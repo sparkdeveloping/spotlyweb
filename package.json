@@ -1,0 +1,31 @@
+{
+  "name": "spotly-web-platform",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "check": "npm run lint && npm run build"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "firebase": "^12.16.0",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^1.25.0",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4.3.3"
+  }
+}
