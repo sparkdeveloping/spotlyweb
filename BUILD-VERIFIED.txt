@@ -1,0 +1,11 @@
+Spotly Unified Web Platform
+Build verified in the supplied source package.
+
+Validation completed:
+- npm run lint
+- npm run build
+
+Verified route:
+- /devstatus (static client-facing development report)
+
+The package uses the public npm registry configured in .npmrc.

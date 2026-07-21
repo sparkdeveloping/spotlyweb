@@ -107,6 +107,7 @@ LEAD_WEBHOOK_URL=https://your-secure-server.example/spotly-leads
 /admin/platform
 /admin/audit
 /admin/settings
+/devstatus
 /api/health
 /api/lead
 ```
@@ -147,4 +148,27 @@ data/                 Demo/domain data adapted from the uploaded Swift projects
 lib/                  Formatting, class helpers, optional Firebase client
 public/brand/         Approved Spotly family app icons
 ```
-# spotlyweb
+
+## npm registry
+
+This project is pinned to the public npm registry through `.npmrc`. The included lockfile uses `https://registry.npmjs.org/` and contains no environment-specific package gateway URLs.
+
+## Client development status
+
+The project includes a client-facing development report at:
+
+```text
+/devstatus
+```
+
+It presents:
+
+- Overall experience completion and production readiness as separate metrics
+- Status of the customer, business, driver, and admin products
+- Detailed product, platform, commerce, operations, and launch workstreams
+- Known limitations of the current demonstration build
+- Commercial, finance, business, partnership, driver, legal, technology, and content requirements needed from the client
+- High-priority client decisions, launch gates, and the six-stage delivery roadmap
+- Print / Save as PDF and share-link controls
+
+The report is deliberately transparent: the current portals are highly developed responsive experiences, while live backend services, money movement, external providers, compliance, pilot operations, and production validation remain separate launch requirements.

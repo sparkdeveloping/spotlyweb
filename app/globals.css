@@ -149,3 +149,35 @@ button, a {
     transition-duration: 0.01ms !important;
   }
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  body > div > header,
+  .devstatus-no-print {
+    display: none !important;
+  }
+
+  .devstatus-page {
+    padding: 0 !important;
+  }
+
+  .devstatus-page .surface,
+  .devstatus-page section {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  .devstatus-page [class*="shadow-"] {
+    box-shadow: none !important;
+  }
+}

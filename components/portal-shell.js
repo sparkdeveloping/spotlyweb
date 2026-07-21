@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Activity,
   Bell,
   Check,
   ChevronDown,
@@ -88,6 +89,11 @@ function PortalSwitcher({ portal }) {
                 {portal.id === item.id && <Check className="h-4 w-4 text-[var(--accent)]" />}
               </Link>
             ))}
+            <div className="my-2 border-t" />
+            <Link href="/devstatus" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-[var(--surface-2)]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-soft text-violet"><Activity className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Development status</span><span className="block truncate text-xs text-secondary">Progress, requirements, and launch readiness</span></span>
+            </Link>
           </motion.div>
         )}
       </AnimatePresence>
@@ -174,6 +180,7 @@ function CommandPalette({ portal, open, onClose }) {
   const [query, setQuery] = useState("");
   const commands = useMemo(() => [
     ...portal.nav.map((item) => ({ label: item.label, detail: portal.name, href: item.href, icon: item.icon })),
+    { label: "Development status", detail: "Client progress, requirements, and launch readiness", href: "/devstatus", icon: Activity },
     ...Object.values(portals).filter((item) => item.id !== portal.id).map((item) => ({ label: `Switch to ${item.name}`, detail: item.description, href: item.href, image: item.logo }))
   ], [portal]);
   const filtered = commands.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query.toLowerCase()));
@@ -286,6 +293,7 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose }) {
           <div className="rounded-2xl bg-[var(--accent-soft)] p-3">
             <p className="text-xs font-semibold text-[var(--accent-strong)] dark:text-[var(--accent)]">Spotly unified web</p>
             <p className="mt-1 text-xs leading-5 text-secondary">Switch between all four apps without leaving the platform.</p>
+            <Link href="/devstatus" onClick={onMobileClose} className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--accent-strong)] dark:text-[var(--accent)]"><Activity className="h-3.5 w-3.5" />Development status</Link>
           </div>
         </div>
       </aside>
