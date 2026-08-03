@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function profile() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data; }
+    function admin() { return signedIn() && ("super_admin" in profile().roles || "admin" in profile().roles || "*" in profile().customPermissions); }
+    function businessOwner(businessId) {
+      return signedIn() && (
+        admin() || request.auth.uid in firestore.get(/databases/(default)/documents/businesses/$(businessId)).data.ownerIds
+      );
+    }
+    function safeImage() { return request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*'); }
+    function safeDocument() { return request.resource.size < 20 * 1024 * 1024 && request.resource.contentType.matches('(application/pdf|image/.*)'); }
+
+    match /businesses/{businessId}/public/{fileName} {
+      allow read: if true;
+      allow write: if businessOwner(businessId) && safeImage();
+    }
+    match /businesses/{businessId}/catalog/{fileName} {
+      allow read: if true;
+      allow write: if businessOwner(businessId) && safeImage();
+    }
+    match /verification/{businessId}/{uid}/{fileName} {
+      allow read: if admin() || (signedIn() && request.auth.uid == uid) || businessOwner(businessId);
+      allow write: if (signedIn() && request.auth.uid == uid || businessOwner(businessId)) && safeDocument();
+    }
+    match /users/{uid}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow write: if signedIn() && request.auth.uid == uid && safeImage();
+    }
+    match /support/{conversationId}/{uid}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow write: if signedIn() && request.auth.uid == uid && request.resource.size < 15 * 1024 * 1024;
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

@@ -1,10 +1,11 @@
 "use client";
 
+import { cloneElement, isValidElement } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronRight, LoaderCircle, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export function Button({ children, variant = "primary", size = "md", className, loading = false, disabled, type = "button", ...props }) {
+export function Button({ children, variant = "primary", size = "md", className, loading = false, disabled, type = "button", asChild = false, ...props }) {
   const variants = {
     primary: "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] shadow-sm",
     secondary: "bg-[var(--accent-soft)] text-[var(--accent-strong)] dark:text-[var(--accent)] hover:brightness-[0.97] border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))]",
@@ -16,15 +17,15 @@ export function Button({ children, variant = "primary", size = "md", className, 
   const sizes = {
     sm: "h-10 rounded-xl px-3.5 text-sm",
     md: "h-[52px] rounded-2xl px-5 text-[15px]",
+    lg: "h-14 rounded-2xl px-6 text-base",
     icon: "h-11 w-11 rounded-xl"
   };
+  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50", variants[variant], sizes[size], className);
+  if (asChild && isValidElement(children)) {
+    return cloneElement(children, { ...props, className: cn(classes, children.props.className), "aria-disabled": disabled || loading || undefined });
+  }
   return (
-    <button
-      type={type}
-      disabled={disabled || loading}
-      className={cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50", variants[variant], sizes[size], className)}
-      {...props}
-    >
+    <button type={type} disabled={disabled || loading} className={classes} {...props}>
       {loading && <LoaderCircle className="h-4 w-4 animate-spin" />}
       {children}
     </button>
@@ -90,7 +91,9 @@ const badgeMap = {
   danger: "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-950/40 dark:text-red-300",
   info: "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-950/40 dark:text-blue-300",
   neutral: "bg-[var(--surface-2)] text-secondary ring-[var(--border)]",
-  accent: "bg-[var(--accent-soft)] text-[var(--accent-strong)] ring-[color-mix(in_srgb,var(--accent)_25%,transparent)] dark:text-[var(--accent)]"
+  accent: "bg-[var(--accent-soft)] text-[var(--accent-strong)] ring-[color-mix(in_srgb,var(--accent)_25%,transparent)] dark:text-[var(--accent)]",
+  purple: "bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-950/40 dark:text-violet-300",
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300"
 };
 
 export function Badge({ children, tone = "neutral", dot = false, className }) {
@@ -188,9 +191,9 @@ export function Modal({ open, onClose, title, children, size = "md" }) {
   );
 }
 
-export function EmptyState({ icon: Icon, title, description, action }) {
+export function EmptyState({ icon: Icon, title, description, action, className }) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+    <div className={cn("flex flex-col items-center justify-center px-6 py-16 text-center", className)}>
       {Icon && <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></div>}
       <h3 className="text-lg font-semibold">{title}</h3>
       <p className="mt-2 max-w-sm text-sm leading-6 text-secondary">{description}</p>

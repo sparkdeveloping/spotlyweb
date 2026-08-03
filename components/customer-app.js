@@ -6,7 +6,6 @@ import { motion } from "framer-motion";
 import {
   BellRing,
   CalendarDays,
-  CheckCircle2,
   ChevronRight,
   CircleHelp,
   Clock3,
@@ -21,7 +20,6 @@ import {
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
-  Sparkles,
   Star,
   Ticket,
   UserRound
@@ -30,7 +28,7 @@ import { useMemo, useState } from "react";
 import { PortalShell } from "@/components/portal-shell";
 import { Badge, Button, Card, EmptyState, ListRow, Modal, PageHeader, SearchField, StatusBadge, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
-import { customerCategories, events, initialBookings, places, quickSearches } from "@/data/customer";
+import { customerCategories, events, initialBookings, places } from "@/data/customer";
 import { portals } from "@/data/portals";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";

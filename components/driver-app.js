@@ -8,7 +8,6 @@ import {
   BellRing,
   Bike,
   CalendarDays,
-  Car,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -18,7 +17,6 @@ import {
   Headphones,
   History,
   IdCard,
-  LifeBuoy,
   LocateFixed,
   LockKeyhole,
   Map,
@@ -30,15 +28,28 @@ import {
   Play,
   ShieldCheck,
   Star,
-  Upload,
   UserRound,
   WalletCards,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { PortalShell } from "@/components/portal-shell";
 import { BarChart, Sparkline } from "@/components/charts";
-import { Badge, Button, Card, EmptyState, ListRow, MetricCard, Modal, PageHeader, ProgressBar, SearchField, SectionCard, StatusBadge, Tabs } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ListRow,
+  MetricCard,
+  Modal,
+  PageHeader,
+  ProgressBar,
+  SearchField,
+  SectionCard,
+  StatusBadge,
+  Tabs
+} from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { activeJob as activeJobSeed, driverMetrics, earningsSeries, jobHistory, jobOffers as initialJobOffers, weeklyEarnings } from "@/data/driver";
 import { cn } from "@/lib/cn";

@@ -1,31 +1,42 @@
 {
   "name": "spotly-web-platform",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "engines": {
-    "node": ">=20.9.0"
+    "node": "22.x",
+    "npm": ">=11"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "check": "npm run lint && npm run build"
+    "check:js": "node scripts/check-javascript.mjs",
+    "check": "npm run check:js && npm run lint && npm run build",
+    "seed": "node scripts/seed-firestore.mjs",
+    "firebase:emulators": "npx firebase-tools emulators:start",
+    "firebase:deploy:indexes": "npx firebase-tools deploy --only firestore:indexes",
+    "firebase:deploy:rules": "npx firebase-tools deploy --only firestore:rules,storage"
   },
   "dependencies": {
-    "clsx": "^2.1.1",
-    "firebase": "^12.16.0",
-    "framer-motion": "^12.42.2",
-    "lucide-react": "^1.25.0",
+    "clsx": "2.1.1",
+    "firebase": "12.16.0",
+    "firebase-admin": "14.2.0",
+    "framer-motion": "12.42.2",
+    "lucide-react": "1.25.0",
     "next": "16.2.10",
+    "paynow": "2.2.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "zod": "^4.4.3"
+    "server-only": "0.0.1",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "eslint": "^9.39.1",
+    "@tailwindcss/postcss": "4.3.3",
+    "eslint": "9.39.1",
     "eslint-config-next": "16.2.10",
-    "tailwindcss": "^4.3.3"
-  }
+    "tailwindcss": "4.3.3"
+  },
+  "type": "module",
+  "packageManager": "npm@11.16.0"
 }

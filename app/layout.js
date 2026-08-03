@@ -7,7 +7,7 @@ export const metadata = {
     default: "Spotly",
     template: "%s · Spotly"
   },
-  description: "One Spotly web platform for customers, businesses, drivers, and platform operations.",
+  description: "Spotly is preparing a simpler way to discover Zimbabwean businesses and arrange grocery pickup.",
   applicationName: "Spotly",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -16,7 +16,7 @@ export const metadata = {
   },
   openGraph: {
     title: "Spotly",
-    description: "Discover, book, order, deliver, and operate in one Spotly platform.",
+    description: "A more useful way to discover Zimbabwean businesses and arrange grocery pickup.",
     images: ["/brand/spotly.png"]
   }
 };

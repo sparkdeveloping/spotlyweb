@@ -1,11 +1,10 @@
-import { CustomerApp } from "@/components/customer-app";
+import { ComingSoonApp } from "@/components/coming-soon-app";
 
 export const metadata = {
-  title: "Discover, book, and order",
-  description: "Explore trusted restaurants, groceries, events, beauty, wellness, activities, and bookings with Spotly."
+  title: "Coming soon across Zimbabwe",
+  description: "Spotly is preparing a more intentional way to discover Zimbabwean businesses and arrange grocery pickup."
 };
 
-export default async function HomePage({ searchParams }) {
-  const params = await searchParams;
-  return <CustomerApp initialView={params?.view || "home"} />;
+export default function HomePage() {
+  return <ComingSoonApp />;
 }

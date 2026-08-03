@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
+import { FirebaseProvider, PlatformProvider } from "@/components/firebase-provider";
 
 const ThemeContext = createContext(null);
 const ToastContext = createContext(null);
@@ -10,11 +11,11 @@ const ToastContext = createContext(null);
 const themeListeners = new Set();
 
 function getThemeSnapshot() {
-  return window.localStorage.getItem("spotly-theme") || "system";
+  return window.localStorage.getItem("spotly-theme") || "light";
 }
 
 function getThemeServerSnapshot() {
-  return "system";
+  return "light";
 }
 
 function subscribeTheme(listener) {
@@ -67,10 +68,11 @@ function ToastProvider({ children }) {
   }, []);
 
   const toast = useCallback((message, options = {}) => {
+    const normalized = typeof options === "string" ? { type: options } : options;
     const id = `${Date.now()}-${Math.random()}`;
-    const next = { id, message, type: options.type || "success", title: options.title || "Done" };
+    const next = { id, message, type: normalized.type || "success", title: normalized.title || "Done" };
     setToasts((items) => [...items.slice(-3), next]);
-    window.setTimeout(() => dismiss(id), options.duration || 3600);
+    window.setTimeout(() => dismiss(id), normalized.duration || 3600);
     return id;
   }, [dismiss]);
 
@@ -111,7 +113,11 @@ function ToastProvider({ children }) {
 export function AppProviders({ children }) {
   return (
     <ThemeProvider>
-      <ToastProvider>{children}</ToastProvider>
+      <FirebaseProvider>
+        <PlatformProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </PlatformProvider>
+      </FirebaseProvider>
     </ThemeProvider>
   );
 }

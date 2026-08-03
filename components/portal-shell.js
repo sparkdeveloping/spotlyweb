@@ -25,14 +25,9 @@ import { portals, globalNotifications } from "@/data/portals";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 import { useTheme } from "@/components/providers";
-import { Badge, SearchField } from "@/components/ui";
+import { useAuth } from "@/components/firebase-provider";
+import { Badge } from "@/components/ui";
 
-const portalUsers = {
-  customer: { name: "Tinashe", role: "Spotly member" },
-  business: { name: "Chido Mavhunga", role: "Owner · Namaste Harare" },
-  driver: { name: "Tendai Mutendi", role: "Verified driver" },
-  admin: { name: "Aisha Moyo", role: "Operations manager" }
-};
 
 function useOutsideClick(ref, callback) {
   useEffect(() => {
@@ -231,24 +226,31 @@ function CommandPalette({ portal, open, onClose }) {
 function UserMenu({ portal }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const user = portalUsers[portal.id];
+  const { user, profile, logout } = useAuth();
+  const displayName = profile?.displayName || user?.displayName || user?.email || "Spotly user";
+  const role = portal.id === "admin" ? (profile?.roles?.find((item) => item !== "customer") || "Administrator") : portal.id === "business" ? "Business workspace" : "Spotly member";
   useOutsideClick(ref, () => setOpen(false));
+  async function signOutNow() {
+    await logout();
+    window.location.href = "/";
+  }
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((value) => !value)} className="flex h-11 items-center gap-2 rounded-xl p-1 pr-2 hover:bg-[var(--surface-2)]">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent)] text-xs font-bold text-white">{initials(user.name)}</span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent)] text-xs font-bold text-white">{initials(displayName)}</span>
         <ChevronDown className="hidden h-4 w-4 text-tertiary sm:block" />
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-2xl p-2 shadow-elevated">
+          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-2xl p-2 shadow-elevated">
             <div className="border-b px-3 py-3">
-              <p className="font-semibold">{user.name}</p>
-              <p className="mt-1 text-xs text-secondary">{user.role}</p>
+              <p className="truncate font-semibold">{displayName}</p>
+              <p className="mt-1 truncate text-xs text-secondary">{user?.email || role}</p>
+              <p className="mt-1 text-[11px] font-semibold capitalize text-tertiary">{role.replaceAll("_", " ")}</p>
             </div>
-            <Link href={portal.id === "customer" ? "/?view=profile" : `${portal.href}/${portal.id === "admin" ? "settings" : "profile"}`} className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Profile</Link>
-            <Link href={portal.id === "customer" ? "/?view=profile" : `${portal.href}/settings`} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Settings</Link>
-            <Link href="/login" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-red-50 dark:hover:bg-red-950/30"><LogOut className="h-4 w-4" /> Sign out</Link>
+            <Link href="/account" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Shared account</Link>
+            <Link href={`${portal.href}${portal.id === "customer" ? "" : "/settings"}`} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>
+            <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-red-50 dark:hover:bg-red-950/30"><LogOut className="h-4 w-4" /> Sign out</button>
           </motion.div>
         )}
       </AnimatePresence>

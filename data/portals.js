@@ -5,6 +5,7 @@ import {
   Bike,
   BookOpenCheck,
   Building2,
+  MapPin,
   CalendarDays,
   CircleUserRound,
   ClipboardList,
@@ -40,11 +41,11 @@ export const portals = {
     darkAccent: "#9B8CFF",
     description: "Discover, book, order, and plan your city.",
     nav: [
-      { id: "home", label: "Home", icon: House, href: "/" },
-      { id: "search", label: "Search", icon: Search, href: "/?view=search" },
-      { id: "bookings", label: "Bookings", icon: CalendarDays, href: "/?view=bookings" },
-      { id: "saved", label: "Saved", icon: Heart, href: "/?view=saved" },
-      { id: "profile", label: "Profile", icon: CircleUserRound, href: "/?view=profile" }
+      { id: "home", label: "Home", icon: House, href: "/marketplace" },
+      { id: "search", label: "Search", icon: Search, href: "/marketplace?view=search" },
+      { id: "bookings", label: "Bookings", icon: CalendarDays, href: "/marketplace?view=bookings" },
+      { id: "saved", label: "Saved", icon: Heart, href: "/marketplace?view=saved" },
+      { id: "profile", label: "Profile", icon: CircleUserRound, href: "/account" }
     ]
   },
   business: {
@@ -62,10 +63,12 @@ export const portals = {
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/business" },
       { id: "activity", label: "Activity", icon: ClipboardList, href: "/business/activity", badge: 7 },
       { id: "catalog", label: "Catalog", icon: BookOpenCheck, href: "/business/catalog" },
+      { id: "branches", label: "Branches", icon: MapPin, href: "/business/branches" },
       { id: "insights", label: "Insights", icon: BarChart3, href: "/business/insights" },
       { id: "promotions", label: "Promotions", icon: BadgeDollarSign, href: "/business/promotions" },
       { id: "staff", label: "Staff", icon: UsersRound, href: "/business/staff" },
       { id: "finance", label: "Finance", icon: WalletCards, href: "/business/finance" },
+      { id: "support", label: "Support", icon: LifeBuoy, href: "/business/support" },
       { id: "settings", label: "Settings", icon: Settings, href: "/business/settings" }
     ]
   },

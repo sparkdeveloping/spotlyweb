@@ -1,0 +1,218 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function anonymousUser() {
+      return signedIn() && request.auth.token.firebase.sign_in_provider == "anonymous";
+    }
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function hasRole(role) { return hasProfile() && role in profile().roles; }
+    function hasPermission(permission) {
+      return hasProfile() && ("*" in profile().customPermissions || permission in profile().customPermissions);
+    }
+    function admin() {
+      return signedIn() && (
+        hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") ||
+        hasPermission("businesses.*") || hasPermission("support.*")
+      );
+    }
+    function superAdmin() { return hasProfile() && (hasRole("super_admin") || "*" in profile().customPermissions); }
+    function activeAccount() { return anonymousUser() || (hasProfile() && !(profile().status in ["suspended", "disabled"])); }
+    function business(businessId) { return get(/databases/$(database)/documents/businesses/$(businessId)).data; }
+    function businessOwner(businessId) {
+      return activeAccount() && (
+        admin() || request.auth.uid in business(businessId).ownerIds ||
+        exists(/databases/$(database)/documents/memberships/$(business(businessId).organizationId + "_" + request.auth.uid))
+      );
+    }
+    function conversation(conversationId) { return get(/databases/$(database)/documents/supportConversations/$(conversationId)).data; }
+    function conversationParticipant(conversationId) {
+      return activeAccount() && (
+        admin() || conversation(conversationId).requesterId == request.auth.uid ||
+        (conversation(conversationId).businessId != null && businessOwner(conversation(conversationId).businessId))
+      );
+    }
+
+    match /users/{uid} {
+      allow create: if self(uid) && request.resource.data.roles == ["customer"];
+      allow read: if self(uid) || admin();
+      allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "displayName", "phoneNumber", "photoURL", "providers", "locale", "lastSeenAt", "updatedAt", "email"
+      ]);
+      allow update, delete: if admin();
+    }
+
+    match /platformSettings/{id} {
+      allow read: if true;
+      allow write: if admin();
+    }
+
+    match /businesses/{businessId} {
+      allow read: if resource.data.public == true || businessOwner(businessId);
+      // New businesses are created by authenticated Next.js route handlers after validation.
+      allow create: if false;
+      allow update: if admin() || (
+        businessOwner(businessId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "name", "brandName", "legalName", "category", "categories", "description",
+          "phone", "email", "website", "instagram", "facebook", "whatsapp",
+          "city", "country", "address", "currency", "logo", "coverImage",
+          "openingHours", "specialHours", "paymentMethods", "searchTerms",
+          "onboardingProgress", "updatedAt", "updatedBy"
+        ])
+      );
+      allow delete: if superAdmin();
+    }
+
+    match /organizations/{organizationId} {
+      allow read: if admin() || (signedIn() && request.auth.uid in resource.data.ownerIds);
+      // Organization creation is performed server-side with its first business claim.
+      allow create: if false;
+      allow update: if admin() || (signedIn() && request.auth.uid in resource.data.ownerIds);
+      allow delete: if superAdmin();
+    }
+
+    match /branches/{branchId} {
+      allow read: if resource.data.public == true || businessOwner(resource.data.businessId);
+      allow create: if businessOwner(request.resource.data.businessId);
+      allow update, delete: if businessOwner(resource.data.businessId);
+    }
+
+    match /memberships/{membershipId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin() || businessOwner(resource.data.businessId));
+      allow create: if admin() || businessOwner(request.resource.data.businessId);
+      allow update, delete: if admin() || businessOwner(resource.data.businessId);
+    }
+
+    match /businessInvitations/{invitationId} {
+      allow read: if signedIn() && (resource.data.email == request.auth.token.email || admin() || businessOwner(resource.data.businessId));
+      allow create: if businessOwner(request.resource.data.businessId);
+      allow update: if admin() || businessOwner(resource.data.businessId) || resource.data.email == request.auth.token.email;
+      allow delete: if admin() || businessOwner(resource.data.businessId);
+    }
+
+    match /businessClaims/{claimId} {
+      // Claim creation is server-validated to prevent forged approval and risk fields.
+      allow create: if false;
+      allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || admin() || businessOwner(resource.data.businessId));
+      allow update: if admin();
+      allow delete: if superAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if (resource.data.available != false && resource.data.status != "archived") || businessOwner(resource.data.businessId);
+      allow create: if businessOwner(request.resource.data.businessId);
+      allow update, delete: if businessOwner(resource.data.businessId);
+    }
+
+    match /orders/{orderId} {
+      allow read: if activeAccount() && (resource.data.customerId == request.auth.uid || businessOwner(resource.data.businessId) || admin());
+      // Production order creation is performed by the authenticated Next.js route handler.
+      allow create: if false;
+      allow update: if businessOwner(resource.data.businessId) || admin();
+      allow delete: if superAdmin();
+    }
+
+    match /orderEvents/{eventId} {
+      allow read: if activeAccount() && (
+        admin() ||
+        get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.customerId == request.auth.uid ||
+        businessOwner(get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.businessId)
+      );
+      allow write: if admin() || (signedIn() && request.resource.data.actorId == request.auth.uid);
+    }
+
+    match /businessFinanceSettings/{businessId} {
+      allow read, write: if businessOwner(businessId) || admin();
+    }
+
+    match /paymentIntents/{intentId} {
+      allow read, write: if false;
+    }
+
+    match /supportConversations/{conversationId} {
+      allow create: if activeAccount() && request.resource.data.requesterId == request.auth.uid;
+      allow read: if conversationParticipant(conversationId);
+      allow update: if conversationParticipant(conversationId) && (
+        admin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastMessage", "lastMessageAt", "updatedAt", "status"])
+      );
+      allow delete: if superAdmin();
+    }
+
+    match /supportMessages/{messageId} {
+      allow read: if conversationParticipant(resource.data.conversationId) && (resource.data.internal != true || admin());
+      allow create: if activeAccount() && conversationParticipant(request.resource.data.conversationId) && request.resource.data.senderId == request.auth.uid && (request.resource.data.internal != true || admin());
+      allow update, delete: if admin();
+    }
+
+    match /waitlistEntries/{entryId} {
+      allow create: if request.resource.data.email is string && request.resource.data.email.size() <= 254;
+      allow update: if admin() || (
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "name", "city", "interests", "locale", "consent", "source", "updatedAt"
+        ])
+      );
+      allow read, delete: if admin();
+    }
+
+    match /partnershipLeads/{leadId} {
+      allow create: if request.resource.data.email is string && request.resource.data.email.size() <= 254;
+      allow read, update, delete: if admin();
+    }
+
+    match /helpResources/{resourceId} {
+      allow read: if resource.data.published == true || admin();
+      allow write: if admin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if resource.data.active == true || admin();
+      allow write: if admin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if activeAccount() && resource.data.userId == request.auth.uid;
+      allow update: if activeAccount() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read", "readAt"]);
+      allow create, delete: if admin();
+    }
+
+    match /notificationPreferences/{uid} {
+      allow read, write: if self(uid) || admin();
+    }
+
+    match /pushTokens/{tokenId} {
+      allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if activeAccount() && resource.data.userId == request.auth.uid;
+    }
+
+    match /favorites/{favoriteId} {
+      allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if activeAccount() && resource.data.userId == request.auth.uid;
+    }
+
+    match /auditLogs/{logId} {
+      allow create: if activeAccount() && request.resource.data.actorId == request.auth.uid;
+      allow read: if admin() || hasPermission("audit.read");
+      allow update, delete: if false;
+    }
+
+    match /roleTemplates/{roleId} {
+      allow read: if activeAccount();
+      allow write: if superAdmin();
+    }
+
+    match /emailLogs/{logId} {
+      allow read: if admin();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

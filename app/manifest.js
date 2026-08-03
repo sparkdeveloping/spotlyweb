@@ -2,7 +2,7 @@ export default function manifest() {
   return {
     name: "Spotly",
     short_name: "Spotly",
-    description: "Spotly customer, business, driver, and admin web platform.",
+    description: "Discover Zimbabwean businesses and arrange grocery pickup with Spotly.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

@@ -50,20 +50,20 @@ const sectionLinks = [
 ];
 
 const reviewReady = [
-  "Full responsive customer, business, driver, and admin experiences",
-  "Brand system and visual distinction across all four apps",
-  "Navigation, dashboards, workflow states, charts, notifications, dark mode, and mobile layouts",
-  "Proposed operational flows for orders, bookings, delivery, earnings, payouts, reviews, and incidents",
-  "A single Next.js platform that routes to /business, /driver, /admin, and this /devstatus report"
+  "Light-mode public coming-soon website with waitlist, partnership, business discovery, and claim entry points",
+  "Firebase-connected account, business, branch, product, pickup order, claim, support, content, settings, and audit architecture",
+  "Admin-controlled private beta, marketplace behavior, verification policy, currencies, payment methods, support, roles, and launch settings",
+  "Secure Next.js route handlers for order totals, Paynow initiation/status/result processing, notifications, email, first-admin bootstrap, and data seeding",
+  "Development and production-draft Firestore/Storage rules, composite indexes, emulator configuration, Vercel configuration, and seed scripts"
 ];
 
 const notLiveYet = [
-  "All records currently use demonstration data rather than a production database",
-  "Authentication screens are present, but live identity, recovery, verification, and role enforcement are not complete",
-  "Payments, refunds, commissions, settlements, and payouts do not move real money",
-  "Maps, routing, live driver location, SMS, WhatsApp, email, and push notifications are not connected",
-  "Business and driver verification processes still require approved policy and provider choices",
-  "The current build has not completed production security, privacy, load, accessibility, or disaster-recovery sign-off"
+  "External Firebase Admin, Apple, phone, App Check, VAPID, Paynow, Resend, domain, and monitoring credentials are not included in the archive",
+  "The production Firestore and Storage rules are drafts and must be tested against every role before replacing development test-mode rules",
+  "Real business records and images remain provisional until each source, branch, owner, catalogue, price, and usage right is verified",
+  "Live money movement, settlement, refunds, fiscal documents, reconciliation, and payouts require sandbox and finance-policy approval",
+  "Legal entity details, privacy/terms/merchant/refund documents, official support contacts, and pilot operating procedures are still required",
+  "A deployed production build, cross-browser/device QA, accessibility audit, load test, security review, backup/restore exercise, and controlled pilot are still pending"
 ];
 
 function statusTone(status) {
@@ -274,7 +274,7 @@ function LaunchTimeline() {
 }
 
 export function DevStatusApp() {
-  const { addToast } = useToast();
+  const { toast } = useToast();
   const [workstreamFilter, setWorkstreamFilter] = useState("all");
   const [openRequirements, setOpenRequirements] = useState(["commercial", "supply"]);
 
@@ -285,9 +285,9 @@ export function DevStatusApp() {
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(window.location.href);
-      addToast({ title: "Development status link copied", message: "The client-facing report URL is ready to share.", tone: "success" });
+      toast("The client-facing report URL is ready to share.", { title: "Development status link copied" });
     } catch {
-      addToast({ title: "Could not copy automatically", message: "Copy the /devstatus URL from your browser address bar.", tone: "warning" });
+      toast("Copy the /devstatus URL from your browser address bar.", { title: "Could not copy automatically", type: "info" });
     }
   }
 
@@ -330,7 +330,7 @@ export function DevStatusApp() {
                   <div className="mt-5 grid grid-cols-6 gap-1.5">
                     {Array.from({ length: statusSnapshot.stageCount }).map((_, index) => <span key={index} className={cn("h-2 rounded-full", index < statusSnapshot.stage ? "bg-white" : "bg-white/20")} />)}
                   </div>
-                  <p className="mt-4 text-sm leading-6 text-white/72">The next major phase is backend and partner integration. It is gated by the client decisions and inputs listed below.</p>
+                  <p className="mt-4 text-sm leading-6 text-white/72">The current phase is production configuration and verification: credentials, rules tests, provider sandboxes, verified merchant data, legal approval, and a controlled pilot.</p>
                 </div>
               </div>
             </div>
@@ -346,8 +346,8 @@ export function DevStatusApp() {
             </Card>
             <Card className="p-5">
               <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-secondary">Launch blockers</p><p className="mt-3 text-[34px] font-bold tracking-[-0.045em]">{statusSnapshot.launchBlockers}</p></div><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-danger dark:bg-red-950/35"><AlertTriangle className="h-5 w-5" /></span></div>
-              <p className="mt-5 text-sm font-semibold text-danger">No public production launch yet</p>
-              <p className="mt-2 text-xs leading-5 text-tertiary">The build is ready for review and planning, not real transactions or public operations.</p>
+              <p className="mt-5 text-sm font-semibold text-danger">Controlled beta only</p>
+              <p className="mt-2 text-xs leading-5 text-tertiary">The architecture is integrated, but live payments and public operations remain gated until the listed release checks pass.</p>
             </Card>
           </section>
 
@@ -368,7 +368,7 @@ export function DevStatusApp() {
           </section>
 
           <section id="workstreams" className="scroll-mt-36 mt-14">
-            <SectionHeading eyebrow="Detailed delivery view" title="Development workstreams" description="This separates the polished front-end experience from the engineering, commercial, operational, and launch work still needed." action={<Tabs value={workstreamFilter} onChange={setWorkstreamFilter} tabs={[{ value: "all", label: "All" }, { value: "complete", label: "Ready" }, { value: "active", label: "Active" }, { value: "attention", label: "Needs action" }]} />} />
+            <SectionHeading eyebrow="Detailed delivery view" title="Development workstreams" description="This shows what is implemented in the download and what still requires external configuration, client decisions, verification, or production testing." action={<Tabs value={workstreamFilter} onChange={setWorkstreamFilter} tabs={[{ value: "all", label: "All" }, { value: "complete", label: "Ready" }, { value: "active", label: "Active" }, { value: "attention", label: "Needs action" }]} />} />
             <div className="mt-6"><WorkstreamTable filter={workstreamFilter} /></div>
           </section>
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "functions": {
+    "app/api/payments/**/*.js": { "maxDuration": 30 },
+    "app/api/admin/**/*.js": { "maxDuration": 60 },
+    "app/api/notifications/**/*.js": { "maxDuration": 30 },
+    "app/api/email/**/*.js": { "maxDuration": 30 }
+  }
+}
