@@ -29,7 +29,6 @@ import { Button, Card, Modal, SearchField } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { joinWaitlist, searchBusinesses, submitPartnershipLead, track } from "@/lib/firebase-services";
-import { zimbabweBusinesses } from "@/data/zimbabwe-businesses";
 
 const highlights = [
   { icon: ShoppingBasket, title: "Pick up groceries with less effort", copy: "Discover nearby stores, build your basket, choose a pickup window, and receive clear updates." },
@@ -101,9 +100,9 @@ function BusinessFinder() {
       setLoading(true);
       try {
         const remote = await searchBusinesses(term, 8);
-        setResults(remote.length ? remote : zimbabweBusinesses.filter((business) => [business.name, business.brandName, business.city, business.category].join(" ").toLowerCase().includes(term)).slice(0, 8));
+        setResults(remote);
       } catch {
-        setResults(zimbabweBusinesses.filter((business) => [business.name, business.brandName, business.city, business.category].join(" ").toLowerCase().includes(term)).slice(0, 8));
+        setResults([]);
       } finally {
         setLoading(false);
       }

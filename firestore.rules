@@ -62,7 +62,9 @@ service cloud.firestore {
           "phone", "email", "website", "instagram", "facebook", "whatsapp",
           "city", "country", "address", "currency", "logo", "coverImage",
           "openingHours", "specialHours", "paymentMethods", "searchTerms",
-          "onboardingProgress", "updatedAt", "updatedBy"
+          "onboardingProgress", "preferredLocale", "customerNotes", "public",
+          "teamReviewedAt", "status", "publicationReviewRequestedAt", "publicationReviewRequestedBy",
+          "updatedAt", "updatedBy"
         ])
       );
       allow delete: if superAdmin();
@@ -134,6 +136,40 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /businessOperationalSettings/{businessId} {
+      allow read, write: if businessOwner(businessId) || admin();
+    }
+
+    match /promotions/{promotionId} {
+      allow read: if resource.data.active == true || businessOwner(resource.data.businessId) || admin();
+      allow create: if businessOwner(request.resource.data.businessId) || admin();
+      allow update, delete: if businessOwner(resource.data.businessId) || admin();
+    }
+
+    match /catalogTemplates/{templateId} {
+      allow read: if activeAccount();
+      allow write: if admin();
+    }
+
+    match /payouts/{payoutId} {
+      allow read: if businessOwner(resource.data.businessId) || admin();
+      allow create: if businessOwner(request.resource.data.businessId) || admin();
+      allow update: if admin();
+      allow delete: if superAdmin();
+    }
+
+    match /adminTasks/{taskId} {
+      allow create: if activeAccount() && request.resource.data.requestedBy == request.auth.uid;
+      allow read: if admin() || (activeAccount() && resource.data.requestedBy == request.auth.uid);
+      allow update: if admin();
+      allow delete: if superAdmin();
+    }
+
+    match /systemStatus/{statusId} {
+      allow read: if admin();
+      allow write: if false;
+    }
+
     match /supportConversations/{conversationId} {
       allow create: if activeAccount() && request.resource.data.requesterId == request.auth.uid;
       allow read: if conversationParticipant(conversationId);
@@ -178,7 +214,8 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read: if activeAccount() && resource.data.userId == request.auth.uid;
       allow update: if activeAccount() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read", "readAt"]);
-      allow create, delete: if admin();
+      allow create: if admin() || (activeAccount() && request.resource.data.businessId is string && businessOwner(request.resource.data.businessId));
+      allow delete: if admin();
     }
 
     match /notificationPreferences/{uid} {

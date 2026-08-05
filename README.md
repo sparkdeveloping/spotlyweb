@@ -96,7 +96,7 @@ They are not automatically verified. Before publication or commercial use, Spotl
 - Catalogue, price, inventory, and opening-hour accuracy
 - Source attribution and removal/correction requests
 
-After first-admin setup, open **Admin → Platform configuration** and use **Import or refresh seed data**. A server-side seed route writes platform defaults, role templates, help resources, catalogue templates, and provisional businesses to Firestore.
+After administrator setup, open **Admin → Businesses** (`/admin/businesses`) and use **Populate Firestore**. This is the required first operational action: claim search and public directory search intentionally use Firebase only and do not fall back to browser-local records. The protected seed route writes platform defaults, role templates, help resources, catalogue templates, organizations, branches, and provisional businesses to Firestore.
 
 A command-line seed is also available:
 
@@ -105,6 +105,15 @@ npm run seed
 ```
 
 This requires Firebase Admin environment variables in the local shell.
+
+
+## Business operations release
+
+This archive includes the focused Business Operations v3 implementation. See:
+
+- [BUSINESS-OPERATIONS.md](./BUSINESS-OPERATIONS.md) for the business onboarding, order, catalogue, branch, team, finance, support, and pilot workflows.
+- [ADMIN-DIRECTORY.md](./ADMIN-DIRECTORY.md) for Firestore population and administrator operations.
+- [RELEASE-NOTES-BUSINESS-V3.md](./RELEASE-NOTES-BUSINESS-V3.md) for the release change summary.
 
 ## Authentication model
 

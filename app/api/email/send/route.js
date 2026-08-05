@@ -71,7 +71,12 @@ export async function POST(request) {
     const body = schema.parse(await request.json());
     const { db } = getAdminServices();
     const roles = new Set(user.profile?.roles || []);
-    const canSendToOthers = roles.has("super_admin") || roles.has("admin") || roles.has("platform_admin") || roles.has("content_manager");
+    let canSendToOthers = roles.has("super_admin") || roles.has("admin") || roles.has("platform_admin") || roles.has("content_manager");
+    if (!canSendToOthers && body.type === "business_invitation" && body.data.invitationId) {
+      const invitation = await db.collection("businessInvitations").doc(String(body.data.invitationId)).get();
+      const values = invitation.exists ? invitation.data() : null;
+      canSendToOthers = Boolean(values && values.invitedBy === user.uid && String(values.email || "").toLowerCase() === body.to.toLowerCase());
+    }
     if (body.to.toLowerCase() !== user.email?.toLowerCase() && !canSendToOthers) {
       throw Object.assign(new Error("You cannot send this notification."), { status: 403 });
     }

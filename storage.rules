@@ -6,7 +6,9 @@ service firebase.storage {
     function admin() { return signedIn() && ("super_admin" in profile().roles || "admin" in profile().roles || "*" in profile().customPermissions); }
     function businessOwner(businessId) {
       return signedIn() && (
-        admin() || request.auth.uid in firestore.get(/databases/(default)/documents/businesses/$(businessId)).data.ownerIds
+        admin() ||
+        request.auth.uid in firestore.get(/databases/(default)/documents/businesses/$(businessId)).data.ownerIds ||
+        firestore.exists(/databases/(default)/documents/memberships/$(firestore.get(/databases/(default)/documents/businesses/$(businessId)).data.organizationId + "_" + request.auth.uid))
       );
     }
     function safeImage() { return request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*'); }

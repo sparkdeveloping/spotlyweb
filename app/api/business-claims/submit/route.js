@@ -64,15 +64,21 @@ export async function POST(request) {
       throw Object.assign(new Error("Create or link an email-and-password credential before claiming a business."), { status: 409 });
     }
     const settingsSnapshot = await db.collection("platformSettings").doc("global").get();
-    if (settingsSnapshot.exists && settingsSnapshot.data().launch?.businessClaimsEnabled === false) {
+    const platformSettings = settingsSnapshot.exists ? settingsSnapshot.data() : {};
+    if (platformSettings.launch?.businessClaimsEnabled === false) {
       throw Object.assign(new Error("Business claiming is temporarily unavailable."), { status: 503 });
     }
+    const verificationPolicy = platformSettings.verification || {};
+    const riskScore = input.provisionalBusiness?.source?.type === "owner_created" ? 20 : 10;
+    const autoApprovalEnabled = Boolean(verificationPolicy.lowRiskAutoApproval) && verificationPolicy.manualReviewRequired === false;
+    const autoApprovalThreshold = Number(verificationPolicy.autoApprovalThreshold || 15);
     const claimId = `${input.businessId}_${actor.uid}`;
     const claimRef = db.collection("businessClaims").doc(claimId);
     const businessRef = db.collection("businesses").doc(input.businessId);
 
     let resolvedOrganizationId = input.organizationId || null;
     let resolvedBranchId = null;
+    let autoApproved = false;
 
     await db.runTransaction(async (transaction) => {
       const [businessSnapshot, existingClaim] = await Promise.all([
@@ -171,7 +177,39 @@ export async function POST(request) {
         });
       } else {
         resolvedOrganizationId = input.organizationId || existingBusiness.organizationId || null;
-        transaction.set(businessRef, { claimStatus: "claim_pending", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        resolvedBranchId = existingBusiness.branchIds?.[0] || null;
+        autoApproved = autoApprovalEnabled
+          && riskScore <= autoApprovalThreshold
+          && input.evidence.length > 0
+          && ["owner", "franchisee"].includes(input.roleAtBusiness)
+          && existingOwners.length === 0
+          && existingBusiness.claimStatus !== "claimed";
+        if (autoApproved) {
+          transaction.set(businessRef, {
+            claimStatus: "claimed",
+            verificationStatus: "approved",
+            ownerIds: [...new Set([...existingOwners, actor.uid])],
+            status: existingBusiness.status === "provisional" ? "active" : existingBusiness.status || "active",
+            public: true,
+            verifiedAt: FieldValue.serverTimestamp(),
+            verifiedBy: "low_risk_policy",
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+          const membershipId = `${resolvedOrganizationId || input.businessId}_${actor.uid}`;
+          transaction.set(db.collection("memberships").doc(membershipId), {
+            organizationId: resolvedOrganizationId,
+            businessId: input.businessId,
+            businessIds: FieldValue.arrayUnion(input.businessId),
+            branchIds: resolvedBranchId ? FieldValue.arrayUnion(resolvedBranchId) : existingBusiness.branchIds?.length ? FieldValue.arrayUnion(...existingBusiness.branchIds) : [],
+            userId: actor.uid,
+            role: resolvedOrganizationId ? "organization_owner" : "business_owner",
+            permissions: FieldValue.arrayUnion("businesses.*", "branches.*", "catalog.*", "orders.*", "staff.*", "finance.read", "finance.configure", "support.*"),
+            status: "active",
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+        } else {
+          transaction.set(businessRef, { claimStatus: "claim_pending", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        }
       }
 
       transaction.set(claimRef, {
@@ -186,25 +224,37 @@ export async function POST(request) {
         evidence: input.evidence,
         notes: safeText(input.notes || "", 2000),
         claimType: input.provisionalBusiness?.source?.type === "owner_created" ? "new_business" : "existing_listing",
-        riskScore: input.provisionalBusiness?.source?.type === "owner_created" ? 20 : 10,
-        status: "submitted",
-        verificationChecklist: {},
+        riskScore,
+        status: autoApproved ? "approved" : "submitted",
+        autoApproved,
+        reviewedBy: autoApproved ? "low_risk_policy" : null,
+        reviewedAt: autoApproved ? FieldValue.serverTimestamp() : null,
+        verificationChecklist: autoApproved ? { ownershipEvidence: true, accountCredential: true, duplicateCheck: true } : {},
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
 
       transaction.create(db.collection("auditLogs").doc(), {
-        action: "business_claim.submitted",
+        action: autoApproved ? "business_claim.auto_approved" : "business_claim.submitted",
         entityType: "businessClaim",
         entityId: claimId,
         actorId: actor.uid,
         actorEmail: actor.email,
-        metadata: { businessId: input.businessId, organizationId: resolvedOrganizationId, branchId: resolvedBranchId, evidenceCount: input.evidence.length },
+        metadata: { businessId: input.businessId, organizationId: resolvedOrganizationId, branchId: resolvedBranchId, evidenceCount: input.evidence.length, riskScore, autoApproved },
+        createdAt: FieldValue.serverTimestamp()
+      });
+      transaction.create(db.collection("notifications").doc(), {
+        userId: actor.uid,
+        title: autoApproved ? "Business ownership approved" : "Business claim received",
+        body: autoApproved ? "Your low-risk claim passed the configured verification policy. The business workspace is ready." : "Spotly received your business claim and will show any request for additional information in your workspace.",
+        href: "/business",
+        category: "business_verification",
+        read: false,
         createdAt: FieldValue.serverTimestamp()
       });
     });
 
-    return Response.json({ ok: true, claimId, businessId: input.businessId, organizationId: resolvedOrganizationId, branchId: resolvedBranchId });
+    return Response.json({ ok: true, claimId, businessId: input.businessId, organizationId: resolvedOrganizationId, branchId: resolvedBranchId, autoApproved });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the claim details and evidence.", details: error.flatten() }, { status: 400 });
     return apiError(error);

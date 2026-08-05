@@ -61,7 +61,7 @@ export const portals = {
     description: "Run orders, bookings, catalog, staff, and finances.",
     nav: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/business" },
-      { id: "activity", label: "Activity", icon: ClipboardList, href: "/business/activity", badge: 7 },
+      { id: "activity", label: "Activity", icon: ClipboardList, href: "/business/activity" },
       { id: "catalog", label: "Catalog", icon: BookOpenCheck, href: "/business/catalog" },
       { id: "branches", label: "Branches", icon: MapPin, href: "/business/branches" },
       { id: "insights", label: "Insights", icon: BarChart3, href: "/business/insights" },
@@ -85,7 +85,7 @@ export const portals = {
     description: "Manage offers, active jobs, shifts, and earnings.",
     nav: [
       { id: "home", label: "Home", icon: House, href: "/driver" },
-      { id: "jobs", label: "Jobs", icon: ListChecks, href: "/driver/jobs", badge: 3 },
+      { id: "jobs", label: "Jobs", icon: ListChecks, href: "/driver/jobs" },
       { id: "active", label: "Active job", icon: MapPinned, href: "/driver/active" },
       { id: "earnings", label: "Earnings", icon: BadgeDollarSign, href: "/driver/earnings" },
       { id: "history", label: "History", icon: PackageCheck, href: "/driver/history" },
@@ -106,9 +106,9 @@ export const portals = {
     description: "Operate the platform, review risk, and manage access.",
     nav: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/admin" },
-      { id: "operations", label: "Operations", icon: Truck, href: "/admin/operations", badge: 12 },
-      { id: "businesses", label: "Businesses", icon: Building2, href: "/admin/businesses", badge: 4 },
-      { id: "drivers", label: "Drivers", icon: Bike, href: "/admin/drivers", badge: 6 },
+      { id: "operations", label: "Operations", icon: Truck, href: "/admin/operations" },
+      { id: "businesses", label: "Businesses", icon: Building2, href: "/admin/businesses" },
+      { id: "drivers", label: "Drivers", icon: Bike, href: "/admin/drivers" },
       { id: "customers", label: "Customers", icon: UsersRound, href: "/admin/customers" },
       { id: "finance", label: "Finance", icon: CreditCard, href: "/admin/finance" },
       { id: "content", label: "Content", icon: Compass, href: "/admin/content" },
@@ -117,27 +117,4 @@ export const portals = {
       { id: "settings", label: "Settings", icon: Settings, href: "/admin/settings" }
     ]
   }
-};
-
-export const globalNotifications = {
-  customer: [
-    { id: "c1", title: "Booking confirmed", message: "Your table at Namaste Harare is confirmed for 19:30.", time: "8 min", unread: true },
-    { id: "c2", title: "Order on the way", message: "Your driver is 6 minutes away.", time: "21 min", unread: true },
-    { id: "c3", title: "Weekend picks", message: "Five new events match your interests.", time: "2 h", unread: false }
-  ],
-  business: [
-    { id: "b1", title: "New order ORD-4824", message: "US$24.50 · Delivery · 4 items", time: "Now", unread: true },
-    { id: "b2", title: "Reservation request", message: "Table for 4 at 19:30 tonight.", time: "4 min", unread: true },
-    { id: "b3", title: "Payout scheduled", message: "US$842.10 will arrive on Friday.", time: "1 h", unread: false }
-  ],
-  driver: [
-    { id: "d1", title: "Priority job available", message: "Borrowdale → Mount Pleasant · US$6.80", time: "Now", unread: true },
-    { id: "d2", title: "Weekly goal", message: "Two more jobs to unlock your US$12 bonus.", time: "18 min", unread: true },
-    { id: "d3", title: "Payout sent", message: "US$86.40 was sent to EcoCash.", time: "Yesterday", unread: false }
-  ],
-  admin: [
-    { id: "a1", title: "Critical incident INC-0090", message: "Fraud pattern detected. Immediate review required.", time: "5 min", unread: true },
-    { id: "a2", title: "Payout POT-3340 on hold", message: "Active dispute requires finance review.", time: "24 min", unread: true },
-    { id: "a3", title: "Driver application submitted", message: "Nomsa Dube is ready for verification.", time: "2 h", unread: false }
-  ]
 };

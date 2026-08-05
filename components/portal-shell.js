@@ -21,12 +21,14 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { portals, globalNotifications } from "@/data/portals";
+import { portals } from "@/data/portals";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 import { useTheme } from "@/components/providers";
 import { useAuth } from "@/components/firebase-provider";
 import { Badge } from "@/components/ui";
+import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
+import { adminSectionsForProfile } from "@/lib/admin-access";
 
 
 function useOutsideClick(ref, callback) {
@@ -131,9 +133,29 @@ function ThemeMenu() {
   );
 }
 
-function NotificationPanel({ portal, open, onClose }) {
-  const [items, setItems] = useState(globalNotifications[portal.id] || []);
-  const unread = items.filter((item) => item.unread).length;
+function notificationTime(value) {
+  if (!value) return "Just now";
+  const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "Yesterday" : `${days} days ago`;
+}
+
+function NotificationPanel({ items, open, onClose, onRead, onReadAll }) {
+  const router = useRouter();
+  const unread = items.filter((item) => !item.read).length;
+
+  async function openItem(item) {
+    if (!item.read) await onRead(item.id);
+    onClose();
+    if (item.href) router.push(item.href);
+  }
+
   return (
     <AnimatePresence>
       {open && (
@@ -143,25 +165,25 @@ function NotificationPanel({ portal, open, onClose }) {
             <div className="flex h-20 items-center justify-between border-b px-5">
               <div>
                 <h2 className="text-lg font-semibold">Notifications</h2>
-                <p className="text-sm text-secondary">{unread ? `${unread} unread updates` : "You’re all caught up"}</p>
+                <p className="text-sm text-secondary">{unread ? `${unread} unread ${unread === 1 ? "update" : "updates"}` : "You’re all caught up"}</p>
               </div>
               <button aria-label="Close" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button>
             </div>
             <div className="flex items-center justify-between border-b px-5 py-3">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-tertiary">Recent</span>
-              <button onClick={() => setItems((current) => current.map((item) => ({ ...item, unread: false })))} className="text-sm font-semibold text-[var(--accent)]">Mark all read</button>
+              <button type="button" disabled={!unread} onClick={onReadAll} className="text-sm font-semibold text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40">Mark all read</button>
             </div>
             <div className="scrollbar-thin flex-1 overflow-y-auto p-3">
-              {items.map((item) => (
-                <button key={item.id} onClick={() => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, unread: false } : entry))} className="flex w-full gap-3 rounded-2xl p-3 text-left hover:bg-[var(--surface-2)]">
-                  <span className={cn("mt-2 h-2 w-2 shrink-0 rounded-full", item.unread ? "bg-[var(--accent)]" : "bg-transparent")} />
+              {items.length ? items.map((item) => (
+                <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-2xl p-3 text-left hover:bg-[var(--surface-2)]">
+                  <span className={cn("mt-2 h-2 w-2 shrink-0 rounded-full", !item.read ? "bg-[var(--accent)]" : "bg-transparent")} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold">{item.title}</span>
-                    <span className="mt-1 block text-sm leading-5 text-secondary">{item.message}</span>
-                    <span className="mt-2 block text-xs text-tertiary">{item.time}</span>
+                    <span className="block text-sm font-semibold">{item.title || "Spotly update"}</span>
+                    <span className="mt-1 block text-sm leading-5 text-secondary">{item.body || item.message || "Open this update for more information."}</span>
+                    <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt)}</span>
                   </span>
                 </button>
-              ))}
+              )) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
             </div>
           </motion.aside>
         </>
@@ -323,12 +345,38 @@ function MobileBottomNav({ portal, activeSection }) {
 }
 
 export function PortalShell({ portalId, activeSection, children, hideSidebar = false }) {
-  const portal = portals[portalId];
+  const basePortal = portals[portalId];
   const pathname = usePathname();
+  const { user, profile } = useAuth();
+  const portal = useMemo(() => {
+    if (portalId !== "admin") return basePortal;
+    const sections = adminSectionsForProfile(profile);
+    return { ...basePortal, nav: basePortal.nav.filter((item) => sections.has(item.id)) };
+  }, [basePortal, portalId, profile]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const unreadCount = (globalNotifications[portal.id] || []).filter((item) => item.unread).length;
+  const [notifications, setNotifications] = useState([]);
+  const unreadCount = notifications.filter((item) => !item.read).length;
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setNotifications([]);
+      return undefined;
+    }
+    return subscribeNotifications(user.uid, setNotifications, () => setNotifications([]));
+  }, [user?.uid]);
+
+  async function readNotification(id) {
+    setNotifications((current) => current.map((item) => item.id === id ? { ...item, read: true } : item));
+    try { await markNotificationRead(id); } catch {}
+  }
+
+  async function readAllNotifications() {
+    const ids = notifications.filter((item) => !item.read).map((item) => item.id);
+    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+    await Promise.allSettled(ids.map((id) => markNotificationRead(id)));
+  }
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -376,7 +424,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
         </main>
       </div>
       {!hideSidebar && <MobileBottomNav portal={portal} activeSection={activeSection} />}
-      <NotificationPanel portal={portal} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+      <NotificationPanel items={notifications} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRead={readNotification} onReadAll={readAllNotifications} />
       <CommandPalette portal={portal} open={commandOpen} onClose={() => setCommandOpen(false)} />
     </div>
   );

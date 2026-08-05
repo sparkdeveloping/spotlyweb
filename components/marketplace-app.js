@@ -33,7 +33,6 @@ import {
   subscribeCustomerOrders,
   subscribeFavorites
 } from "@/lib/firebase-services";
-import { zimbabweBusinesses } from "@/data/zimbabwe-businesses";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 
@@ -247,9 +246,9 @@ export function MarketplaceApp() {
     const timer = setTimeout(async () => {
       try {
         const result = await searchBusinesses(query, 80);
-        if (active) setBusinesses(result.length ? result : zimbabweBusinesses.filter((business) => business.public).slice(0, 80));
+        if (active) setBusinesses(result);
       } catch {
-        if (active) setBusinesses(zimbabweBusinesses.filter((business) => business.public && (!query || `${business.name} ${business.category} ${business.city}`.toLowerCase().includes(query.toLowerCase()))).slice(0, 80));
+        if (active) setBusinesses([]);
       } finally {
         if (active) setLoading(false);
       }
