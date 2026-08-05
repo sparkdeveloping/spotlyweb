@@ -37,6 +37,11 @@
     "eslint-config-next": "16.2.10",
     "tailwindcss": "4.3.3"
   },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "4.15.9"
+    }
+  },
   "type": "module",
   "packageManager": "npm@11.16.0"
 }
