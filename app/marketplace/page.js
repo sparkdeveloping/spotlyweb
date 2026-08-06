@@ -1,10 +1,11 @@
+import { Suspense } from "react";
 import { MarketplaceApp } from "@/components/marketplace-app";
 
 export const metadata = {
   title: "Marketplace preview",
-  description: "Spotly grocery pickup marketplace private preview for Zimbabwe."
+  description: "Find nearby businesses, build a basket, and follow pickup orders in the Spotly private preview."
 };
 
 export default function MarketplacePage() {
-  return <MarketplaceApp />;
+  return <Suspense fallback={<main className="min-h-screen bg-[#fffdf9]" />}><MarketplaceApp /></Suspense>;
 }

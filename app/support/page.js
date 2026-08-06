@@ -1,7 +1,8 @@
+import { Suspense } from "react";
 import { SupportApp } from "@/components/support-app";
 
-export const metadata = { title: "Help and live support", description: "Spotly guides, orientation resources, and live support." };
+export const metadata = { title: "Help and support", description: "Practical Spotly guides and support conversations." };
 
 export default function SupportPage() {
-  return <SupportApp />;
+  return <Suspense fallback={<main className="min-h-screen bg-grouped" />}><SupportApp /></Suspense>;
 }

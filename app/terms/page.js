@@ -1,0 +1,17 @@
+import Image from "next/image";
+import Link from "next/link";
+
+export const metadata = { title: "Terms of use", description: "Basic terms for using Spotly during the controlled pilot." };
+
+const sections = [
+  ["Using Spotly", "Use accurate information, protect your account, follow the instructions shown for each service, and do not misuse the platform or interfere with another person’s access."],
+  ["Pilot availability", "Spotly features may open by invitation, area, business, or account type. A visible business listing does not always mean ordering, booking, payment, delivery, or another transaction is available."],
+  ["Business information", "Businesses and authorized representatives are responsible for confirming public details, locations, offerings, prices, availability, operating hours, and customer instructions before publication or use."],
+  ["Orders and payments", "The final price, payment method, pickup or fulfilment details, cancellation terms, and any applicable fee must be shown before confirmation. A transaction is not complete until Spotly displays the relevant confirmation state."],
+  ["Support and corrections", "Report an incorrect listing, account problem, order issue, or payment concern through Spotly Support. Include the relevant reference while avoiding passwords, one-time codes, or payment PINs."],
+  ["Changes", "Spotly may update these terms as the pilot, supported services, and operating procedures develop. Material changes should be presented before they apply to continued use where appropriate."]
+];
+
+export default function TermsPage() {
+  return <main className="min-h-screen bg-[#fffdf9] px-4 py-10 text-ink sm:px-6"><div className="mx-auto max-w-3xl"><header className="flex items-center justify-between border-b pb-6"><Link href="/" className="flex items-center gap-3"><Image src="/brand/spotly.svg" alt="Spotly" width={42} height={42} /><span className="font-semibold">Spotly</span></Link><Link href="/support" className="text-sm font-semibold text-violet">Get help</Link></header><div className="py-10"><p className="text-sm font-semibold text-violet">Using the platform</p><h1 className="mt-2 text-4xl font-semibold tracking-[-.04em]">Terms of use</h1><p className="mt-5 text-base leading-8 text-secondary">These terms describe the basic expectations for using Spotly during its controlled pilot. Additional customer, business, staff, driver, or payment terms may be presented for a specific service.</p><p className="mt-3 text-sm text-tertiary">Last updated 6 August 2026</p><div className="mt-10 divide-y border-y">{sections.map(([title, body]) => <section key={title} className="py-6"><h2 className="text-lg font-semibold">{title}</h2><p className="mt-3 text-sm leading-7 text-secondary">{body}</p></section>)}</div><div className="mt-8 flex flex-wrap gap-3"><Link href="/support" className="inline-flex h-12 items-center rounded-xl bg-violet px-5 text-sm font-semibold text-white">Contact Spotly Support</Link><Link href="/" className="inline-flex h-12 items-center rounded-xl border px-5 text-sm font-semibold">Return home</Link></div></div></div></main>;
+}

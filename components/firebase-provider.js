@@ -207,7 +207,7 @@ export function FirebaseProvider({ children }) {
     const messaging = await getFirebaseMessaging();
     if (!messaging) throw new Error("Messaging is not supported in this browser.");
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
-    if (!vapidKey) throw new Error("Add NEXT_PUBLIC_FIREBASE_VAPID_KEY to enable push notifications.");
+    if (!vapidKey) throw new Error("Push notifications are not available yet.");
     const serviceWorkerRegistration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration });
     await setDoc(doc(client.db, "pushTokens", token), {

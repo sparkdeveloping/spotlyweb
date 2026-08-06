@@ -2,13 +2,14 @@ export default function manifest() {
   return {
     name: "Spotly",
     short_name: "Spotly",
-    description: "Discover Zimbabwean businesses and arrange grocery pickup with Spotly.",
+    description: "Find nearby businesses, order ahead, and collect when it is ready.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",
     theme_color: "#6657D9",
     icons: [
-      { src: "/brand/spotly.png", sizes: "1254x1254", type: "image/png", purpose: "any maskable" }
+      { src: "/icons/spotly-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/spotly-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
     ]
   };
 }

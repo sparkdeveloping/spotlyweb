@@ -7,17 +7,17 @@ export const metadata = {
     default: "Spotly",
     template: "%s · Spotly"
   },
-  description: "Spotly is preparing a simpler way to discover Zimbabwean businesses and arrange grocery pickup.",
+  description: "Find nearby Zimbabwean businesses, order ahead, and collect when it is ready.",
   applicationName: "Spotly",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/brand/spotly.png",
-    apple: "/brand/spotly.png"
+    icon: [{ url: "/brand/spotly.svg", type: "image/svg+xml" }, { url: "/icons/spotly-192.png", sizes: "192x192", type: "image/png" }],
+    apple: "/apple-touch-icon.png"
   },
   openGraph: {
     title: "Spotly",
-    description: "A more useful way to discover Zimbabwean businesses and arrange grocery pickup.",
-    images: ["/brand/spotly.png"]
+    description: "Find nearby businesses, order ahead, and collect when it is ready.",
+    images: ["/icons/spotly-512.png"]
   }
 };
 

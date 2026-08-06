@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* global firebase */
 importScripts("https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/12.6.0/firebase-messaging-compat.js");
@@ -16,8 +17,8 @@ messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title || payload.data?.title || "Spotly";
   const options = {
     body: payload.notification?.body || payload.data?.body || "You have a new update.",
-    icon: "/brand/spotly.png",
-    badge: "/brand/spotly.png",
+    icon: "/icons/spotly-192.png",
+    badge: "/icons/spotly-192.png",
     data: { href: payload.data?.href || "/account" },
     tag: payload.data?.category || "spotly-notification"
   };

@@ -1,25 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  BadgeDollarSign,
-  BellRing,
   Bike,
   CalendarDays,
   Check,
   CheckCircle2,
   ChevronRight,
-  CircleHelp,
   Clock3,
-  FileText,
-  Headphones,
   History,
   IdCard,
-  LocateFixed,
-  LockKeyhole,
-  Map,
   MapPin,
   MessageCircle,
   Navigation,
@@ -27,168 +19,144 @@ import {
   Phone,
   Play,
   ShieldCheck,
-  Star,
   UserRound,
   WalletCards,
   X
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PortalShell } from "@/components/portal-shell";
-import { BarChart, Sparkline } from "@/components/charts";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ListRow,
-  MetricCard,
-  Modal,
-  PageHeader,
-  ProgressBar,
-  SearchField,
-  SectionCard,
-  StatusBadge,
-  Tabs
-} from "@/components/ui";
+import { AuthGate } from "@/components/auth-gate";
+import { BarChart } from "@/components/charts";
+import { Badge, Button, Card, EmptyState, ListRow, Modal, PageHeader, ProgressBar, SearchField, SectionCard, StatusBadge } from "@/components/ui";
+import { useAuth } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
-import { activeJob as activeJobSeed, driverMetrics, earningsSeries, jobHistory, jobOffers as initialJobOffers, weeklyEarnings } from "@/data/driver";
+import { activeJob as activeJobSeed, jobHistory, jobOffers as initialJobOffers, weeklyEarnings } from "@/data/driver";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 
+const STORE_KEY = "spotly-driver-workflow-v2";
+const stages = [
+  { id: "to_pickup", label: "Going to pickup", action: "I have arrived", helper: "Navigate to the business and confirm when you arrive." },
+  { id: "at_pickup", label: "At pickup", action: "Order collected", helper: "Confirm the pickup code and check the order before leaving." },
+  { id: "to_customer", label: "Going to customer", action: "I have arrived", helper: "Use navigation and avoid interacting with the app while moving." },
+  { id: "handoff", label: "Customer handoff", action: "Complete delivery", helper: "Confirm the customer PIN or approved proof of delivery." },
+  { id: "complete", label: "Completed", action: "Back to jobs", helper: "The job has been completed and added to earnings." }
+];
+
 const sectionMeta = {
-  home: { title: "Driver home", description: "Your shift, live demand, and next best action." },
-  jobs: { title: "Available jobs", description: "Review dispatch offers and choose the right work." },
-  active: { title: "Active job", description: "Complete the delivery safely and keep the customer informed." },
-  earnings: { title: "Earnings", description: "Track pay, tips, bonuses, and payout history." },
-  history: { title: "Job history", description: "Your completed work, incidents, and shift records." },
-  support: { title: "Safety & support", description: "Get help quickly and report anything that needs attention." },
-  profile: { title: "Driver profile", description: "Manage verification, vehicle, documents, and availability." }
+  home: { title: "Driver home", description: "Your current shift and the next safe action." },
+  jobs: { title: "Available jobs", description: "Review one offer at a time and accept only when you can travel safely." },
+  active: { title: "Active job", description: "Complete the current delivery one step at a time." },
+  earnings: { title: "Earnings", description: "Pay, tips and payout history." },
+  history: { title: "Job history", description: "Completed work and recorded outcomes." },
+  support: { title: "Safety and support", description: "Get help or record an issue." },
+  profile: { title: "Driver profile", description: "Your account, vehicle and verification information." }
 };
 
-function AvailabilityCard({ online, setOnline }) {
-  return (
-    <Card className={cn("overflow-hidden p-5", online && "border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] bg-[linear-gradient(135deg,var(--surface),var(--accent-soft))]")}>
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-        <div className={cn("flex h-14 w-14 items-center justify-center rounded-[18px] text-white", online ? "bg-success" : "bg-gray-500")}><Bike className="h-6 w-6" /></div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold">{online ? "You’re online" : "You’re offline"}</h2><StatusBadge status={online ? "Online" : "Offline"} /></div>
-          <p className="mt-1 text-sm text-secondary">{online ? "Receiving offers in Borrowdale, Highlands, and Mount Pleasant." : "Go online when you’re ready to receive delivery offers."}</p>
-        </div>
-        <Button variant={online ? "outline" : "primary"} onClick={() => setOnline(!online)}>{online ? <><X className="h-4 w-4" />Go offline</> : <><Play className="h-4 w-4" />Go online</>}</Button>
-      </div>
-    </Card>
-  );
+function seededState() {
+  return { online: false, jobs: initialJobOffers, activeJob: null, stage: 0, completed: [] };
 }
 
-function JobOfferCard({ job, onAccept, onDecline, compact = false }) {
-  return (
-    <motion.article whileHover={{ y: -2 }} className={cn("surface rounded-2xl shadow-card", job.priority && "border-[var(--accent)]")}>
-      <div className="p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]"><PackageCheck className="h-5 w-5" /></span><div><div className="flex items-center gap-2"><h3 className="font-semibold">{job.merchant}</h3>{job.priority && <Badge tone="accent">Priority</Badge>}</div><p className="mt-1 text-sm text-secondary">{job.type} · {job.id}</p></div></div>
-          <div className="text-right"><p className="text-xl font-bold">{formatCurrency(job.pay + job.tip)}</p>{job.tip > 0 && <p className="mt-1 text-xs text-success">Includes {formatCurrency(job.tip)} tip</p>}</div>
-        </div>
-        <div className={cn("mt-5 grid gap-3", compact ? "grid-cols-1" : "sm:grid-cols-[1fr_auto_1fr]")}>
-          <div className="rounded-2xl bg-[var(--surface-2)] p-3"><p className="text-xs font-semibold uppercase tracking-wide text-tertiary">Pickup</p><p className="mt-2 text-sm font-semibold">{job.pickup}</p></div>
-          {!compact && <div className="hidden items-center sm:flex"><ChevronRight className="h-5 w-5 text-tertiary" /></div>}
-          <div className="rounded-2xl bg-[var(--surface-2)] p-3"><p className="text-xs font-semibold uppercase tracking-wide text-tertiary">Drop-off</p><p className="mt-2 text-sm font-semibold">{job.dropoff}</p></div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-secondary"><span className="inline-flex items-center gap-1"><Navigation className="h-3.5 w-3.5" />{job.distance}</span><span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{job.duration}</span><span className="ml-auto font-semibold text-warning">Offer expires in {job.expires}s</span></div>
-      </div>
-      <div className="flex gap-2 border-t p-3"><Button size="sm" variant="outline" className="flex-1" onClick={() => onDecline(job.id)}>Decline</Button><Button size="sm" className="flex-[1.5]" onClick={() => onAccept(job)}>Accept job</Button></div>
-    </motion.article>
-  );
+function useDriverWorkflow() {
+  const [state, setState] = useState(seededState);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(STORE_KEY) || "null");
+      if (saved) setState({ ...seededState(), ...saved });
+    } catch {}
+    setReady(true);
+  }, []);
+  useEffect(() => { if (ready) window.localStorage.setItem(STORE_KEY, JSON.stringify(state)); }, [ready, state]);
+  return [state, setState, ready];
 }
 
-function DriverHome({ online, setOnline, jobs, acceptJob, declineJob, navigateActive }) {
-  return (
-    <div className="space-y-7">
-      <PageHeader eyebrow="Monday · 20 July" title="Good evening, Tendai" description="Demand is high across north Harare. You’re two completed jobs away from today’s bonus." actions={<Button variant="outline"><Map className="h-4 w-4" />View demand map</Button>} />
-      <AvailabilityCard online={online} setOnline={setOnline} />
-      <div className="metric-grid">{driverMetrics.map((metric, index) => <MetricCard key={metric.label} {...metric} tone={index === 0 || index === 3 ? "success" : "default"} />)}</div>
-      <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
-        <SectionCard title="Best offer nearby" description="Matched to your current location and vehicle" action={<Link href="/driver/jobs" className="text-sm font-semibold text-[var(--accent)]">All offers</Link>}>
-          <div className="p-4">{online && jobs.length ? <JobOfferCard job={jobs[0]} onAccept={acceptJob} onDecline={declineJob} /> : <EmptyState icon={online ? LocateFixed : Bike} title={online ? "Looking for nearby jobs" : "Go online for offers"} description={online ? "New offers will appear here when dispatch finds a strong match." : "You must be online to receive available delivery work."} />}</div>
-        </SectionCard>
-        <SectionCard title="Today’s goal" description="Complete 9 jobs to unlock US$12"><div className="p-5"><div className="flex items-end justify-between"><div><p className="text-4xl font-bold">7<span className="text-xl text-tertiary">/9</span></p><p className="mt-1 text-sm text-secondary">jobs completed</p></div><span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]"><BadgeDollarSign className="h-6 w-6" /></span></div><ProgressBar value={78} className="mt-5 h-3" /><div className="mt-5 rounded-2xl bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">US$38.40 earned today</p><p className="mt-1 text-sm text-secondary">US$12 bonus unlocks after two more jobs.</p></div></div></SectionCard>
-      </div>
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><SectionCard title="Earnings trend" description="Last 12 shifts"><div className="p-5"><div className="flex items-end gap-2"><p className="text-3xl font-bold">US$286.70</p><p className="pb-1 text-sm text-success">+14.8%</p></div><Sparkline values={earningsSeries} className="mt-5 h-32" /></div></SectionCard><SectionCard title="Active delivery" description="Sakura Sushi → Highlands"><div className="p-5"><div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--accent)] text-white"><Navigation className="h-5 w-5" /></span><div className="min-w-0 flex-1"><p className="font-semibold">Heading to customer</p><p className="mt-1 text-sm text-secondary">6.2 km · approximately 17 min</p></div></div><Button className="mt-5 w-full" onClick={navigateActive}>Open active job</Button></div></SectionCard></div>
-    </div>
-  );
+function DemoNotice() {
+  return <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"><strong>Training preview:</strong> Sample offers are shown until a live driver profile and dispatch feed are connected.</div>;
 }
 
-function Jobs({ jobs, acceptJob, declineJob }) {
-  const [tab, setTab] = useState("available");
-  const [query, setQuery] = useState("");
-  const filtered = jobs.filter((job) => `${job.merchant} ${job.pickup} ${job.dropoff} ${job.type}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="space-y-6"><PageHeader {...sectionMeta.jobs} actions={<Button variant="outline"><Map className="h-4 w-4" />Demand map</Button>} /><Tabs value={tab} onChange={setTab} tabs={[{ value: "available", label: `Available (${jobs.length})` }, { value: "scheduled", label: "Scheduled" }]} />{tab === "available" ? <><SearchField value={query} onChange={setQuery} placeholder="Search pickup, drop-off, or merchant" />{filtered.length ? <div className="grid gap-4 xl:grid-cols-2">{filtered.map((job) => <JobOfferCard key={job.id} job={job} onAccept={acceptJob} onDecline={declineJob} />)}</div> : <Card><EmptyState icon={Search} title="No matching jobs" description="Clear your search to see all current offers." /></Card>}</> : <Card><EmptyState icon={CalendarDays} title="No scheduled jobs" description="Reserved or pre-booked deliveries will appear here." /></Card>}</div>;
+function Availability({ online, setOnline, hasActiveJob }) {
+  return <Card className={cn("p-5", online && "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))]")}><div className="flex flex-col gap-5 sm:flex-row sm:items-center"><span className={cn("flex h-14 w-14 items-center justify-center rounded-xl text-white", online ? "bg-success" : "bg-gray-500")}><Bike className="h-6 w-6" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold">{online ? "You are online" : "You are offline"}</h2><StatusBadge status={online ? "Online" : "Offline"} /></div><p className="mt-1 text-sm text-secondary">{online ? hasActiveJob ? "Finish the active job before accepting another offer." : "You can receive offers in your selected areas." : "Go online when you are ready to receive an offer."}</p></div><Button variant={online ? "outline" : "primary"} onClick={() => setOnline(!online)}>{online ? <><X className="h-4 w-4" />Go offline</> : <><Play className="h-4 w-4" />Go online</>}</Button></div></Card>;
 }
 
-function ActiveJob({ job, stage, progressStage }) {
+function JobOffer({ job, onAccept, onDecline }) {
+  return <Card className={cn("overflow-hidden", job.priority && "border-[var(--accent)]")}><div className="p-5"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><PackageCheck className="h-5 w-5" /></span><div><div className="flex items-center gap-2"><h3 className="font-semibold">{job.merchant}</h3>{job.priority && <Badge tone="accent">Priority</Badge>}</div><p className="mt-1 text-sm text-secondary">{job.type} · {job.id}</p></div></div><div className="text-right"><p className="text-xl font-semibold">{formatCurrency(job.pay + job.tip)}</p>{job.tip > 0 && <p className="mt-1 text-xs text-success">Includes {formatCurrency(job.tip)} tip</p>}</div></div><div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto_1fr]"><div className="rounded-lg bg-[var(--surface-2)] p-3"><p className="text-xs font-semibold text-tertiary">PICKUP</p><p className="mt-2 text-sm font-semibold">{job.pickup}</p></div><div className="hidden items-center sm:flex"><ChevronRight className="h-5 w-5 text-tertiary" /></div><div className="rounded-lg bg-[var(--surface-2)] p-3"><p className="text-xs font-semibold text-tertiary">DROP-OFF AREA</p><p className="mt-2 text-sm font-semibold">{job.dropoff}</p></div></div><div className="mt-4 flex flex-wrap gap-4 text-xs text-secondary"><span className="inline-flex items-center gap-1"><Navigation className="h-3.5 w-3.5" />{job.distance}</span><span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{job.duration}</span></div></div><div className="flex gap-2 border-t p-3"><Button size="sm" variant="outline" className="flex-1" onClick={() => onDecline(job.id)}>Decline</Button><Button size="sm" className="flex-[1.5]" onClick={() => onAccept(job)}>Accept job</Button></div></Card>;
+}
+
+function DriverHome({ state, setState, onAccept }) {
+  const { profile, user } = useAuth();
+  const name = (profile?.displayName || user?.displayName || "Driver").split(" ")[0];
+  const router = useRouter();
+  return <div className="space-y-6"><PageHeader eyebrow={new Date().toLocaleDateString("en-ZW", { weekday: "long", day: "numeric", month: "long" })} title={`Hello, ${name}`} description={state.activeJob ? "You have an active job. Continue from the exact step where you stopped." : "Go online when you are ready to receive work."} actions={state.activeJob ? <Button onClick={() => router.push("/driver/active")}>Continue active job</Button> : undefined} /><DemoNotice /><Availability online={state.online} hasActiveJob={Boolean(state.activeJob)} setOnline={(online) => setState((current) => ({ ...current, online }))} />{state.activeJob ? <Card className="p-5"><div className="flex items-start gap-4"><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Navigation className="h-6 w-6" /></span><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent)]">Current task</p><h2 className="mt-1 text-xl font-semibold">{stages[state.stage]?.label}</h2><p className="mt-2 text-sm text-secondary">{state.activeJob.merchant} · {state.activeJob.id}</p></div><Button onClick={() => router.push("/driver/active")}>Open</Button></div></Card> : state.online && state.jobs.length ? <div><div className="mb-4 flex items-end justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">Best offer nearby</p><h2 className="mt-1 text-2xl font-semibold">Review before accepting</h2></div><Link href="/driver/jobs" className="text-sm font-semibold text-[var(--accent)]">All offers</Link></div><JobOffer job={state.jobs[0]} onAccept={onAccept} onDecline={(id) => setState((current) => ({ ...current, jobs: current.jobs.filter((job) => job.id !== id) }))} /></div> : <EmptyState icon={state.online ? PackageCheck : Bike} title={state.online ? "No offers right now" : "You are not receiving offers"} description={state.online ? "Keep this screen open or go offline while you wait." : "Go online only when you are ready to travel safely."} />}</div>;
+}
+
+function Jobs({ state, setState, onAccept }) {
+  return <div className="space-y-6"><PageHeader {...sectionMeta.jobs} /><DemoNotice />{!state.online ? <EmptyState icon={Bike} title="Go online to review offers" description="Offers are hidden while you are offline." action={<Button onClick={() => setState((current) => ({ ...current, online: true }))}>Go online</Button>} /> : state.activeJob ? <EmptyState icon={Navigation} title="Finish your active job first" description="A driver can complete one job safely before accepting another." action={<Button asChild><Link href="/driver/active">Continue active job</Link></Button>} /> : state.jobs.length ? <div className="grid gap-4 xl:grid-cols-2">{state.jobs.map((job) => <JobOffer key={job.id} job={job} onAccept={onAccept} onDecline={(id) => setState((current) => ({ ...current, jobs: current.jobs.filter((item) => item.id !== id) }))} />)}</div> : <EmptyState icon={PackageCheck} title="No offers available" description="New offers will appear here while you remain online." />}</div>;
+}
+
+function MapsButton({ destination, children = "Open navigation" }) {
+  const href = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination || "Harare, Zimbabwe")}`;
+  return <Button asChild className="w-full"><a href={href} target="_blank" rel="noreferrer"><Navigation className="h-5 w-5" />{children}</a></Button>;
+}
+
+function ActiveJob({ state, setState }) {
+  const router = useRouter();
   const { toast } = useToast();
-  const stages = [
-    { title: "Accepted", detail: "Job accepted at 18:42" },
-    { title: "At pickup", detail: `Collect order and confirm code ${job.orderCode}` },
-    { title: "Heading to customer", detail: `${job.distance} · approximately 17 min` },
-    { title: "Delivered", detail: "Confirm customer PIN and complete job" }
-  ];
-  const nextLabels = ["I’m at pickup", "Start delivery", "Arrived at customer", "Complete job"];
-  return <div className="space-y-6"><PageHeader {...sectionMeta.active} actions={<Badge tone="info">{job.id}</Badge>} /><div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]"><div className="space-y-5"><Card className="overflow-hidden"><div className="relative flex min-h-[300px] items-center justify-center bg-[linear-gradient(135deg,#dbeafe,#eff6ff)] dark:bg-[linear-gradient(135deg,#172b4d,#111f37)]"><div className="absolute inset-0 opacity-40" style={{ backgroundImage: "radial-gradient(circle at 20% 30%, #60a5fa 0 3px, transparent 4px), radial-gradient(circle at 75% 60%, #2563eb 0 4px, transparent 5px), linear-gradient(35deg, transparent 47%, #93c5fd 48% 51%, transparent 52%)", backgroundSize: "100% 100%" }} /><div className="relative rounded-2xl bg-white/90 p-4 text-center text-gray-900 shadow-elevated"><Navigation className="mx-auto h-7 w-7 text-driver" /><p className="mt-2 text-sm font-semibold">Live route preview</p><p className="mt-1 text-xs text-gray-500">{job.pickup} → {job.dropoff}</p></div></div><div className="grid gap-3 border-t p-4 sm:grid-cols-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-tertiary">Pickup</p><p className="mt-2 font-semibold">{job.merchant}</p><p className="mt-1 text-sm text-secondary">{job.pickup}</p></div><div><p className="text-xs font-semibold uppercase tracking-wide text-tertiary">Customer</p><p className="mt-2 font-semibold">{job.customer}</p><p className="mt-1 text-sm text-secondary">{job.dropoff}</p></div></div></Card><SectionCard title="Delivery progress"><div className="p-5">{stages.map((item, index) => <div key={item.title} className="relative flex gap-4 pb-7 last:pb-0"><div className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 bg-[var(--surface)]" style={{ borderColor: index <= stage ? "var(--accent)" : "var(--border)", color: index <= stage ? "var(--accent)" : "var(--text-3)" }}>{index < stage ? <Check className="h-4 w-4" /> : index + 1}</div>{index < stages.length - 1 && <span className="absolute left-[17px] top-9 h-[calc(100%-2.25rem)] w-0.5" style={{ backgroundColor: index < stage ? "var(--accent)" : "var(--border)" }} />}<div className="pt-1"><p className="font-semibold">{item.title}</p><p className="mt-1 text-sm text-secondary">{item.detail}</p></div></div>)}</div></SectionCard></div><div className="space-y-5"><Card className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-sm text-secondary">Estimated earnings</p><p className="mt-2 text-3xl font-bold">{formatCurrency(job.pay + job.tip)}</p></div><StatusBadge status={stage >= 3 ? "Completed" : "Active job"} /></div><div className="mt-5 rounded-2xl bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">Order code</p><p className="mt-2 text-3xl font-bold tracking-[0.18em]">{job.orderCode}</p></div>{stage < 4 && <Button className="mt-5 w-full" onClick={() => { progressStage(); toast(stage === 3 ? "Delivery completed and earnings added." : `Job moved to ${stages[Math.min(stage + 1, 3)].title}.`); }}>{nextLabels[Math.min(stage, 3)]}</Button>}<Button className="mt-2 w-full" variant="outline"><Navigation className="h-4 w-4" />Open navigation</Button></Card><SectionCard title="Contact"><div><ListRow icon={Phone} title={job.merchant} subtitle="Call pickup location" /><div className="mx-4 border-t" /><ListRow icon={MessageCircle} title={job.customer} subtitle="Message customer safely" /></div></SectionCard><Card className="border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><p className="text-sm font-semibold">Safety comes first</p><p className="mt-1 text-sm leading-6 opacity-80">Do not use the app while moving. Stop safely before updating the delivery.</p></div></div></Card></div></div></div>;
+  const job = state.activeJob;
+  if (!job) return <div className="space-y-6"><PageHeader {...sectionMeta.active} /><EmptyState icon={Navigation} title="No active job" description="Accept an available offer when you are online." action={<Button asChild><Link href="/driver/jobs">View offers</Link></Button>} /></div>;
+  const stage = stages[state.stage] || stages[0];
+  const destination = state.stage < 2 ? job.pickup : job.dropoff;
+  function progress() {
+    if (state.stage < 4) {
+      const next = state.stage + 1;
+      setState((current) => ({ ...current, stage: next }));
+      toast(next === 4 ? "Delivery completed." : `Moved to ${stages[next].label}.`, { title: next === 4 ? "Job complete" : "Job updated" });
+    } else {
+      setState((current) => ({ ...current, activeJob: null, stage: 0, completed: [{ ...job, completedAt: new Date().toISOString() }, ...current.completed] }));
+      router.push("/driver/jobs");
+    }
+  }
+  return <div className="mx-auto max-w-2xl space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">{job.id}</p><h1 className="mt-1 text-3xl font-semibold tracking-[-.035em]">{stage.label}</h1></div><StatusBadge status={state.stage === 4 ? "Completed" : "Active job"} /></div><div className="rounded-xl bg-[#101827] p-5 text-white"><p className="text-xs font-semibold text-white/55">CURRENT DESTINATION</p><h2 className="mt-3 text-2xl font-semibold">{destination}</h2><p className="mt-2 text-sm text-white/65">{stage.helper}</p><div className="mt-6">{state.stage < 4 ? <MapsButton destination={destination} /> : <div className="rounded-lg bg-white/10 p-4 text-sm">This job is complete. Review the earnings, then return to available work.</div>}</div></div><Card className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-tertiary">PICKUP</p><p className="mt-2 font-semibold">{job.merchant}</p><p className="mt-1 text-sm text-secondary">{job.pickup}</p></div><div className="text-right"><p className="text-xs font-semibold text-tertiary">PAY</p><p className="mt-2 text-lg font-semibold">{formatCurrency((job.pay || 0) + (job.tip || 0))}</p></div></div>{state.stage === 1 && <div className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Pickup code: {job.orderCode || "Ask the business"}</p><p className="mt-1">Confirm the package and collection code before leaving.</p></div>}{state.stage === 3 && <div className="mt-5 rounded-lg bg-violet-soft p-4 text-sm text-violet-900"><p className="font-semibold">Customer handoff</p><p className="mt-1">Confirm the approved PIN or proof before completing the delivery.</p></div>}</Card><div className="grid grid-cols-2 gap-3"><Button asChild variant="outline"><Link href={`/support?topic=driver-job&reference=${encodeURIComponent(job.id)}`}><MessageCircle className="h-4 w-4" />Report a problem</Link></Button><Button onClick={progress}>{state.stage === 4 ? <><CheckCircle2 className="h-4 w-4" />Finish</> : <><Check className="h-4 w-4" />{stage.action}</>}</Button></div><div className="flex items-center justify-between gap-2">{stages.map((item, index) => <div key={item.id} className="min-w-0 flex-1"><div className={cn("h-1.5 rounded-full", index <= state.stage ? "bg-[var(--accent)]" : "bg-[var(--surface-2)]")} /><p className="mt-2 hidden truncate text-center text-[10px] text-secondary sm:block">{item.label}</p></div>)}</div></div>;
 }
 
 function Earnings() {
-  return <div className="space-y-6"><PageHeader {...sectionMeta.earnings} actions={<Button variant="outline"><FileText className="h-4 w-4" />Statement</Button>} /><div className="metric-grid"><MetricCard label="This week" value="US$131.90" delta="+14.8%" hint="vs last week" tone="success" icon={BadgeDollarSign} /><MetricCard label="Tips" value="US$18.60" delta="14.1%" hint="of total pay" icon={Star} /><MetricCard label="Bonuses" value="US$24.00" delta="2 earned" hint="this week" icon={CheckCircle2} /><MetricCard label="Next payout" value="US$86.40" delta="Friday" hint="EcoCash ••3012" icon={WalletCards} /></div><div className="grid gap-5 lg:grid-cols-[1.25fr_.75fr]"><SectionCard title="Daily earnings" description="Current week"><div className="p-5"><BarChart data={weeklyEarnings} height={250} formatValue={(value) => formatCurrency(value)} /></div></SectionCard><SectionCard title="Pay breakdown" description="This week"><div className="p-5"><div className="space-y-4">{[{ label: "Base pay", value: 89.3, pct: 68 }, { label: "Tips", value: 18.6, pct: 14 }, { label: "Bonuses", value: 24, pct: 18 }].map((item) => <div key={item.label}><div className="flex justify-between text-sm"><span className="text-secondary">{item.label}</span><span className="font-semibold">{formatCurrency(item.value)}</span></div><ProgressBar value={item.pct} className="mt-2" /></div>)}</div><div className="mt-6 border-t pt-4"><div className="flex justify-between"><span className="font-semibold">Total</span><span className="text-xl font-bold">US$131.90</span></div></div></div></SectionCard></div><SectionCard title="Recent payouts"><div>{[{ id: "PAY-1831", date: "17 Jul", amount: 86.4, status: "Paid" }, { id: "PAY-1818", date: "10 Jul", amount: 104.2, status: "Paid" }, { id: "PAY-1807", date: "3 Jul", amount: 92.8, status: "Paid" }].map((item) => <div key={item.id} className="flex min-h-[64px] items-center gap-3 border-b px-5 py-3 last:border-b-0"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><WalletCards className="h-5 w-5" /></span><div className="flex-1"><p className="text-sm font-semibold">{item.id}</p><p className="mt-1 text-xs text-secondary">{item.date} · EcoCash ••3012</p></div><p className="font-semibold">{formatCurrency(item.amount)}</p><StatusBadge status={item.status} /></div>)}</div></SectionCard></div>;
+  return <div className="space-y-6"><PageHeader {...sectionMeta.earnings} /><DemoNotice /><div className="grid gap-4 sm:grid-cols-3"><Card className="p-5"><p className="text-sm text-secondary">This week</p><p className="mt-3 text-3xl font-semibold">US$131.90</p></Card><Card className="p-5"><p className="text-sm text-secondary">Tips</p><p className="mt-3 text-3xl font-semibold">US$18.60</p></Card><Card className="p-5"><p className="text-sm text-secondary">Next payout</p><p className="mt-3 text-3xl font-semibold">Friday</p></Card></div><SectionCard title="Daily earnings" description="Training data for the current week"><div className="p-5"><BarChart data={weeklyEarnings} height={250} formatValue={(value) => formatCurrency(value)} /></div></SectionCard><SectionCard title="Pay breakdown"><div className="space-y-4 p-5">{[{ label: "Base pay", value: 89.3, pct: 68 }, { label: "Tips", value: 18.6, pct: 14 }, { label: "Bonuses", value: 24, pct: 18 }].map((item) => <div key={item.label}><div className="flex justify-between text-sm"><span className="text-secondary">{item.label}</span><span className="font-semibold">{formatCurrency(item.value)}</span></div><ProgressBar value={item.pct} className="mt-2" label={`${item.label} share`} /></div>)}</div></SectionCard></div>;
 }
 
-function HistoryView() {
+function HistoryView({ completed }) {
   const [query, setQuery] = useState("");
-  const visible = jobHistory.filter((item) => `${item.id} ${item.merchant} ${item.route}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="space-y-6"><PageHeader {...sectionMeta.history} /><SearchField value={query} onChange={setQuery} placeholder="Search jobs" /><SectionCard><div>{visible.map((item) => <div key={item.id} className="flex min-h-[70px] items-center gap-3 border-b px-4 py-3 last:border-b-0"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]"><History className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{item.merchant}</p><StatusBadge status={item.status} /></div><p className="mt-1 text-sm text-secondary">{item.route}</p><p className="mt-1 text-xs text-tertiary">{item.id} · {item.date}</p></div><p className="font-semibold">{formatCurrency(item.pay)}</p><ChevronRight className="h-4 w-4 text-tertiary" /></div>)}</div></SectionCard></div>;
+  const rows = useMemo(() => [...completed.map((job) => ({ id: job.id, merchant: job.merchant, route: `${job.pickup} → ${job.dropoff}`, date: new Date(job.completedAt).toLocaleString("en-ZW"), pay: (job.pay || 0) + (job.tip || 0), status: "Completed" })), ...jobHistory.filter((item) => item.status !== "Active")], [completed]);
+  const visible = rows.filter((item) => `${item.id} ${item.merchant} ${item.route}`.toLowerCase().includes(query.toLowerCase()));
+  return <div className="space-y-6"><PageHeader {...sectionMeta.history} /><DemoNotice /><SearchField value={query} onChange={setQuery} label="Search job history" placeholder="Search jobs" /><SectionCard><div>{visible.map((item) => <div key={`${item.id}-${item.date}`} className="flex min-h-[70px] items-center gap-3 border-b px-4 py-3 last:border-b-0"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><History className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{item.merchant}</p><StatusBadge status={item.status} /></div><p className="mt-1 text-sm text-secondary">{item.route}</p><p className="mt-1 text-xs text-tertiary">{item.id} · {item.date}</p></div><p className="font-semibold">{formatCurrency(item.pay)}</p></div>)}</div></SectionCard></div>;
 }
 
 function Support() {
-  const { toast } = useToast();
-  return <div className="space-y-6"><PageHeader {...sectionMeta.support} /><Card className="border-red-300 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/30"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-danger text-white"><ShieldCheck className="h-6 w-6" /></span><div className="flex-1"><h2 className="text-lg font-semibold text-red-900 dark:text-red-100">Emergency safety support</h2><p className="mt-1 text-sm text-red-700 dark:text-red-300">Use this only for immediate danger or an urgent active-job safety issue.</p></div><Button variant="danger" onClick={() => toast("Safety support request opened.", { type: "error", title: "Emergency support" })}><Phone className="h-4 w-4" />Contact safety</Button></div></Card><div className="grid gap-5 lg:grid-cols-2"><SectionCard title="Get help"><div><ListRow icon={Headphones} title="Live driver support" subtitle="Chat with the operations team" /><div className="mx-4 border-t" /><ListRow icon={CircleHelp} title="Help centre" subtitle="Jobs, payments, account, and vehicle" /><div className="mx-4 border-t" /><ListRow icon={MessageCircle} title="Report an issue" subtitle="Tell us about a completed job" /></div></SectionCard><SectionCard title="Safety resources"><div><ListRow icon={ShieldCheck} title="Safety toolkit" subtitle="Emergency contacts and safe delivery guidance" /><div className="mx-4 border-t" /><ListRow icon={AlertTriangle} title="Incident history" subtitle="Review submitted safety reports" /><div className="mx-4 border-t" /><ListRow icon={FileText} title="Driver policies" subtitle="Terms, privacy, and community standards" /></div></SectionCard></div></div>;
+  return <div className="space-y-6"><PageHeader {...sectionMeta.support} /><Card className="border-red-200 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/30"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-danger text-white"><ShieldCheck className="h-6 w-6" /></span><div className="flex-1"><h2 className="text-lg font-semibold text-red-900 dark:text-red-100">Immediate danger</h2><p className="mt-1 text-sm text-red-700 dark:text-red-300">Move to a safe place and contact local emergency services. Use Spotly support for an active-job incident or follow-up.</p></div><Button asChild variant="danger"><Link href="/support?topic=safety"><Phone className="h-4 w-4" />Open urgent support</Link></Button></div></Card><div className="grid gap-5 lg:grid-cols-2"><SectionCard title="Get help"><div><ListRow href="/support?topic=driver-job" icon={MessageCircle} title="Active-job support" subtitle="Include the job reference and what happened" /><div className="mx-4 border-t" /><ListRow href="/support?topic=driver-account" icon={UserRound} title="Account or vehicle help" subtitle="Profile, documents, payout or availability" /><div className="mx-4 border-t" /><ListRow href="/support?topic=driver-payment" icon={WalletCards} title="Earnings and payout help" subtitle="Ask about a statement or payout" /></div></SectionCard><SectionCard title="Safety resources"><div><ListRow href="/support?topic=safety-guidance" icon={ShieldCheck} title="Safety guidance" subtitle="Safe pickup, contact and handoff practices" /><div className="mx-4 border-t" /><ListRow href="/support?topic=incident" icon={AlertTriangle} title="Report an incident" subtitle="Create a record for review" /><div className="mx-4 border-t" /><ListRow href="/support?topic=driver-policy" icon={IdCard} title="Driver policies" subtitle="Request the current operating guidance" /></div></SectionCard></div></div>;
 }
 
 function Profile() {
-  return <div className="space-y-6"><PageHeader {...sectionMeta.profile} actions={<Button variant="outline">Edit profile</Button>} /><Card className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center"><span className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[var(--accent)] text-xl font-bold text-white">TM</span><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-semibold">Tendai Mutendi</h2><Badge tone="success">Verified</Badge></div><p className="mt-1 text-sm text-secondary">Harare · Motorbike · Joined March 2026</p><div className="mt-3 flex flex-wrap gap-2"><Badge tone="accent">4.96 rating</Badge><Badge tone="neutral">1,842 jobs</Badge><Badge tone="neutral">Top 8%</Badge></div></div></Card><div className="grid gap-5 lg:grid-cols-2"><SectionCard title="Driver account"><div><ListRow icon={UserRound} title="Personal details" subtitle="Name, phone, and emergency contact" /><div className="mx-4 border-t" /><ListRow icon={Bike} title="Vehicle details" subtitle="Honda CB125 · ACD 4812" /><div className="mx-4 border-t" /><ListRow icon={IdCard} title="Documents" subtitle="Licence, registration, and insurance" trailing={<StatusBadge status="Approved" />} /><div className="mx-4 border-t" /><ListRow icon={WalletCards} title="Payout method" subtitle="EcoCash ••3012" /></div></SectionCard><SectionCard title="Preferences"><div><ListRow icon={MapPin} title="Delivery zones" subtitle="Borrowdale, Highlands, Mount Pleasant" /><div className="mx-4 border-t" /><ListRow icon={CalendarDays} title="Availability" subtitle="Flexible schedule" /><div className="mx-4 border-t" /><ListRow icon={BellRing} title="Notifications" subtitle="Offers, payouts, and safety updates" /><div className="mx-4 border-t" /><ListRow icon={LockKeyhole} title="Privacy & security" subtitle="Password and account access" /></div></SectionCard></div><SectionCard title="Verification progress" description="All required steps are complete"><div className="grid gap-3 p-5 sm:grid-cols-3">{["Identity", "Vehicle", "Background check"].map((item) => <div key={item} className="rounded-2xl bg-green-50 p-4 text-green-800 dark:bg-green-950/30 dark:text-green-300"><CheckCircle2 className="h-5 w-5" /><p className="mt-3 text-sm font-semibold">{item}</p><p className="mt-1 text-xs opacity-75">Approved</p></div>)}</div></SectionCard></div>;
+  const { profile, user } = useAuth();
+  const name = profile?.displayName || user?.displayName || "Driver";
+  const initials = name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  return <div className="space-y-6"><PageHeader {...sectionMeta.profile} actions={<Button asChild variant="outline"><Link href="/account">Open account settings</Link></Button>} /><DemoNotice /><Card className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center"><span className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[var(--accent)] text-xl font-semibold text-white">{initials}</span><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-semibold">{name}</h2><Badge tone="warning">Training profile</Badge></div><p className="mt-1 text-sm text-secondary">Live driver verification details will appear after onboarding.</p></div></Card><div className="grid gap-5 lg:grid-cols-2"><SectionCard title="Driver account"><div><ListRow href="/account" icon={UserRound} title="Personal details" subtitle="Name, phone and account security" /><div className="mx-4 border-t" /><ListRow href="/support?topic=driver-vehicle" icon={Bike} title="Vehicle details" subtitle="Add or update a vehicle through driver support" /><div className="mx-4 border-t" /><ListRow href="/support?topic=driver-documents" icon={IdCard} title="Documents" subtitle="Licence, registration and insurance" /><div className="mx-4 border-t" /><ListRow href="/support?topic=driver-payout" icon={WalletCards} title="Payout method" subtitle="Update payout details securely" /></div></SectionCard><SectionCard title="Preferences"><div><ListRow href="/support?topic=driver-zones" icon={MapPin} title="Delivery zones" subtitle="Request an area change" /><div className="mx-4 border-t" /><ListRow href="/support?topic=driver-availability" icon={CalendarDays} title="Availability" subtitle="Update your normal schedule" /><div className="mx-4 border-t" /><ListRow href="/account" icon={ShieldCheck} title="Privacy and security" subtitle="Manage your Spotly account" /></div></SectionCard></div></div>;
 }
 
 export function DriverApp({ section = "home" }) {
   const safeSection = sectionMeta[section] ? section : "home";
-  const [online, setOnline] = useState(true);
-  const [jobs, setJobs] = useState(initialJobOffers);
-  const [activeJob, setActiveJob] = useState(activeJobSeed);
-  const [stage, setStage] = useState(2);
+  const [state, setState, ready] = useDriverWorkflow();
   const [offerModal, setOfferModal] = useState(null);
+  const router = useRouter();
   const { toast } = useToast();
 
   function acceptJob(job) {
-    setActiveJob({ ...activeJobSeed, id: job.id, merchant: job.merchant, pickup: job.pickup, dropoff: job.dropoff, pay: job.pay, tip: job.tip, distance: job.distance });
-    setStage(0);
-    setJobs((current) => current.filter((item) => item.id !== job.id));
+    const nextJob = { ...activeJobSeed, ...job, customer: "Customer details appear after pickup", orderCode: activeJobSeed.orderCode || "8241" };
+    setState((current) => ({ ...current, activeJob: nextJob, stage: 0, jobs: current.jobs.filter((item) => item.id !== job.id), online: true }));
     setOfferModal(null);
-    toast(`${job.id} accepted. Navigate to ${job.merchant}.`, { title: "Job accepted" });
-    window.location.href = "/driver/active";
+    toast(`${job.id} accepted.`, { title: "Job accepted" });
+    router.push("/driver/active");
   }
 
-  function declineJob(id) {
-    setJobs((current) => current.filter((item) => item.id !== id));
-    toast(`${id} removed from your offers.`, { title: "Offer declined", type: "info" });
-  }
+  if (!ready) return <div className="flex min-h-screen items-center justify-center"><Bike className="h-8 w-8 animate-pulse text-driver" /></div>;
 
-  function progressStage() {
-    setStage((current) => Math.min(4, current + 1));
-  }
-
-  return <PortalShell portalId="driver" activeSection={safeSection}><div className="mx-auto max-w-[1450px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">
-    {safeSection === "home" && <DriverHome online={online} setOnline={setOnline} jobs={jobs} acceptJob={acceptJob} declineJob={declineJob} navigateActive={() => { window.location.href = "/driver/active"; }} />}
-    {safeSection === "jobs" && <Jobs jobs={jobs} acceptJob={(job) => setOfferModal(job)} declineJob={declineJob} />}
-    {safeSection === "active" && <ActiveJob job={activeJob} stage={stage} progressStage={progressStage} />}
-    {safeSection === "earnings" && <Earnings />}
-    {safeSection === "history" && <HistoryView />}
-    {safeSection === "support" && <Support />}
-    {safeSection === "profile" && <Profile />}
-  </div><Modal open={Boolean(offerModal)} onClose={() => setOfferModal(null)} title="Confirm job acceptance" size="sm">{offerModal && <div className="p-5"><JobOfferCard job={offerModal} onAccept={acceptJob} onDecline={declineJob} compact /><p className="mt-4 text-xs leading-5 text-secondary">Accepting confirms that you can travel to the pickup now and complete the delivery safely.</p></div>}</Modal></PortalShell>;
+  return <AuthGate><PortalShell portalId="driver" activeSection={safeSection}><div className="mx-auto max-w-[1280px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{safeSection === "home" && <DriverHome state={state} setState={setState} onAccept={(job) => setOfferModal(job)} />}{safeSection === "jobs" && <Jobs state={state} setState={setState} onAccept={(job) => setOfferModal(job)} />}{safeSection === "active" && <ActiveJob state={state} setState={setState} />}{safeSection === "earnings" && <Earnings />}{safeSection === "history" && <HistoryView completed={state.completed || []} />}{safeSection === "support" && <Support />}{safeSection === "profile" && <Profile />}</div><Modal open={Boolean(offerModal)} onClose={() => setOfferModal(null)} title="Accept this job?" description="Confirm that you can travel to the pickup now and complete the delivery safely." size="sm">{offerModal && <div className="p-5"><JobOffer job={offerModal} onAccept={acceptJob} onDecline={(id) => { setState((current) => ({ ...current, jobs: current.jobs.filter((item) => item.id !== id) })); setOfferModal(null); }} /></div>}</Modal></PortalShell></AuthGate>;
 }

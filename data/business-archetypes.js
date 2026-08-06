@@ -1,5 +1,4 @@
 import {
-  Activity,
   BadgeDollarSign,
   BarChart3,
   CalendarDays,

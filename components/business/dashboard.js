@@ -3,28 +3,20 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
   CalendarCheck2,
   CheckCircle2,
-  CircleDollarSign,
   Clock3,
   MessageCircle,
   PackageCheck,
-  ScanLine,
   ShoppingBag,
   Sparkles,
   Store,
   UsersRound
 } from "lucide-react";
-import { Badge, Button, Card, MetricCard, PageHeader, SectionCard, StatusBadge } from "@/components/ui";
-import { formatCurrency } from "@/lib/format";
+import { Badge, Button, Card, PageHeader, SectionCard, StatusBadge } from "@/components/ui";
 import { useBusinessWorkspace } from "@/components/business/business-context";
 import { CompletionBanner, ReadinessCard, WorkspaceContextSwitcher } from "@/components/business/shared";
 import { getBusinessReadiness } from "@/data/business-config";
-
-function orderTotal(order) {
-  return Number(order.totals?.total ?? order.total ?? 0);
-}
 
 function timestamp(value) {
   if (!value) return null;
@@ -49,7 +41,7 @@ function SetupWelcome({ data }) {
   const next = readiness.checks.find((item) => !item.done);
   return <div className="space-y-6">
     <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader eyebrow="Spotly Business" title={`Let’s finish setting up ${data.business?.brandName || data.business?.name || "your business"}`} description="Spotly will introduce one decision at a time. Finance, team controls, and advanced tools stay out of the way until they are relevant." /><WorkspaceContextSwitcher showBranch={false} /></div>
-    <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-950 via-business to-emerald-500 p-7 text-white sm:p-10"><div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-white/10" /><div className="relative max-w-3xl"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15"><Sparkles className="h-7 w-7" /></span><p className="mt-7 text-xs font-black uppercase tracking-[.16em] text-white/65">Recommended next step</p><h1 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">{next?.label || "Review the business"}</h1><p className="mt-4 max-w-2xl text-base leading-8 text-white/75">{next?.description || "Confirm the essentials before opening the full workspace."}</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Button asChild className="bg-white text-business hover:bg-white/90"><Link href="/business/setup">Continue guided setup<ArrowRight className="h-4 w-4" /></Link></Button><Button asChild variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/20"><Link href="/business/support">Get setup help</Link></Button></div></div></Card>
+    <Card className="relative overflow-hidden border-business/20 bg-business-soft p-7 sm:p-10"><div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-business/5" /><div className="relative max-w-3xl"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-business"><Sparkles className="h-7 w-7" /></span><p className="mt-7 text-xs font-black uppercase tracking-[.16em] text-business">Recommended next step</p><h1 className="mt-2 text-4xl font-semibold tracking-[-.04em] sm:text-5xl">{next?.label || "Review the business"}</h1><p className="mt-4 max-w-2xl text-base leading-8 text-secondary">{next?.description || "Confirm the essentials before opening the full workspace."}</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Button asChild ><Link href="/business/setup">Continue guided setup<ArrowRight className="h-4 w-4" /></Link></Button><Button asChild variant="outline" ><Link href="/business/support">Get setup help</Link></Button></div></div></Card>
     <div className="grid gap-5 xl:grid-cols-[1fr_390px]"><SectionCard title="What Spotly is preparing" description="Only the essential decisions are required before the operational workspace opens"><div className="grid gap-0 sm:grid-cols-2">{[
       [Store, "Business and brand", data.business?.businessType ? "Business type selected" : "Needs confirmation"],
       [data.archetype.icon, data.archetype.label, `${data.business?.capabilities?.length || data.archetype.capabilities.length} relevant capabilities`],
@@ -70,57 +62,37 @@ export function BusinessDashboard() {
   if (!data.setupComplete) return <SetupWelcome data={data} />;
 
   const scopedOrders = data.orders.filter((order) => !data.selectedBranchId || !order.branchId || order.branchId === data.selectedBranchId);
-  const activeOrders = scopedOrders.filter((order) => !["picked_up", "completed", "cancelled", "refunded", "checked_in", "checked_out", "resolved"].includes(order.status));
-  const urgentOrders = activeOrders.filter((order) => ["submitted", "new", "accepted", "preparing", "customer_arrived"].includes(order.status));
+  const finalStates = new Set(["picked_up", "completed", "cancelled", "refunded", "checked_in", "checked_out", "resolved"]);
+  const activeOrders = scopedOrders.filter((order) => !finalStates.has(order.status));
+  const urgentOrders = activeOrders.filter((order) => ["submitted", "new", "accepted", "preparing", "customer_arrived", "substitution_required"].includes(order.status));
   const activeProducts = data.products.filter((product) => product.active);
   const unavailableProducts = data.products.filter((product) => product.active && ["unavailable", "out_of_stock"].includes(product.stockStatus));
   const openSupport = data.support.filter((item) => !["closed", "resolved"].includes(item.status));
-  const completedOrders = scopedOrders.filter((order) => ["picked_up", "completed", "checked_in", "checked_out", "issued", "resolved"].includes(order.status));
-  const completedRevenue = completedOrders.reduce((sum, order) => sum + orderTotal(order), 0);
-  const primaryCurrency = data.finance?.acceptedCurrencies?.[0] || data.operations?.defaultCurrency || "USD";
-  const recentOrders = [...activeOrders].slice(0, 5);
   const ActivityIcon = activityIcon(data.businessType);
   const activityLabel = data.archetype.nouns.activity[0].toUpperCase() + data.archetype.nouns.activity.slice(1);
   const capabilities = new Set(data.business?.capabilities || data.archetype.capabilities);
   const needsCatalog = ["catalog", "menu", "events", "services", "listings"].some((item) => capabilities.has(item));
-  const hasKiosk = ["kiosk_pickup", "kiosk_ordering", "kiosk_checkin"].some((item) => capabilities.has(item));
-
-  const actions = [
-    needsCatalog && {
-      icon: PackageCheck,
-      title: activeProducts.length ? `Review ${data.archetype.nouns.items}` : `Add the first ${data.archetype.nouns.item}`,
-      description: activeProducts.length ? `${activeProducts.length} active · ${unavailableProducts.length} unavailable` : `Use a relevant starter or create one ${data.archetype.nouns.item}.`,
-      href: "/business/catalog",
-      done: activeProducts.length > 0
-    },
-    {
-      icon: UsersRound,
-      title: data.members.length > 1 ? "Review who has access" : "Add the first teammate when ready",
-      description: data.members.length > 1 ? `${data.members.length} people can access this business` : "Team setup is optional until another person needs to work here.",
-      href: "/business/staff",
-      done: data.members.length > 1
-    },
-    hasKiosk && {
-      icon: ScanLine,
-      title: data.business?.kiosk?.enabled ? "Review kiosk mode" : "Prepare a shared-device kiosk",
-      description: data.business?.kiosk?.enabled ? "A focused shared-device experience is configured." : "Use a tablet for pickup or guest check-in without exposing settings.",
-      href: "/business/kiosk",
-      done: Boolean(data.business?.kiosk?.enabled)
-    },
-    {
-      icon: MessageCircle,
-      title: openSupport.length ? "Reply to Spotly Support" : "Get help without leaving the task",
-      description: openSupport.length ? `${openSupport.length} open conversation${openSupport.length === 1 ? "" : "s"}` : "Open a conversation with the business and location already attached.",
-      href: "/business/support",
-      done: !openSupport.length
-    }
+  const locationName = data.selectedBranch?.branchName || data.selectedBranch?.name || data.selectedBranch?.displayName || "Main location";
+  const locationCity = data.selectedBranch?.city || "Zimbabwe";
+  const locationOpen = data.selectedBranch?.status !== "paused" && data.selectedBranch?.status !== "inactive";
+  const queueGroups = [
+    { id: "new", label: "New", statuses: ["submitted", "new"], tone: "warning" },
+    { id: "preparing", label: "Preparing", statuses: ["accepted", "preparing", "in_progress"], tone: "accent" },
+    { id: "ready", label: "Ready", statuses: ["ready", "ready_for_pickup", "customer_arrived"], tone: "success" }
+  ].map((group) => ({ ...group, records: activeOrders.filter((order) => group.statuses.includes(order.status)) }));
+  const attention = [
+    urgentOrders.length > 0 && { title: `${urgentOrders.length} ${activityLabel.toLowerCase()} need action`, detail: "Open the queue and move each one to its next state.", href: "/business/activity", icon: ActivityIcon, tone: "warning" },
+    unavailableProducts.length > 0 && { title: `${unavailableProducts.length} ${data.archetype.nouns.items} unavailable`, detail: "Confirm stock or availability before customers place another order.", href: "/business/catalog", icon: PackageCheck, tone: "warning" },
+    openSupport.length > 0 && { title: `${openSupport.length} support conversation${openSupport.length === 1 ? "" : "s"} open`, detail: "Review replies and resolve anything blocking the location.", href: "/business/support", icon: MessageCircle, tone: "accent" },
+    !data.business?.public && { title: "This business is still private", detail: "Review setup and publication requirements before customers can find it.", href: "/business/setup", icon: Store, tone: "neutral" }
   ].filter(Boolean);
 
   return <div className="space-y-6">
-    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader eyebrow={data.archetype.shortLabel} title={data.business?.brandName || data.business?.name || "Business home"} description={`${data.selectedBranch?.branchName || data.selectedBranch?.name || data.selectedBranch?.displayName || "Main location"} · ${data.selectedBranch?.city || "Zimbabwe"}`} actions={<div className="flex flex-wrap items-center gap-2"><StatusBadge status={data.business?.verificationStatus || "unverified"} />{data.business?.public ? <Badge tone="success">Visible to customers</Badge> : <Badge tone="neutral">Private setup</Badge>}</div>} /><WorkspaceContextSwitcher /></div>
+    <div className="flex flex-col gap-5 border-b pb-6 xl:flex-row xl:items-end xl:justify-between"><div><p className="text-sm font-semibold text-business">{data.business?.brandName || data.business?.name || "Spotly Business"}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.03em]">Today at {locationName}</h1><p className="mt-2 text-sm text-secondary">{locationCity} · {data.archetype.shortLabel}</p></div><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><WorkspaceContextSwitcher /><Button asChild variant="outline"><Link href="/business/branches">Manage location</Link></Button></div></div>
     <CompletionBanner />
-    <div className="metric-grid"><MetricCard label={`${activityLabel} needing action`} value={String(urgentOrders.length)} hint={urgentOrders.length ? "Open the current queue" : "Nothing waiting right now"} icon={ActivityIcon} tone={urgentOrders.length ? "warning" : "success"} /><MetricCard label="Completed value" value={formatCurrency(completedRevenue, primaryCurrency)} hint={`${completedOrders.length} completed`} icon={CircleDollarSign} />{needsCatalog && <MetricCard label={`Active ${data.archetype.nouns.items}`} value={String(activeProducts.length)} hint={unavailableProducts.length ? `${unavailableProducts.length} currently unavailable` : "Availability looks current"} icon={PackageCheck} tone={unavailableProducts.length ? "warning" : "default"} />}<MetricCard label="Open support" value={String(openSupport.length)} hint={openSupport.length ? "A reply may be needed" : "Support inbox is clear"} icon={MessageCircle} /></div>
-    <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]"><SectionCard title={activityLabel} description={`The most recent ${data.archetype.nouns.activity} that still need action`} action={<Link href="/business/activity"><Button size="sm" variant="outline">Open all<ArrowRight className="h-4 w-4" /></Button></Link>}>{recentOrders.length ? <div>{recentOrders.map((order) => <Link href={`/business/activity?order=${order.id}`} key={order.id} className="flex items-center gap-4 border-b p-4 last:border-0 hover:bg-[var(--surface-2)]"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><ActivityIcon className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{order.number || order.reference || order.id.slice(0, 8).toUpperCase()}</p><StatusBadge status={(order.status || "submitted").replaceAll("_", " ")} /></div><p className="mt-1 truncate text-sm text-secondary">{order.customerName || "Spotly customer"} · {order.items?.length || order.itemCount || 0} {data.archetype.nouns.items} · {order.branchName || data.selectedBranch?.branchName || data.selectedBranch?.name || "Location"}</p></div><div className="hidden text-right sm:block"><p className="font-bold">{formatCurrency(orderTotal(order), order.currency || primaryCurrency)}</p><p className="mt-1 text-xs text-tertiary">{relativeTime(order.createdAt)}</p></div><ArrowRight className="h-4 w-4 text-tertiary" /></Link>)}</div> : <div className="flex flex-col items-center justify-center px-6 py-14 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-success"><CheckCircle2 className="h-6 w-6" /></span><h3 className="mt-4 text-lg font-bold">Nothing needs attention</h3><p className="mt-2 max-w-sm text-sm leading-6 text-secondary">New {data.archetype.nouns.activity} will appear here with one clear next action.</p></div>}</SectionCard><ReadinessCard compact /></div>
-    <div className="grid gap-5 lg:grid-cols-[1fr_1fr]"><SectionCard title="Recommended next actions" description="Spotly shows the most useful actions for this business and location"><div>{actions.map((item) => <Link href={item.href} key={item.title} className="flex items-center gap-3 border-b p-4 last:border-0 hover:bg-[var(--surface-2)]"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.done ? "bg-emerald-50 text-success" : "bg-business-soft text-business"}`}><item.icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{item.title}</span><span className="mt-1 block text-xs leading-5 text-secondary">{item.description}</span></span>{item.done ? <CheckCircle2 className="h-4 w-4 text-success" /> : <ArrowRight className="h-4 w-4 text-tertiary" />}</Link>)}</div></SectionCard><Card className="relative overflow-hidden p-6"><div className="absolute -right-14 -top-14 h-44 w-44 rounded-full bg-business-soft" /><div className="relative"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-business text-white"><BarChart3 className="h-6 w-6" /></span><h2 className="mt-5 text-2xl font-black tracking-[-.035em]">A workspace shaped around {data.archetype.shortLabel.toLowerCase()}</h2><p className="mt-3 max-w-lg text-sm leading-7 text-secondary">Only relevant tools are visible. Business owners see the whole brand, while location-scoped staff see only assigned locations and responsibilities.</p><div className="mt-5 grid gap-3 sm:grid-cols-2"><Link href="/business/setup"><Button className="w-full"><Sparkles className="h-4 w-4" />Review setup</Button></Link><Link href="/business/insights"><Button variant="outline" className="w-full"><BarChart3 className="h-4 w-4" />View insights</Button></Link></div></div></Card></div>
+    <Card className="overflow-hidden"><div className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center"><div className="flex items-start gap-4"><span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${locationOpen ? "bg-success" : "bg-tertiary"}`} /><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-semibold">{locationOpen ? "Location is operational" : "Location is paused"}</h2><StatusBadge status={data.business?.verificationStatus || "unverified"} />{data.business?.public && <Badge tone="success">Visible to customers</Badge>}</div><p className="mt-2 text-sm leading-6 text-secondary">{locationOpen ? `${activeOrders.length} active ${data.archetype.nouns.activity} · ${queueGroups.find((group) => group.id === "ready")?.records.length || 0} ready for the customer` : "Customers cannot complete normal activity at this location until it is resumed."}</p></div></div><Button asChild><Link href="/business/branches">{locationOpen ? "Review hours and status" : "Resume location"}<ArrowRight className="h-4 w-4" /></Link></Button></div></Card>
+    <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]"><SectionCard title="Needs your attention" description="The most important work for this location right now"><div>{attention.map(({ title, detail, href, icon: Icon, tone }) => <Link href={href} key={title} className="flex items-start gap-4 border-b p-4 transition hover:bg-grouped last:border-b-0"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tone === "warning" ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" : "bg-business-soft text-business"}`}><Icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block font-semibold">{title}</span><span className="mt-1 block text-sm leading-6 text-secondary">{detail}</span></span><ArrowRight className="mt-3 h-4 w-4 text-tertiary" /></Link>)}{!attention.length && <div className="px-5 py-10 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-success" /><h3 className="mt-3 font-semibold">Everything is under control</h3><p className="mt-2 text-sm text-secondary">New orders, messages, approval requests, or availability issues will appear here.</p></div>}</div></SectionCard><ReadinessCard compact /></div>
+    <SectionCard title={`${activityLabel} today`} description="Work grouped by the next action" action={<Button asChild size="sm" variant="outline"><Link href="/business/activity">Open full queue<ArrowRight className="h-4 w-4" /></Link></Button>}><div className="grid divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">{queueGroups.map((group) => <div key={group.id} className="min-w-0"><div className="flex items-center justify-between bg-grouped px-4 py-3"><p className="font-semibold">{group.label}</p><Badge tone={group.tone}>{group.records.length}</Badge></div><div>{group.records.slice(0, 4).map((order) => <Link href={`/business/activity?order=${order.id}`} key={order.id} className="flex items-center gap-3 border-b p-4 hover:bg-grouped last:border-b-0"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-business-soft text-business"><ActivityIcon className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{order.number || order.reference || order.id.slice(0, 8).toUpperCase()}</span><span className="mt-1 block truncate text-xs text-secondary">{order.customerName || "Spotly customer"} · {relativeTime(order.createdAt)}</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link>)}{!group.records.length && <p className="p-5 text-sm leading-6 text-secondary">No {group.label.toLowerCase()} work right now.</p>}</div></div>)}</div></SectionCard>
+    <div className="grid gap-5 lg:grid-cols-2"><SectionCard title="Before you close" description="Keep the location ready for the next customer"><div>{needsCatalog && <Link href="/business/catalog" className="flex items-center gap-3 border-b p-4 hover:bg-grouped"><PackageCheck className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block font-semibold">Review availability</span><span className="mt-1 block text-sm text-secondary">{activeProducts.length} active · {unavailableProducts.length} unavailable</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link>}<Link href="/business/staff" className="flex items-center gap-3 border-b p-4 hover:bg-grouped"><UsersRound className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block font-semibold">Confirm team coverage</span><span className="mt-1 block text-sm text-secondary">{data.members.length} people currently have access</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link><Link href="/business/support" className="flex items-center gap-3 p-4 hover:bg-grouped"><MessageCircle className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block font-semibold">Resolve open support</span><span className="mt-1 block text-sm text-secondary">{openSupport.length ? `${openSupport.length} conversation${openSupport.length === 1 ? "" : "s"} waiting` : "Support inbox is clear"}</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link></div></SectionCard><SectionCard title="Quick actions" description="Common location tasks"><div className="grid gap-3 p-4 sm:grid-cols-2"><Button asChild><Link href="/business/activity"><ActivityIcon className="h-4 w-4" />Open {data.archetype.nouns.activity}</Link></Button>{needsCatalog && <Button asChild variant="outline"><Link href="/business/catalog"><PackageCheck className="h-4 w-4" />Update {data.archetype.nouns.items}</Link></Button>}<Button asChild variant="outline"><Link href="/business/staff"><UsersRound className="h-4 w-4" />Manage team</Link></Button><Button asChild variant="outline"><Link href="/business/support"><MessageCircle className="h-4 w-4" />Contact support</Link></Button></div></SectionCard></div>
   </div>;
 }

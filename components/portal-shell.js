@@ -13,7 +13,10 @@ import {
   Laptop,
   LogOut,
   Menu,
+  MoreHorizontal,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
   Sun,
@@ -41,9 +44,25 @@ function useOutsideClick(ref, callback) {
   }, [callback, ref]);
 }
 
-function PortalSwitcher({ portal }) {
+function accessiblePortals(profile) {
+  const roles = new Set(profile?.roles || []);
+  const items = [portals.customer];
+  const hasBusiness = profile?.businessIds?.length || profile?.organizationIds?.length || [...roles].some((role) => /business|owner|branch|merchant|catalog|finance/.test(role));
+  const hasDriver = [...roles].some((role) => /driver|fleet|dispatch/.test(role));
+  const hasStaff = [...roles].some((role) => /staff|support|people|verification|operations|finance|content|manager|admin/.test(role));
+  const hasAdmin = [...roles].some((role) => /admin|super_admin|platform/.test(role));
+  if (hasBusiness) items.push(portals.business);
+  if (hasDriver) items.push(portals.driver);
+  if (hasStaff) items.push(portals.staff);
+  if (hasAdmin) items.push(portals.admin);
+  return items;
+}
+
+function PortalSwitcher({ portal, compact = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const { profile } = useAuth();
+  const available = useMemo(() => accessiblePortals(profile), [profile]);
   useOutsideClick(ref, () => setOpen(false));
 
   return (
@@ -51,34 +70,33 @@ function PortalSwitcher({ portal }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex min-w-0 items-center gap-3 rounded-2xl p-2 text-left transition hover:bg-[var(--surface-2)]"
+        className={cn("flex min-w-0 items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[var(--surface-2)]", compact && "lg:justify-center")}
         aria-expanded={open}
+        aria-haspopup="menu"
       >
-        <Image src={portal.logo} alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-[14px] object-cover" priority />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-bold">{portal.name}</span>
-          <span className="block truncate text-xs text-secondary">{portal.label} portal</span>
-        </span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-tertiary transition", open && "rotate-180")} />
+        <Image src={portal.logo} alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-xl object-cover" priority />
+        <span className={cn("min-w-0 flex-1", compact && "lg:hidden")}><span className="block truncate text-sm font-semibold">{portal.name}</span><span className="block truncate text-xs text-secondary">{portal.label} workspace</span></span><ChevronDown className={cn("h-4 w-4 shrink-0 text-tertiary transition", open && "rotate-180", compact && "lg:hidden")} />
       </button>
 
       <AnimatePresence>
         {open && (
           <motion.div
+            role="menu"
             initial={{ opacity: 0, y: -8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            className="surface absolute left-0 top-[calc(100%+8px)] z-50 w-[310px] overflow-hidden rounded-2xl p-2 shadow-elevated"
+            className="surface absolute left-0 top-[calc(100%+8px)] z-50 w-[310px] overflow-hidden rounded-xl p-2 shadow-elevated"
           >
-            <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-tertiary">Switch Spotly app</p>
-            {Object.values(portals).map((item) => (
+            <p className="px-3 pb-2 pt-1 text-[11px] font-semibold tracking-[0.08em] text-tertiary">Switch workspace</p>
+            {available.map((item) => (
               <Link
+                role="menuitem"
                 key={item.id}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-[var(--surface-2)]"
+                className="flex items-center gap-3 rounded-lg p-2.5 transition hover:bg-[var(--surface-2)]"
               >
-                <Image src={item.logo} alt="" width={40} height={40} className="h-10 w-10 rounded-xl object-cover" />
+                <Image src={item.logo} alt="" width={40} height={40} className="h-10 w-10 rounded-lg object-cover" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{item.name}</span>
                   <span className="block truncate text-xs text-secondary">{item.description}</span>
@@ -86,11 +104,7 @@ function PortalSwitcher({ portal }) {
                 {portal.id === item.id && <Check className="h-4 w-4 text-[var(--accent)]" />}
               </Link>
             ))}
-            <div className="my-2 border-t" />
-            <Link href="/devstatus" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-[var(--surface-2)]">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-soft text-violet"><Activity className="h-5 w-5" /></span>
-              <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Development status</span><span className="block truncate text-xs text-secondary">Progress, requirements, and launch readiness</span></span>
-            </Link>
+            {available.length === 1 && <p className="px-3 py-3 text-xs leading-5 text-secondary">Additional workspaces appear only when access is assigned.</p>}
           </motion.div>
         )}
       </AnimatePresence>
@@ -195,11 +209,12 @@ function NotificationPanel({ items, open, onClose, onRead, onReadAll }) {
 function CommandPalette({ portal, open, onClose }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const commands = useMemo(() => [
-    ...portal.nav.map((item) => ({ label: item.label, detail: portal.name, href: item.href, icon: item.icon })),
-    { label: "Development status", detail: "Client progress, requirements, and launch readiness", href: "/devstatus", icon: Activity },
-    ...Object.values(portals).filter((item) => item.id !== portal.id).map((item) => ({ label: `Switch to ${item.name}`, detail: item.description, href: item.href, image: item.logo }))
-  ], [portal]);
+  const commands = useMemo(() => portal.nav.map((item) => ({
+    label: item.label,
+    detail: `Open in ${portal.name}`,
+    href: item.href,
+    icon: item.icon
+  })), [portal]);
   const filtered = commands.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query.toLowerCase()));
 
   function closePalette() {
@@ -219,7 +234,7 @@ function CommandPalette({ portal, open, onClose }) {
           <motion.div initial={{ opacity: 0, y: -16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }} className="surface w-full max-w-2xl overflow-hidden rounded-[24px] shadow-elevated" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center gap-3 border-b px-5">
               <Search className="h-5 w-5 text-tertiary" />
-              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${portal.name} or switch apps…`} className="h-16 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-tertiary" />
+              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Go to a page in ${portal.name}…`} className="h-16 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-tertiary" />
               <kbd className="rounded-lg border bg-[var(--surface-2)] px-2 py-1 text-xs text-tertiary">ESC</kbd>
             </div>
             <div className="max-h-[58vh] overflow-y-auto p-2">
@@ -270,7 +285,7 @@ function UserMenu({ portal }) {
               <p className="mt-1 truncate text-xs text-secondary">{user?.email || role}</p>
               <p className="mt-1 text-[11px] font-semibold capitalize text-tertiary">{role.replaceAll("_", " ")}</p>
             </div>
-            <Link href="/account" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Shared account</Link>
+            <Link href="/account" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
             <Link href={`${portal.href}${portal.id === "customer" ? "" : "/settings"}`} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>
             <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-red-50 dark:hover:bg-red-950/30"><LogOut className="h-4 w-4" /> Sign out</button>
           </motion.div>
@@ -280,67 +295,62 @@ function UserMenu({ portal }) {
   );
 }
 
-function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = true }) {
+function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = true, collapsed = false, onToggleCollapse }) {
+  const groups = useMemo(() => {
+    const result = [];
+    for (const item of portal.nav) {
+      const label = item.group || "Workspace";
+      let group = result.find((entry) => entry.label === label);
+      if (!group) { group = { label, items: [] }; result.push(group); }
+      group.items.push(item);
+    }
+    return result;
+  }, [portal.nav]);
   return (
     <>
-      <AnimatePresence>
-        {mobileOpen && <motion.button aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/35 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onMobileClose} />}
-      </AnimatePresence>
-      <aside className={cn("surface fixed inset-y-0 left-0 z-50 flex w-[278px] flex-col border-y-0 border-l-0 transition-transform duration-300 lg:translate-x-0", mobileOpen ? "translate-x-0" : "-translate-x-full")}>
+      <AnimatePresence>{mobileOpen && <motion.button aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/35 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onMobileClose} />}</AnimatePresence>
+      <aside className={cn("surface fixed inset-y-0 left-0 z-50 flex w-[278px] flex-col border-y-0 border-l-0 transition-[width,transform] duration-300 lg:translate-x-0", collapsed && "lg:w-[88px]", mobileOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex h-20 items-center px-3">
-          <PortalSwitcher portal={portal} />
-          <button className="ml-auto flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--surface-2)] lg:hidden" onClick={onMobileClose}><X className="h-5 w-5" /></button>
+          <PortalSwitcher portal={portal} compact={collapsed} />
+          <button className="ml-auto flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--surface-2)] lg:hidden" onClick={onMobileClose} aria-label="Close navigation"><X className="h-5 w-5" /></button>
         </div>
         <nav aria-label={`${portal.name} navigation`} className="no-scrollbar flex-1 overflow-y-auto px-3 py-2">
-          <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-tertiary">Workspace</p>
-          <div className="space-y-1">
-            {portal.nav.map((item) => {
-              const Icon = item.icon;
-              const active = activeSection === item.id;
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  onClick={onMobileClose}
-                  className={cn("relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : item.emphasis ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}
-                >
-                  {active && <motion.span layoutId={`sidebar-${portal.id}`} className="absolute inset-0 rounded-xl bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.15, duration: 0.45 }} />}
-                  <Icon className="relative h-5 w-5 shrink-0" />
-                  <span className="relative flex-1">{item.label}</span>
-                  {item.badge ? <Badge className="relative min-w-6 justify-center px-1.5" tone={active ? "accent" : "neutral"}>{item.badge}</Badge> : null}
-                </Link>
-              );
-            })}
-          </div>
+          {groups.map((group) => <div key={group.label} className="mb-5 last:mb-0">
+            <p className={cn("px-3 pb-2 pt-1 text-[11px] font-semibold tracking-[0.08em] text-tertiary", collapsed && "lg:sr-only")}>{group.label}</p>
+            <div className="space-y-1">{group.items.map((item) => {
+              const Icon = item.icon; const active = activeSection === item.id;
+              return <Link key={item.id} href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined} className={cn("relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition", collapsed && "lg:justify-center lg:px-0", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : item.emphasis ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}>
+                {active && <motion.span layoutId={`sidebar-${portal.id}`} className="absolute inset-0 rounded-xl bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.15, duration: 0.45 }} />}
+                <Icon className="relative h-5 w-5 shrink-0" /><span className={cn("relative flex-1", collapsed && "lg:hidden")}>{item.label}</span>{item.badge ? <Badge className={cn("relative min-w-6 justify-center px-1.5", collapsed && "lg:absolute lg:right-0 lg:top-0 lg:min-w-4 lg:px-1 lg:text-[9px]")} tone={active ? "accent" : "neutral"}>{item.badge}</Badge> : null}
+              </Link>;
+            })}</div>
+          </div>)}
         </nav>
-        {footer && <div className="border-t p-3">
-          <div className="rounded-2xl bg-[var(--accent-soft)] p-3">
-            <p className="text-xs font-semibold text-[var(--accent-strong)] dark:text-[var(--accent)]">Spotly unified web</p>
-            <p className="mt-1 text-xs leading-5 text-secondary">Switch between all five role-specific apps without leaving the platform.</p>
-            <Link href="/devstatus" onClick={onMobileClose} className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--accent-strong)] dark:text-[var(--accent)]"><Activity className="h-3.5 w-3.5" />Development status</Link>
-          </div>
-        </div>}
+        <div className="border-t p-3">
+          <button type="button" onClick={onToggleCollapse} className="hidden w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)] lg:flex" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="mx-auto h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /><span>Collapse sidebar</span></>}</button>
+          {footer && <Link href="/support" onClick={onMobileClose} className={cn("mt-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)]", collapsed && "lg:justify-center lg:px-0")} title={collapsed ? "Help and support" : undefined}><Activity className="h-4 w-4" /><span className={cn(collapsed && "lg:hidden")}>Help and support</span></Link>}
+        </div>
       </aside>
     </>
   );
 }
 
 function MobileBottomNav({ portal, activeSection }) {
-  const items = portal.nav.slice(0, 5);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const primary = portal.nav.slice(0, 4);
+  const remaining = portal.nav.slice(4);
   return (
-    <nav className="surface safe-bottom fixed inset-x-0 bottom-0 z-30 flex min-h-[68px] items-start justify-around border-x-0 border-b-0 px-2 pt-2 lg:hidden" aria-label="Mobile navigation">
-      {items.map((item) => {
-        const Icon = item.icon;
-        const active = item.id === activeSection;
-        return (
-          <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[10px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}>
-            <Icon className="h-5 w-5" />
-            <span>{item.label}</span>
-            {item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-white">{item.badge}</span> : null}
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      <nav className="surface safe-bottom fixed inset-x-0 bottom-0 z-30 flex min-h-[70px] items-start justify-around border-x-0 border-b-0 px-2 pt-2 lg:hidden" aria-label="Mobile navigation">
+        {primary.map((item) => {
+          const Icon = item.icon;
+          const active = item.id === activeSection;
+          return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-white">{item.badge}</span> : null}</Link>;
+        })}
+        <button type="button" onClick={() => setMoreOpen(true)} className={cn("flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", remaining.some((item) => item.id === activeSection) ? "text-[var(--accent)]" : "text-tertiary")}><MoreHorizontal className="h-5 w-5" /><span>More</span></button>
+      </nav>
+      <AnimatePresence>{moreOpen && <><motion.button aria-label="Close more navigation" className="fixed inset-0 z-40 bg-black/35 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMoreOpen(false)} /><motion.div role="dialog" aria-modal="true" aria-label="More navigation" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} className="surface safe-bottom fixed inset-x-0 bottom-0 z-50 rounded-t-[20px] p-4 lg:hidden"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">More</h2><button aria-label="Close" onClick={() => setMoreOpen(false)} className="rounded-lg p-2 hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button></div><div className="mt-3 grid grid-cols-2 gap-2">{remaining.map((item) => { const Icon=item.icon; return <Link key={item.id} href={item.href} onClick={() => setMoreOpen(false)} className={cn("flex items-center gap-3 rounded-lg border p-3 text-sm font-medium", item.id === activeSection && "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]")}><Icon className="h-5 w-5" />{item.label}</Link>; })}</div></motion.div></>}</AnimatePresence>
+    </>
   );
 }
 
@@ -355,10 +365,18 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
     return { ...basePortal, nav: basePortal.nav.filter((item) => sections.has(item.id)) };
   }, [basePortal, portalId, profile, navigation]);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const unreadCount = notifications.filter((item) => !item.read).length;
+
+  useEffect(() => {
+    setSidebarCollapsed(window.localStorage.getItem("spotly-sidebar-collapsed") === "1");
+  }, []);
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => { const next = !current; window.localStorage.setItem("spotly-sidebar-collapsed", next ? "1" : "0"); return next; });
+  }
 
   useEffect(() => {
     if (!user?.uid) {
@@ -399,14 +417,14 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
 
   return (
     <div style={shellStyle} className="min-h-screen bg-[var(--grouped)]">
-      {!hideSidebar && <Sidebar portal={portal} activeSection={activeSection} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} footer={footer} />}
-      <div className={cn(!hideSidebar && "lg:pl-[278px]")}> 
+      {!hideSidebar && <Sidebar portal={portal} activeSection={activeSection} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} footer={footer} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />}
+      <div className={cn(!hideSidebar && (sidebarCollapsed ? "lg:pl-[88px]" : "lg:pl-[278px]"), "transition-[padding] duration-300")}>
         <header className={cn("surface sticky top-0 z-30 flex h-20 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6", hideSidebar && "justify-between")}>
           {!hideSidebar && <button aria-label="Open navigation" className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-[var(--surface-2)] lg:hidden" onClick={() => setMobileOpen(true)}><Menu className="h-5 w-5" /></button>}
           {hideSidebar && <PortalSwitcher portal={portal} />}
           <button onClick={() => setCommandOpen(true)} className="surface hidden h-11 min-w-0 max-w-xl flex-1 items-center gap-3 rounded-xl px-3 text-left text-sm text-secondary hover:bg-[var(--surface-2)] sm:flex">
             <Search className="h-4 w-4" />
-            <span className="truncate">Search pages, records, and actions</span>
+            <span className="truncate">Go to a page or action</span>
             <kbd className="ml-auto rounded-lg border bg-[var(--surface-2)] px-2 py-1 text-[11px] text-tertiary">⌘ K</kbd>
           </button>
           <div className="ml-auto flex items-center gap-2">

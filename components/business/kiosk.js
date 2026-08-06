@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   ExternalLink,
@@ -13,7 +12,6 @@ import {
   MonitorSmartphone,
   ScanLine,
   ShieldCheck,
-  Sparkles,
   Store,
   XCircle
 } from "lucide-react";
@@ -78,7 +76,7 @@ function codeFor(order) {
 }
 
 function KioskLiveContent() {
-  const { business, orders, user, selectedBranch, selectedBranchId, branches, setSelectedBranchId, archetype } = useBusinessWorkspace();
+  const { business, orders, user, selectedBranch, selectedBranchId, branches, setSelectedBranchId } = useBusinessWorkspace();
   const [code, setCode] = useState("");
   const [result, setResult] = useState(null);
   const [state, setState] = useState("idle");

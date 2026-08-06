@@ -8,7 +8,6 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
-  MapPin,
   MessageSquareText,
   PackageCheck,
   Phone,
