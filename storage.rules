@@ -3,7 +3,8 @@ service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
     function profile() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data; }
-    function admin() { return signedIn() && ("super_admin" in profile().roles || "admin" in profile().roles || "*" in profile().customPermissions); }
+    function admin() { return signedIn() && ("super_admin" in profile().roles || "admin" in profile().roles || "platform_admin" in profile().roles || "*" in profile().customPermissions); }
+    function peopleAdmin() { return signedIn() && (admin() || "people_operations_admin" in profile().roles || "people_admin" in profile().roles || "people.*" in profile().customPermissions); }
     function businessOwner(businessId) {
       return signedIn() && (
         admin() ||
@@ -33,6 +34,10 @@ service firebase.storage {
     match /support/{conversationId}/{uid}/{fileName} {
       allow read: if signedIn() && (request.auth.uid == uid || admin());
       allow write: if signedIn() && request.auth.uid == uid && request.resource.size < 15 * 1024 * 1024;
+    }
+    match /staff/{uid}/{category}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == uid || peopleAdmin());
+      allow write: if signedIn() && (request.auth.uid == uid || peopleAdmin()) && safeDocument();
     }
     match /{allPaths=**} { allow read, write: if false; }
   }

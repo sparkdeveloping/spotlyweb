@@ -29,6 +29,44 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/memberships/$(business(businessId).organizationId + "_" + request.auth.uid))
       );
     }
+    function hasStaffProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid));
+    }
+    function currentStaffProfile() { return get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data; }
+    function hasStaffRole(roleId) { return hasStaffProfile() && currentStaffProfile().rolePackId == roleId; }
+    function hasStaffPermission(permission) {
+      return hasStaffProfile() && permission in currentStaffProfile().permissions;
+    }
+    function staffMember() {
+      return activeAccount() && (
+        (hasStaffProfile() && currentStaffProfile().status in ["active", "probation", "preboarding", "leave"]) || hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") ||
+        hasRole("operations_manager") || hasRole("verification_officer") || hasRole("business_success") ||
+        hasRole("business_success_manager") || hasRole("finance_admin") || hasRole("support_manager") ||
+        hasRole("support_agent") || hasRole("driver_operations_coordinator") || hasRole("regional_operations_manager") ||
+        hasRole("content_editor") || hasRole("content_manager") || hasRole("marketing_manager") ||
+        hasRole("risk_compliance_officer") || hasRole("people_operations_admin") ||
+        hasRole("people_admin")
+      );
+    }
+    function peopleAdmin() {
+      return activeAccount() && (
+        hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") ||
+        hasRole("people_operations_admin") || hasRole("people_admin") ||
+        hasStaffRole("platform_admin") || hasStaffRole("people_operations_admin") ||
+        hasPermission("people.*") || hasPermission("people.write") ||
+        hasStaffPermission("people.*") || hasStaffPermission("people.write")
+      );
+    }
+    function staffManager() {
+      return peopleAdmin() || hasRole("operations_manager") || hasRole("regional_operations_manager") || hasRole("support_manager") ||
+        hasRole("business_success_manager") || hasStaffRole("operations_manager") || hasStaffRole("regional_operations_manager") ||
+        hasStaffRole("business_success_manager") || hasPermission("people.approve") || hasStaffPermission("people.approve");
+    }
+    function recruitmentManager() {
+      return peopleAdmin() || hasRole("operations_manager") || hasRole("regional_operations_manager") ||
+        hasStaffRole("operations_manager") || hasStaffRole("regional_operations_manager") ||
+        hasPermission("recruitment.*") || hasStaffPermission("recruitment.*");
+    }
     function conversation(conversationId) { return get(/databases/$(database)/documents/supportConversations/$(conversationId)).data; }
     function conversationParticipant(conversationId) {
       return activeAccount() && (
@@ -241,6 +279,91 @@ service cloud.firestore {
     match /roleTemplates/{roleId} {
       allow read: if activeAccount();
       allow write: if superAdmin();
+    }
+
+
+    match /staffProfiles/{userId} {
+      allow read: if self(userId) || peopleAdmin() || staffManager();
+      allow create: if peopleAdmin() || (self(userId) && (
+        hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin")
+      ));
+      allow update: if peopleAdmin() || (self(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "displayName", "phone", "emergencyContactName", "emergencyContactPhone", "preferredLocale",
+        "workArrangement", "updatedAt", "updatedBy"
+      ]));
+      allow delete: if peopleAdmin();
+    }
+
+    match /staffTasks/{taskId} {
+      allow read: if staffManager() || (staffMember() && (
+        resource.data.assigneeId == request.auth.uid || resource.data.createdBy == request.auth.uid
+      ));
+      allow create: if staffMember() && (
+        staffManager() || request.resource.data.assigneeId == request.auth.uid
+      );
+      allow update: if staffManager() || (staffMember() && resource.data.assigneeId == request.auth.uid);
+      allow delete: if peopleAdmin();
+    }
+
+    match /staffShifts/{shiftId} {
+      allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
+      allow create: if staffManager() || (staffMember() && request.resource.data.userId == request.auth.uid);
+      allow update: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status", "clockedInAt", "clockedInBy", "clockedOutAt", "clockedOutBy", "updatedAt", "updatedBy"
+        ]));
+      allow delete: if peopleAdmin();
+    }
+
+    match /staffLeaveRequests/{requestId} {
+      allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
+      allow create: if staffMember() && request.resource.data.userId == request.auth.uid;
+      allow update: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid &&
+        resource.data.status == "pending" && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "type", "startDate", "endDate", "days", "reason", "coverageNote", "status", "updatedAt"
+        ]));
+      allow delete: if peopleAdmin();
+    }
+
+    match /staffTrainingAssignments/{assignmentId} {
+      allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if peopleAdmin();
+    }
+
+    match /staffPerformance/{recordId} {
+      allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if peopleAdmin() || staffManager();
+    }
+
+    match /staffPayrollRecords/{recordId} {
+      allow read: if peopleAdmin() || hasPermission("payroll.read") || (staffMember() && resource.data.userId == request.auth.uid);
+      allow create, update: if peopleAdmin() || hasPermission("payroll.prepare") || hasPermission("finance.*");
+      allow delete: if peopleAdmin();
+    }
+
+    match /staffAssets/{assetId} {
+      allow read: if staffManager() || (staffMember() && resource.data.assignedTo == request.auth.uid);
+      allow create, update, delete: if peopleAdmin() || staffManager();
+    }
+
+    match /workforceRequests/{requestId} {
+      allow read: if staffManager();
+      allow create: if staffManager() && request.resource.data.requestedBy == request.auth.uid;
+      allow update: if staffManager();
+      allow delete: if peopleAdmin();
+    }
+
+    match /staffCandidates/{candidateId} {
+      allow read, create, update: if recruitmentManager();
+      allow delete: if peopleAdmin();
+    }
+
+    match /staffSupportRequests/{requestId} {
+      allow read: if peopleAdmin() || (staffMember() && resource.data.userId == request.auth.uid);
+      allow create: if staffMember() && request.resource.data.userId == request.auth.uid;
+      allow update: if peopleAdmin() || (staffMember() && resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["description", "status", "updatedAt"]));
+      allow delete: if peopleAdmin();
     }
 
     match /emailLogs/{logId} {

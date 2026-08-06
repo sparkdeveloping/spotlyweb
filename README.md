@@ -1,38 +1,97 @@
 # Spotly Web Platform
 
-Spotly is a JavaScript-only Next.js platform for Zimbabwean business discovery, guided merchant onboarding, adaptive business operations, and grocery pickup. Version 4 upgrades the existing Firebase-backed project with a correct organization-to-brand-to-location hierarchy, step-by-step business setup, business-type-specific workspaces, kiosk modes, synchronized customer/admin experiences, support, notifications, and payment architecture while preserving the dormant driver portal for a future delivery phase.
+Spotly is one operating network with five role-specific entrances:
+
+```text
+/          Customer marketplace
+/business  Merchant and branch operations
+/driver    Delivery and field operations
+/staff     Spotly workforce
+/admin     Platform governance
+```
+
+Version 5 adds the complete Spotly workforce application, expands administrator People Operations and organization governance, and connects every portal to the same identity, permissions, notifications, support, audit, payment, and workflow foundations.
 
 ## Included applications
 
 | Route | Purpose |
 |---|---|
-| `/` | Light-mode coming-soon website, launch waitlist, partnerships, and business-claim entry point |
-| `/marketplace` | Admin-controlled public/private-beta customer marketplace |
-| `/claim` | Search-first business listing and ownership-claim flow |
-| `/business` | Guided business setup and adaptive operations for retail, food, ticketing, appointments, accommodation/activities, and profile businesses |
-| `/admin` | Platform controls, claims, businesses, access, finance, content, support, seed data, settings, and audit |
-| `/admin/support-view/[businessId]` | Audited, read-only administrator support context |
-| `/support` | Public and authenticated help centre and realtime support chat |
-| `/account` | Shared Spotly identity, linked providers, phone, and browser notifications |
-| `/devstatus` | Client-facing implementation and launch-readiness report |
-| `/driver` | Preserved but intentionally dormant driver experience |
+| `/` | Coming-soon experience, launch waitlist, partnerships, discovery, and business claim entry |
+| `/marketplace` | Admin-controlled customer marketplace |
+| `/claim` | Search-first business listing and ownership-claim workflow |
+| `/business` | Guided merchant setup and adaptive retail, food, events, services, accommodation, and listing operations |
+| `/driver` | Driver onboarding, shifts, delivery work, earnings, safety, and fleet operations |
+| `/staff` | Spotly employee and contractor Today view, work, hiring, scheduling, leave, learning, performance, pay, assets, support, and profile |
+| `/admin` | Platform control centre, organizations, businesses, People Operations, drivers, customers, money, content, support, compliance, configuration, and audit |
+| `/admin/platform-map` | Interactive entity/workforce maps and plain-language record diagnostics |
+| `/admin/support-view/[businessId]` | Audited, read-only administrator business support context |
+| `/support` | Public and authenticated help centre and realtime support |
+| `/account` | Shared identity, linked providers, phone, and notification preferences |
+| `/devstatus` | Implementation and launch-readiness report |
+
+## Version 5 operating model
+
+### Organization hierarchy
+
+```text
+Organization
+└── Brand
+    ├── Location
+    └── Location
+```
+
+The organization owns legal identity and consolidated governance. The brand owns the customer-facing identity and shared catalogue. The location owns local hours, staff, availability, inventory, fulfilment, and location-specific operations.
+
+### Workforce separation
+
+```text
+/staff            Spotly internal workforce
+/business/team    Merchant employees and operators
+/driver           Drivers and fleet personnel
+```
+
+The three systems share people infrastructure without conflating their employment or membership relationships.
+
+### Staff lifecycle
+
+The `/staff` and `/admin/people` modules support the full relationship:
+
+```text
+Workforce request → vacancy → candidate → screening → interview → offer
+→ preboarding → first day → probation → active employment → development
+→ role change → leave/absence → exit → alumni record
+```
+
+Implemented workforce domains include:
+
+- Employee profiles and employment records
+- Reusable role packs, permissions, approval limits, and scopes
+- Role-adaptive Today queues and operational assignments
+- Workforce requests and recruitment pipeline
+- Shifts, attendance, exceptions, and scheduling
+- Leave requests, coverage, and manager approval
+- Training paths, acknowledgements, assessments, and manager sign-off
+- Probation, check-ins, goals, feedback, and performance reviews
+- Payroll preparation, allowances, deductions, reimbursements, and payslip records
+- Asset issue, condition, return, and incident history
+- Internal People Operations, technical support, policy, and concern channels
+- Offboarding, access revocation, ownership transfer, and audit history
 
 ## Technology
 
 - Next.js App Router
-- JavaScript only; no TypeScript
-- React
-- Tailwind CSS
+- JavaScript only; no TypeScript source
+- React 19
+- Tailwind CSS 4
 - Framer Motion
 - Firebase Authentication
 - Cloud Firestore
 - Cloud Storage
-- Firebase Analytics
-- Firebase Cloud Messaging
+- Firebase Analytics and Messaging integration points
 - Firebase App Check integration point
-- Firebase Admin SDK in protected Next.js route handlers
+- Firebase Admin SDK in protected route handlers
 - Paynow Node SDK
-- Resend REST API integration
+- Resend REST integration
 - Vercel deployment configuration
 
 ## Start locally
@@ -47,7 +106,17 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-The Firebase Web configuration supplied for `denzeltinashe-spotly` is already present as a public fallback and in `.env.example`. Server-side Firebase Admin, Paynow, Resend, App Check, Web Push, and bootstrap values must be added by the project owner.
+Private Firebase Admin, Paynow, Resend, App Check, Web Push, and bootstrap values must be supplied by the project owner. Never commit `.env.local`, service-account JSON, or private keys.
+
+## Validation
+
+Run the complete local release gate:
+
+```bash
+npm run check
+```
+
+This executes the JavaScript-only source check, ESLint, and a production Next.js build. Also test Firestore and Storage rules using the Firebase Emulator Suite before production deployment.
 
 ## First administrator
 
@@ -60,43 +129,32 @@ BOOTSTRAP_ADMIN_EMAILS=founder@example.com
 2. Add valid Firebase Admin credentials.
 3. Deploy or restart the application.
 4. Create a Spotly account using that email and password.
-5. Open `/admin` and choose **Request one-time super-admin bootstrap**.
-6. After the first super administrator exists, further access should be assigned from **Admin → People & access**.
-7. Remove `BOOTSTRAP_ADMIN_EMAILS` after confirming administrative access.
+5. Open `/admin` and request the one-time super-administrator bootstrap.
+6. Assign later platform roles from **Admin → People**.
+7. Remove `BOOTSTRAP_ADMIN_EMAILS` after confirming access.
 
-The actual role assignment is performed by a protected server route. The allowlist is never exposed through a `NEXT_PUBLIC_` variable.
+## Firebase data and security
 
-## Firebase setup
-
-See [FIREBASE-SETUP.md](./FIREBASE-SETUP.md) for the complete console checklist.
-
-Development test-mode files are included:
-
-- `firestore.test.rules`
-- `storage.test.rules`
-
-Production drafts are also included:
+Production drafts are included:
 
 - `firestore.rules`
 - `storage.rules`
 - `firestore.indexes.json`
 
-Do not deploy open test rules to a public production project. Test the production drafts with the Firebase Emulator Suite and role-specific regression tests first.
+Development-only open rules are also included:
+
+- `firestore.test.rules`
+- `storage.test.rules`
+
+Do not deploy the test rules publicly.
+
+Version 5 introduces protected workforce collections for profiles, tasks, shifts, leave, training, performance, payroll, assets, workforce requests, candidates, and internal support. Access is resolved through employment or membership, role pack, permission set, scope, approval limits, and temporary exceptions.
 
 ## Directory and starter data
 
-The project includes 347 provisional Zimbabwe locations representing 125 real business brands across multiple cities and categories. Directory version 4 stores one business-brand record per brand and its exact locations separately in Firestore. These records are designed to reduce onboarding friction by allowing owners to find and claim an existing profile.
+The project includes provisional Zimbabwe business and location starter data. Directory records remain unverified until Spotly reviews identity, location details, ownership evidence, media rights, catalogue accuracy, and source attribution.
 
-They are not automatically verified. Before publication or commercial use, Spotly must review:
-
-- Correct legal/business identity
-- Current branch location and contact details
-- Ownership and claim evidence
-- Logos and image usage rights
-- Catalogue, price, inventory, and opening-hour accuracy
-- Source attribution and removal/correction requests
-
-After deploying version 4, open **Admin → Businesses** (`/admin/businesses`) and use **Upgrade / refresh directory**. This is a required migration action: the protected route creates business brands, exact locations, organizations, role templates, help resources, and catalogue templates; archives legacy branch-as-business duplicates; and migrates related memberships and claims where possible. Claim search and public directory search intentionally use Firebase only and do not fall back to browser-local records.
+After deploying to a backup or non-production environment first, open `/admin/businesses` and run the directory upgrade/refresh flow. Review organizations, brands, locations, memberships, claims, and archived legacy branch-as-business records before production use.
 
 A command-line seed is also available:
 
@@ -104,148 +162,44 @@ A command-line seed is also available:
 npm run seed
 ```
 
-This requires Firebase Admin environment variables in the local shell.
+It requires Firebase Admin environment variables.
 
+## Adaptive business operations
 
-## Adaptive business experience release
+Business setup is staged and resumable. Navigation and terminology adapt to the selected operating model:
 
-This archive includes Spotly Business Experience v4. See:
+- Grocery and retail
+- Restaurant and prepared food
+- Events and ticketing
+- Services and appointments
+- Accommodation and activities
+- Public listing and enquiries
 
-- [UX-ARCHITECTURE.md](./UX-ARCHITECTURE.md) for the product and interaction model.
-- [BUSINESS-OPERATIONS.md](./BUSINESS-OPERATIONS.md) for operational workflows.
-- [ADMIN-DIRECTORY.md](./ADMIN-DIRECTORY.md) for Firestore population and administrator operations.
-- [RELEASE-NOTES-BUSINESS-V4.md](./RELEASE-NOTES-BUSINESS-V4.md) for the complete release summary.
+Branch access is location-scoped. Parent-company policy can centrally control, accept suggestions, auto-approve changes, or delegate full control for each operational field.
 
-## Authentication model
+## Driver operations
 
-Email and password are the mandatory primary credential. Google, Apple, and phone are linked to the existing account rather than creating separate Spotly identities.
+The driver portal supports Spotly-employed drivers, independent drivers, business-employed drivers, fleet partners, and dispatchers. The operational model covers onboarding, document review, shifts, job offers, pickup verification, delivery proof, failed-delivery recovery, cash handling, expenses, earnings, incidents, training, and fleet visibility.
 
-Supported flows:
+## Marketplace and payments
 
-- Email/password registration and sign-in
-- Email verification request
-- Password reset
-- Google provider linking
-- Apple provider linking
-- Phone-number linking
-- Anonymous session for public support and browsing
-- Shared account across customer, business, and admin portals
+Marketplace availability is controlled through platform settings and private-beta access. The first transaction focus remains grocery pickup, with architecture for products, food pickup, appointments, tickets, accommodation, activities, and enquiries.
 
-Google, Apple, Phone, Anonymous, and Email/Password must be enabled in Firebase Console. Apple requires its own Apple Developer and OAuth configuration. Phone authentication requires billing/quota readiness and authorized deployment domains.
-
-## Adaptive business portal
-
-Business setup is a resumable, staged flow. Before setup is complete, the portal exposes only setup, home, support, and account/access. After setup, navigation and terminology adapt to the selected model:
-
-- shop/grocery retail
-- restaurant/café/food
-- events and ticketing
-- appointments and services
-- accommodation and activities
-- public profile and enquiries
-
-Business brands and exact locations are selected separately. Location-scoped staff see only assigned locations. Full-screen processing and completion states are used for important operations. Kiosk modes support pickup arrival, ticket admission, and appointment/guest arrival.
-
-## Marketplace and grocery pickup
-
-The public root remains a coming-soon experience by default. The customer marketplace is controlled through Firestore platform settings and private-beta access.
-
-Implemented marketplace architecture includes:
-
-- Real/provisional business directory
-- Business search and categories
-- Business and branch context
-- Product catalogue listeners
-- Favorites
-- Pickup cart
-- Currency selection for USD and ZiG
-- Pickup contact, date, slot, notes, and substitution preference
-- Server-calculated order totals
-- Cash, bank transfer, Paynow, EcoCash, OneMoney, and card configuration
-- Customer order history
-- Payment initiation and recovery
-- Helpful empty and unavailable states
-
-The first transaction focus is grocery pickup. Driver delivery is intentionally not a release dependency.
-
-## Payments
-
-Paynow integration is handled by protected Next.js route handlers:
+Paynow integration is handled by protected route handlers:
 
 - `/api/payments/paynow/initiate`
 - `/api/payments/paynow/status`
 - `/api/payments/paynow/result`
 
-The server re-reads the order and validates the amount rather than trusting totals from the browser. Separate USD and ZiG Paynow integration values can be configured, or one shared integration can be used.
+The server re-reads orders and validates amounts rather than trusting browser totals. No real payment should be enabled until credentials, callbacks, settlement details, reconciliation, and commercial policies are configured and tested.
 
-No real payment can be processed until valid Paynow credentials, return/result URLs, merchant settlement details, and approved commercial policies are configured and tested.
+## Supporting documentation
 
-## Support and notifications
-
-The support system includes:
-
-- Public anonymous chat
-- Customer and business chat
-- Realtime messages
-- Admin support queue
-- Assignment and statuses
-- Internal notes
-- Escalation-ready metadata
-- Help resources and unlisted YouTube video IDs
-- Audited administrator business support view
-
-Notifications include:
-
-- In-app notification documents
-- Browser push token registration
-- Firebase Cloud Messaging server route
-- Notification preferences
-- Background service worker
-- Transactional email route using Resend
-
-External credentials and verified sender/domain configuration are required.
-
-## Vercel deployment
-
-See [VERCEL-DEPLOYMENT.md](./VERCEL-DEPLOYMENT.md).
-
-The minimum sequence is:
-
-```bash
-npm install
-npm run check:js
-npm run lint
-npm run build
-```
-
-Then import the repository into Vercel, add all required environment variables, deploy, add the Vercel domains to Firebase Authentication authorized domains, and verify every route and integration in Preview before promoting Production.
-
-## Project validation
-
-This generated archive was validated for:
-
-- JavaScript syntax across application, component, library, data, and script files
-- Absence of TypeScript source files
-- JSON parse validity
-- Local alias import resolution
-- Firebase configuration files and route structure
-- No OpenAI internal npm-registry URLs
-
-JavaScript validation and ESLint completed successfully. A production Next.js build could not complete in the Linux generation container because the matching Next.js SWC binary could not be downloaded through its restricted package gateway. Run `npm install && npm run check` locally and in Vercel Preview before release. See [BUILD-REPORT.md](./BUILD-REPORT.md).
-
-## Production boundaries
-
-This is a substantial integrated beta foundation, not a claim that external systems have been configured or certified. Public production release still requires:
-
-- Firebase provider and domain configuration
-- Firebase Admin credentials
-- Tested production Firestore and Storage rules
-- App Check and Web Push configuration
-- Paynow sandbox and live verification
-- Resend and sending-domain verification
-- Approved legal entity and policy documents
-- Verified business and catalogue data
-- Merchant and customer pilot
-- Role, security, privacy, accessibility, performance, backup, restore, monitoring, reconciliation, and incident-response testing
-
-The `/devstatus` page presents these boundaries to the client in the application itself.
+- [SPOTLY-PLATFORM-BLUEPRINT.md](./SPOTLY-PLATFORM-BLUEPRINT.md)
+- [RELEASE-NOTES-PLATFORM-V5.md](./RELEASE-NOTES-PLATFORM-V5.md)
+- [BUILD-REPORT.md](./BUILD-REPORT.md)
+- [FIREBASE-SETUP.md](./FIREBASE-SETUP.md)
+- [VERCEL-DEPLOYMENT.md](./VERCEL-DEPLOYMENT.md)
+- [UX-ARCHITECTURE.md](./UX-ARCHITECTURE.md)
+- [BUSINESS-OPERATIONS.md](./BUSINESS-OPERATIONS.md)
+- [ADMIN-DIRECTORY.md](./ADMIN-DIRECTORY.md)

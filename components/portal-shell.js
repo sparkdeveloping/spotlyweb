@@ -250,7 +250,7 @@ function UserMenu({ portal }) {
   const ref = useRef(null);
   const { user, profile, logout } = useAuth();
   const displayName = profile?.displayName || user?.displayName || user?.email || "Spotly user";
-  const role = portal.id === "admin" ? (profile?.roles?.find((item) => item !== "customer") || "Administrator") : portal.id === "business" ? "Business workspace" : "Spotly member";
+  const role = portal.id === "admin" ? (profile?.roles?.find((item) => item !== "customer") || "Administrator") : portal.id === "staff" ? (profile?.roles?.find((item) => item !== "customer") || "Spotly staff") : portal.id === "business" ? "Business workspace" : "Spotly member";
   useOutsideClick(ref, () => setOpen(false));
   async function signOutNow() {
     await logout();
@@ -316,7 +316,7 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = tr
         {footer && <div className="border-t p-3">
           <div className="rounded-2xl bg-[var(--accent-soft)] p-3">
             <p className="text-xs font-semibold text-[var(--accent-strong)] dark:text-[var(--accent)]">Spotly unified web</p>
-            <p className="mt-1 text-xs leading-5 text-secondary">Switch between all four apps without leaving the platform.</p>
+            <p className="mt-1 text-xs leading-5 text-secondary">Switch between all five role-specific apps without leaving the platform.</p>
             <Link href="/devstatus" onClick={onMobileClose} className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--accent-strong)] dark:text-[var(--accent)]"><Activity className="h-3.5 w-3.5" />Development status</Link>
           </div>
         </div>}

@@ -12,6 +12,7 @@ import {
   Compass,
   CreditCard,
   Heart,
+  GitBranch,
   House,
   LayoutDashboard,
   LifeBuoy,
@@ -22,6 +23,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   Store,
   Truck,
   UsersRound,
@@ -72,6 +74,28 @@ export const portals = {
       { id: "settings", label: "Settings", icon: Settings, href: "/business/settings" }
     ]
   },
+  staff: {
+    id: "staff",
+    name: "Spotly Staff",
+    label: "Staff",
+    href: "/staff",
+    logo: "/brand/spotly-admin.png",
+    accent: "#8B5CF6",
+    accentStrong: "#6D28D9",
+    accentSoft: "#F3EEFF",
+    darkAccent: "#C4B5FD",
+    description: "Work, schedule, people, learning, pay, and internal support.",
+    nav: [
+      { id: "today", label: "Today", icon: House, href: "/staff" },
+      { id: "work", label: "My work", icon: ListChecks, href: "/staff/work" },
+      { id: "schedule", label: "Schedule", icon: CalendarDays, href: "/staff/schedule" },
+      { id: "leave", label: "Leave", icon: Heart, href: "/staff/leave" },
+      { id: "learning", label: "Learning", icon: BookOpenCheck, href: "/staff/learning" },
+      { id: "performance", label: "Performance", icon: Sparkles, href: "/staff/performance" },
+      { id: "pay", label: "Pay", icon: WalletCards, href: "/staff/pay" },
+      { id: "profile", label: "Profile", icon: CircleUserRound, href: "/staff/profile" }
+    ]
+  },
   driver: {
     id: "driver",
     name: "Spotly Driver",
@@ -105,14 +129,17 @@ export const portals = {
     darkAccent: "#78A5D8",
     description: "Operate the platform, review risk, and manage access.",
     nav: [
-      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/admin" },
+      { id: "dashboard", label: "Control centre", icon: LayoutDashboard, href: "/admin" },
       { id: "operations", label: "Operations", icon: Truck, href: "/admin/operations" },
-      { id: "businesses", label: "Businesses", icon: Building2, href: "/admin/businesses" },
+      { id: "organizations", label: "Organizations", icon: Building2, href: "/admin/organizations" },
+      { id: "businesses", label: "Businesses", icon: Store, href: "/admin/businesses" },
+      { id: "people", label: "People", icon: UsersRound, href: "/admin/people" },
       { id: "drivers", label: "Drivers", icon: Bike, href: "/admin/drivers" },
-      { id: "customers", label: "Customers", icon: UsersRound, href: "/admin/customers" },
-      { id: "finance", label: "Finance", icon: CreditCard, href: "/admin/finance" },
+      { id: "customers", label: "Customers", icon: CircleUserRound, href: "/admin/customers" },
+      { id: "finance", label: "Money", icon: CreditCard, href: "/admin/finance" },
       { id: "content", label: "Content", icon: Compass, href: "/admin/content" },
-      { id: "platform", label: "Platform", icon: ShieldCheck, href: "/admin/platform" },
+      { id: "platform-map", label: "Platform map", icon: GitBranch, href: "/admin/platform-map" },
+      { id: "platform", label: "Configuration", icon: ShieldCheck, href: "/admin/platform" },
       { id: "audit", label: "Audit log", icon: ClipboardList, href: "/admin/audit" },
       { id: "settings", label: "Settings", icon: Settings, href: "/admin/settings" }
     ]

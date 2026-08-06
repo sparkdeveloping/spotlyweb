@@ -1,52 +1,59 @@
-# Spotly Business Experience v4 release manifest
+# Spotly Platform v5 release manifest
 
-Generated: August 5, 2026  
+Generated: August 6, 2026  
 Project: `spotly-web-platform`  
-Version: `4.0.0`  
+Version: `5.0.0`  
 Runtime: Next.js 16, JavaScript, React 19, Tailwind CSS 4, Framer Motion, Firebase
 
 ## Release contents
 
-- 98 source/data/script files
-- 97 JavaScript, JSX, or MJS modules
-- Approximately 11,780 lines across application source, shared components, libraries, data, and scripts
-- Guided business setup and adaptive workspaces
-- Correct organization → business brand → exact location hierarchy
-- Grocery/retail, restaurant/food, ticketing/events, appointments/services, accommodation/activities, and profile-only models
-- Branch-scoped access, adaptive catalogue/activity/finance/insights, shared-device kiosk modes, admin migration, and customer directory synchronization
-- Firebase Auth, Firestore, Storage, Analytics, Messaging preparation, route handlers, indexes, and rules
-- Vercel configuration and Firebase Admin/Jose compatibility override
+- Unified customer, business, driver, staff, and administrator applications
+- Complete `/staff` workforce workspace
+- Administrator People Operations centre
+- Organization, brand, and location governance
+- Interactive platform and workforce maps
+- Role packs, scoped access, approval limits, and role-adaptive queues
+- Recruitment, shifts, leave, learning, performance, payroll preparation, assets, support, and offboarding data models
+- Updated Firestore and Storage security rules
+- Updated production seed data and portal configuration
+- Existing adaptive merchant operations, marketplace, support, notifications, payments, and driver foundations
 
 ## Validation completed in the generation environment
 
-- `node scripts/check-javascript.mjs` passed
-- ESLint passed with zero errors and zero warnings
+- JavaScript/JSX parser-transpile validation passed across source modules
+- Local relative and `@/` import resolution passed
 - JavaScript-only source check passed
-- No TypeScript source files are included
 - JSON configuration parsing passed
-- No TODO/FIXME markers, dead `href="#"` links, or empty click handlers were found in application source
-- No Firebase service-account JSON, PEM/P12 key, or internal OpenAI registry reference is included
+- No TypeScript source files are included
 
-## Build note
+## Validation not completed in the generation environment
 
-A full Linux `next build` could not complete in the generation container because its installed dependencies were produced for macOS and the restricted package registry could not supply the matching Linux SWC binary. The owner previously completed a successful build on macOS with the same dependency family. Run `npm install` followed by `npm run check` locally and in a Vercel Preview deployment.
+A clean dependency installation, ESLint run, production Next.js build, and Firebase Emulator rules test could not be completed because the restricted package gateway returned a 404 for a transitive package. These checks must be run after extraction:
 
-## Required post-deployment action
+```bash
+npm install
+npm run check
+npm run firebase:emulators
+```
 
-1. Back up/export the current Firestore data.
-2. Sign in as Super Administrator.
-3. Open `/admin/businesses`.
-4. Select **Upgrade / refresh directory**.
-5. Wait for directory version 4 to complete.
-6. Review brand counts, location counts, claims, memberships, and archived legacy records before onboarding businesses.
+## Required production checks
 
-## Release exclusions
+- Least-privilege testing for every staff role pack
+- Employee self-service versus manager visibility
+- People Operations access to sensitive profile sections
+- Payroll and document isolation
+- Recruitment and candidate consent workflows
+- Attendance, leave, and approval chains
+- Temporary support access and automatic expiry
+- Organization/brand/location governance and parent approvals
+- Business, driver, customer, payment, and support regression tests
+- Mobile, keyboard, screen-reader, reduced-motion, offline, and low-bandwidth behavior
 
-The archive intentionally excludes:
+## Archive exclusions
 
 - `.git`
 - `.next`
 - `node_modules`
-- `.env.local` and other private environment files
-- service-account JSON and private keys
+- `.env.local` and private environment files
+- Service-account JSON and private keys
 - macOS metadata
