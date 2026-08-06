@@ -1,14 +1,14 @@
 export const statusSnapshot = {
-  label: "Firebase integration and pilot preparation",
+  label: "Adaptive business experience and pilot preparation",
   stage: 4,
   stageCount: 6,
   updated: "August 2026",
-  experienceProgress: 94,
-  productionReadiness: 68,
+  experienceProgress: 96,
+  productionReadiness: 72,
   clientInputsOpen: 18,
   launchBlockers: 6,
   summary:
-    "Spotly now has a JavaScript-only Next.js platform connected to Firebase architecture for shared accounts, business claiming, branch operations, grocery pickup, administration, support, notifications, and Paynow-ready payments. External credentials, production rules, approved legal terms, real merchant verification, and controlled pilot testing remain before public transactions should begin."
+    "Spotly now has a Firebase-backed, JavaScript-only Next.js platform with guided business setup, correct brand-to-location hierarchy, business-type-specific workspaces, kiosk modes, customer directory synchronization, administration, support, notifications, and Paynow-ready payments. Verified merchant data, production rules, approved legal terms, provider credentials, and controlled pilot testing remain before public transactions should begin."
 };
 
 export const productAreas = [
@@ -36,12 +36,12 @@ export const productAreas = [
     route: "/business",
     logo: "/brand/spotly-business.png",
     accent: "#147A4A",
-    status: "Integrated beta",
-    progress: 93,
+    status: "Adaptive pilot build",
+    progress: 96,
     complete: [
-      "Search-first business claiming, evidence upload, verification status, readiness guidance, and multi-brand/branch data model",
-      "Realtime profiles, branches, products, inventory availability, pickup orders, staff invitations, finance preferences, and support",
-      "Autosave-oriented forms, success/error feedback, useful empty states, and admin-managed platform defaults"
+      "Search-first business claiming, evidence upload, correct organization-to-brand-to-location hierarchy, and guided verification",
+      "Step-by-step setup that reveals only relevant tools for retail, food, ticketing, appointments, accommodation, activities, or profile-only businesses",
+      "Realtime offerings, locations, activity queues, team access, payments, insights, kiosk modes, support, full-screen completion feedback, and contextual empty states"
     ],
     next: [
       "Verify imported records and media rights with each merchant, then load approved catalogues and operational data",
@@ -93,7 +93,7 @@ export const workstreams = [
       { name: "Four-brand visual system and responsive shared UI", status: "Complete", progress: 100, owner: "Product" },
       { name: "Light public website and admin-controlled private beta", status: "Complete", progress: 100, owner: "Product + Engineering" },
       { name: "Customer grocery-pickup marketplace", status: "Review ready", progress: 92, owner: "Product + Engineering" },
-      { name: "Business onboarding and operating portal", status: "Review ready", progress: 93, owner: "Product + Engineering" },
+      { name: "Adaptive business onboarding and operating portal", status: "Review ready", progress: 96, owner: "Product + Engineering" },
       { name: "Administrator control plane", status: "Review ready", progress: 95, owner: "Engineering + Operations" },
       { name: "English, ChiShona, and isiNdebele content coverage", status: "In progress", progress: 55, owner: "Content + Community" },
       { name: "Formal accessibility and device QA", status: "In progress", progress: 60, owner: "Engineering + QA" }
@@ -127,7 +127,8 @@ export const workstreams = [
     group: "Launch readiness",
     items: [
       { name: "JavaScript syntax and project structure validation", status: "Complete", progress: 100, owner: "Engineering" },
-      { name: "Dependency install, lint, and production build on Vercel", status: "Needs action", progress: 55, owner: "Engineering" },
+      { name: "JavaScript validation and ESLint", status: "Complete", progress: 100, owner: "Engineering" },
+      { name: "Production build on Vercel Preview", status: "Needs action", progress: 70, owner: "Engineering" },
       { name: "Authentication, rules, payment, and permissions regression suite", status: "In progress", progress: 40, owner: "Engineering + QA" },
       { name: "Privacy, terms, merchant agreement, refund policy, and data terms", status: "Client counsel required", progress: 10, owner: "Founder + Legal" },
       { name: "Monitoring, backups, analytics definitions, and incident response", status: "In progress", progress: 45, owner: "Engineering + Operations" },
@@ -234,7 +235,7 @@ export const launchStages = [
   { number: 1, title: "Discovery and scope", status: "Complete", description: "Four audiences, portal boundaries, Zimbabwe-wide direction, grocery pickup focus, and admin-controlled behavior established." },
   { number: 2, title: "Brand and product experience", status: "Complete", description: "Four icon identities, light public experience, responsive design system, motion, and intentional interaction patterns established." },
   { number: 3, title: "Integrated application build", status: "Complete", description: "Customer, business, admin, dormant driver, support, claim, account, marketplace, and development-status experiences implemented." },
-  { number: 4, title: "Firebase and provider integration", status: "Current stage", description: "Firebase clients and server routes, shared identity, Firestore models, Storage paths, notifications, seeding, Paynow-ready flows, and Vercel configuration are implemented; credentials and production verification remain." },
+  { number: 4, title: "Firebase and adaptive business integration", status: "Current stage", description: "Firebase clients and server routes, shared identity, corrected brand/location records, guided setup, business-type-specific workspaces, kiosks, notifications, directory migration, Paynow-ready flows, and Vercel configuration are implemented; live data verification and production hardening remain." },
   { number: 5, title: "Controlled pilot and hardening", status: "Next", description: "Verified businesses and customers, real catalogues, sandbox payments, role/rules tests, accessibility, performance, security, support, reconciliation, and operating procedures." },
   { number: 6, title: "Production release", status: "Planned", description: "Approved legal documents, production credentials and rules, monitoring, backups, launch communications, measured rollout, and incident-ready operations." }
 ];

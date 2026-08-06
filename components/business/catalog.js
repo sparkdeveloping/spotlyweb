@@ -2,20 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Barcode,
   BookOpenCheck,
+  CalendarDays,
   Check,
+  Clock3,
   Copy,
-  Download,
   Edit3,
   FileSpreadsheet,
   ImagePlus,
+  MapPin,
   PackageCheck,
   Plus,
-  Search,
   Sparkles,
   Trash2,
-  UploadCloud
+  UploadCloud,
+  UsersRound
 } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
@@ -29,169 +30,259 @@ import {
 } from "@/lib/business-services";
 import { businessCategories, emptyProduct } from "@/data/business-config";
 import { useBusinessWorkspace } from "@/components/business/business-context";
-import { BusinessSwitcher, ConfirmDialog, FieldLabel, fieldClass, selectClass, textAreaClass } from "@/components/business/shared";
+import { BusinessSwitcher, ConfirmDialog, FieldLabel, FullScreenTask, fieldClass, selectClass, textAreaClass } from "@/components/business/shared";
 
 function productPrice(product) {
   return Number(product.price ?? product.prices?.[product.currency || "USD"] ?? 0);
 }
 
-function ProductModal({ product, open, onClose }) {
-  const { selectedBusinessId, user, branches } = useBusinessWorkspace();
-  const [form, setForm] = useState(product || emptyProduct);
+function dateTimeValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
+}
+
+function itemDefaults(archetype) {
+  const isPickup = archetype.capabilities.includes("pickup_orders");
+  const itemType = archetype.id === "ticketing_events" ? "ticket" : archetype.id === "appointments_services" ? "service" : archetype.id === "accommodation_activities" ? "listing" : "product";
+  return {
+    ...emptyProduct,
+    category: archetype.categoryHints?.[0] || "General",
+    itemType,
+    pickupEligible: isPickup,
+    substitutionAllowed: isPickup && archetype.id === "grocery_retail",
+    requiresBusinessReview: archetype.id === "directory_profile"
+  };
+}
+
+function OfferingModal({ product, open, onClose }) {
+  const { selectedBusinessId, user, branches, selectedBranchId, archetype } = useBusinessWorkspace();
+  const defaults = useMemo(() => itemDefaults(archetype), [archetype]);
+  const isInventory = archetype.capabilities.includes("inventory") || archetype.capabilities.includes("menu");
+  const isPickup = archetype.capabilities.includes("pickup_orders");
+  const isTicket = archetype.id === "ticketing_events";
+  const isAppointment = archetype.id === "appointments_services";
+  const isBooking = archetype.id === "accommodation_activities";
+  const [form, setForm] = useState(defaults);
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [task, setTask] = useState({ open: false, state: "processing", title: "", description: "", active: 0 });
   const { toast } = useToast();
 
   useEffect(() => {
-    if (open) setForm(product ? { ...emptyProduct, ...product } : { ...emptyProduct });
-  }, [open, product]);
+    if (!open) return;
+    setForm(product
+      ? { ...defaults, ...product, startsAt: dateTimeValue(product.startsAt), endsAt: dateTimeValue(product.endsAt) }
+      : { ...defaults, branchIds: selectedBranchId ? [selectedBranchId] : branches.map((branch) => branch.id) });
+  }, [open, product, defaults, selectedBranchId, branches]);
+
+  const update = (values) => setForm((current) => ({ ...current, ...values }));
+  const toggleBranch = (id) => update({ branchIds: (form.branchIds || []).includes(id) ? form.branchIds.filter((item) => item !== id) : [...(form.branchIds || []), id] });
+
+  async function chooseImage(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast("Choose an image file.", { type: "error", title: "Image required" });
+    if (file.size > 8 * 1024 * 1024) return toast("Images must be smaller than 8 MB.", { type: "error", title: "Image too large" });
+    setUploadingImage(true);
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const url = await uploadFile(`businesses/${selectedBusinessId}/catalog/${crypto.randomUUID()}.${extension}`, file, { businessId: selectedBusinessId, kind: "offering_image" });
+      update({ image: url });
+      toast("Image uploaded.", { title: "Image ready" });
+    } catch (error) {
+      toast(error.message, { type: "error", title: "Image upload failed" });
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
+    const noun = archetype.nouns.item;
+    setTask({ open: true, state: "processing", title: product ? `Updating ${noun}` : `Creating ${noun}`, description: "Spotly is validating the customer-facing details and location availability.", active: 1 });
     try {
       await saveProduct({
         ...form,
         price: Number(form.price || 0),
         compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : null,
         stockQuantity: Number(form.stockQuantity || 0),
-        branchIds: form.branchIds || branches.map((branch) => branch.id),
+        durationMinutes: Number(form.durationMinutes || 0),
+        capacity: Number(form.capacity || 0),
+        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
+        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
+        branchIds: form.branchIds?.length ? form.branchIds : branches.map((branch) => branch.id),
         prices: { ...(form.prices || {}), [form.currency || "USD"]: Number(form.price || 0) }
       }, selectedBusinessId, user);
-      toast(product ? "Product changes saved." : "Product added to the catalog.", { title: "Catalog updated" });
-      onClose();
+      setTask({ open: true, state: "success", title: `${noun[0].toUpperCase()}${noun.slice(1)} saved`, description: "The latest details are now available across the business workspace.", active: 4 });
+      toast(product ? "Changes saved." : `${noun[0].toUpperCase()}${noun.slice(1)} added.`, { title: `${archetype.nouns.catalog} updated` });
     } catch (error) {
-      toast(error.message, { type: "error", title: "Could not save product" });
-    } finally { setLoading(false); }
+      setTask({ open: true, state: "error", title: `Could not save this ${noun}`, description: error.message, active: 1 });
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const update = (values) => setForm((current) => ({ ...current, ...values }));
-  async function chooseImage(event) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) return toast("Choose a JPG, PNG, WEBP, or another image file.", { type: "error", title: "Image required" });
-    if (file.size > 8 * 1024 * 1024) return toast("Product images must be smaller than 8 MB.", { type: "error", title: "Image too large" });
-    setUploadingImage(true);
-    try {
-      const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const url = await uploadFile(`businesses/${selectedBusinessId}/catalog/${crypto.randomUUID()}.${extension}`, file, { businessId: selectedBusinessId, kind: "product_image" });
-      update({ image: url });
-      toast("Product image uploaded.", { title: "Image ready" });
-    } catch (error) { toast(error.message, { type: "error", title: "Image upload failed" }); }
-    finally { setUploadingImage(false); }
+  function finishTask() {
+    const succeeded = task.state === "success";
+    setTask((current) => ({ ...current, open: false }));
+    if (succeeded) onClose();
   }
-  return <Modal open={open} onClose={onClose} title={product ? "Edit product" : "Add product"} size="lg">
-    <form onSubmit={submit} className="space-y-5 p-5">
-      <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-        <FieldLabel label="Product name" required hint="Use the name customers will search for."><input required value={form.name || ""} onChange={(event) => update({ name: event.target.value })} className={fieldClass} autoFocus /></FieldLabel>
-        <FieldLabel label="Status"><select value={form.active === false ? "paused" : "active"} onChange={(event) => update({ active: event.target.value === "active" })} className={selectClass}><option value="active">Active</option><option value="paused">Paused</option></select></FieldLabel>
-      </div>
-      <FieldLabel label="Description" hint="Include size, brand, pack count, flavour, or other details that prevent confusion."><textarea value={form.description || ""} onChange={(event) => update({ description: event.target.value })} className={textAreaClass} /></FieldLabel>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <FieldLabel label="Category" required><input required value={form.category || ""} onChange={(event) => update({ category: event.target.value })} className={fieldClass} list="spotly-product-categories" /><datalist id="spotly-product-categories">{businessCategories.map((item) => <option key={item} value={item} />)}</datalist></FieldLabel>
-        <FieldLabel label="SKU"><input value={form.sku || ""} onChange={(event) => update({ sku: event.target.value })} className={fieldClass} autoComplete="off" /></FieldLabel>
-        <FieldLabel label="Barcode"><input value={form.barcode || ""} onChange={(event) => update({ barcode: event.target.value })} className={fieldClass} inputMode="numeric" autoComplete="off" /></FieldLabel>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <FieldLabel label="Currency"><select value={form.currency || "USD"} onChange={(event) => update({ currency: event.target.value })} className={selectClass}><option value="USD">USD</option><option value="ZWG">ZiG (ZWG)</option></select></FieldLabel>
-        <FieldLabel label="Selling price" required><input required type="number" min="0" step="0.01" value={form.price ?? ""} onChange={(event) => update({ price: event.target.value })} className={fieldClass} /></FieldLabel>
-        <FieldLabel label="Compare-at price" hint="Optional previous price."><input type="number" min="0" step="0.01" value={form.compareAtPrice ?? ""} onChange={(event) => update({ compareAtPrice: event.target.value })} className={fieldClass} /></FieldLabel>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <FieldLabel label="Stock tracking"><select value={form.stockMode || "status"} onChange={(event) => update({ stockMode: event.target.value })} className={selectClass}><option value="status">Simple availability</option><option value="quantity">Exact quantity</option></select></FieldLabel>
-        <FieldLabel label="Availability"><select value={form.stockStatus || "in_stock"} onChange={(event) => update({ stockStatus: event.target.value })} className={selectClass}><option value="in_stock">In stock</option><option value="low_stock">Low stock</option><option value="unavailable">Unavailable</option></select></FieldLabel>
-        <FieldLabel label="Quantity" hint={form.stockMode === "quantity" ? "Used for stock alerts." : "Optional reference."}><input type="number" min="0" value={form.stockQuantity ?? 0} onChange={(event) => update({ stockQuantity: event.target.value })} className={fieldClass} /></FieldLabel>
-      </div>
-      <FieldLabel label="Product image" hint="Upload an image you own or are allowed to use. Spotly stores it with this business."><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-business-soft text-business" style={form.image ? { backgroundImage: `url(${form.image})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>{!form.image && <ImagePlus className="h-6 w-6" />}</span><div className="flex-1"><label className={`inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-white px-4 text-sm font-semibold transition hover:bg-grouped ${uploadingImage ? "pointer-events-none opacity-60" : ""}`}><UploadCloud className="h-4 w-4" />{uploadingImage ? "Uploading image…" : form.image ? "Replace image" : "Upload image"}<input type="file" accept="image/*" className="sr-only" onChange={chooseImage} disabled={uploadingImage} /></label>{form.image && <button type="button" onClick={() => update({ image: "" })} className="ml-3 text-sm font-semibold text-danger">Remove</button>}<p className="mt-2 text-xs text-tertiary">Maximum 8 MB. Square or landscape images work best.</p></div></div></FieldLabel>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={form.pickupEligible !== false} onChange={(event) => update({ pickupEligible: event.target.checked })} /><span><span className="block text-sm font-semibold">Available for pickup</span><span className="mt-1 block text-xs leading-5 text-secondary">Customers can add this item to grocery pickup orders.</span></span></label>
-        <label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={form.substitutionAllowed !== false} onChange={(event) => update({ substitutionAllowed: event.target.checked })} /><span><span className="block text-sm font-semibold">Allow substitutions</span><span className="mt-1 block text-xs leading-5 text-secondary">The pickup team may suggest a comparable item when unavailable.</span></span></label>
-      </div>
-      <Button type="submit" loading={loading} className="w-full"><Check className="h-4 w-4" />{product ? "Save product" : "Add product"}</Button>
-    </form>
-  </Modal>;
+
+  const noun = archetype.nouns.item;
+  return <>
+    <Modal open={open && !task.open} onClose={onClose} title={product ? `Edit ${noun}` : `Add ${noun}`} size="xl">
+      <form onSubmit={submit} className="space-y-6 p-5">
+        <div className="rounded-2xl bg-business-soft p-4"><p className="text-sm font-bold">{archetype.label}</p><p className="mt-1 text-xs leading-5 text-secondary">Only fields relevant to this business model are shown. You can change the business type from Setup centre.</p></div>
+        <div className="grid gap-4 sm:grid-cols-[1fr_170px]">
+          <FieldLabel label={`${noun[0].toUpperCase()}${noun.slice(1)} name`} required hint="Use the name a customer will recognize and search for."><input required value={form.name || ""} onChange={(event) => update({ name: event.target.value })} className={fieldClass} autoFocus /></FieldLabel>
+          <FieldLabel label="Visibility"><select value={form.active === false ? "paused" : "active"} onChange={(event) => update({ active: event.target.value === "active" })} className={selectClass}><option value="active">Visible</option><option value="paused">Hidden</option></select></FieldLabel>
+        </div>
+        <FieldLabel label="Description" hint={isInventory ? "Include size, pack, flavour, preparation details, or anything that prevents confusion." : "Explain exactly what the customer receives, what is included, and any important conditions."}><textarea value={form.description || ""} onChange={(event) => update({ description: event.target.value })} className={textAreaClass} /></FieldLabel>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <FieldLabel label="Category" required><input required value={form.category || ""} onChange={(event) => update({ category: event.target.value })} className={fieldClass} list="spotly-offering-categories" /><datalist id="spotly-offering-categories">{businessCategories.map((item) => <option key={item} value={item} />)}</datalist></FieldLabel>
+          <FieldLabel label="Currency"><select value={form.currency || "USD"} onChange={(event) => update({ currency: event.target.value })} className={selectClass}><option value="USD">USD</option><option value="ZWG">ZiG (ZWG)</option></select></FieldLabel>
+          <FieldLabel label={archetype.id === "directory_profile" ? "Price, if applicable" : "Price"} required={archetype.id !== "directory_profile"}><input required={archetype.id !== "directory_profile"} type="number" min="0" step="0.01" value={form.price ?? ""} onChange={(event) => update({ price: event.target.value })} className={fieldClass} /></FieldLabel>
+        </div>
+
+        {isInventory && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Availability and stock</h3><p className="mt-1 text-xs text-secondary">Keep the customer promise accurate without forcing exact inventory when the business does not use it.</p></div><div className="grid gap-4 sm:grid-cols-3"><FieldLabel label="Tracking"><select value={form.stockMode || "status"} onChange={(event) => update({ stockMode: event.target.value })} className={selectClass}><option value="status">Availability only</option><option value="quantity">Exact quantity</option></select></FieldLabel><FieldLabel label="Availability"><select value={form.stockStatus || "in_stock"} onChange={(event) => update({ stockStatus: event.target.value })} className={selectClass}><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select></FieldLabel><FieldLabel label="Quantity" hint={form.stockMode === "quantity" ? "Used for stock alerts." : "Optional reference."}><input type="number" min="0" value={form.stockQuantity ?? 0} onChange={(event) => update({ stockQuantity: event.target.value })} className={fieldClass} /></FieldLabel></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="SKU"><input value={form.sku || ""} onChange={(event) => update({ sku: event.target.value })} className={fieldClass} autoComplete="off" /></FieldLabel><FieldLabel label="Barcode"><input value={form.barcode || ""} onChange={(event) => update({ barcode: event.target.value })} className={fieldClass} inputMode="numeric" autoComplete="off" /></FieldLabel></div></div>}
+
+        {isTicket && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Event and admission</h3><p className="mt-1 text-xs text-secondary">The venue is a location under the business. Ticket types stay inside this event catalogue.</p></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Starts"><input type="datetime-local" value={form.startsAt || ""} onChange={(event) => update({ startsAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Ends"><input type="datetime-local" value={form.endsAt || ""} onChange={(event) => update({ endsAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Venue or area"><input value={form.venue || ""} onChange={(event) => update({ venue: event.target.value })} className={fieldClass} placeholder="Main stage, hall, or venue" /></FieldLabel><FieldLabel label="Ticket capacity"><input type="number" min="0" value={form.capacity || 0} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel></div></div>}
+
+        {isAppointment && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Appointment details</h3><p className="mt-1 text-xs text-secondary">Define the normal session length and whether the team must approve each request.</p></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Duration in minutes"><input type="number" min="5" step="5" value={form.durationMinutes || 30} onChange={(event) => update({ durationMinutes: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="People per slot"><input type="number" min="1" value={form.capacity || 1} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel></div><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={Boolean(form.requiresBusinessReview)} onChange={(event) => update({ requiresBusinessReview: event.target.checked })} /><span><span className="block text-sm font-semibold">Approve requests before confirming</span><span className="mt-1 block text-xs text-secondary">Useful when staff schedules or service details require a manual check.</span></span></label></div>}
+
+        {isBooking && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Booking details</h3><p className="mt-1 text-xs text-secondary">Use capacity for rooms, seats, participants, or another bookable unit.</p></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Capacity"><input type="number" min="1" value={form.capacity || 1} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Typical duration in minutes"><input type="number" min="0" value={form.durationMinutes || 0} onChange={(event) => update({ durationMinutes: event.target.value })} className={fieldClass} placeholder="Leave 0 for overnight stays" /></FieldLabel></div><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={Boolean(form.requiresBusinessReview)} onChange={(event) => update({ requiresBusinessReview: event.target.checked })} /><span><span className="block text-sm font-semibold">Approve requests before confirming</span><span className="mt-1 block text-xs text-secondary">Spotly will collect the request without promising unavailable capacity.</span></span></label></div>}
+
+        {isPickup && <div className="grid gap-3 sm:grid-cols-2"><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={form.pickupEligible !== false} onChange={(event) => update({ pickupEligible: event.target.checked })} /><span><span className="block text-sm font-semibold">Available for pickup</span><span className="mt-1 block text-xs leading-5 text-secondary">Customers can include this item in a pickup order.</span></span></label>{archetype.id === "grocery_retail" && <label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={form.substitutionAllowed !== false} onChange={(event) => update({ substitutionAllowed: event.target.checked })} /><span><span className="block text-sm font-semibold">Allow substitutions</span><span className="mt-1 block text-xs leading-5 text-secondary">The team can suggest a comparable item when this one is unavailable.</span></span></label>}</div>}
+
+        {branches.length > 0 && <div><p className="text-sm font-semibold">Available at</p><p className="mt-1 text-xs text-secondary">Choose the exact locations where customers can use this offering.</p><div className="mt-3 flex flex-wrap gap-2">{branches.map((branch) => { const selected = (form.branchIds || []).includes(branch.id); return <button type="button" key={branch.id} onClick={() => toggleBranch(branch.id)} className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${selected ? "border-business bg-business-soft text-business" : "bg-white text-secondary"}`}><MapPin className="h-4 w-4" />{branch.branchName || branch.name}{selected && <Check className="h-3.5 w-3.5" />}</button>; })}</div></div>}
+
+        <FieldLabel label={`${noun[0].toUpperCase()}${noun.slice(1)} image`} hint="Upload an image you own or are allowed to use."><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-business-soft text-business" style={form.image ? { backgroundImage: `url(${form.image})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>{!form.image && <ImagePlus className="h-6 w-6" />}</span><div className="flex-1"><label className={`inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-white px-4 text-sm font-semibold transition hover:bg-grouped ${uploadingImage ? "pointer-events-none opacity-60" : ""}`}><UploadCloud className="h-4 w-4" />{uploadingImage ? "Uploading…" : form.image ? "Replace image" : "Upload image"}<input type="file" accept="image/*" className="sr-only" onChange={chooseImage} disabled={uploadingImage} /></label>{form.image && <button type="button" onClick={() => update({ image: "" })} className="ml-3 text-sm font-semibold text-danger">Remove</button>}<p className="mt-2 text-xs text-tertiary">Maximum 8 MB. Square or landscape images work best.</p></div></div></FieldLabel>
+        <Button type="submit" loading={loading} className="w-full"><Check className="h-4 w-4" />Save {noun}</Button>
+      </form>
+    </Modal>
+    <FullScreenTask open={task.open} state={task.state} title={task.title} description={task.description} steps={["Validate customer details", "Save pricing and availability", "Attach selected locations", "Refresh the live workspace"]} activeStep={task.active} onDone={finishTask} doneLabel={task.state === "success" ? `Return to ${archetype.nouns.catalog}` : "Review details"} />
+  </>;
 }
 
 function QuickAddModal({ open, onClose }) {
-  const { selectedBusinessId, user } = useBusinessWorkspace();
-  const [rows, setRows] = useState(Array.from({ length: 5 }, () => ({ name: "", category: "Groceries", price: "", currency: "USD", stockStatus: "in_stock" })));
+  const { selectedBusinessId, user, archetype, selectedBranchId } = useBusinessWorkspace();
+  const starterCategory = archetype.categoryHints?.[0] || "General";
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (open) setRows(Array.from({ length: 5 }, () => ({ name: "", category: starterCategory, price: "", currency: "USD", stockStatus: "in_stock", branchIds: selectedBranchId ? [selectedBranchId] : [] })));
+  }, [open, starterCategory, selectedBranchId]);
+
   const updateRow = (index, values) => setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, ...values } : row));
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
     try {
-      const count = await quickAddProducts(rows, selectedBusinessId, user);
-      toast(`${count} product${count === 1 ? "" : "s"} added.`, { title: "Quick add complete" });
-      setRows(Array.from({ length: 5 }, () => ({ name: "", category: "Groceries", price: "", currency: "USD", stockStatus: "in_stock" })));
+      const count = await quickAddProducts(rows.map((row) => ({ ...row, itemType: itemDefaults(archetype).itemType, pickupEligible: archetype.capabilities.includes("pickup_orders"), substitutionAllowed: archetype.id === "grocery_retail" })), selectedBusinessId, user);
+      toast(`${count} ${count === 1 ? archetype.nouns.item : archetype.nouns.items} added.`, { title: "Quick add complete" });
       onClose();
     } catch (error) {
-      toast(error.message, { type: "error", title: "Could not add products" });
-    } finally { setLoading(false); }
+      toast(error.message, { type: "error", title: "Could not add items" });
+    } finally {
+      setLoading(false);
+    }
   }
-  return <Modal open={open} onClose={onClose} title="Quick add products" size="xl"><form onSubmit={submit} className="p-5"><p className="text-sm leading-6 text-secondary">Add the essential information now. Descriptions, images, SKUs, and exact stock can be completed later.</p><div className="mt-5 overflow-x-auto rounded-2xl border"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-grouped text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-3 py-3">Product name</th><th className="px-3 py-3">Category</th><th className="px-3 py-3">Currency</th><th className="px-3 py-3">Price</th><th className="px-3 py-3">Availability</th></tr></thead><tbody>{rows.map((row, index) => <tr key={index} className="border-t"><td className="p-2"><input value={row.name} onChange={(event) => updateRow(index, { name: event.target.value })} className="h-11 w-full rounded-xl border px-3 outline-none" placeholder={`Product ${index + 1}`} /></td><td className="p-2"><input value={row.category} onChange={(event) => updateRow(index, { category: event.target.value })} className="h-11 w-full rounded-xl border px-3 outline-none" /></td><td className="p-2"><select value={row.currency} onChange={(event) => updateRow(index, { currency: event.target.value })} className="h-11 w-full rounded-xl border px-3"><option>USD</option><option>ZWG</option></select></td><td className="p-2"><input type="number" min="0" step="0.01" value={row.price} onChange={(event) => updateRow(index, { price: event.target.value })} className="h-11 w-full rounded-xl border px-3 outline-none" /></td><td className="p-2"><select value={row.stockStatus} onChange={(event) => updateRow(index, { stockStatus: event.target.value })} className="h-11 w-full rounded-xl border px-3"><option value="in_stock">In stock</option><option value="low_stock">Low stock</option><option value="unavailable">Unavailable</option></select></td></tr>)}</tbody></table></div><div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-between"><Button type="button" variant="outline" onClick={() => setRows((current) => [...current, ...Array.from({ length: 3 }, () => ({ name: "", category: "Groceries", price: "", currency: "USD", stockStatus: "in_stock" }))])}><Plus className="h-4 w-4" />Add more rows</Button><Button type="submit" loading={loading}><Check className="h-4 w-4" />Save products</Button></div></form></Modal>;
+
+  return <Modal open={open} onClose={onClose} title={`Quick add ${archetype.nouns.items}`} size="xl"><form onSubmit={submit} className="space-y-4 p-5"><p className="text-sm leading-6 text-secondary">Add the essentials first. Open any row later to add images, schedules, capacity, or detailed availability.</p><div className="overflow-x-auto"><div className="min-w-[760px] space-y-2">{rows.map((row, index) => <div key={index} className="grid grid-cols-[1fr_220px_120px_110px] gap-2"><input aria-label={`${archetype.nouns.item} ${index + 1} name`} placeholder={`${archetype.nouns.item[0].toUpperCase()}${archetype.nouns.item.slice(1)} name`} className={fieldClass} value={row.name} onChange={(event) => updateRow(index, { name: event.target.value })} /><input aria-label={`${archetype.nouns.item} ${index + 1} category`} placeholder="Category" className={fieldClass} value={row.category} onChange={(event) => updateRow(index, { category: event.target.value })} /><input aria-label={`${archetype.nouns.item} ${index + 1} price`} type="number" min="0" step="0.01" placeholder="Price" className={fieldClass} value={row.price} onChange={(event) => updateRow(index, { price: event.target.value })} /><select aria-label={`${archetype.nouns.item} ${index + 1} currency`} className={selectClass} value={row.currency} onChange={(event) => updateRow(index, { currency: event.target.value })}><option value="USD">USD</option><option value="ZWG">ZiG</option></select></div>)}</div></div><Button type="submit" className="w-full" loading={loading}><Plus className="h-4 w-4" />Add completed rows</Button></form></Modal>;
 }
 
 function TemplateModal({ open, onClose }) {
-  const { templates, selectedBusinessId, user } = useBusinessWorkspace();
-  const [selected, setSelected] = useState([]);
-  const [currency, setCurrency] = useState("USD");
-  const [loading, setLoading] = useState(false);
+  const { templates, selectedBusinessId, user, archetype, selectedBranchId } = useBusinessWorkspace();
+  const [loading, setLoading] = useState("");
   const { toast } = useToast();
-  async function submit() {
-    if (!selected.length) return toast("Choose at least one catalog section.", { type: "error", title: "Nothing selected" });
-    setLoading(true);
+  const relevant = useMemo(() => templates.filter((template) => !template.businessTypes?.length || template.businessTypes.includes(archetype.id)), [templates, archetype.id]);
+
+  async function apply(template) {
+    setLoading(template.id);
     try {
-      let created = 0;
-      let skipped = 0;
-      for (const id of selected) {
-        const template = templates.find((item) => item.id === id);
-        const result = await importCatalogTemplate(template, selectedBusinessId, user, { currency, active: false });
-        created += result.created;
-        skipped += result.skipped;
-      }
-      toast(`${created} product${created === 1 ? "" : "s"} prepared${skipped ? ` · ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped` : ""}.`, { title: "Template imported" });
-      setSelected([]);
+      const result = await importCatalogTemplate(template, selectedBusinessId, user, {
+        currency: "USD",
+        active: false,
+        pickupEligible: archetype.capabilities.includes("pickup_orders"),
+        substitutionAllowed: archetype.id === "grocery_retail",
+        branchIds: selectedBranchId ? [selectedBranchId] : []
+      });
+      toast(`${result.created} draft ${result.created === 1 ? archetype.nouns.item : archetype.nouns.items} created. Review names, prices, and availability before publishing.`, { title: "Starter applied", duration: 6000 });
       onClose();
     } catch (error) {
-      toast(error.message, { type: "error", title: "Could not import template" });
-    } finally { setLoading(false); }
+      toast(error.message, { type: "error", title: "Could not apply starter" });
+    } finally {
+      setLoading("");
+    }
   }
-  return <Modal open={open} onClose={onClose} title="Start from a catalog template" size="lg"><div className="p-5"><div className="rounded-2xl bg-business-soft p-4"><div className="flex items-center gap-2 font-bold text-business-strong"><Sparkles className="h-5 w-5" />Spotly prepares the product names and categories.</div><p className="mt-2 text-sm leading-6 text-business-strong">Imported products start paused so your team only needs to add accurate prices, images, sizes, and availability before publishing.</p></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{templates.map((template) => <label key={template.id} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${selected.includes(template.id) ? "border-business bg-business-soft" : "hover:bg-grouped"}`}><input type="checkbox" className="mt-1" checked={selected.includes(template.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, template.id] : selected.filter((id) => id !== template.id))} /><span><span className="block font-semibold">{template.name}</span><span className="mt-1 block text-xs text-secondary">{template.products?.length || 0} suggested products</span></span></label>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto]"><FieldLabel label="Default currency"><select value={currency} onChange={(event) => setCurrency(event.target.value)} className={selectClass}><option value="USD">USD</option><option value="ZWG">ZiG (ZWG)</option></select></FieldLabel><Button className="self-end" onClick={submit} loading={loading}><Download className="h-4 w-4" />Import {selected.length || "selected"}</Button></div></div></Modal>;
+
+  return <Modal open={open} onClose={onClose} title={`Start ${archetype.nouns.catalog.toLowerCase()} with a useful structure`} size="lg"><div className="space-y-3 p-5">{relevant.length ? relevant.map((template) => <Card key={template.id} className="p-5"><div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-business-soft text-business"><Sparkles className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h3 className="font-bold">{template.name}</h3><p className="mt-1 text-sm leading-6 text-secondary">{template.description}</p><div className="mt-3 flex items-center gap-2"><Badge tone="neutral">{(template.products || template.items || []).length} drafts</Badge><Badge tone="warning">Prices need review</Badge></div></div><Button size="sm" onClick={() => apply(template)} loading={loading === template.id}>Use starter</Button></div></Card>) : <EmptyState icon={Sparkles} title="No starter is configured for this business type" description="Add the first offering manually or ask Spotly Support to publish a suitable starter." />}</div></Modal>;
+}
+
+function parseCsv(text, archetype, selectedBranchId) {
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return [];
+  const first = lines[0].toLowerCase();
+  const hasHeader = first.includes("name") && first.includes("price");
+  const body = hasHeader ? lines.slice(1) : lines;
+  return body.map((line) => {
+    const [name, category, price, currency = "USD", code = ""] = line.split(",").map((item) => item.trim());
+    return {
+      name,
+      category: category || archetype.categoryHints?.[0] || "General",
+      price: Number(price || 0),
+      currency: currency || "USD",
+      sku: code,
+      itemType: itemDefaults(archetype).itemType,
+      pickupEligible: archetype.capabilities.includes("pickup_orders"),
+      substitutionAllowed: archetype.id === "grocery_retail",
+      branchIds: selectedBranchId ? [selectedBranchId] : []
+    };
+  }).filter((item) => item.name);
 }
 
 function CsvModal({ open, onClose }) {
-  const { selectedBusinessId, user } = useBusinessWorkspace();
-  const [text, setText] = useState("name,category,price,currency,sku,stock\n");
+  const { selectedBusinessId, user, archetype, selectedBranchId } = useBusinessWorkspace();
+  const [text, setText] = useState("name,category,price,currency,code\n");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  useEffect(() => { if (open) setText("name,category,price,currency,code\n"); }, [open]);
   async function submit(event) {
     event.preventDefault();
-    const lines = text.trim().split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) return toast("Paste at least one product row below the header.", { type: "error" });
-    const headers = lines[0].split(",").map((item) => item.trim().toLowerCase());
-    const products = lines.slice(1).map((line) => {
-      const values = line.split(",").map((item) => item.trim());
-      const row = Object.fromEntries(headers.map((header, index) => [header, values[index] || ""]));
-      return { name: row.name, category: row.category || "Groceries", price: row.price || 0, currency: row.currency || "USD", sku: row.sku || "", stockStatus: row.stock || "in_stock" };
-    });
     setLoading(true);
     try {
-      const count = await quickAddProducts(products, selectedBusinessId, user);
-      toast(`${count} products imported from CSV.`, { title: "Import complete" });
+      const items = parseCsv(text, archetype, selectedBranchId);
+      if (!items.length) throw new Error(`Add at least one ${archetype.nouns.item} row.`);
+      const count = await quickAddProducts(items, selectedBusinessId, user);
+      toast(`${count} ${count === 1 ? archetype.nouns.item : archetype.nouns.items} imported.`, { title: "Import complete" });
       onClose();
-    } catch (error) { toast(error.message, { type: "error", title: "Import failed" }); }
-    finally { setLoading(false); }
+    } catch (error) {
+      toast(error.message, { type: "error", title: "Import failed" });
+    } finally {
+      setLoading(false);
+    }
   }
-  return <Modal open={open} onClose={onClose} title="Paste a CSV product list" size="lg"><form onSubmit={submit} className="space-y-4 p-5"><p className="text-sm leading-6 text-secondary">Use the columns shown below. Commas inside product names are not supported in this quick importer; use a standard spreadsheet export for clean results.</p><textarea value={text} onChange={(event) => setText(event.target.value)} className="min-h-[320px] w-full rounded-2xl border p-4 font-mono text-sm outline-none" spellCheck="false" /><Button type="submit" className="w-full" loading={loading}><UploadCloud className="h-4 w-4" />Import products</Button></form></Modal>;
+  return <Modal open={open} onClose={onClose} title={`Paste a CSV ${archetype.nouns.item} list`} size="lg"><form onSubmit={submit} className="space-y-4 p-5"><p className="text-sm leading-6 text-secondary">Use one row per {archetype.nouns.item}: <strong>name, category, price, currency, code</strong>. Detailed schedules and capacity can be added after import.</p><textarea value={text} onChange={(event) => setText(event.target.value)} className="min-h-[320px] w-full rounded-2xl border p-4 font-mono text-sm outline-none" spellCheck="false" /><Button type="submit" className="w-full" loading={loading}><UploadCloud className="h-4 w-4" />Import {archetype.nouns.items}</Button></form></Modal>;
+}
+
+function OfferingSummary({ item, archetype }) {
+  if (archetype.id === "ticketing_events") return <div className="space-y-1 text-xs text-secondary">{item.startsAt && <p className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{new Date(item.startsAt).toLocaleString("en-ZW", { timeZone: "Africa/Harare", dateStyle: "medium", timeStyle: "short" })}</p>}{item.capacity > 0 && <p className="flex items-center gap-1.5"><UsersRound className="h-3.5 w-3.5" />{item.capacity} available</p>}</div>;
+  if (archetype.id === "appointments_services") return <p className="flex items-center gap-1.5 text-xs text-secondary"><Clock3 className="h-3.5 w-3.5" />{item.durationMinutes || 30} minutes</p>;
+  if (archetype.id === "accommodation_activities") return <p className="flex items-center gap-1.5 text-xs text-secondary"><UsersRound className="h-3.5 w-3.5" />Capacity {item.capacity || 1}</p>;
+  return <p className="text-xs text-secondary">{item.sku || item.barcode || "No internal code"}</p>;
 }
 
 export function CatalogView() {
-  const { products, selectedBusinessId, user } = useBusinessWorkspace();
+  const { products, user, archetype, selectedBranchId } = useBusinessWorkspace();
   const { toast } = useToast();
-  const [query, setQuery] = useState("");
+  const [queryText, setQueryText] = useState("");
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
   const [editing, setEditing] = useState(null);
@@ -201,55 +292,87 @@ export function CatalogView() {
   const [csvOpen, setCsvOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
   const [busyId, setBusyId] = useState("");
+  const isInventory = archetype.capabilities.includes("inventory") || archetype.capabilities.includes("menu");
+  const isPickup = archetype.capabilities.includes("pickup_orders");
 
-  const categories = useMemo(() => ["all", ...new Set(products.map((item) => item.category).filter(Boolean))], [products]);
+  const scopedProducts = useMemo(() => products.filter((item) => !selectedBranchId || !(item.branchIds || []).length || item.branchIds.includes(selectedBranchId)), [products, selectedBranchId]);
+  const categories = useMemo(() => ["all", ...new Set(scopedProducts.map((item) => item.category).filter(Boolean))], [scopedProducts]);
   const visible = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return products.filter((product) => status === "all" || (status === "active" ? product.active !== false : status === "paused" ? product.active === false : product.stockStatus === status)).filter((product) => category === "all" || product.category === category).filter((product) => !term || [product.name, product.category, product.sku, product.barcode].filter(Boolean).join(" ").toLowerCase().includes(term));
-  }, [products, query, status, category]);
+    const term = queryText.trim().toLowerCase();
+    return scopedProducts
+      .filter((item) => status === "all" || (status === "active" ? item.active !== false : status === "paused" ? item.active === false : item.stockStatus === status))
+      .filter((item) => category === "all" || item.category === category)
+      .filter((item) => !term || [item.name, item.category, item.sku, item.barcode, item.venue].filter(Boolean).join(" ").toLowerCase().includes(term));
+  }, [scopedProducts, queryText, status, category]);
 
-  async function availability(product, value) {
-    setBusyId(product.id);
+  async function availability(item, value) {
+    setBusyId(item.id);
     try {
-      await updateProductAvailability(product.id, { stockStatus: value, active: value === "unavailable" ? product.active : true }, user);
-      toast(`${product.name} is now ${value.replaceAll("_", " ")}.`, { title: "Availability updated" });
-    } catch (error) { toast(error.message, { type: "error" }); }
-    finally { setBusyId(""); }
+      await updateProductAvailability(item.id, { stockStatus: value }, user);
+      toast(`${item.name} is now ${value.replaceAll("_", " ")}.`, { title: "Availability updated" });
+    } catch (error) {
+      toast(error.message, { type: "error" });
+    } finally {
+      setBusyId("");
+    }
   }
 
-  async function duplicate(product) {
-    setBusyId(product.id);
-    try { await duplicateProduct(product, user); toast("A paused copy was created.", { title: "Product duplicated" }); }
-    catch (error) { toast(error.message, { type: "error" }); }
-    finally { setBusyId(""); }
+  async function duplicate(item) {
+    setBusyId(item.id);
+    try {
+      await duplicateProduct(item, user);
+      toast("A hidden copy was created.", { title: `${archetype.nouns.item[0].toUpperCase()}${archetype.nouns.item.slice(1)} duplicated` });
+    } catch (error) {
+      toast(error.message, { type: "error" });
+    } finally {
+      setBusyId("");
+    }
   }
 
   async function remove() {
     if (!removeTarget) return;
     setBusyId(removeTarget.id);
-    try { await removeProduct(removeTarget.id, user); toast("Product removed from the catalog.", { title: "Product deleted" }); setRemoveTarget(null); }
-    catch (error) { toast(error.message, { type: "error", title: "Could not delete product" }); }
-    finally { setBusyId(""); }
+    try {
+      await removeProduct(removeTarget.id, user);
+      toast(`${archetype.nouns.item[0].toUpperCase()}${archetype.nouns.item.slice(1)} removed.`, { title: "Deleted" });
+      setRemoveTarget(null);
+    } catch (error) {
+      toast(error.message, { type: "error", title: "Could not delete" });
+    } finally {
+      setBusyId("");
+    }
   }
 
-  function openProduct(product = null) {
-    setEditing(product);
+  function openOffering(item = null) {
+    setEditing(item);
     setProductOpen(true);
   }
 
-  return <div className="space-y-6">
-    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title="Catalog" description="Products, prices, images, stock, substitutions, and pickup eligibility." actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use template</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><FileSpreadsheet className="h-4 w-4" />Quick add</Button><Button onClick={() => openProduct()}><Plus className="h-4 w-4" />Add product</Button></div>} /><BusinessSwitcher /></div>
+  const tabs = [
+    { value: "all", label: `All (${scopedProducts.length})` },
+    { value: "active", label: `Visible (${scopedProducts.filter((item) => item.active !== false).length})` },
+    { value: "paused", label: `Hidden (${scopedProducts.filter((item) => item.active === false).length})` },
+    ...(isInventory ? [
+      { value: "low_stock", label: `Limited (${scopedProducts.filter((item) => item.stockStatus === "low_stock").length})` },
+      { value: "unavailable", label: `Unavailable (${scopedProducts.filter((item) => item.stockStatus === "unavailable").length})` }
+    ] : [])
+  ];
 
-    <Card className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"><SearchField value={query} onChange={setQuery} placeholder="Search product name, category, SKU, or barcode" /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-2xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import CSV</Button></div><div className="mt-4"><Tabs value={status} onChange={setStatus} tabs={[{ value: "all", label: `All (${products.length})` }, { value: "active", label: `Active (${products.filter((item) => item.active !== false).length})` }, { value: "paused", label: `Paused (${products.filter((item) => item.active === false).length})` }, { value: "low_stock", label: `Low stock (${products.filter((item) => item.stockStatus === "low_stock").length})` }, { value: "unavailable", label: `Unavailable (${products.filter((item) => item.stockStatus === "unavailable").length})` }]} /></div></Card>
+  return <div className="space-y-6">
+    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.catalog} description={`Create the ${archetype.nouns.items} customers can understand and act on at the selected ${archetype.nouns.branch}.`} actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><FileSpreadsheet className="h-4 w-4" />Quick add</Button><Button onClick={() => openOffering()}><Plus className="h-4 w-4" />Add {archetype.nouns.item}</Button></div>} /><BusinessSwitcher /></div>
+
+    <Card className="border-business/15 bg-business-soft/50 p-5"><div className="flex items-start gap-3"><BookOpenCheck className="mt-0.5 h-5 w-5 text-business" /><div><p className="font-bold">A catalogue shaped around {archetype.label.toLowerCase()}</p><p className="mt-1 text-sm leading-6 text-secondary">Spotly shows stock controls for retail, event timing for tickets, duration for appointments, and capacity for bookings. Irrelevant fields stay out of the way.</p></div></div></Card>
+
+    <Card className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder={`Search ${archetype.nouns.items}, category, or code`} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-2xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import CSV</Button></div><div className="mt-4"><Tabs value={status} onChange={setStatus} tabs={tabs} /></div></Card>
 
     <SectionCard>
-      {visible.length ? <div className="overflow-x-auto"><table className="w-full min-w-[1020px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">Product</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Availability</th><th className="px-5 py-3">Pickup</th><th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((product) => <tr key={product.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{product.image ? <span role="img" aria-label={`${product.name} product image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${product.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{product.name}</p><p className="mt-1 text-xs text-secondary">{product.sku || product.barcode || "No SKU or barcode"}</p></div></div></td><td className="px-5 py-4">{product.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{formatCurrency(productPrice(product), product.currency || "USD")}</p>{product.compareAtPrice && <p className="mt-1 text-xs text-tertiary line-through">{formatCurrency(product.compareAtPrice, product.currency || "USD")}</p>}</td><td className="px-5 py-4"><select aria-label={`Availability for ${product.name}`} value={product.stockStatus || "in_stock"} onChange={(event) => availability(product, event.target.value)} disabled={busyId === product.id} className="h-10 rounded-xl border bg-white px-3 text-sm font-semibold"><option value="in_stock">In stock</option><option value="low_stock">Low stock</option><option value="unavailable">Unavailable</option></select>{product.stockMode === "quantity" && <p className="mt-2 text-xs text-secondary">{Number(product.stockQuantity || 0)} units</p>}</td><td className="px-5 py-4">{product.pickupEligible !== false ? <Badge tone="success">Eligible</Badge> : <Badge tone="neutral">Not eligible</Badge>}</td><td className="px-5 py-4"><StatusBadge status={product.active === false ? "Paused" : "Active"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(product)} loading={busyId === product.id} aria-label={`Duplicate ${product.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openProduct(product)} aria-label={`Edit ${product.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(product)} aria-label={`Delete ${product.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div> : <EmptyState icon={BookOpenCheck} title={query || category !== "all" || status !== "all" ? "No products match this view" : "Build the first useful catalog"} description={query || category !== "all" || status !== "all" ? "Clear a filter or try a different product name, category, SKU, or barcode." : "Start from a prepared grocery template, add several essentials quickly, paste a CSV, or add one detailed product."} action={!query && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a template</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><Plus className="h-4 w-4" />Quick add</Button></div>} />}
+      {visible.length ? <div className="overflow-x-auto"><table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{productPrice(item) > 0 ? formatCurrency(productPrice(item), item.currency || "USD") : item.requiresBusinessReview ? "Confirm price" : "Free"}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-white px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><Plus className="h-4 w-4" />Quick add</Button></div>} />}
     </SectionCard>
 
-    <ProductModal product={editing} open={productOpen} onClose={() => setProductOpen(false)} />
+    <OfferingModal product={editing} open={productOpen} onClose={() => setProductOpen(false)} />
     <QuickAddModal open={quickOpen} onClose={() => setQuickOpen(false)} />
     <TemplateModal open={templateOpen} onClose={() => setTemplateOpen(false)} />
     <CsvModal open={csvOpen} onClose={() => setCsvOpen(false)} />
-    <ConfirmDialog open={Boolean(removeTarget)} onClose={() => setRemoveTarget(null)} title="Delete this product?" description={`${removeTarget?.name || "This product"} will be removed from the catalog. Existing order records keep their own product snapshot.`} confirmLabel="Delete product" danger loading={busyId === removeTarget?.id} onConfirm={remove} />
+    <ConfirmDialog open={Boolean(removeTarget)} onClose={() => setRemoveTarget(null)} title={`Delete this ${archetype.nouns.item}?`} description={`${removeTarget?.name || "This item"} will be removed. Existing transaction records keep their own snapshot.`} confirmLabel={`Delete ${archetype.nouns.item}`} danger loading={busyId === removeTarget?.id} onConfirm={remove} />
   </div>;
 }

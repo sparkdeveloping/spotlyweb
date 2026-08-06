@@ -7,6 +7,10 @@ export const runtime = "nodejs";
 const createSchema = z.object({
   name: z.string().trim().min(2).max(140),
   brandName: z.string().trim().max(140).optional().default(""),
+  branchName: z.string().trim().min(2).max(120).optional().default("Main location"),
+  businessType: z.enum(["grocery_retail", "restaurant_food", "ticketing_events", "appointments_services", "accommodation_activities", "directory_profile"]).optional(),
+  operatingModel: z.enum(["physical_single", "physical_multi", "online_only", "mobile_service"]).default("physical_single"),
+  capabilities: z.array(z.string().max(80)).max(30).optional(),
   legalName: z.string().trim().max(180).optional().default(""),
   category: z.string().trim().min(2).max(100).default("Groceries"),
   city: z.string().trim().min(2).max(100).default("Harare"),
@@ -20,6 +24,28 @@ const createSchema = z.object({
   status: z.enum(["provisional", "draft", "pending_publication_review", "active", "paused", "removed"]).default("provisional"),
   public: z.boolean().default(true)
 });
+
+const TYPE_CAPABILITIES = {
+  grocery_retail: ["catalog", "inventory", "pickup_orders", "promotions", "kiosk_pickup"],
+  restaurant_food: ["menu", "pickup_orders", "preparation", "promotions", "kiosk_ordering"],
+  ticketing_events: ["events", "tickets", "attendees", "kiosk_checkin", "promotions"],
+  appointments_services: ["services", "appointments", "staff_schedules", "promotions", "kiosk_checkin"],
+  accommodation_activities: ["listings", "bookings", "capacity", "promotions", "kiosk_checkin"],
+  directory_profile: ["profile", "enquiries"]
+};
+
+function businessTypeFor(input) {
+  if (input.businessType && TYPE_CAPABILITIES[input.businessType]) return input.businessType;
+  const category = input.category.toLowerCase();
+  if (["groceries", "retail", "pharmacy", "fashion", "home & living", "hardware", "agriculture"].some((item) => category.includes(item))) return "grocery_retail";
+  if (category.includes("restaurant") || category.includes("food")) return "restaurant_food";
+  if (category.includes("event")) return "ticketing_events";
+  if (["beauty", "wellness", "health", "professional", "education"].some((item) => category.includes(item))) return "appointments_services";
+  if (["accommodation", "activities"].some((item) => category.includes(item))) return "accommodation_activities";
+  return "directory_profile";
+}
+
+function supportsPickup(capabilities) { return capabilities.includes("pickup_orders"); }
 
 function terms(...values) {
   const words = values.filter(Boolean).join(" ").toLowerCase().normalize("NFKD").replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter(Boolean);
@@ -52,6 +78,10 @@ export async function POST(request) {
     const businessRef = db.collection("businesses").doc();
     const branchRef = db.collection("branches").doc();
     const brandName = input.brandName || input.name;
+    const businessType = businessTypeFor(input);
+    const capabilities = input.capabilities?.length ? input.capabilities : TYPE_CAPABILITIES[businessType];
+    const pickupEnabled = supportsPickup(capabilities);
+    const branchName = input.branchName || "Main location";
     const now = FieldValue.serverTimestamp();
     const batch = db.batch();
 
@@ -74,10 +104,15 @@ export async function POST(request) {
     batch.set(businessRef, {
       organizationId: organizationRef.id,
       branchIds: [branchRef.id],
+      branchCount: 1,
       ownerIds: [],
       name: input.name,
       brandName,
       legalName: input.legalName || "",
+      businessType,
+      capabilities,
+      operatingModel: input.operatingModel,
+      onboardingStatus: "not_started",
       category: input.category,
       categories: [input.category],
       city: input.city,
@@ -89,7 +124,7 @@ export async function POST(request) {
       address: input.address,
       currency: "USD",
       acceptedCurrencies: ["USD", "ZWG"],
-      fulfilment: input.category === "Groceries" || input.category === "Restaurants" ? ["pickup"] : [],
+      fulfilment: pickupEnabled ? ["pickup"] : [],
       public: input.public,
       claimStatus: input.claimStatus,
       verificationStatus: input.verificationStatus,
@@ -107,7 +142,9 @@ export async function POST(request) {
     batch.set(branchRef, {
       organizationId: organizationRef.id,
       businessId: businessRef.id,
-      name: `${input.name} — ${input.city}`,
+      name: branchName,
+      branchName,
+      displayName: `${input.name} — ${branchName}`,
       city: input.city,
       country: "ZW",
       address: input.address,
@@ -115,12 +152,12 @@ export async function POST(request) {
       email: input.email,
       public: input.public,
       status: input.status === "active" ? "active" : "provisional",
-      fulfilment: input.category === "Groceries" || input.category === "Restaurants" ? ["pickup"] : [],
+      fulfilment: pickupEnabled ? ["pickup"] : [],
       openingHours: openingHours(),
-      pickup: { enabled: input.category === "Groceries" || input.category === "Restaurants", slotMinutes: 30, slotCapacity: 12, preparationMinutes: 45 },
+      pickup: { enabled: pickupEnabled, slotMinutes: 30, slotCapacity: 12, preparationMinutes: 45 },
       acceptedCurrencies: ["USD", "ZWG"],
       paymentMethods: ["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"],
-      searchTerms: terms(input.name, brandName, input.city, input.address),
+      searchTerms: terms(input.name, brandName, branchName, input.city, input.address),
       source: { type: "admin_created", imported: false },
       createdAt: now,
       updatedAt: now,
@@ -134,7 +171,7 @@ export async function POST(request) {
       entityId: businessRef.id,
       actorId: actor.uid,
       actorEmail: actor.email || "",
-      metadata: { organizationId: organizationRef.id, branchId: branchRef.id, name: input.name, city: input.city },
+      metadata: { organizationId: organizationRef.id, branchId: branchRef.id, name: input.name, branchName, city: input.city, businessType },
       createdAt: now
     });
 

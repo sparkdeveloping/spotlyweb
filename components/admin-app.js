@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -43,6 +43,7 @@ import {
   adminUpdateBusiness,
   assignSupportConversation,
   decideBusinessClaim,
+  getBranchesForBusiness,
   deleteHelpResource,
   saveAnnouncement,
   saveHelpResource,
@@ -65,6 +66,8 @@ import {
   updateSupportConversation
 } from "@/lib/firebase-services";
 import { seedSummary } from "@/data/zimbabwe-businesses";
+import { BUSINESS_ARCHETYPES, capabilitiesFor, inferBusinessType } from "@/data/business-archetypes";
+import { businessCategories, zimbabweCities } from "@/data/business-config";
 import { defaultRoleTemplates } from "@/data/production-seed";
 import { authenticatedFetch } from "@/lib/api-client";
 import { canAccessAdminSection, hasAdminAccess } from "@/lib/admin-access";
@@ -222,38 +225,130 @@ function Operations({ data, user }) {
   return <div className="space-y-6"><PageHeader {...sectionMeta.operations} /><Tabs value={tab} onChange={setTab} tabs={[{ value: "claims", label: `Claims (${claims.length})` }, { value: "publication", label: `Publication (${publicationTasks.length})` }, { value: "support", label: `Support (${data.support.filter((item) => !["closed", "resolved"].includes(item.status)).length})` }]} />{tab === "claims" ? <SectionCard>{claims.length ? <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-grouped text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">Claim</th><th className="px-5 py-3">Business</th><th className="px-5 py-3">Applicant</th><th className="px-5 py-3">Evidence</th><th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{claims.map((claim) => { const business = data.businesses.find((item) => item.id === claim.businessId); return <tr key={claim.id} className="border-t"><td className="px-5 py-4 font-semibold">{claim.id.slice(0, 8).toUpperCase()}</td><td className="px-5 py-4"><p className="font-semibold">{business?.name || claim.businessId}</p><p className="mt-1 text-xs text-secondary">{business?.city || "Location unavailable"}</p></td><td className="px-5 py-4"><p>{claim.applicantName || claim.applicantEmail}</p><p className="mt-1 text-xs text-secondary">{claim.roleAtBusiness}</p></td><td className="px-5 py-4">{claim.evidence?.length || 0} file(s)</td><td className="px-5 py-4"><StatusBadge status={claim.status.replaceAll("_", " ")} /></td><td className="px-5 py-4"><Button size="sm" onClick={() => setSelectedClaim(claim)}>Review</Button></td></tr>; })}</tbody></table></div> : <EmptyState icon={FileCheck2} title="Claim queue is clear" description="New business claims will appear here in realtime. A clear queue means every current application has a decision." />}</SectionCard> : tab === "publication" ? <PublicationQueue tasks={data.tasks} businesses={data.businesses} user={user} /> : <SupportDesk conversations={data.support} user={user} />}<ClaimReviewModal claim={selectedClaim} businesses={data.businesses} open={Boolean(selectedClaim)} onClose={() => setSelectedClaim(null)} user={user} /></div>;
 }
 
+function BusinessLocationsModal({ business, open, onClose }) {
+  const [branches, setBranches] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    if (!open || !business?.id) return undefined;
+    setLoading(true);
+    setError("");
+    getBranchesForBusiness(business.id)
+      .then((items) => { if (active) setBranches(items); })
+      .catch((reason) => { if (active) setError(reason.message || "Locations could not be loaded."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [business?.id, open]);
+
+  return <Modal open={open} onClose={onClose} title={business ? `${business.name} locations` : "Business locations"} size="lg">
+    <div className="max-h-[76vh] overflow-y-auto p-5">
+      <div className="rounded-2xl bg-admin-soft p-4 text-sm leading-6 text-admin"><strong>{business?.name}</strong> is the business brand. The records below are the exact branches, venues, properties, or service locations connected to it.</div>
+      {loading ? <div className="flex justify-center py-14"><span className="h-7 w-7 animate-spin rounded-full border-2 border-admin border-t-transparent" /></div>
+        : error ? <EmptyState icon={AlertTriangle} title="Locations could not be loaded" description={error} action={<Button variant="outline" onClick={onClose}>Close</Button>} />
+          : branches.length ? <div className="mt-5 space-y-3">{branches.map((branch, index) => <div key={branch.id} className="flex flex-col gap-4 rounded-2xl border p-4 sm:flex-row sm:items-center">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-grouped text-admin"><Building2 className="h-5 w-5" /></span>
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">{branch.branchName || branch.name || `Location ${index + 1}`}</p>{index === 0 && <Badge tone="neutral">Primary</Badge>}<StatusBadge status={branch.status || "active"} /></div><p className="mt-1 text-sm text-secondary">{[branch.address, branch.city].filter(Boolean).join(" · ") || "Address awaiting confirmation"}</p><p className="mt-1 text-xs text-tertiary">{branch.id}</p></div>
+            <Badge tone={branch.public === false ? "warning" : "success"}>{branch.public === false ? "Hidden" : "Public"}</Badge>
+          </div>)}</div> : <EmptyState className="mt-5" icon={Building2} title="No location is connected" description="This brand needs at least one exact customer or service location before it can be published." />}
+    </div>
+  </Modal>;
+}
+
 function BusinessModal({ business, open, onClose, user }) {
   const isNew = !business;
-  const defaults = { name: "", brandName: "", category: "Groceries", city: "Harare", description: "", phone: "", email: "", website: "", address: "", claimStatus: "unclaimed", verificationStatus: "unverified", status: "provisional", public: true, country: "ZW", source: { type: "admin_created", imported: false } };
+  const defaults = useMemo(() => ({
+    name: "",
+    brandName: "",
+    legalName: "",
+    businessType: "grocery_retail",
+    category: "Groceries",
+    description: "",
+    branchName: "Main location",
+    city: "Harare",
+    address: "",
+    phone: "",
+    email: "",
+    website: "",
+    operatingModel: "physical_single",
+    claimStatus: "unclaimed",
+    verificationStatus: "unverified",
+    status: "provisional",
+    public: true,
+    country: "ZW",
+    source: { type: "admin_created", imported: false }
+  }), []);
   const [form, setForm] = useState(defaults);
+  const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  useEffect(() => setForm(business ? { ...defaults, ...business } : defaults), [business, open]);
+  useEffect(() => {
+    const next = business ? { ...defaults, ...business, businessType: inferBusinessType(business) } : defaults;
+    setForm(next);
+    setStep(0);
+  }, [business, open, defaults]);
+
+  function patch(values) { setForm((current) => ({ ...current, ...values })); }
+  function chooseType(type) {
+    const archetype = BUSINESS_ARCHETYPES[type];
+    patch({ businessType: type, category: archetype?.categoryHints?.[0] || form.category, capabilities: capabilitiesFor(type) });
+  }
   async function save(event) {
     event.preventDefault();
-    if (!form.name.trim()) return toast("Enter the business name.", { type: "error", title: "Name required" });
+    if (!form.name.trim()) return toast("Enter the business brand name.", { type: "error", title: "Business name required" });
+    if (isNew && step === 0) { setStep(1); return; }
+    if (isNew && !form.branchName.trim()) return toast("Give the first location a short name, such as Hillside or Main office.", { type: "error", title: "Location name required" });
     setLoading(true);
     try {
-      if (isNew) {
-        await authenticatedFetch("/api/admin/businesses", { method: "POST", body: JSON.stringify({ ...form, brandName: form.brandName || form.name }) });
-      } else {
-        await adminUpdateBusiness(business.id, { ...form, brandName: form.brandName || form.name, aliases: [...new Set([...(form.aliases || []), form.name, form.brandName, form.city].filter(Boolean))] }, user);
-      }
-      toast(isNew ? "The provisional business is now in the live directory and can be claimed." : "Business record updated.", { title: isNew ? "Business added" : "Saved" });
+      const payload = {
+        ...form,
+        name: form.name.trim(),
+        brandName: (form.brandName || form.name).trim(),
+        businessType: form.businessType,
+        capabilities: capabilitiesFor(form.businessType)
+      };
+      if (isNew) await authenticatedFetch("/api/admin/businesses", { method: "POST", body: JSON.stringify(payload) });
+      else await adminUpdateBusiness(business.id, { ...payload, aliases: [...new Set([...(form.aliases || []), form.name, form.brandName, form.city].filter(Boolean))] }, user);
+      toast(isNew ? "The brand and its first location are now in the live directory." : "Business brand updated.", { title: isNew ? "Business created" : "Saved" });
       onClose();
-    } catch (error) { toast(error.message, { type: "error", title: "Could not save business" }); }
+    } catch (error) { toast(error.message || "The business could not be saved.", { type: "error", title: "Could not save business" }); }
     finally { setLoading(false); }
   }
-  return <Modal open={open} onClose={onClose} title={isNew ? "Add provisional business" : "Edit business record"} size="lg"><form onSubmit={save} className="max-h-[78vh] space-y-4 overflow-y-auto p-5"><div className="grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2"><span className="mb-2 block text-sm font-semibold">Public business name</span><input required value={form.name || ""} onChange={(event) => setForm({ ...form, name: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Parent brand</span><input value={form.brandName || ""} onChange={(event) => setForm({ ...form, brandName: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" placeholder="Defaults to the public name" /></label><label><span className="mb-2 block text-sm font-semibold">Category</span><input value={form.category || ""} onChange={(event) => setForm({ ...form, category: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">City</span><input value={form.city || ""} onChange={(event) => setForm({ ...form, city: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Phone</span><input value={form.phone || ""} onChange={(event) => setForm({ ...form, phone: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Email</span><input type="email" value={form.email || ""} onChange={(event) => setForm({ ...form, email: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Website</span><input value={form.website || ""} onChange={(event) => setForm({ ...form, website: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label className="sm:col-span-2"><span className="mb-2 block text-sm font-semibold">Address</span><input value={form.address || ""} onChange={(event) => setForm({ ...form, address: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Claim status</span><select value={form.claimStatus || "unclaimed"} onChange={(event) => setForm({ ...form, claimStatus: event.target.value })} className="surface h-12 w-full rounded-xl px-4"><option value="unclaimed">Unclaimed</option><option value="claim_pending">Claim pending</option><option value="claimed">Claimed</option><option value="claim_needs_information">Needs information</option></select></label><label><span className="mb-2 block text-sm font-semibold">Verification</span><select value={form.verificationStatus || "unverified"} onChange={(event) => setForm({ ...form, verificationStatus: event.target.value })} className="surface h-12 w-full rounded-xl px-4"><option value="unverified">Unverified</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label><label><span className="mb-2 block text-sm font-semibold">Record status</span><select value={form.status || "provisional"} onChange={(event) => setForm({ ...form, status: event.target.value })} className="surface h-12 w-full rounded-xl px-4"><option value="provisional">Provisional</option><option value="draft">Draft</option><option value="pending_publication_review">Publication review</option><option value="active">Active</option><option value="paused">Paused</option><option value="removed">Removed</option></select></label><label className="flex items-end gap-2 pb-3 text-sm font-semibold"><input type="checkbox" checked={Boolean(form.public)} onChange={(event) => setForm({ ...form, public: event.target.checked })} />Public listing</label></div><label className="block"><span className="mb-2 block text-sm font-semibold">Description</span><textarea value={form.description || ""} onChange={(event) => setForm({ ...form, description: event.target.value })} className="surface min-h-28 w-full rounded-xl p-4 outline-none" /></label><div className="flex justify-end gap-2 border-t pt-5"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" loading={loading}>{isNew ? "Add business" : "Save record"}</Button></div></form></Modal>;
+
+  const title = isNew ? (step === 0 ? "Add a business brand" : "Add its first location") : "Edit business brand";
+  return <Modal open={open} onClose={onClose} title={title} size="lg"><form onSubmit={save} className="max-h-[80vh] overflow-y-auto">
+    {isNew && <div className="border-b px-5 py-4"><div className="flex items-center gap-3"><span className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${step >= 0 ? "bg-admin text-white" : "bg-grouped"}`}>1</span><div className={`h-1 flex-1 rounded-full ${step >= 1 ? "bg-admin" : "bg-grouped"}`} /><span className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${step >= 1 ? "bg-admin text-white" : "bg-grouped"}`}>2</span></div><div className="mt-2 flex justify-between text-xs font-semibold text-secondary"><span>Business brand</span><span>First location</span></div></div>}
+    <div className="space-y-5 p-5">
+      {(!isNew || step === 0) && <>
+        <div><p className="text-sm font-black">What kind of business is this?</p><p className="mt-1 text-sm leading-6 text-secondary">This choice shapes the onboarding, workspace, customer actions, and language. It can be changed later.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.values(BUSINESS_ARCHETYPES).map((item) => { const Icon = item.icon; const selected = form.businessType === item.id; return <button key={item.id} type="button" onClick={() => chooseType(item.id)} className={`flex items-start gap-3 rounded-2xl border p-4 text-left ${selected ? "border-admin bg-admin-soft ring-2 ring-admin/10" : "hover:border-admin/30"}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "bg-admin text-white" : "bg-grouped text-secondary"}`}><Icon className="h-5 w-5" /></span><span><span className="block text-sm font-bold">{item.label}</span><span className="mt-1 block text-xs leading-5 text-secondary">{item.description}</span></span></button>; })}</div></div>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2"><span className="mb-2 block text-sm font-semibold">Business brand name</span><input required value={form.name || ""} onChange={(event) => patch({ name: event.target.value, brandName: form.brandName || event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" placeholder="Example: OK Zimbabwe" /><span className="mt-1.5 block text-xs text-secondary">Use the brand customers recognize, not a branch name or address.</span></label><label><span className="mb-2 block text-sm font-semibold">Legal name <span className="font-normal text-tertiary">optional</span></span><input value={form.legalName || ""} onChange={(event) => patch({ legalName: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Primary category</span><select value={form.category || "Other"} onChange={(event) => patch({ category: event.target.value })} className="surface h-12 w-full rounded-xl px-4">{businessCategories.map((item) => <option key={item}>{item}</option>)}</select></label><label className="sm:col-span-2"><span className="mb-2 block text-sm font-semibold">Description</span><textarea rows={4} value={form.description || ""} onChange={(event) => patch({ description: event.target.value })} className="surface w-full rounded-xl p-4 outline-none" placeholder="What customers should know about this business" /></label></div>
+      </>}
+      {isNew && step === 1 && <>
+        <div className="rounded-2xl bg-admin-soft p-4"><p className="text-sm font-black text-admin">{form.name}</p><p className="mt-1 text-sm leading-6 text-secondary">Now add one exact location. More locations can be added after the brand exists.</p></div>
+        <div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Short location name</span><input required value={form.branchName || ""} onChange={(event) => patch({ branchName: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" placeholder="Hillside, CBD, Main office" /></label><label><span className="mb-2 block text-sm font-semibold">Operating model</span><select value={form.operatingModel || "physical_single"} onChange={(event) => patch({ operatingModel: event.target.value })} className="surface h-12 w-full rounded-xl px-4"><option value="physical_single">One physical location</option><option value="physical_multi">Several locations</option><option value="online_only">Online only</option><option value="mobile_service">Mobile or at-customer service</option></select></label><label><span className="mb-2 block text-sm font-semibold">City</span><select value={form.city || "Harare"} onChange={(event) => patch({ city: event.target.value })} className="surface h-12 w-full rounded-xl px-4">{zimbabweCities.map((item) => <option key={item}>{item}</option>)}</select></label><label><span className="mb-2 block text-sm font-semibold">Address or service area</span><input value={form.address || ""} onChange={(event) => patch({ address: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Phone</span><input value={form.phone || ""} onChange={(event) => patch({ phone: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Email</span><input type="email" value={form.email || ""} onChange={(event) => patch({ email: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label className="sm:col-span-2"><span className="mb-2 block text-sm font-semibold">Website <span className="font-normal text-tertiary">optional</span></span><input value={form.website || ""} onChange={(event) => patch({ website: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label></div>
+      </>}
+      {!isNew && <div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Phone</span><input value={form.phone || ""} onChange={(event) => patch({ phone: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Email</span><input type="email" value={form.email || ""} onChange={(event) => patch({ email: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Website</span><input value={form.website || ""} onChange={(event) => patch({ website: event.target.value })} className="surface h-12 w-full rounded-xl px-4 outline-none" /></label><label><span className="mb-2 block text-sm font-semibold">Primary city</span><select value={form.city || "Harare"} onChange={(event) => patch({ city: event.target.value })} className="surface h-12 w-full rounded-xl px-4">{zimbabweCities.map((item) => <option key={item}>{item}</option>)}</select></label><label><span className="mb-2 block text-sm font-semibold">Claim status</span><select value={form.claimStatus || "unclaimed"} onChange={(event) => patch({ claimStatus: event.target.value })} className="surface h-12 w-full rounded-xl px-4"><option value="unclaimed">Unclaimed</option><option value="claim_pending">Claim pending</option><option value="claimed">Claimed</option><option value="claim_needs_information">Needs information</option></select></label><label><span className="mb-2 block text-sm font-semibold">Verification</span><select value={form.verificationStatus || "unverified"} onChange={(event) => patch({ verificationStatus: event.target.value })} className="surface h-12 w-full rounded-xl px-4"><option value="unverified">Unverified</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label><label><span className="mb-2 block text-sm font-semibold">Lifecycle status</span><select value={form.status || "provisional"} onChange={(event) => patch({ status: event.target.value })} className="surface h-12 w-full rounded-xl px-4"><option value="provisional">Provisional</option><option value="draft">Draft</option><option value="pending_publication_review">Publication review</option><option value="active">Active</option><option value="paused">Paused</option><option value="removed">Removed</option></select></label><label className="flex items-center gap-3 rounded-xl bg-grouped p-4 text-sm font-semibold"><input type="checkbox" checked={form.public !== false} onChange={(event) => patch({ public: event.target.checked })} />Visible in the public directory</label></div>}
+    </div>
+    <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t bg-white/95 p-5 backdrop-blur"><div>{isNew && step === 1 && <Button type="button" variant="ghost" onClick={() => setStep(0)}>Back</Button>}</div><div className="flex gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={loading}>{isNew && step === 0 ? "Continue to location" : isNew ? "Create brand & location" : "Save business"}</Button></div></div>
+  </form></Modal>;
 }
 
 function Businesses({ data, user }) {
   const [queryText, setQueryText] = useState("");
   const [filter, setFilter] = useState("all");
-  const [editing, setEditing] = useState(undefined);
+  const [editing, setEditing] = useState(null);
+  const [locationsFor, setLocationsFor] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const visible = data.businesses.filter((item) => [item.name, item.brandName, item.category, item.city, item.id].join(" ").toLowerCase().includes(queryText.toLowerCase()) && (filter === "all" || filter === "unclaimed" && item.claimStatus === "unclaimed" || filter === "claimed" && item.claimStatus === "claimed" || filter === "verified" && item.verificationStatus === "approved" || filter === "provisional" && item.status === "provisional" || filter === "review" && item.status === "pending_publication_review"));
-  return <div className="space-y-6"><PageHeader {...sectionMeta.businesses} actions={<Button onClick={() => { setEditing(undefined); setModalOpen(true); }}><Plus className="h-4 w-4" />Add business</Button>} /><AdminDirectoryManager liveBusinessCount={data.businesses.length} compact /><div className="grid gap-3 lg:grid-cols-[1fr_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder="Search business, brand, category, city, or ID" /><Tabs value={filter} onChange={setFilter} tabs={[{ value: "all", label: `All (${data.businesses.length})` }, { value: "unclaimed", label: "Unclaimed" }, { value: "claimed", label: "Claimed" }, { value: "verified", label: "Verified" }, { value: "review", label: "Review" }, { value: "provisional", label: "Provisional" }]} /></div><SectionCard>{visible.length ? <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left text-sm"><thead className="bg-grouped text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">Business</th><th className="px-5 py-3">Category / city</th><th className="px-5 py-3">Claim</th><th className="px-5 py-3">Verification</th><th className="px-5 py-3">Visibility</th><th className="px-5 py-3">Data quality</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => { const missing = [item.description, item.phone, item.email, item.address].filter((value) => !value).length; return <tr key={item.id} className="border-t"><td className="px-5 py-4"><p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.brandName || item.id}</p></td><td className="px-5 py-4">{item.category}<p className="mt-1 text-xs text-secondary">{item.city}</p></td><td className="px-5 py-4"><StatusBadge status={(item.claimStatus || "unclaimed").replaceAll("_", " ")} /></td><td className="px-5 py-4"><StatusBadge status={item.verificationStatus || "unverified"} /></td><td className="px-5 py-4"><StatusBadge status={item.public ? "Public" : "Hidden"} /></td><td className="px-5 py-4"><Badge tone={missing ? "warning" : "success"}>{missing ? `${missing} fields need confirmation` : "Core details complete"}</Badge></td><td className="px-5 py-4"><div className="flex gap-2"><Link href={`/admin/support-view/${item.id}`}><Button size="sm" variant="ghost"><Headphones className="h-4 w-4" />Support view</Button></Link><Button size="sm" variant="outline" onClick={() => { setEditing(item); setModalOpen(true); }}><Edit3 className="h-4 w-4" />Edit</Button></div></td></tr>; })}</tbody></table></div> : <EmptyState icon={Store} title={data.businesses.length ? "No businesses match this view" : "Populate the business directory"} description={data.businesses.length ? "Change the search or filter." : "Use the directory setup above. Businesses, branches, organization groups, search terms, and source details will be added to the live platform."} />}</SectionCard><BusinessModal business={editing} open={modalOpen} onClose={() => setModalOpen(false)} user={user} /></div>;
+  const visible = data.businesses.filter((item) => {
+    const matchesText = [item.name, item.brandName, item.category, item.city, item.id].filter(Boolean).join(" ").toLowerCase().includes(queryText.toLowerCase());
+    const matchesFilter = filter === "all" || (filter === "unclaimed" && item.claimStatus === "unclaimed") || (filter === "claimed" && item.claimStatus === "claimed") || (filter === "verified" && item.verificationStatus === "approved") || (filter === "review" && ["claim_pending", "pending_publication_review"].includes(item.status) || item.claimStatus === "claim_pending") || (filter === "provisional" && item.status === "provisional");
+    return matchesText && matchesFilter;
+  });
+  return <div className="space-y-6"><PageHeader {...sectionMeta.businesses} actions={<Button onClick={() => { setEditing(null); setModalOpen(true); }}><Plus className="h-4 w-4" />Add business brand</Button>} /><AdminDirectoryManager liveBusinessCount={data.businesses.length} compact /><div className="rounded-2xl border bg-admin-soft p-4 text-sm leading-6 text-admin"><strong>Brand first, locations second.</strong> Each row below is one business brand. Open locations to see its branches, venues, properties, or service areas.</div><div className="grid gap-3 lg:grid-cols-[1fr_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder="Search brand, category, city, or ID" /><Tabs value={filter} onChange={setFilter} tabs={[{ value: "all", label: `All (${data.businesses.length})` }, { value: "unclaimed", label: "Unclaimed" }, { value: "claimed", label: "Claimed" }, { value: "verified", label: "Verified" }, { value: "review", label: "Review" }, { value: "provisional", label: "Provisional" }]} /></div><SectionCard>{visible.length ? <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-left text-sm"><thead className="bg-grouped text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">Business brand</th><th className="px-5 py-3">Model</th><th className="px-5 py-3">Locations</th><th className="px-5 py-3">Ownership</th><th className="px-5 py-3">Publication</th><th className="px-5 py-3">Readiness</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => {
+    const missing = [item.description, item.phone || item.email, item.category].filter((value) => !value).length;
+    const archetype = BUSINESS_ARCHETYPES[inferBusinessType(item)];
+    return <tr key={item.id} className="border-t align-top"><td className="px-5 py-4"><p className="font-bold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.id}</p></td><td className="px-5 py-4"><p className="font-semibold">{archetype?.shortLabel || item.category}</p><p className="mt-1 text-xs text-secondary">{item.category} · {item.city || "Zimbabwe"}</p></td><td className="px-5 py-4"><button className="rounded-xl border px-3 py-2 text-left transition hover:border-admin hover:bg-admin-soft" onClick={() => setLocationsFor(item)}><span className="block font-bold">{item.branchCount || item.branchIds?.length || 0} location{(item.branchCount || item.branchIds?.length || 0) === 1 ? "" : "s"}</span><span className="mt-0.5 block text-xs text-admin">Open hierarchy</span></button></td><td className="px-5 py-4"><StatusBadge status={(item.claimStatus || "unclaimed").replaceAll("_", " ")} /><div className="mt-2"><StatusBadge status={item.verificationStatus || "unverified"} /></div></td><td className="px-5 py-4"><StatusBadge status={item.status || "provisional"} /><p className="mt-2 text-xs text-secondary">{item.public === false ? "Hidden from directory" : "Visible in directory"}</p></td><td className="px-5 py-4"><Badge tone={missing ? "warning" : "success"}>{missing ? `${missing} brand detail${missing === 1 ? "" : "s"} to confirm` : "Core brand details ready"}</Badge></td><td className="px-5 py-4"><div className="flex flex-col gap-2"><Link href={`/admin/support-view/${item.id}`}><Button size="sm" variant="ghost" className="w-full"><Headphones className="h-4 w-4" />Support view</Button></Link><Button size="sm" variant="outline" onClick={() => { setEditing(item); setModalOpen(true); }}><Edit3 className="h-4 w-4" />Edit brand</Button></div></td></tr>;
+  })}</tbody></table></div> : <EmptyState icon={Store} title={data.businesses.length ? "No business brands match this view" : "Populate the business directory"} description={data.businesses.length ? "Change the search or filter." : "Use the directory setup above. Brands and their exact locations will be connected separately in Firestore."} />}</SectionCard><BusinessModal business={editing} open={modalOpen} onClose={() => setModalOpen(false)} user={user} /><BusinessLocationsModal business={locationsFor} open={Boolean(locationsFor)} onClose={() => setLocationsFor(null)} /></div>;
 }
 
 function People({ data, user }) {

@@ -1,46 +1,49 @@
 # Build and validation report
 
 Generated: August 5, 2026
+Release: 4.0.0
 
 ## Completed checks
 
-- JavaScript and JSX parse validation completed across 97 `.js` and `.mjs` source files
+- JavaScript and JSX parse validation passed across the application, route handlers, components, libraries, data, and scripts
+- ESLint passed with zero errors and zero warnings
 - JavaScript-only project check passed
-- No `.ts`, `.tsx`, `.mts`, or `.cts` source files included
+- No `.ts`, `.tsx`, `.mts`, or `.cts` source files are included
 - JSON configuration files parsed successfully
-- Local `@/` imports checked for matching source files
-- Firebase route, rule, index, Storage, and Vercel configuration files included
-- No OpenAI internal npm registry URLs included
-- `.next`, `.git`, `node_modules`, macOS metadata, and stale build-verification files excluded from the final archive
+- Local `@/` imports resolve to matching source files
+- Firebase route, rules, indexes, Storage, and Vercel configuration files are included
+- Firebase Admin/Jose ESM compatibility override remains in `package.json` and `package-lock.json`
+- No OpenAI internal npm-registry URLs are included
+- Service account JSON, private environment files, `.next`, `.git`, `node_modules`, and macOS metadata are excluded from the release archive
 
-## Build limitation in the generation environment
+## Production-build limitation in the generation environment
 
-The generation container could not resolve the public npm registry, so it could not perform a fresh `npm install`, ESLint run, or production `next build` with the updated dependencies.
+The source compilation command reached Next.js, but the Linux generation container did not contain the matching `@next/swc-linux-x64-gnu` package. Next.js attempted to download it through the restricted package gateway, which returned 404. The project itself previously built successfully on the owner’s Mac after a normal `npm install`.
 
-This archive therefore does not claim a verified production build. Run:
+Run the following after extracting the archive:
 
 ```bash
 npm install
-npm run check:js
-npm run lint
-npm run build
+npm run check
 ```
 
-on the developer Mac and in Vercel Preview. Resolve any environment-specific dependency, lint, or Next.js diagnostics before production promotion.
+Run the same commands in a Vercel Preview deployment before promoting Production.
 
-## Important release tests
+## Required release tests
 
-- Authentication and account-linking providers
-- Anonymous-to-email account upgrade
-- Role and custom-permission enforcement
-- Firestore and Storage rules in emulator
-- Business organization/branch isolation
-- Claim evidence privacy
-- Server order total calculation
-- Paynow amount and callback verification
-- Notification token ownership and invalidation
-- Support internal-note visibility
-- Admin support-view audit records
-- Mobile, tablet, desktop, keyboard, screen reader, and browser coverage
-- Network loss, retries, duplicate submissions, and offline behavior
-- Backup, restore, monitoring, and rollback
+- Directory version 4 migration on a backup or non-production copy first
+- Brand/location count and relationship verification
+- Existing owner, membership, and claim migration
+- New business guided setup from start to completion
+- Save-and-leave and resume behavior
+- Role and location-scoped team access
+- Grocery, food, ticket, appointment, booking, and profile-only navigation
+- Catalogue templates, imports, images, and branch assignment
+- Activity state transitions and duplicate submission protection
+- Kiosk arrival/check-in on a shared device
+- Firebase Auth and linked-provider behavior
+- Firestore and Storage rules in the Emulator Suite
+- Paynow amount, callback, retry, and settlement behavior
+- Public directory and private-beta controls
+- Mobile, tablet, desktop, keyboard, screen-reader, reduced-motion, and browser coverage
+- Network loss, retries, offline behavior, backups, restore, monitoring, and rollback

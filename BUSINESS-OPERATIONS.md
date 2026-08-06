@@ -1,107 +1,207 @@
 # Spotly Business operations guide
 
-This release is centered on making business onboarding and grocery-pickup operations usable before the public customer marketplace is fully launched.
+Release: 4.0.0
+
+This release is designed for controlled business onboarding before the public customer marketplace is fully released.
 
 ## First-time business journey
 
 1. Create a Spotly account with email and password.
-2. Open `/claim` and search the Firebase directory before creating a new listing.
-3. Select the existing provisional listing or choose **Add a business not listed**.
-4. Confirm the known information, correct inaccurate fields, and upload ownership evidence.
-5. Submit the claim. The business application and all evidence references are stored in Firebase.
-6. While review is pending, use the business workspace to complete branches, catalogue, finance, team, pickup operations, and support setup.
-7. When every launch-readiness item is complete, request publication review from Business Settings.
-8. Spotly Admin can approve publication or return a clear correction requirement.
+2. Open `/claim` and search the Firebase directory.
+3. Select the business **brand** first.
+4. Select the exact location or locations being claimed.
+5. Confirm known information, correct inaccuracies, state authority, and upload evidence.
+6. Submit the claim.
+7. Open `/business/setup` and complete the guided setup.
+8. Spotly generates a workspace based on the business type and customer workflows.
+9. Complete the launch-readiness items.
+10. Request publication review.
 
-Low-risk automatic approval is disabled by default. A super administrator can enable it from Admin → Platform and set the risk threshold. New owner-created businesses always remain subject to manual review.
+A user adding a missing business creates the organization, business brand, first location, claim, and membership as separate but related records.
 
-## Business workspace routes
+## Setup before operations
 
-| Route | Operational use |
+Until setup is complete, the business sees only:
+
+- Continue setup
+- Home
+- Help & support
+- Account & access
+
+The setup centre covers:
+
+- business identity and type
+- operating model
+- first exact location
+- relevant customer workflows
+- relevant starter content
+- final review and workspace preparation
+
+Finance, team, advanced location controls, reports, and other operational tools are intentionally hidden until the user understands the business structure.
+
+## Adaptive workspace routes
+
+The route remains consistent while labels and screens adapt to the business type.
+
+| Route | Adaptive purpose |
 |---|---|
-| `/business` | Live dashboard, readiness, next actions, and pickup queue |
-| `/business/activity` | Orders, payment state, substitutions, notes, cancellation, and pickup progression |
-| `/business/catalog` | Product creation, editing, images, templates, bulk entry, CSV import, stock, and availability |
-| `/business/branches` | Branch creation, hours, pickup capacity, contacts, payment methods, and copied settings |
-| `/business/insights` | Realtime order, sales, product, branch, and export views |
-| `/business/promotions` | Promotion creation, limits, dates, audience, branches, and activation |
-| `/business/staff` | Invitations, roles, branch access, permissions, suspension, resending, and revocation |
-| `/business/finance` | Currencies, payment methods, settlement details, fiscal fields, balances, and payout requests |
-| `/business/support` | Live support conversations and role-relevant help resources |
-| `/business/settings` | Public profile, media, pickup defaults, notifications, readiness, and publication review |
+| `/business/setup` | Guided, resumable setup centre |
+| `/business` | Focused home, readiness, and recommended next action |
+| `/business/activity` | Orders, ticket sales, appointments, bookings, or enquiries |
+| `/business/catalog` | Products, menu items, events/tickets, services, listings, or offerings |
+| `/business/branches` | Locations, venues, properties, offices, or service bases |
+| `/business/kiosk` | Shared-device pickup or arrival/check-in workflow |
+| `/business/insights` | Activity, value, completion, cancellation, offering, and location signals |
+| `/business/promotions` | Audience, offering, location, schedule, limits, and activation |
+| `/business/staff` | Invitations, roles, location scope, permissions, and access review |
+| `/business/finance` | Customer methods, settlement, legal records, balances, and payouts |
+| `/business/support` | Live support and role-relevant help |
+| `/business/settings` | Brand profile, media, operations, notifications, readiness, and review |
 
-## Built-in operating principles
+## Brand and location structure
 
-- Search and prefill before asking a business to type information.
-- Autosynchronized Firebase data across business and administrator screens.
-- Clear success, warning, failure, loading, and empty states.
-- One obvious next action for every order state.
-- Reusable templates and branch-copy actions for repetitive setup.
-- Branch-specific control without requiring duplicate business accounts.
-- Invitation links preserve existing business access and add the new membership.
-- Team invitations expire after 14 days and can be refreshed by an owner.
-- Product images are uploaded to the business-owned Firebase Storage path.
-- Every significant business or administrator change records an audit event.
+```text
+Organization
+└── Business brand
+    ├── Exact location A
+    ├── Exact location B
+    └── Exact location C
+```
 
-## Grocery pickup lifecycle
+The business selector changes the brand. The location selector narrows operational data. Location-scoped staff see only assigned records.
 
-The supported order progression is:
+## Operating models
+
+- One physical location
+- Several physical locations
+- Online only
+- Mobile/at-customer service
+
+A single-location business does not see unnecessary multi-location navigation. A multi-location owner can add locations, copy settings, assign staff, and compare location performance.
+
+## Grocery and retail operations
+
+Supported activity progression:
 
 ```text
 awaiting payment → submitted → accepted → preparing → ready for pickup → picked up
 ```
 
-Businesses can also:
+Businesses can:
 
-- Record a verified manual payment.
-- Propose an item substitution with quantity and price.
-- Save internal operational notes to the order timeline.
-- Cancel an order with immediate customer notification.
-- See customer contact, branch, pickup slot, notes, and substitution preference.
+- manage products and branch availability
+- configure pickup eligibility
+- record stock state
+- propose substitutions
+- record manual payment
+- add operational notes
+- cancel with a reason
+- confirm pickup completion
+- run pickup-arrival kiosk mode
 
-Paynow orders remain blocked from preparation while payment is still awaiting confirmation. Cash and manual methods can be marked received by an authorized business user.
+## Restaurant and food operations
 
-## Catalogue workflow
+- menu items instead of generic products
+- preparation and collection states
+- location availability
+- customer pickup notes
+- collection-order kiosk configuration
 
-A business can start through any of these paths:
+## Events and ticketing
 
-- Add a single product with a guided form.
-- Use quick-add rows for several products.
-- Import a curated grocery catalogue template.
-- Upload a CSV file.
-- Duplicate or edit an existing product.
-- Upload and replace a product image.
+- event and ticket-type records
+- venue assignment
+- date, time, capacity, and price
+- ticket-sale activity
+- attendee admission/check-in kiosk
 
-The system stores product search terms, SKU/barcode values, USD/ZiG price information, stock mode, stock state or exact quantity, pickup eligibility, substitution preference, active state, and source-template information.
+## Appointments and services
 
-## Branch model
+- service duration and capacity
+- exact service locations
+- staff/location access
+- appointment activity and arrival kiosk
 
-Each branch stores:
+## Accommodation and activities
 
-- Organization and business relationship.
-- Name, city, address, phone, and email.
-- Opening and closing hours for every day.
-- Pickup enabled state, slot length, capacity, and preparation time.
-- Accepted currencies and payment methods.
-- Public and operational status.
+- properties or activity locations
+- bookable listings
+- capacity and booking activity
+- guest/participant arrival kiosk
 
-A business must retain at least one branch. Settings can be copied from an existing branch when opening another location.
+## Team access
 
-## Finance boundaries
+Default roles include:
 
-The interface is operational for configuration, payment records, payout requests, and administrator payout progression. Real payment processing still requires valid server-only Paynow credentials and merchant approval. Legal entity details, settlement accounts, tax identifiers, commission terms, payout rules, and fiscal requirements must be confirmed before live release.
+- organization owner
+- business owner
+- business manager
+- location manager
+- activity/order staff
+- catalogue manager
+- finance manager
+- analyst
+- custom role
 
-## Pilot acceptance checklist
+Owners and authorized business managers can grant business-wide access. Scoped managers must choose locations. View-only users cannot invite, modify, resend, or revoke access.
 
-Before inviting the first external business, confirm:
+Invitations:
 
-- The Firebase directory is populated from Admin → Businesses.
-- The business can find and claim its record.
-- Claim evidence uploads remain private to the applicant, business, and administrators.
-- A claim decision creates the correct membership and business access.
-- Business profile, media, branch, catalogue, staff, finance, support, and publication actions persist after refresh.
-- A second account can accept a staff invitation and sees only assigned branches and permissions.
-- Test orders can progress through every pickup state.
-- Notifications appear for the intended customer or business user.
-- Admin publication, support, payout, and audit workflows work for the assigned administrator roles.
-- Firestore and Storage rules have been tested with the Firebase Emulator Suite before production enforcement.
+- validate the recipient email
+- expire after 14 days
+- preserve existing business memberships
+- merge new branch and permission access safely
+- remain visible until accepted or revoked
+
+## Payments
+
+Payment setup is progressive:
+
+1. Accepted currencies and customer methods
+2. Payment recipient, payout cadence, and destination
+3. Verified legal, tax, and invoice details
+
+USD and ZiG are supported. Configurable methods include cash, bank transfer, Paynow, EcoCash, OneMoney, and card. Online provider credentials and policies remain production prerequisites.
+
+## Kiosk
+
+Kiosk is a separate full-screen route intended for shared devices. It hides the wider business portal and supports an optional staff PIN to exit.
+
+Current complete modes:
+
+- pickup arrival
+- ticket check-in
+- appointment/guest arrival
+
+Unattended self-ordering remains hidden until its full checkout and device-security requirements are implemented.
+
+## Data and starter content
+
+Starter templates prevent empty setup but do not create verified commercial data. Zimbabwe reference items are inactive and contain no guessed prices, stock, barcodes, or copied images. The business must confirm every item before publication.
+
+## Readiness and publication
+
+Readiness adapts to the business type and checks:
+
+- public brand profile
+- at least one usable location where required
+- relevant published offerings
+- applicable payment configuration
+- support and customer guidance
+- verification status
+
+Ownership approval and public publication are separate. Administrators can approve publication or return a specific correction request.
+
+## Pilot checklist
+
+Before inviting real businesses:
+
+- run directory version 4 migration
+- inspect brand/location relationships
+- test every business type from setup to readiness
+- test location-scoped roles
+- verify catalogues and source rights
+- configure support contacts and help videos
+- test payment sandbox behavior
+- deploy and test production rules
+- run mobile, tablet, desktop, keyboard, reduced-motion, and screen-reader QA

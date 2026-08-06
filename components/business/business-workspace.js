@@ -22,12 +22,17 @@ import { StaffView } from "@/components/business/staff";
 import { FinanceView } from "@/components/business/finance";
 import { SupportView } from "@/components/business/support";
 import { SettingsView } from "@/components/business/settings";
+import { BusinessSetupView } from "@/components/business/setup";
+import { KioskView } from "@/components/business/kiosk";
+import { businessNavigation } from "@/data/business-archetypes";
 
 const views = {
+  setup: BusinessSetupView,
   dashboard: BusinessDashboard,
   activity: OrdersView,
   catalog: CatalogView,
   branches: BranchesView,
+  kiosk: KioskView,
   insights: InsightsView,
   promotions: PromotionsView,
   staff: StaffView,
@@ -49,14 +54,14 @@ function InvitationBanner() {
     try {
       await authenticatedFetch("/api/business-invitations/accept", { method: "POST", body: JSON.stringify({ invitationId }) });
       await user.getIdToken(true);
-      toast("The invitation has been accepted and the new business is ready in your workspace.", { title: "Access added" });
+      toast("The invitation has been accepted and the assigned business is ready.", { title: "Access added" });
       window.setTimeout(() => window.location.assign("/business"), 650);
     } catch (error) {
       toast(error.message || "The invitation could not be accepted.", { type: "error", title: "Could not accept invitation" });
     } finally { setAccepting(false); }
   }
 
-  return <Card className="mb-6 flex flex-col gap-4 border-business/25 bg-business-soft p-5 sm:flex-row sm:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-business shadow-sm"><CheckCircle2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 className="font-bold">A business invited this account</h2><p className="mt-1 text-sm leading-6 text-secondary">Accepting adds the assigned role, permissions, and branch access without changing your existing businesses.</p></div><Button onClick={accept} loading={accepting}>Accept invitation</Button></Card>;
+  return <Card className="mb-6 flex flex-col gap-4 border-business/25 bg-business-soft p-5 sm:flex-row sm:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-business shadow-sm"><CheckCircle2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 className="font-bold">A business invited this account</h2><p className="mt-1 text-sm leading-6 text-secondary">Accepting adds only the assigned business, location, and responsibilities. Your existing access will not be replaced.</p></div><Button onClick={accept} loading={accepting}>Accept invitation</Button></Card>;
 }
 
 function WorkspaceContent({ section }) {
@@ -69,6 +74,14 @@ function WorkspaceContent({ section }) {
   return <div className="p-4 sm:p-6 lg:p-8"><InvitationBanner /><View /></div>;
 }
 
+function BusinessShell({ section }) {
+  const workspace = useBusinessWorkspace();
+  const navigation = businessNavigation(workspace.business || {}, workspace.setupComplete, workspace.branches.length);
+  const allowed = new Set(navigation.map((item) => item.id));
+  const safeSection = allowed.has(section) ? section : workspace.setupComplete ? "dashboard" : "setup";
+  return <PortalShell portalId="business" activeSection={safeSection} navigation={navigation} footer={false}><WorkspaceContent section={safeSection} /></PortalShell>;
+}
+
 export function BusinessWorkspace({ section = "dashboard" }) {
-  return <AuthGate portal="business" title="Sign in to manage your business"><BusinessDataProvider><PortalShell portalId="business" activeSection={section}><WorkspaceContent section={section} /></PortalShell></BusinessDataProvider></AuthGate>;
+  return <AuthGate portal="business" title="Sign in to manage your business"><BusinessDataProvider><BusinessShell section={section} /></BusinessDataProvider></AuthGate>;
 }

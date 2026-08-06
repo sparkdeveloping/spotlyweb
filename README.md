@@ -1,6 +1,6 @@
 # Spotly Web Platform
 
-Spotly is a JavaScript-only Next.js platform for Zimbabwean business discovery and grocery pickup. This archive upgrades the existing Spotly web project with Firebase-backed customer, business, administration, support, claim, notification, and payment architecture while preserving the dormant driver portal for a future delivery phase.
+Spotly is a JavaScript-only Next.js platform for Zimbabwean business discovery, guided merchant onboarding, adaptive business operations, and grocery pickup. Version 4 upgrades the existing Firebase-backed project with a correct organization-to-brand-to-location hierarchy, step-by-step business setup, business-type-specific workspaces, kiosk modes, synchronized customer/admin experiences, support, notifications, and payment architecture while preserving the dormant driver portal for a future delivery phase.
 
 ## Included applications
 
@@ -9,7 +9,7 @@ Spotly is a JavaScript-only Next.js platform for Zimbabwean business discovery a
 | `/` | Light-mode coming-soon website, launch waitlist, partnerships, and business-claim entry point |
 | `/marketplace` | Admin-controlled public/private-beta customer marketplace |
 | `/claim` | Search-first business listing and ownership-claim flow |
-| `/business` | Business onboarding, operations, products, branches, pickup orders, staff, finance, and support |
+| `/business` | Guided business setup and adaptive operations for retail, food, ticketing, appointments, accommodation/activities, and profile businesses |
 | `/admin` | Platform controls, claims, businesses, access, finance, content, support, seed data, settings, and audit |
 | `/admin/support-view/[businessId]` | Audited, read-only administrator support context |
 | `/support` | Public and authenticated help centre and realtime support chat |
@@ -83,9 +83,9 @@ Production drafts are also included:
 
 Do not deploy open test rules to a public production project. Test the production drafts with the Firebase Emulator Suite and role-specific regression tests first.
 
-## Seed data
+## Directory and starter data
 
-The project includes 347 provisional Zimbabwe business listings representing 125 real brands across multiple cities and categories. These records are designed to reduce onboarding friction by allowing owners to find and claim an existing profile.
+The project includes 347 provisional Zimbabwe locations representing 125 real business brands across multiple cities and categories. Directory version 4 stores one business-brand record per brand and its exact locations separately in Firestore. These records are designed to reduce onboarding friction by allowing owners to find and claim an existing profile.
 
 They are not automatically verified. Before publication or commercial use, Spotly must review:
 
@@ -96,7 +96,7 @@ They are not automatically verified. Before publication or commercial use, Spotl
 - Catalogue, price, inventory, and opening-hour accuracy
 - Source attribution and removal/correction requests
 
-After administrator setup, open **Admin → Businesses** (`/admin/businesses`) and use **Populate Firestore**. This is the required first operational action: claim search and public directory search intentionally use Firebase only and do not fall back to browser-local records. The protected seed route writes platform defaults, role templates, help resources, catalogue templates, organizations, branches, and provisional businesses to Firestore.
+After deploying version 4, open **Admin → Businesses** (`/admin/businesses`) and use **Upgrade / refresh directory**. This is a required migration action: the protected route creates business brands, exact locations, organizations, role templates, help resources, and catalogue templates; archives legacy branch-as-business duplicates; and migrates related memberships and claims where possible. Claim search and public directory search intentionally use Firebase only and do not fall back to browser-local records.
 
 A command-line seed is also available:
 
@@ -107,13 +107,14 @@ npm run seed
 This requires Firebase Admin environment variables in the local shell.
 
 
-## Business operations release
+## Adaptive business experience release
 
-This archive includes the focused Business Operations v3 implementation. See:
+This archive includes Spotly Business Experience v4. See:
 
-- [BUSINESS-OPERATIONS.md](./BUSINESS-OPERATIONS.md) for the business onboarding, order, catalogue, branch, team, finance, support, and pilot workflows.
+- [UX-ARCHITECTURE.md](./UX-ARCHITECTURE.md) for the product and interaction model.
+- [BUSINESS-OPERATIONS.md](./BUSINESS-OPERATIONS.md) for operational workflows.
 - [ADMIN-DIRECTORY.md](./ADMIN-DIRECTORY.md) for Firestore population and administrator operations.
-- [RELEASE-NOTES-BUSINESS-V3.md](./RELEASE-NOTES-BUSINESS-V3.md) for the release change summary.
+- [RELEASE-NOTES-BUSINESS-V4.md](./RELEASE-NOTES-BUSINESS-V4.md) for the complete release summary.
 
 ## Authentication model
 
@@ -131,6 +132,19 @@ Supported flows:
 - Shared account across customer, business, and admin portals
 
 Google, Apple, Phone, Anonymous, and Email/Password must be enabled in Firebase Console. Apple requires its own Apple Developer and OAuth configuration. Phone authentication requires billing/quota readiness and authorized deployment domains.
+
+## Adaptive business portal
+
+Business setup is a resumable, staged flow. Before setup is complete, the portal exposes only setup, home, support, and account/access. After setup, navigation and terminology adapt to the selected model:
+
+- shop/grocery retail
+- restaurant/café/food
+- events and ticketing
+- appointments and services
+- accommodation and activities
+- public profile and enquiries
+
+Business brands and exact locations are selected separately. Location-scoped staff see only assigned locations. Full-screen processing and completion states are used for important operations. Kiosk modes support pickup arrival, ticket admission, and appointment/guest arrival.
 
 ## Marketplace and grocery pickup
 
@@ -217,7 +231,7 @@ This generated archive was validated for:
 - Firebase configuration files and route structure
 - No OpenAI internal npm-registry URLs
 
-A full dependency installation and `next build` could not be completed in the generation environment because that environment could not resolve the public npm registry. Run the install, lint, and production build locally or in Vercel before release. See [BUILD-REPORT.md](./BUILD-REPORT.md).
+JavaScript validation and ESLint completed successfully. A production Next.js build could not complete in the Linux generation container because the matching Next.js SWC binary could not be downloaded through its restricted package gateway. Run `npm install && npm run check` locally and in Vercel Preview before release. See [BUILD-REPORT.md](./BUILD-REPORT.md).
 
 ## Production boundaries
 

@@ -21,6 +21,7 @@ import {
   subscribePromotions
 } from "@/lib/business-services";
 import { defaultOperationalSettings } from "@/data/business-config";
+import { businessArchetype, inferBusinessType } from "@/data/business-archetypes";
 
 const BusinessContext = createContext(null);
 
@@ -33,14 +34,25 @@ function uniqueBusinessIds(memberships) {
   return [...ids];
 }
 
+function canUseEveryBranch(membership) {
+  const role = membership?.role || "";
+  const permissions = membership?.permissions || [];
+  return ["organization_owner", "business_owner", "business_manager"].includes(role)
+    || permissions.includes("*")
+    || permissions.includes("organization.*")
+    || permissions.includes("businesses.*")
+    || permissions.includes("branches.*");
+}
+
 export function BusinessDataProvider({ children }) {
   const { user, memberships } = useAuth();
   const businessIds = useMemo(() => uniqueBusinessIds(memberships), [memberships]);
   const businessIdsKey = useMemo(() => businessIds.join("|"), [businessIds]);
   const [businessChoices, setBusinessChoices] = useState([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState("");
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [business, setBusiness] = useState(null);
-  const [branches, setBranches] = useState([]);
+  const [allBranches, setAllBranches] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [claims, setClaims] = useState([]);
@@ -66,19 +78,28 @@ export function BusinessDataProvider({ children }) {
       try { return await getBusiness(id); } catch { return null; }
     })).then((items) => {
       if (!active) return;
-      const choices = items.filter(Boolean);
+      const choices = items.filter((item) => item && item.status !== "archived");
       setBusinessChoices(choices);
       const stored = typeof window !== "undefined" ? window.localStorage.getItem("spotly-business-id") : "";
-      const next = businessIds.includes(stored) ? stored : businessIds[0];
-      setSelectedBusinessId((current) => businessIds.includes(current) ? current : next);
+      const availableIds = choices.map((item) => item.id);
+      const next = availableIds.includes(stored) ? stored : availableIds[0] || businessIds[0];
+      setSelectedBusinessId((current) => availableIds.includes(current) ? current : next);
     });
     return () => { active = false; };
   }, [businessIds, businessIdsKey]);
 
+  const membership = useMemo(() => memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId)) || null, [memberships, selectedBusinessId]);
+  const branches = useMemo(() => {
+    if (canUseEveryBranch(membership) || !(membership?.branchIds || []).length) return allBranches;
+    const allowed = new Set(membership.branchIds);
+    return allBranches.filter((branch) => allowed.has(branch.id));
+  }, [allBranches, membership]);
+
   useEffect(() => {
     if (!selectedBusinessId) {
       setBusiness(null);
-      setBranches([]);
+      setAllBranches([]);
+      setSelectedBranchId("");
       setProducts([]);
       setOrders([]);
       setClaims([]);
@@ -110,7 +131,7 @@ export function BusinessDataProvider({ children }) {
         });
         setLoading(false);
       }, onError),
-      subscribeBranches(selectedBusinessId, setBranches, onError),
+      subscribeBranches(selectedBusinessId, setAllBranches, onError),
       subscribeBusinessCatalog(selectedBusinessId, setProducts, onError),
       subscribeOrdersForBusiness(selectedBusinessId, setOrders, onError),
       subscribeBusinessClaimsForBusiness(selectedBusinessId, setClaims, onError),
@@ -125,9 +146,29 @@ export function BusinessDataProvider({ children }) {
     return () => cleanups.forEach((cleanup) => cleanup?.());
   }, [selectedBusinessId]);
 
+  useEffect(() => {
+    if (!branches.length) {
+      setSelectedBranchId("");
+      return;
+    }
+    const storageKey = `spotly-branch-id:${selectedBusinessId}`;
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : "";
+    const next = branches.some((branch) => branch.id === stored) ? stored : branches[0].id;
+    setSelectedBranchId((current) => branches.some((branch) => branch.id === current) ? current : next);
+  }, [branches, selectedBusinessId]);
+
+  useEffect(() => {
+    if (selectedBusinessId && selectedBranchId && typeof window !== "undefined") {
+      window.localStorage.setItem(`spotly-branch-id:${selectedBusinessId}`, selectedBranchId);
+    }
+  }, [selectedBusinessId, selectedBranchId]);
+
   useEffect(() => subscribeCatalogTemplates(setTemplates, () => {}), []);
 
-  const membership = useMemo(() => memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId)) || null, [memberships, selectedBusinessId]);
+  const selectedBranch = useMemo(() => branches.find((branch) => branch.id === selectedBranchId) || branches[0] || null, [branches, selectedBranchId]);
+  const businessType = inferBusinessType(business || {});
+  const archetype = businessArchetype(business || {});
+  const setupComplete = Boolean(business?.onboarding?.completedAt || business?.onboardingStatus === "complete");
   const value = useMemo(() => ({
     user,
     memberships,
@@ -137,7 +178,11 @@ export function BusinessDataProvider({ children }) {
     selectedBusinessId,
     setSelectedBusinessId,
     business,
+    allBranches,
     branches,
+    selectedBranchId,
+    setSelectedBranchId,
+    selectedBranch,
     products,
     orders,
     claims,
@@ -150,8 +195,11 @@ export function BusinessDataProvider({ children }) {
     support,
     templates,
     loading,
-    error
-  }), [user, memberships, membership, businessIds, businessChoices, selectedBusinessId, business, branches, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, error]);
+    error,
+    businessType,
+    archetype,
+    setupComplete
+  }), [user, memberships, membership, businessIds, businessChoices, selectedBusinessId, business, allBranches, branches, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, error, businessType, archetype, setupComplete]);
 
   return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 }

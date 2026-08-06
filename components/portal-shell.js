@@ -280,7 +280,7 @@ function UserMenu({ portal }) {
   );
 }
 
-function Sidebar({ portal, activeSection, mobileOpen, onMobileClose }) {
+function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = true }) {
   return (
     <>
       <AnimatePresence>
@@ -302,7 +302,7 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose }) {
                   key={item.id}
                   href={item.href}
                   onClick={onMobileClose}
-                  className={cn("relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}
+                  className={cn("relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : item.emphasis ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}
                 >
                   {active && <motion.span layoutId={`sidebar-${portal.id}`} className="absolute inset-0 rounded-xl bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.15, duration: 0.45 }} />}
                   <Icon className="relative h-5 w-5 shrink-0" />
@@ -313,13 +313,13 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose }) {
             })}
           </div>
         </nav>
-        <div className="border-t p-3">
+        {footer && <div className="border-t p-3">
           <div className="rounded-2xl bg-[var(--accent-soft)] p-3">
             <p className="text-xs font-semibold text-[var(--accent-strong)] dark:text-[var(--accent)]">Spotly unified web</p>
             <p className="mt-1 text-xs leading-5 text-secondary">Switch between all four apps without leaving the platform.</p>
             <Link href="/devstatus" onClick={onMobileClose} className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--accent-strong)] dark:text-[var(--accent)]"><Activity className="h-3.5 w-3.5" />Development status</Link>
           </div>
-        </div>
+        </div>}
       </aside>
     </>
   );
@@ -344,15 +344,16 @@ function MobileBottomNav({ portal, activeSection }) {
   );
 }
 
-export function PortalShell({ portalId, activeSection, children, hideSidebar = false }) {
+export function PortalShell({ portalId, activeSection, children, hideSidebar = false, navigation = null, footer = true }) {
   const basePortal = portals[portalId];
   const pathname = usePathname();
   const { user, profile } = useAuth();
   const portal = useMemo(() => {
+    if (navigation) return { ...basePortal, nav: navigation };
     if (portalId !== "admin") return basePortal;
     const sections = adminSectionsForProfile(profile);
     return { ...basePortal, nav: basePortal.nav.filter((item) => sections.has(item.id)) };
-  }, [basePortal, portalId, profile]);
+  }, [basePortal, portalId, profile, navigation]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -398,7 +399,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
 
   return (
     <div style={shellStyle} className="min-h-screen bg-[var(--grouped)]">
-      {!hideSidebar && <Sidebar portal={portal} activeSection={activeSection} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />}
+      {!hideSidebar && <Sidebar portal={portal} activeSection={activeSection} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} footer={footer} />}
       <div className={cn(!hideSidebar && "lg:pl-[278px]")}> 
         <header className={cn("surface sticky top-0 z-30 flex h-20 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6", hideSidebar && "justify-between")}>
           {!hideSidebar && <button aria-label="Open navigation" className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-[var(--surface-2)] lg:hidden" onClick={() => setMobileOpen(true)}><Menu className="h-5 w-5" /></button>}

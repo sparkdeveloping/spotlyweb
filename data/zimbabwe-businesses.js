@@ -155,6 +155,7 @@ function makeRecord([baseId, name, category, cities, sourceUrl], city, index) {
   const displayName = cities.length === 1 && branch === "Main" ? name : `${name} — ${city} ${branch}`;
   return {
     id: `${baseId}-${slug(city)}-${index + 1}`,
+    brandId: baseId,
     name: displayName,
     brandName: name,
     branchName: branch,
