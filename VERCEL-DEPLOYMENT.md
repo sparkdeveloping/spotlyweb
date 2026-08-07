@@ -32,7 +32,7 @@ Set for Preview and Production:
 ```env
 NEXT_PUBLIC_APP_URL=https://<deployment-domain>
 NEXT_PUBLIC_APP_ENV=preview
-NEXT_PUBLIC_APP_VERSION=5.1.0-depth-pass
+NEXT_PUBLIC_APP_VERSION=5.2.0-theme-integrity
 NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
 NEXT_PUBLIC_BUILD_DATE=<ISO-8601 timestamp>
 ```

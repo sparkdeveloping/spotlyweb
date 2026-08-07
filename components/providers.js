@@ -9,19 +9,25 @@ const ThemeContext = createContext(null);
 const ToastContext = createContext(null);
 
 const themeListeners = new Set();
+const THEME_KEY = "spotly-theme";
+const VALID_THEMES = new Set(["light", "dark", "system"]);
+
+function normalizeTheme(value) {
+  return VALID_THEMES.has(value) ? value : "system";
+}
 
 function getThemeSnapshot() {
-  return window.localStorage.getItem("spotly-theme") || "light";
+  return normalizeTheme(window.localStorage.getItem(THEME_KEY));
 }
 
 function getThemeServerSnapshot() {
-  return "light";
+  return "system";
 }
 
 function subscribeTheme(listener) {
   themeListeners.add(listener);
   const onStorage = (event) => {
-    if (event.key === "spotly-theme") listener();
+    if (event.key === THEME_KEY) listener();
   };
   window.addEventListener("storage", onStorage);
   return () => {
@@ -31,31 +37,45 @@ function subscribeTheme(listener) {
 }
 
 function setStoredTheme(nextTheme) {
-  window.localStorage.setItem("spotly-theme", nextTheme);
+  const normalized = normalizeTheme(nextTheme);
+  window.localStorage.setItem(THEME_KEY, normalized);
   themeListeners.forEach((listener) => listener());
+}
+
+function resolveTheme(theme, mediaMatches) {
+  return theme === "system" ? (mediaMatches ? "dark" : "light") : theme;
 }
 
 function ThemeProvider({ children }) {
   const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeServerSnapshot);
+  const [systemDark, setSystemDark] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystemDark(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  const resolvedTheme = resolveTheme(theme, systemDark);
 
   useEffect(() => {
     const root = document.documentElement;
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const applyTheme = () => {
-      const dark = theme === "dark" || (theme === "system" && media.matches);
-      root.classList.toggle("dark", dark);
-      root.dataset.theme = theme;
-    };
-    applyTheme();
-    media.addEventListener("change", applyTheme);
-    return () => media.removeEventListener("change", applyTheme);
-  }, [theme]);
+    const dark = resolvedTheme === "dark";
+    root.classList.toggle("dark", dark);
+    root.dataset.theme = theme;
+    root.dataset.resolvedTheme = resolvedTheme;
+    root.style.colorScheme = resolvedTheme;
+  }, [resolvedTheme, theme]);
 
   const value = useMemo(() => ({
     theme,
+    selectedTheme: theme,
+    resolvedTheme,
     setTheme: setStoredTheme,
-    isDark: theme === "dark"
-  }), [theme]);
+    isDark: resolvedTheme === "dark"
+  }), [resolvedTheme, theme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

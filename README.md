@@ -10,14 +10,14 @@ Spotly is one operating network with five role-specific entrances:
 /admin     Platform governance and operational queues
 ```
 
-This repository is the **5.1 production-depth candidate**. It preserves the organization → brand → location model while correcting product truth, account/session state, customer pickup availability, business claiming, merchant mobile operations, staff routing, admin queues, support context, accessibility overlays, and release traceability.
+This repository is the **5.2 theme-integrity candidate**. It preserves the production-depth workflows while replacing the split light/dark styling system with semantic tokens, paired foreground/background colors, controlled form primitives, pre-hydration theme resolution, route theme policy, reservation release, and automated theme/contrast checks.
 
 ## Capability truth
 
 | Area | Current classification |
 |---|---|
 | Public homepage and waitlist | Pilot-ready UI; launch content and approved businesses require production configuration |
-| Customer marketplace | Pilot-ready candidate with real location/branch availability and transactional order creation; payments and cancellation release require production completion |
+| Customer marketplace | Pilot-ready candidate with real location/branch availability, transactional order creation, and reservation release; production payments and provider reconciliation remain |
 | Business claiming | Pilot-ready progressive flow with account drafts and persisted evidence |
 | Merchant operations | Pilot-ready for pickup-oriented retail/food workflows; additional archetype depth remains staged |
 | Driver | Training-only; no live dispatch, earnings, GPS proof, or production job assignment |
@@ -84,14 +84,14 @@ npm run build
 
 Also validate Firestore and Storage rules with the Firebase Emulator Suite and run authenticated browser smoke tests against the exact staging deployment.
 
-The generation environment could not complete `npm ci` because outbound package downloads repeatedly failed with `EAI_AGAIN`; therefore lint and production build are **not claimed as passed** in this package. See [SPOTLY-VALIDATION-REPORT.md](./SPOTLY-VALIDATION-REPORT.md).
+The generation environment could not complete `npm ci` because its internal npm mirror returned HTTP 404 for `zod-validation-error-4.0.2.tgz`; therefore ESLint, Next.js build, browser screenshots, and runtime accessibility checks are **not claimed as passed**. See [SPOTLY-THEME-VALIDATION-REPORT.md](./SPOTLY-THEME-VALIDATION-REPORT.md).
 
 ## Release traceability
 
 Set these values for every preview and production deployment:
 
 ```env
-NEXT_PUBLIC_APP_VERSION=5.1.0-depth-pass
+NEXT_PUBLIC_APP_VERSION=5.2.0-theme-integrity
 NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
 NEXT_PUBLIC_BUILD_DATE=<ISO timestamp>
 NEXT_PUBLIC_APP_ENV=preview
@@ -109,7 +109,6 @@ The safe version label appears in authenticated Account and Admin surfaces and c
 - Resend and push notification configuration
 - Support staffing, response targets, escalation ownership and final help content
 - Final legal text and consent versions
-- Order cancellation/refund workflow that releases inventory and pickup reservations
 - Monitoring, backup/restore, incident and rollback procedures
 
 ## Documentation
@@ -119,7 +118,14 @@ The safe version label appears in authenticated Account and Admin surfaces and c
 - [SPOTLY-ROUTE-INVENTORY.md](./SPOTLY-ROUTE-INVENTORY.md)
 - [SPOTLY-INTERACTION-INVENTORY.md](./SPOTLY-INTERACTION-INVENTORY.md)
 - [SPOTLY-BROWSER-STATE-INVENTORY.md](./SPOTLY-BROWSER-STATE-INVENTORY.md)
-- [SPOTLY-VALIDATION-REPORT.md](./SPOTLY-VALIDATION-REPORT.md)
+- [SPOTLY-THEME-INTEGRITY-IMPLEMENTATION-REPORT.md](./SPOTLY-THEME-INTEGRITY-IMPLEMENTATION-REPORT.md)
+- [SPOTLY-ROUTE-THEME-MATRIX.md](./SPOTLY-ROUTE-THEME-MATRIX.md)
+- [SPOTLY-TOKEN-INVENTORY.md](./SPOTLY-TOKEN-INVENTORY.md)
+- [SPOTLY-FIXED-COLOR-EXCEPTIONS.md](./SPOTLY-FIXED-COLOR-EXCEPTIONS.md)
+- [SPOTLY-FORM-MIGRATION-REPORT.md](./SPOTLY-FORM-MIGRATION-REPORT.md)
+- [SPOTLY-VISUAL-REGRESSION-REPORT.md](./SPOTLY-VISUAL-REGRESSION-REPORT.md)
+- [SPOTLY-FUNCTIONAL-REPAIR-REPORT.md](./SPOTLY-FUNCTIONAL-REPAIR-REPORT.md)
+- [SPOTLY-THEME-VALIDATION-REPORT.md](./SPOTLY-THEME-VALIDATION-REPORT.md)
 - [SPOTLY-PLATFORM-BLUEPRINT.md](./SPOTLY-PLATFORM-BLUEPRINT.md)
 - [FIREBASE-SETUP.md](./FIREBASE-SETUP.md)
 - [VERCEL-DEPLOYMENT.md](./VERCEL-DEPLOYMENT.md)

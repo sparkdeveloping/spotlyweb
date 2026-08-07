@@ -1,6 +1,6 @@
 {
   "name": "spotly-web-platform",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "private": true,
   "engines": {
     "node": "22.x",
@@ -12,12 +12,15 @@
     "start": "next start",
     "lint": "eslint .",
     "check:js": "node scripts/check-javascript.mjs",
-    "check": "npm run check:js && npm run lint && npm run build",
+    "check": "npm run check:js && npm run check:theme && npm test && npm run lint && npm run build",
     "seed": "node scripts/seed-firestore.mjs",
     "firebase:emulators": "npx firebase-tools emulators:start",
     "firebase:deploy:indexes": "npx firebase-tools deploy --only firestore:indexes",
     "firebase:deploy:rules": "npx firebase-tools deploy --only firestore:rules,storage",
-    "test": "node --test"
+    "test": "node --test",
+    "test:theme": "node --test tests/theme-integrity.test.mjs tests/contrast.test.mjs",
+    "test:integrity": "node --test tests/theme-integrity.test.mjs tests/contrast.test.mjs tests/reservation-release.test.mjs",
+    "check:theme": "node scripts/theme-safety.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

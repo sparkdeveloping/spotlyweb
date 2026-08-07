@@ -1,3 +1,5 @@
+> **Superseded by [SPOTLY-THEME-VALIDATION-REPORT.md](./SPOTLY-THEME-VALIDATION-REPORT.md) for the 5.2 theme-integrity candidate.**
+
 # Spotly Validation Report
 
 **Candidate:** 5.1 production-depth pass  

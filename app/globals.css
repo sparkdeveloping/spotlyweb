@@ -2,59 +2,217 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
+@theme inline {
   --font-sans: "Aptos", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --color-canvas: #ffffff;
-  --color-grouped: #f7f8fa;
-  --color-subtle: #f3f4f6;
-  --color-ink: #111827;
-  --color-muted: #6b7280;
-  --color-tertiary: #9ca3af;
-  --color-line: #e5e7eb;
-  --color-violet: #6657d9;
-  --color-violet-strong: #4e3fbf;
-  --color-violet-soft: #f0eeff;
-  --color-business: #147a4a;
-  --color-business-strong: #0e5c36;
-  --color-business-soft: #e8f5ed;
-  --color-driver: #2563eb;
-  --color-driver-strong: #1d4ed8;
-  --color-driver-soft: #eaf1ff;
-  --color-admin: #28466f;
-  --color-admin-strong: #1b3152;
-  --color-admin-soft: #eaf0f7;
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-danger: #dc2626;
-  --color-info: #2563eb;
-  --radius-card: 1rem;
+  --color-canvas: var(--surface);
+  --color-grouped: var(--grouped);
+  --color-subtle: var(--surface-2);
+  --color-ink: var(--text);
+  --color-muted: var(--text-2);
+  --color-tertiary: var(--text-3);
+  --color-line: var(--border);
+  --color-violet: var(--accent);
+  --color-violet-strong: var(--accent-strong);
+  --color-violet-soft: var(--accent-soft);
+  --color-business: var(--business);
+  --color-business-strong: var(--business-strong);
+  --color-business-soft: var(--business-soft);
+  --color-driver: var(--driver);
+  --color-driver-strong: var(--driver-strong);
+  --color-driver-soft: var(--driver-soft);
+  --color-admin: var(--admin);
+  --color-admin-strong: var(--admin-strong);
+  --color-admin-soft: var(--admin-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --radius-card: 0.75rem;
   --radius-hero: 1.25rem;
-  --shadow-card: 0 2px 8px rgba(17, 24, 39, 0.05);
-  --shadow-elevated: 0 12px 36px rgba(17, 24, 39, 0.10);
+  --shadow-card: 0 1px 3px rgba(17, 24, 39, 0.06);
+  --shadow-elevated: 0 16px 44px rgba(17, 24, 39, 0.14);
 }
 
 :root {
   color-scheme: light;
-  --background: #ffffff;
-  --grouped: #f7f8fa;
+
+  --background: #fbfbfc;
+  --grouped: #f3f5f8;
   --surface: #ffffff;
-  --surface-2: #f3f4f6;
+  --surface-2: #eef1f5;
+  --surface-raised: #ffffff;
+  --surface-hover: #f7f8fa;
+  --surface-selected: #f0eeff;
+  --overlay: rgba(15, 23, 42, 0.52);
+
   --text: #111827;
-  --text-2: #6b7280;
-  --text-3: #9ca3af;
-  --border: #e5e7eb;
+  --text-2: #4b5563;
+  --text-3: #667085;
+  --text-disabled: #7d8796;
+  --text-inverse: #ffffff;
+
+  --border: #cbd2dc;
+  --border-subtle: #e2e7ee;
+  --border-strong: #9aa6b5;
+  --divider: #d8dee7;
+
+  --accent: #5a4bcf;
+  --accent-hover: #4e3fc0;
+  --accent-active: #4335ad;
+  --accent-strong: #4638b5;
+  --accent-soft: #eeebff;
+  --on-accent: #ffffff;
+  --on-accent-soft: #30266f;
+
+  --control-bg: #ffffff;
+  --control-bg-hover: #fbfcfd;
+  --control-bg-disabled: #edf0f4;
+  --control-text: #111827;
+  --control-text-disabled: #667085;
+  --control-placeholder: #667085;
+  --control-border: #7d899a;
+  --control-border-hover: #7d899a;
+  --control-border-error: #b42318;
+
+  --focus: #4e3fbf;
+  --focus-soft: rgba(78, 63, 191, 0.24);
+
+  --success: #087a38;
+  --success-hover: #06672f;
+  --success-soft: #e3f6ea;
+  --on-success: #ffffff;
+  --on-success-soft: #075d2d;
+
+  --warning: #8a4300;
+  --warning-hover: #713600;
+  --warning-soft: #fff0d6;
+  --on-warning: #ffffff;
+  --on-warning-soft: #713500;
+
+  --danger: #b42318;
+  --danger-hover: #921d14;
+  --danger-soft: #feeceb;
+  --on-danger: #ffffff;
+  --on-danger-soft: #8b1a12;
+
+  --info: #175cd3;
+  --info-hover: #1849a9;
+  --info-soft: #eaf2ff;
+  --on-info: #ffffff;
+  --on-info-soft: #1849a9;
+
+  --inverse-surface: #111827;
+  --inverse-surface-2: #1f2937;
+  --inverse-text: #ffffff;
+  --inverse-text-muted: #d1d5db;
+  --inverse-border: #374151;
+
+  --business: #147a4a;
+  --business-strong: #0e5c36;
+  --business-soft: #e8f5ed;
+  --on-business: #ffffff;
+  --on-business-soft: #0e5c36;
+  --driver: #2563eb;
+  --driver-strong: #1d4ed8;
+  --driver-soft: #eaf1ff;
+  --on-driver: #ffffff;
+  --on-driver-soft: #173f9e;
+  --admin: #28466f;
+  --admin-strong: #1b3152;
+  --admin-soft: #eaf0f7;
+  --on-admin: #ffffff;
+  --on-admin-soft: #1b3152;
 }
 
 html.dark {
   color-scheme: dark;
+
   --background: #0b0d12;
-  --grouped: #11141b;
-  --surface: #151923;
-  --surface-2: #1c2230;
-  --text: #f4f5f7;
-  --text-2: #aab1bf;
-  --text-3: #747d8f;
-  --border: #2a3140;
+  --grouped: #10141b;
+  --surface: #171b24;
+  --surface-2: #202632;
+  --surface-raised: #1d222d;
+  --surface-hover: #222936;
+  --surface-selected: #292448;
+  --overlay: rgba(0, 0, 0, 0.70);
+
+  --text: #f4f6f8;
+  --text-2: #c1c7d0;
+  --text-3: #a0a9b8;
+  --text-disabled: #8791a1;
+  --text-inverse: #111827;
+
+  --border: #465063;
+  --border-subtle: #303848;
+  --border-strong: #647087;
+  --divider: #353e4e;
+
+  --accent: #9b91ff;
+  --accent-hover: #aaa1ff;
+  --accent-active: #b8b1ff;
+  --accent-strong: #b2aaff;
+  --accent-soft: #292448;
+  --on-accent: #12101f;
+  --on-accent-soft: #dcd8ff;
+
+  --control-bg: #151923;
+  --control-bg-hover: #1b202b;
+  --control-bg-disabled: #202632;
+  --control-text: #f4f6f8;
+  --control-text-disabled: #909aaa;
+  --control-placeholder: #a0a9b8;
+  --control-border: #5d687d;
+  --control-border-hover: #78859b;
+  --control-border-error: #f97066;
+
+  --focus: #b2aaff;
+  --focus-soft: rgba(178, 170, 255, 0.28);
+
+  --success: #5fd68a;
+  --success-hover: #75e29a;
+  --success-soft: #173725;
+  --on-success: #092113;
+  --on-success-soft: #b7f4ca;
+
+  --warning: #f5b041;
+  --warning-hover: #ffc15c;
+  --warning-soft: #3d2b12;
+  --on-warning: #281a06;
+  --on-warning-soft: #ffe4ad;
+
+  --danger: #ff7a70;
+  --danger-hover: #ff938a;
+  --danger-soft: #421d20;
+  --on-danger: #2b090b;
+  --on-danger-soft: #ffd1cd;
+
+  --info: #84adff;
+  --info-hover: #9cbdff;
+  --info-soft: #172f59;
+  --on-info: #071a38;
+  --on-info-soft: #ccddff;
+
+  --inverse-surface: #f4f6f8;
+  --inverse-surface-2: #e4e8ee;
+  --inverse-text: #111827;
+  --inverse-text-muted: #4b5563;
+  --inverse-border: #cbd2dc;
+
+  --business: #65d99c;
+  --business-strong: #8ce7b7;
+  --business-soft: #17372a;
+  --on-business: #082218;
+  --on-business-soft: #bdf3d4;
+  --driver: #8bb4ff;
+  --driver-strong: #aac8ff;
+  --driver-soft: #172c53;
+  --on-driver: #07162e;
+  --on-driver-soft: #d2e1ff;
+  --admin: #a9c7ec;
+  --admin-strong: #c4d9f2;
+  --admin-soft: #1b2b40;
+  --on-admin: #0b1b2e;
+  --on-admin-soft: #d8e8fa;
 }
 
 * {
@@ -86,16 +244,17 @@ button, a {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent, #6657d9) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent, #6657d9) 42%, transparent);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
 .surface {
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--border);
 }
 
@@ -109,6 +268,78 @@ button, a {
 
 .text-tertiary {
   color: var(--text-3);
+}
+
+.field-control,
+.input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--control-border);
+  border-radius: 0.5rem;
+  background: var(--control-bg);
+  color: var(--control-text);
+  padding: 0 0.875rem;
+  outline: none;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+textarea.field-control,
+textarea.input {
+  min-height: 112px;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  resize: vertical;
+}
+
+select.field-control,
+select.input {
+  color-scheme: light dark;
+}
+
+.field-control:hover:not(:disabled),
+.input:hover:not(:disabled) {
+  border-color: var(--control-border-hover);
+  background: var(--control-bg-hover);
+}
+
+.field-control:focus-visible,
+.input:focus-visible {
+  border-color: var(--focus);
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 5px var(--focus-soft);
+}
+
+.field-control::placeholder,
+.input::placeholder {
+  color: var(--control-placeholder);
+  opacity: 1;
+}
+
+.field-control:disabled,
+.input:disabled {
+  cursor: not-allowed;
+  background: var(--control-bg-disabled);
+  color: var(--control-text-disabled);
+  opacity: 1;
+}
+
+.field-control[aria-invalid="true"],
+.input[aria-invalid="true"] {
+  border-color: var(--control-border-error);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--control-text);
+  box-shadow: 0 0 0 1000px var(--control-bg) inset;
+  transition: background-color 9999s ease-out;
 }
 
 .safe-bottom {
@@ -125,7 +356,7 @@ button, a {
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-3) 50%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--text-3) 55%, transparent) transparent;
 }
 
 .portal-gradient {
@@ -141,6 +372,18 @@ button, a {
   gap: 0.75rem;
 }
 
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 3px solid Highlight;
+  }
+
+  .field-control,
+  .input,
+  .surface {
+    border-color: CanvasText;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
@@ -149,3 +392,35 @@ button, a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Workspace accent scopes keep foreground/background pairs synchronized in both themes. */
+[data-workspace="business"] {
+  --accent: var(--business);
+  --accent-hover: var(--business-strong);
+  --accent-active: var(--business-strong);
+  --accent-strong: var(--business-strong);
+  --accent-soft: var(--business-soft);
+  --on-accent: var(--on-business);
+  --on-accent-soft: var(--on-business-soft);
+}
+
+[data-workspace="driver"] {
+  --accent: var(--driver);
+  --accent-hover: var(--driver-strong);
+  --accent-active: var(--driver-strong);
+  --accent-strong: var(--driver-strong);
+  --accent-soft: var(--driver-soft);
+  --on-accent: var(--on-driver);
+  --on-accent-soft: var(--on-driver-soft);
+}
+
+[data-workspace="admin"] {
+  --accent: var(--admin);
+  --accent-hover: var(--admin-strong);
+  --accent-active: var(--admin-strong);
+  --accent-strong: var(--admin-strong);
+  --accent-soft: var(--admin-soft);
+  --on-accent: var(--on-admin);
+  --on-accent-soft: var(--on-admin-soft);
+}
+

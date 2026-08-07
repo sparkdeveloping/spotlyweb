@@ -1,0 +1,37 @@
+{
+  "adaptive": [
+    "/",
+    "/login",
+    "/support",
+    "/privacy",
+    "/terms",
+    "/marketplace",
+    "/account",
+    "/claim",
+    "/claim/drafts",
+    "/claim/status/[claimId]",
+    "/payment/return",
+    "/business",
+    "/business/[section]",
+    "/driver",
+    "/driver/[section]",
+    "/staff",
+    "/staff/[section]",
+    "/admin",
+    "/admin/[section]",
+    "/admin/queues/[queue]",
+    "/admin/support-view/[businessId]",
+    "/devstatus"
+  ],
+  "fixedDark": [
+    "/business/kiosk/live"
+  ],
+  "fixedLight": [],
+  "approvedInverseComponents": [
+    "components/login-app.js",
+    "components/coming-soon-app.js",
+    "components/business/no-business.js",
+    "components/business/shared.js",
+    "components/business/kiosk.js"
+  ]
+}

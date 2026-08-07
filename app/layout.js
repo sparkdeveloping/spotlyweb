@@ -41,9 +41,25 @@ export const viewport = {
   ]
 };
 
+const themeBootstrap = `(() => {
+  try {
+    const stored = localStorage.getItem("spotly-theme");
+    const selected = ["light", "dark", "system"].includes(stored) ? stored : "system";
+    const resolved = selected === "system"
+      ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : selected;
+    const root = document.documentElement;
+    root.classList.toggle("dark", resolved === "dark");
+    root.dataset.theme = selected;
+    root.dataset.resolvedTheme = resolved;
+    root.style.colorScheme = resolved;
+  } catch (_) {}
+})();`;
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /></head>
       <body>
         <AppProviders>{children}</AppProviders>
       </body>

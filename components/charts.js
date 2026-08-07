@@ -39,7 +39,7 @@ export function BarChart({ data, valueKey = "amount", labelKey = "day", height =
               transition={{ duration: 0.55, delay: index * 0.04 }}
               className="group relative w-full max-w-10 rounded-t-lg bg-[var(--accent)]"
             >
-              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 px-2 py-1 text-[10px] font-semibold text-white group-hover:block">{formatValue(value)}</span>
+              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--inverse-surface)] px-2 py-1 text-[10px] font-semibold text-[var(--inverse-text)] group-hover:block">{formatValue(value)}</span>
             </motion.div>
             <span className="text-[11px] text-tertiary">{item[labelKey]}</span>
           </div>

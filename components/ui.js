@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { cloneElement, isValidElement, useEffect, useId, useRef, useState } from "react";
+import { cloneElement, forwardRef, isValidElement, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronRight, LoaderCircle, Search, X } from "lucide-react";
@@ -11,12 +11,14 @@ const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select
 
 export function Button({ children, variant = "primary", size = "md", className, loading = false, disabled, type = "button", asChild = false, ...props }) {
   const variants = {
-    primary: "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] shadow-sm",
-    secondary: "bg-[var(--accent-soft)] text-[var(--accent-strong)] dark:text-[var(--accent)] hover:brightness-[0.97] border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))]",
-    outline: "border bg-[var(--surface)] hover:bg-[var(--surface-2)]",
-    ghost: "hover:bg-[var(--surface-2)]",
-    danger: "bg-danger text-white hover:bg-red-700",
-    success: "bg-success text-white hover:bg-green-700"
+    primary: "border border-transparent bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-hover)] active:bg-[var(--accent-active)]",
+    secondary: "border border-[color-mix(in_srgb,var(--accent)_25%,var(--border))] bg-[var(--accent-soft)] text-[var(--on-accent-soft)] hover:bg-[color-mix(in_srgb,var(--accent-soft)_80%,var(--accent)_20%)]",
+    outline: "border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface-hover)] active:bg-[var(--surface-2)]",
+    ghost: "border border-transparent bg-transparent text-[var(--text)] hover:bg-[var(--surface-hover)] active:bg-[var(--surface-2)]",
+    danger: "border border-transparent bg-[var(--danger)] text-[var(--on-danger)] hover:bg-[var(--danger-hover)]",
+    success: "border border-transparent bg-[var(--success)] text-[var(--on-success)] hover:bg-[var(--success-hover)]",
+    warning: "border border-transparent bg-[var(--warning)] text-[var(--on-warning)] hover:bg-[var(--warning-hover)]",
+    inverse: "border border-[var(--inverse-border)] bg-[var(--inverse-surface)] text-[var(--inverse-text)] hover:bg-[var(--inverse-surface-2)]"
   };
   const sizes = {
     sm: "h-10 rounded-lg px-3.5 text-sm",
@@ -25,7 +27,7 @@ export function Button({ children, variant = "primary", size = "md", className, 
     icon: "h-11 w-11 rounded-lg"
   };
   const isDisabled = Boolean(disabled || loading);
-  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 disabled:cursor-not-allowed disabled:opacity-50", variants[variant], sizes[size], className);
+  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--control-bg-disabled)] disabled:text-[var(--control-text-disabled)] disabled:opacity-100", variants[variant] || variants.primary, sizes[size], className);
 
   if (asChild && isValidElement(children)) {
     const childProps = {
@@ -112,14 +114,14 @@ export function MetricCard({ label, value, delta, hint, icon: Icon, tone = "defa
 }
 
 const badgeMap = {
-  success: "bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-950/40 dark:text-green-300",
-  warning: "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300",
-  danger: "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-950/40 dark:text-red-300",
-  info: "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-950/40 dark:text-blue-300",
-  neutral: "bg-[var(--surface-2)] text-secondary ring-[var(--border)]",
-  accent: "bg-[var(--accent-soft)] text-[var(--accent-strong)] ring-[color-mix(in_srgb,var(--accent)_25%,transparent)] dark:text-[var(--accent)]",
-  purple: "bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-950/40 dark:text-violet-300",
-  green: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300"
+  success: "bg-[var(--success-soft)] text-[var(--on-success-soft)] ring-[color-mix(in_srgb,var(--success)_28%,transparent)]",
+  warning: "bg-[var(--warning-soft)] text-[var(--on-warning-soft)] ring-[color-mix(in_srgb,var(--warning)_28%,transparent)]",
+  danger: "bg-[var(--danger-soft)] text-[var(--on-danger-soft)] ring-[color-mix(in_srgb,var(--danger)_28%,transparent)]",
+  info: "bg-[var(--info-soft)] text-[var(--on-info-soft)] ring-[color-mix(in_srgb,var(--info)_28%,transparent)]",
+  neutral: "bg-[var(--surface-2)] text-[var(--text-2)] ring-[var(--border)]",
+  accent: "bg-[var(--accent-soft)] text-[var(--on-accent-soft)] ring-[color-mix(in_srgb,var(--accent)_25%,transparent)]",
+  purple: "bg-[var(--accent-soft)] text-[var(--on-accent-soft)] ring-[color-mix(in_srgb,var(--accent)_25%,transparent)]",
+  green: "bg-[var(--success-soft)] text-[var(--on-success-soft)] ring-[color-mix(in_srgb,var(--success)_28%,transparent)]"
 };
 
 export function Badge({ children, tone = "neutral", dot = false, className }) {
@@ -146,7 +148,7 @@ export function StatusBadge({ status }) {
 
 export function SearchField({ value, onChange, placeholder = "Search", className, onFocus, onKeyDown, shortcut, label = "Search", inputProps = {} }) {
   return (
-    <label className={cn("surface flex h-[50px] items-center gap-3 rounded-lg px-4 transition focus-within:ring-2 focus-within:ring-[var(--accent)]/30", className)}>
+    <label className={cn("flex h-[50px] items-center gap-3 rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-4 text-[var(--control-text)] transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]", className)}>
       <span className="sr-only">{label}</span>
       <Search className="h-5 w-5 shrink-0 text-tertiary" aria-hidden="true" />
       <input
@@ -156,7 +158,7 @@ export function SearchField({ value, onChange, placeholder = "Search", className
         onFocus={onFocus}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-tertiary"
+        className="min-w-0 flex-1 bg-transparent text-sm text-[var(--control-text)] outline-none placeholder:text-[var(--control-placeholder)]"
         {...inputProps}
       />
       {value ? (
@@ -230,11 +232,49 @@ export function TabPanel({ idPrefix, value, active, children, className, keepMou
   );
 }
 
-export function Select({ value, onChange, options, className, ariaLabel = "Select option" }) {
+export const Input = forwardRef(function Input({ className, invalid = false, ...props }, ref) {
+  return <input ref={ref} aria-invalid={invalid || undefined} className={cn("field-control", className)} {...props} />;
+});
+
+export const Textarea = forwardRef(function Textarea({ className, invalid = false, ...props }, ref) {
+  return <textarea ref={ref} aria-invalid={invalid || undefined} className={cn("field-control", className)} {...props} />;
+});
+
+export const NativeSelect = forwardRef(function NativeSelect({ className, invalid = false, children, ...props }, ref) {
+  return <select ref={ref} aria-invalid={invalid || undefined} className={cn("field-control appearance-none pr-10", className)} {...props}>{children}</select>;
+});
+
+export function Field({ label, description, error, required = false, children, className, id }) {
+  const generated = useId();
+  const fieldId = id || `field-${safeId(generated)}`;
+  const descriptionId = description ? `${fieldId}-description` : undefined;
+  const errorId = error ? `${fieldId}-error` : undefined;
+  const child = isValidElement(children) ? cloneElement(children, {
+    id: children.props.id || fieldId,
+    "aria-describedby": [children.props["aria-describedby"], descriptionId, errorId].filter(Boolean).join(" ") || undefined,
+    "aria-invalid": error ? true : children.props["aria-invalid"]
+  }) : children;
+  return <div className={className}><label htmlFor={fieldId} className="mb-2 block text-sm font-semibold text-[var(--text)]">{label}{required && <span aria-hidden="true" className="ml-1 text-[var(--danger)]">*</span>}</label>{description && <p id={descriptionId} className="mb-2 text-sm text-[var(--text-2)]">{description}</p>}{child}{error && <p id={errorId} className="mt-2 text-sm font-medium text-[var(--danger)]">{error}</p>}</div>;
+}
+
+export function ErrorSummary({ title = "Check the highlighted fields", errors = [], className }) {
+  if (!errors.length) return null;
+  return <div role="alert" tabIndex={-1} className={cn("rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] p-4 text-[var(--on-danger-soft)]", className)}><p className="font-semibold">{title}</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{errors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul></div>;
+}
+
+export function Checkbox({ label, description, className, ...props }) {
+  return <label className={cn("flex items-start gap-3", className)}><input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0" {...props} /><span><span className="block text-sm font-semibold">{label}</span>{description && <span className="mt-1 block text-sm text-[var(--text-2)]">{description}</span>}</span></label>;
+}
+
+export function RadioGroup({ label, name, value, onChange, options, className }) {
+  return <fieldset className={className}><legend className="mb-2 text-sm font-semibold">{label}</legend><div className="space-y-2">{options.map((option) => <label key={option.value} className="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><input type="radio" name={name} value={option.value} checked={value === option.value} onChange={() => onChange(option.value)} className="mt-0.5 h-5 w-5" /><span><span className="block text-sm font-semibold">{option.label}</span>{option.description && <span className="mt-1 block text-sm text-[var(--text-2)]">{option.description}</span>}</span></label>)}</div></fieldset>;
+}
+
+export function Select({ value, onChange, options, className, ariaLabel = "Select option", ...props }) {
   return (
-    <label className={cn("surface relative flex h-11 items-center rounded-lg", className)}>
+    <label className={cn("relative flex h-11 items-center rounded-lg", className)}>
       <span className="sr-only">{ariaLabel}</span>
-      <select aria-label={ariaLabel} value={value} onChange={(event) => onChange(event.target.value)} className="h-full appearance-none bg-transparent pl-3 pr-9 text-sm font-medium outline-none">
+      <select aria-label={ariaLabel} value={value} onChange={(event) => onChange(event.target.value)} className="field-control h-11 appearance-none py-0 pl-3 pr-9 text-sm font-medium" {...props}>
         {options.map((option) => <option key={option.value ?? option} value={option.value ?? option}>{option.label ?? option}</option>)}
       </select>
       <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-tertiary" aria-hidden="true" />
@@ -315,7 +355,7 @@ export function Overlay({ open, onClose, title, description, children, mode = "m
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-[100]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <button type="button" aria-label={`Close ${label || title || "dialog"}`} className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" onClick={closeOnBackdrop ? onClose : undefined} />
+          <button type="button" aria-label={`Close ${label || title || "dialog"}`} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" onClick={closeOnBackdrop ? onClose : undefined} />
           <motion.div
             ref={dialogRef}
             role="dialog"

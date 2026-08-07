@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { createPaynow, normalizePaynowStatus } from "@/lib/paynow-server";
+import { releaseOrderReservation } from "@/lib/order-reservations-server";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,10 @@ export async function POST(request) {
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
     });
+
+    if (["failed", "cancelled", "expired"].includes(normalized.state)) {
+      await releaseOrderReservation(body.orderId, { reason: normalized.state === "expired" ? "payment_expired" : "payment_failed", status: normalized.state === "expired" ? "expired" : "payment_failed", actorId: user.uid }).catch(() => null);
+    }
 
     return Response.json({ ok: true, orderId: body.orderId, ...normalized });
   } catch (error) {

@@ -61,7 +61,7 @@ function InvitationBanner() {
     } finally { setAccepting(false); }
   }
 
-  return <Card className="mb-6 flex flex-col gap-4 border-business/25 bg-business-soft p-5 sm:flex-row sm:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-business shadow-sm"><CheckCircle2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 className="font-bold">A business invited this account</h2><p className="mt-1 text-sm leading-6 text-secondary">Accepting adds only the assigned business, location, and responsibilities. Your existing access will not be replaced.</p></div><Button onClick={accept} loading={accepting}>Accept invitation</Button></Card>;
+  return <Card className="mb-6 flex flex-col gap-4 border-business/25 bg-business-soft p-5 sm:flex-row sm:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface)] text-business shadow-sm"><CheckCircle2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 className="font-bold">A business invited this account</h2><p className="mt-1 text-sm leading-6 text-secondary">Accepting adds only the assigned business, location, and responsibilities. Your existing access will not be replaced.</p></div><Button onClick={accept} loading={accepting}>Accept invitation</Button></Card>;
 }
 
 function WorkspaceContent({ section }) {

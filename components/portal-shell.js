@@ -230,7 +230,7 @@ function UserMenu({ portal }) {
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((value) => !value)} className="flex h-11 items-center gap-2 rounded-xl p-1 pr-2 hover:bg-[var(--surface-2)]">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent)] text-xs font-bold text-white">{initials(displayName)}</span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent)] text-xs font-bold text-[var(--on-accent)]">{initials(displayName)}</span>
         <ChevronDown className="hidden h-4 w-4 text-tertiary sm:block" />
       </button>
       <AnimatePresence>
@@ -243,7 +243,7 @@ function UserMenu({ portal }) {
             </div>
             <Link href="/account" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
             {WORKSPACE_SETTINGS_ROUTES[portal.id] && <Link href={WORKSPACE_SETTINGS_ROUTES[portal.id]} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>}
-            <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-red-50 dark:hover:bg-red-950/30"><LogOut className="h-4 w-4" /> Sign out</button>
+            <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-[var(--danger-soft)] dark:hover:bg-red-950/30"><LogOut className="h-4 w-4" /> Sign out</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -298,7 +298,7 @@ function MobileBottomNav({ portal, activeSection, onOpenCommand }) {
   return (
     <>
       <nav className="surface safe-bottom fixed inset-x-0 bottom-0 z-30 flex min-h-[70px] items-start justify-around border-x-0 border-b-0 px-2 pt-2 lg:hidden" aria-label="Mobile navigation">
-        {primary.map((item) => { const Icon = item.icon; const active = item.id === activeSection; return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-white">{item.badge}</span> : null}</Link>; })}
+        {primary.map((item) => { const Icon = item.icon; const active = item.id === activeSection; return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-[var(--on-danger)]">{item.badge}</span> : null}</Link>; })}
         <button type="button" onClick={() => setMoreOpen(true)} className={cn("flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", remaining.some((item) => item.id === activeSection) ? "text-[var(--accent)]" : "text-tertiary")}><MoreHorizontal className="h-5 w-5" /><span>More</span></button>
       </nav>
       <Overlay open={moreOpen} onClose={() => setMoreOpen(false)} title="More" description={`More destinations in ${portal.name}.`} mode="sheet" label="More navigation">
@@ -366,14 +366,8 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const shellStyle = {
-    "--accent": portal.accent,
-    "--accent-strong": portal.accentStrong,
-    "--accent-soft": portal.accentSoft
-  };
-
   return (
-    <div style={shellStyle} className="min-h-screen bg-[var(--grouped)]">
+    <div data-workspace={portal.id} className="min-h-screen bg-[var(--grouped)]">
       {!hideSidebar && <Sidebar portal={portal} activeSection={activeSection} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} footer={footer} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />}
       <div className={cn(!hideSidebar && (sidebarCollapsed ? "lg:pl-[88px]" : "lg:pl-[278px]"), "transition-[padding] duration-300")}>
         <header className={cn("surface sticky top-0 z-30 flex h-20 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6", hideSidebar && "justify-between")}>
