@@ -21,6 +21,7 @@ import {
 import { getToken } from "firebase/messaging";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebaseClient, getFirebaseMessaging } from "@/lib/firebase";
+import { clearUserSessionState } from "@/lib/browser-state";
 import {
   DEFAULT_PLATFORM_SETTINGS,
   ensureUserProfile,
@@ -145,8 +146,10 @@ export function FirebaseProvider({ children }) {
 
   const logout = useCallback(async () => {
     const client = getFirebaseClient();
+    const activeUser = client?.auth?.currentUser || user;
+    clearUserSessionState(activeUser);
     if (client) await signOut(client.auth);
-  }, []);
+  }, [user]);
 
   const resetPassword = useCallback(async (email) => {
     const client = getFirebaseClient();

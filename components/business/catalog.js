@@ -18,7 +18,7 @@ import {
   UploadCloud,
   UsersRound
 } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, Tabs } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, TabPanel, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { formatCurrency } from "@/lib/format";
 import { removeProduct, saveProduct, uploadFile } from "@/lib/firebase-services";
@@ -33,7 +33,13 @@ import { useBusinessWorkspace } from "@/components/business/business-context";
 import { BusinessSwitcher, ConfirmDialog, FieldLabel, FullScreenTask, fieldClass, selectClass, textAreaClass } from "@/components/business/shared";
 
 function productPrice(product) {
-  return Number(product.price ?? product.prices?.[product.currency || "USD"] ?? 0);
+  const value = Number(product.price ?? product.prices?.[product.currency || "USD"]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function priceLabel(product) {
+  const value = productPrice(product);
+  return value ? formatCurrency(value, product.currency || "USD") : "Price required";
 }
 
 function dateTimeValue(value) {
@@ -283,7 +289,7 @@ function MobileOfferingCard({ item, archetype, isInventory, isPickup, busyId, on
   return <article className="rounded-xl border bg-white p-4">
     <div className="flex items-start gap-3">
       <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span>
-      <div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><h3 className="font-semibold">{item.name}</h3><p className="mt-1 text-xs text-secondary">{item.category || "General"}</p></div><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></div><p className="mt-3 text-lg font-semibold">{productPrice(item) > 0 ? formatCurrency(productPrice(item), item.currency || "USD") : item.requiresBusinessReview ? "Confirm price" : "Free"}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div>
+      <div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><h3 className="font-semibold">{item.name}</h3><p className="mt-1 text-xs text-secondary">{item.category || "General"}</p></div><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></div><p className="mt-3 text-lg font-semibold">{priceLabel(item)}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div>
     </div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       {isInventory ? <label className="text-xs font-semibold text-secondary">Customer availability<select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => onAvailability(item, event.target.value)} disabled={busyId === item.id} className="mt-1 h-11 w-full rounded-lg border bg-white px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select></label> : <div><p className="text-xs font-semibold text-secondary">Customer availability</p><div className="mt-2">{item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</div></div>}
@@ -294,8 +300,9 @@ function MobileOfferingCard({ item, archetype, isInventory, isPickup, busyId, on
 }
 
 export function CatalogView() {
-  const { products, user, archetype, selectedBranchId } = useBusinessWorkspace();
+  const { products, user, archetype, selectedBranchId, selectedBusinessId } = useBusinessWorkspace();
   const { toast } = useToast();
+  const [catalogMode, setCatalogMode] = useState("quick");
   const [queryText, setQueryText] = useState("");
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
@@ -357,6 +364,27 @@ export function CatalogView() {
     }
   }
 
+  const missingPrice = scopedProducts.filter((item) => item.active !== false && !productPrice(item));
+  const draftItems = scopedProducts.filter((item) => item.active === false || item.published === false);
+  const importedItems = scopedProducts.filter((item) => item.source || item.importSource || item.templateId);
+
+  async function publishReadyItems() {
+    const ready = scopedProducts.filter((item) => item.active !== false && productPrice(item));
+    if (!ready.length) {
+      toast("Add a valid price and make at least one item visible before publishing.", { type: "error", title: "Nothing is ready" });
+      return;
+    }
+    setBusyId("publish");
+    try {
+      await Promise.all(ready.map((item) => saveProduct({ ...item, published: true, publishedAt: new Date().toISOString() }, selectedBusinessId, user)));
+      toast(`${ready.length} ${ready.length === 1 ? archetype.nouns.item : archetype.nouns.items} published for customer preview.`, { title: "Catalogue published" });
+    } catch (error) {
+      toast(error.message, { type: "error", title: "Could not publish" });
+    } finally {
+      setBusyId("");
+    }
+  }
+
   function openOffering(item = null) {
     setEditing(item);
     setProductOpen(true);
@@ -372,15 +400,48 @@ export function CatalogView() {
     ] : [])
   ];
 
+  const catalogModes = [
+    { value: "quick", label: "Quick updates" },
+    { value: "manage", label: "Catalogue manager" },
+    { value: "import", label: `Import review (${importedItems.length})` },
+    { value: "publish", label: `Publishing (${draftItems.length})` }
+  ];
+
   return <div className="space-y-6">
     <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.catalog} description={`Create the ${archetype.nouns.items} customers can understand and act on at the selected ${archetype.nouns.branch}.`} actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><FileSpreadsheet className="h-4 w-4" />Quick add</Button><Button onClick={() => openOffering()}><Plus className="h-4 w-4" />Add {archetype.nouns.item}</Button></div>} /><BusinessSwitcher /></div>
 
 
-    <Card className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder={`Search ${archetype.nouns.items}, category, or code`} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-2xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import CSV</Button></div><div className="mt-4"><Tabs value={status} onChange={setStatus} tabs={tabs} /></div></Card>
+    <Tabs idPrefix="catalog-mode" value={catalogMode} onChange={setCatalogMode} tabs={catalogModes} />
 
-    <SectionCard>
-      {visible.length ? <><div className="space-y-3 md:hidden">{visible.map((item) => <MobileOfferingCard key={item.id} item={item} archetype={archetype} isInventory={isInventory} isPickup={isPickup} busyId={busyId} onAvailability={availability} onDuplicate={duplicate} onEdit={openOffering} onDelete={setRemoveTarget} />)}</div><div className="hidden overflow-x-auto md:block">      <table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{productPrice(item) > 0 ? formatCurrency(productPrice(item), item.currency || "USD") : item.requiresBusinessReview ? "Confirm price" : "Free"}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-white px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div></> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><Plus className="h-4 w-4" />Quick add</Button></div>} />}
-    </SectionCard>
+    <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="quick">
+      <Card variant="bordered" className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder={`Search ${archetype.nouns.items}, category, or code`} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div className="mt-4"><Tabs idPrefix="catalog-status-quick" value={status} onChange={setStatus} tabs={tabs} /></div></Card>
+      <div className="mt-5"><SectionCard>
+      {visible.length ? <><div className="space-y-3 md:hidden">{visible.map((item) => <MobileOfferingCard key={item.id} item={item} archetype={archetype} isInventory={isInventory} isPickup={isPickup} busyId={busyId} onAvailability={availability} onDuplicate={duplicate} onEdit={openOffering} onDelete={setRemoveTarget} />)}</div><div className="hidden overflow-x-auto md:block">      <table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{priceLabel(item)}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-white px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div></> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><Plus className="h-4 w-4" />Quick add</Button></div>} />}
+    </SectionCard></div>
+    </TabPanel>
+
+    <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="manage">
+      <Card variant="bordered" className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder={`Search ${archetype.nouns.items}, category, or code`} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import CSV</Button></div><div className="mt-4"><Tabs idPrefix="catalog-status-manage" value={status} onChange={setStatus} tabs={tabs} /></div></Card>
+      <div className="mt-5"><SectionCard>
+      {visible.length ? <><div className="space-y-3 md:hidden">{visible.map((item) => <MobileOfferingCard key={item.id} item={item} archetype={archetype} isInventory={isInventory} isPickup={isPickup} busyId={busyId} onAvailability={availability} onDuplicate={duplicate} onEdit={openOffering} onDelete={setRemoveTarget} />)}</div><div className="hidden overflow-x-auto md:block">      <table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{priceLabel(item)}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-white px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div></> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><Plus className="h-4 w-4" />Quick add</Button></div>} />}
+    </SectionCard></div>
+    </TabPanel>
+
+    <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="import">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Bring in a starter or CSV</h2><p className="mt-2 text-sm leading-6 text-secondary">Imported items stay hidden until names, prices, images and location availability have been reviewed.</p><div className="mt-5 flex flex-wrap gap-2"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use starter</Button><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import CSV</Button></div></Card>
+        <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Review queue</h2><p className="mt-2 text-sm leading-6 text-secondary">{importedItems.length ? `${importedItems.length} imported item${importedItems.length === 1 ? "" : "s"} can be reviewed below.` : "No imported items are waiting for review."}</p></Card>
+      </div>
+      <div className="mt-5 space-y-3">{importedItems.length ? importedItems.map((item) => <Card key={item.id} variant="bordered" className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="font-semibold">{item.name}</p><p className="mt-1 text-sm text-secondary">{item.category || "General"} · {priceLabel(item)} · {item.active === false ? "Hidden draft" : "Visible"}</p></div><Button variant="outline" onClick={() => openOffering(item)}><Edit3 className="h-4 w-4" />Review item</Button></Card>) : <EmptyState icon={UploadCloud} title="No imported items" description="Use a starter or CSV when you have a catalogue list to review." />}</div>
+    </TabPanel>
+
+    <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="publish">
+      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+        <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Customer publishing</h2><p className="mt-2 text-sm leading-6 text-secondary">Only visible items with a valid price can be published. Hidden drafts remain private until reviewed.</p>{missingPrice.length > 0 && <div className="mt-4 rounded-xl border border-warning/30 bg-warning-soft p-4"><p className="font-semibold text-warning">{missingPrice.length} visible item{missingPrice.length === 1 ? " needs" : "s need"} a price</p><p className="mt-1 text-sm text-secondary">Resolve every missing price before those items can appear to customers.</p></div>}<div className="mt-5 flex flex-wrap gap-2"><Button onClick={publishReadyItems} loading={busyId === "publish"} disabled={!scopedProducts.some((item) => item.active !== false && productPrice(item))}><Check className="h-4 w-4" />Publish ready items</Button><Button variant="outline" href="/marketplace">Customer preview</Button></div></Card>
+        <Card variant="bordered" className="p-5"><p className="text-sm text-secondary">Visible and priced</p><p className="mt-2 text-3xl font-semibold">{scopedProducts.filter((item) => item.active !== false && productPrice(item)).length}</p><p className="mt-5 text-sm text-secondary">Hidden drafts</p><p className="mt-2 text-2xl font-semibold">{draftItems.length}</p></Card>
+      </div>
+      <div className="mt-5 space-y-3">{scopedProducts.map((item) => <Card key={item.id} variant="bordered" className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{item.name}</p><StatusBadge status={item.active === false ? "Hidden" : item.published ? "Published" : "Ready for review"} /></div><p className="mt-1 text-sm text-secondary">{priceLabel(item)} · {(item.branchIds || []).length ? `${item.branchIds.length} location${item.branchIds.length === 1 ? "" : "s"}` : "All locations"}</p></div><Button variant="outline" onClick={() => openOffering(item)}><Edit3 className="h-4 w-4" />Review</Button></Card>)}</div>
+    </TabPanel>
 
     <OfferingModal product={editing} open={productOpen} onClose={() => setProductOpen(false)} />
     <QuickAddModal open={quickOpen} onClose={() => setQuickOpen(false)} />

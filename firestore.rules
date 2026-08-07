@@ -79,7 +79,8 @@ service cloud.firestore {
       allow create: if self(uid) && request.resource.data.roles == ["customer"];
       allow read: if self(uid) || admin();
       allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        "displayName", "phoneNumber", "photoURL", "providers", "locale", "lastSeenAt", "updatedAt", "email"
+        "displayName", "phoneNumber", "phone", "photoURL", "providers", "locale", "lastSeenAt", "updatedAt", "email",
+        "preferences", "preferredContact", "pickupContactName", "pickupContactPhone", "accessibilityPreferences"
       ]);
       allow update, delete: if admin();
     }
@@ -141,6 +142,13 @@ service cloud.firestore {
       allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || admin() || businessOwner(resource.data.businessId));
       allow update: if admin();
       allow delete: if superAdmin();
+    }
+
+    match /businessClaimDrafts/{draftId} {
+      allow create: if activeAccount() && request.resource.data.applicantId == request.auth.uid;
+      allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || admin());
+      allow update: if activeAccount() && resource.data.applicantId == request.auth.uid && request.resource.data.applicantId == request.auth.uid;
+      allow delete: if activeAccount() && (resource.data.applicantId == request.auth.uid || admin());
     }
 
     match /products/{productId} {
@@ -212,7 +220,10 @@ service cloud.firestore {
       allow create: if activeAccount() && request.resource.data.requesterId == request.auth.uid;
       allow read: if conversationParticipant(conversationId);
       allow update: if conversationParticipant(conversationId) && (
-        admin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastMessage", "lastMessageAt", "updatedAt", "status"])
+        admin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "lastMessage", "lastMessageAt", "updatedAt", "status", "closedAt", "closedBy",
+          "reopenedAt", "reopenedBy", "satisfaction", "satisfactionAt", "satisfactionBy"
+        ])
       );
       allow delete: if superAdmin();
     }
@@ -327,7 +338,16 @@ service cloud.firestore {
 
     match /staffTrainingAssignments/{assignmentId} {
       allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
-      allow create, update, delete: if peopleAdmin();
+      allow create: if peopleAdmin() || (staffMember() && request.resource.data.userId == request.auth.uid &&
+        request.resource.data.diff({}).affectedKeys().hasOnly([
+          "userId", "employeeName", "title", "description", "status", "progress", "assessmentScore",
+          "completedAt", "renewalDate", "updatedAt", "createdAt", "assignedBy"
+        ]));
+      allow update: if peopleAdmin() || (staffMember() && resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status", "progress", "assessmentScore", "completedAt", "renewalDate", "updatedAt"
+        ]));
+      allow delete: if peopleAdmin();
     }
 
     match /staffPerformance/{recordId} {

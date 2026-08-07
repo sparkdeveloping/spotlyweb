@@ -1,8 +1,10 @@
 import "./globals.css";
 import { AppProviders } from "@/components/providers";
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyweb.vercel.app";
+
 export const metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
+  metadataBase: new URL(appUrl),
   title: {
     default: "Spotly",
     template: "%s · Spotly"
@@ -15,6 +17,15 @@ export const metadata = {
     apple: "/apple-touch-icon.png"
   },
   openGraph: {
+    title: "Spotly",
+    description: "Find nearby businesses, order ahead, and collect when it is ready.",
+    url: appUrl,
+    siteName: "Spotly",
+    images: ["/icons/spotly-512.png"],
+    type: "website"
+  },
+  twitter: {
+    card: "summary_large_image",
     title: "Spotly",
     description: "Find nearby businesses, order ahead, and collect when it is ready.",
     images: ["/icons/spotly-512.png"]

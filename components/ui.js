@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { cloneElement, isValidElement, useEffect, useId, useRef } from "react";
+import { cloneElement, isValidElement, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronRight, LoaderCircle, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function Button({ children, variant = "primary", size = "md", className, loading = false, disabled, type = "button", asChild = false, ...props }) {
   const variants = {
     primary: "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] shadow-sm",
     secondary: "bg-[var(--accent-soft)] text-[var(--accent-strong)] dark:text-[var(--accent)] hover:brightness-[0.97] border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))]",
-    outline: "surface hover:bg-[var(--surface-2)]",
+    outline: "border bg-[var(--surface)] hover:bg-[var(--surface-2)]",
     ghost: "hover:bg-[var(--surface-2)]",
     danger: "bg-danger text-white hover:bg-red-700",
     success: "bg-success text-white hover:bg-green-700"
@@ -22,7 +25,7 @@ export function Button({ children, variant = "primary", size = "md", className, 
     icon: "h-11 w-11 rounded-lg"
   };
   const isDisabled = Boolean(disabled || loading);
-  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50", variants[variant], sizes[size], className);
+  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 disabled:cursor-not-allowed disabled:opacity-50", variants[variant], sizes[size], className);
 
   if (asChild && isValidElement(children)) {
     const childProps = {
@@ -51,13 +54,20 @@ export function Button({ children, variant = "primary", size = "md", className, 
   );
 }
 
-export function Card({ children, className, elevated = false, ...props }) {
-  return <div className={cn("surface rounded-xl", elevated ? "shadow-elevated" : "shadow-card", className)} {...props}>{children}</div>;
+const cardVariants = {
+  plain: "bg-[var(--surface)]",
+  bordered: "surface",
+  raised: "surface shadow-elevated",
+  interactive: "surface transition hover:border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] hover:bg-[var(--surface-2)]"
+};
+
+export function Card({ children, className, elevated = false, variant = elevated ? "raised" : "bordered", ...props }) {
+  return <div className={cn("rounded-xl", cardVariants[variant] || cardVariants.bordered, className)} {...props}>{children}</div>;
 }
 
-export function SectionCard({ title, description, action, children, className }) {
+export function SectionCard({ title, description, action, children, className, variant = "bordered" }) {
   return (
-    <Card className={className}>
+    <Card className={className} variant={variant}>
       {(title || action) && (
         <div className="flex items-start justify-between gap-4 border-b px-4 py-4 sm:px-5">
           <div>
@@ -87,7 +97,7 @@ export function PageHeader({ eyebrow, title, description, actions, compact = fal
 
 export function MetricCard({ label, value, delta, hint, icon: Icon, tone = "default", onClick }) {
   const toneClass = tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning" : tone === "success" ? "text-success" : "text-[var(--accent)]";
-  const className = cn("surface min-w-0 rounded-xl p-4 text-left shadow-card", onClick && "cursor-pointer hover:bg-[var(--surface-2)]");
+  const className = cn("surface min-w-0 rounded-xl p-4 text-left", onClick && "cursor-pointer transition hover:bg-[var(--surface-2)]");
   const content = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -134,7 +144,7 @@ export function StatusBadge({ status }) {
   return <Badge tone={statusTone(status)} dot>{status}</Badge>;
 }
 
-export function SearchField({ value, onChange, placeholder = "Search", className, onFocus, shortcut, label = "Search" }) {
+export function SearchField({ value, onChange, placeholder = "Search", className, onFocus, onKeyDown, shortcut, label = "Search", inputProps = {} }) {
   return (
     <label className={cn("surface flex h-[50px] items-center gap-3 rounded-lg px-4 transition focus-within:ring-2 focus-within:ring-[var(--accent)]/30", className)}>
       <span className="sr-only">{label}</span>
@@ -144,8 +154,10 @@ export function SearchField({ value, onChange, placeholder = "Search", className
         value={value}
         onChange={(event) => onChange?.(event.target.value)}
         onFocus={onFocus}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-tertiary"
+        {...inputProps}
       />
       {value ? (
         <button type="button" aria-label="Clear search" className="rounded-lg p-1 text-tertiary hover:bg-[var(--surface-2)]" onClick={() => onChange?.("")}><X className="h-4 w-4" /></button>
@@ -154,7 +166,13 @@ export function SearchField({ value, onChange, placeholder = "Search", className
   );
 }
 
-export function Tabs({ tabs, value, onChange, className, label = "Sections" }) {
+function safeId(value) {
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
+export function Tabs({ tabs, value, onChange, className, label = "Sections", idPrefix, controlsPanels = false }) {
+  const generated = useId();
+  const prefix = safeId(idPrefix || `tabs-${generated}`);
   const tabRefs = useRef([]);
   function onKeyDown(event, index) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -169,25 +187,46 @@ export function Tabs({ tabs, value, onChange, className, label = "Sections" }) {
   }
   return (
     <div role="tablist" aria-label={label} className={cn("inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-[var(--surface-2)] p-1", className)}>
-      {tabs.map((tab, index) => (
-        <button
-          ref={(node) => { tabRefs.current[index] = node; }}
-          key={tab.value}
-          id={`tab-${tab.value}`}
-          type="button"
-          role="tab"
-          aria-selected={value === tab.value}
-          aria-controls={`panel-${tab.value}`}
-          tabIndex={value === tab.value ? 0 : -1}
-          onKeyDown={(event) => onKeyDown(event, index)}
-          onClick={() => onChange(tab.value)}
-          className={cn("relative h-10 whitespace-nowrap rounded-lg px-4 text-sm font-semibold text-secondary transition", value === tab.value && "text-[var(--accent-strong)] dark:text-[var(--accent)]")}
-        >
-          {value === tab.value && <motion.span layoutId="active-tab" className="absolute inset-0 rounded-lg bg-[var(--surface)] shadow-sm" transition={{ type: "spring", bounce: 0.12, duration: 0.4 }} />}
-          <span className="relative">{tab.label}</span>
-        </button>
-      ))}
+      {tabs.map((tab, index) => {
+        const tabId = `${prefix}-tab-${safeId(tab.value)}`;
+        const panelId = `${prefix}-panel-${safeId(tab.value)}`;
+        return (
+          <button
+            ref={(node) => { tabRefs.current[index] = node; }}
+            key={tab.value}
+            id={tabId}
+            type="button"
+            role="tab"
+            aria-selected={value === tab.value}
+            aria-controls={controlsPanels ? panelId : undefined}
+            tabIndex={value === tab.value ? 0 : -1}
+            onKeyDown={(event) => onKeyDown(event, index)}
+            onClick={() => onChange(tab.value)}
+            className={cn("relative h-10 whitespace-nowrap rounded-lg px-4 text-sm font-semibold text-secondary transition", value === tab.value && "text-[var(--accent-strong)] dark:text-[var(--accent)]")}
+          >
+            {value === tab.value && <motion.span layoutId={`${prefix}-active-tab`} className="absolute inset-0 rounded-lg bg-[var(--surface)] shadow-sm" transition={{ type: "spring", bounce: 0.12, duration: 0.4 }} />}
+            <span className="relative">{tab.label}</span>
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+export function TabPanel({ idPrefix, value, active, children, className, keepMounted = false }) {
+  if (!active && !keepMounted) return null;
+  const prefix = safeId(idPrefix);
+  return (
+    <section
+      id={`${prefix}-panel-${safeId(value)}`}
+      role="tabpanel"
+      aria-labelledby={`${prefix}-tab-${safeId(value)}`}
+      hidden={!active}
+      tabIndex={0}
+      className={className}
+    >
+      {children}
+    </section>
   );
 }
 
@@ -203,69 +242,114 @@ export function Select({ value, onChange, options, className, ariaLabel = "Selec
   );
 }
 
-export function Modal({ open, onClose, title, description, children, size = "md", closeOnBackdrop = true }) {
+function useOverlayPortal(open, onClose) {
+  const [root, setRoot] = useState(null);
+  const dialogRef = useRef(null);
+  const previousFocus = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const node = document.createElement("div");
+    node.dataset.spotlyOverlayRoot = "true";
+    document.body.appendChild(node);
+    setRoot(node);
+    return () => {
+      setRoot(null);
+      node.remove();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !root) return undefined;
+    previousFocus.current = document.activeElement;
+    const siblings = [...document.body.children].filter((item) => item !== root);
+    const previous = siblings.map((item) => ({ item, inert: item.inert, ariaHidden: item.getAttribute("aria-hidden") }));
+    siblings.forEach((item) => { item.inert = true; item.setAttribute("aria-hidden", "true"); });
+    const priorOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => {
+      const target = dialogRef.current?.querySelector("[data-autofocus], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href]");
+      (target || dialogRef.current)?.focus?.();
+    });
+    function onKeyDown(event) {
+      if (event.key === "Escape") { event.preventDefault(); onClose?.(); return; }
+      if (event.key !== "Tab") return;
+      const nodes = [...(dialogRef.current?.querySelectorAll(FOCUSABLE) || [])].filter((node) => !node.hasAttribute("hidden"));
+      if (!nodes.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (!dialogRef.current?.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = priorOverflow;
+      previous.forEach(({ item, inert, ariaHidden }) => {
+        item.inert = inert;
+        if (ariaHidden === null) item.removeAttribute("aria-hidden"); else item.setAttribute("aria-hidden", ariaHidden);
+      });
+      previousFocus.current?.focus?.();
+    };
+  }, [open, root, onClose]);
+  return { root, dialogRef };
+}
+
+export function Overlay({ open, onClose, title, description, children, mode = "modal", size = "md", closeOnBackdrop = true, className, hideHeader = false, label }) {
   const widths = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl" };
   const titleId = useId();
   const descriptionId = useId();
-  const dialogRef = useRef(null);
-  const previousFocus = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    previousFocus.current = document.activeElement;
-    const dialog = dialogRef.current;
-    const focusable = dialog?.querySelector('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
-    requestAnimationFrame(() => focusable?.focus());
-    const priorOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    function onKeyDown(event) {
-      if (event.key === "Escape") onClose?.();
-      if (event.key !== "Tab" || !dialog) return;
-      const nodes = [...dialog.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
-      if (!nodes.length) return;
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = priorOverflow;
-      previousFocus.current?.focus?.();
-    };
-  }, [open, onClose]);
-
-  return (
+  const { root, dialogRef } = useOverlayPortal(open, onClose);
+  const panelClass = mode === "drawer"
+    ? "inset-y-0 right-0 h-full w-full max-w-md border-y-0 border-r-0"
+    : mode === "sheet"
+      ? "inset-x-0 bottom-0 max-h-[92dvh] w-full rounded-t-[20px]"
+      : mode === "full"
+        ? "inset-0 h-full w-full max-h-none rounded-none border-0"
+        : cn("bottom-0 left-1/2 w-full -translate-x-1/2 rounded-t-[20px] sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-[20px]", widths[size]);
+  const initial = mode === "drawer" ? { x: "100%" } : mode === "sheet" ? { y: "100%" } : mode === "full" ? { opacity: 0 } : { y: 30, opacity: 0, scale: 0.99 };
+  const animate = mode === "drawer" ? { x: 0 } : mode === "sheet" ? { y: 0 } : mode === "full" ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 };
+  const exit = initial;
+  if (!root) return null;
+  return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <motion.button aria-label="Close dialog" className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={closeOnBackdrop ? onClose : undefined} />
+        <motion.div className="fixed inset-0 z-[100]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <button type="button" aria-label={`Close ${label || title || "dialog"}`} className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" onClick={closeOnBackdrop ? onClose : undefined} />
           <motion.div
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
-            aria-labelledby={titleId}
+            aria-labelledby={title ? titleId : undefined}
+            aria-label={!title ? label : undefined}
             aria-describedby={description ? descriptionId : undefined}
-            initial={{ y: 36, opacity: 0, scale: 0.99 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 24, opacity: 0, scale: 0.99 }}
-            transition={{ type: "spring", stiffness: 330, damping: 30 }}
-            className={cn("surface relative z-10 flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-[20px] shadow-elevated sm:rounded-[20px]", widths[size])}
+            tabIndex={-1}
+            initial={initial}
+            animate={animate}
+            exit={exit}
+            transition={{ type: "spring", stiffness: 330, damping: 32 }}
+            className={cn("surface absolute z-10 flex max-h-[94dvh] flex-col overflow-hidden shadow-elevated", panelClass, className)}
           >
-            <div className="flex min-h-16 items-center justify-between gap-4 border-b px-5">
-              <div>
-                <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
-                {description && <p id={descriptionId} className="mt-1 text-sm text-secondary">{description}</p>}
+            {!hideHeader && (
+              <div className="flex min-h-16 items-center justify-between gap-4 border-b px-5">
+                <div>
+                  {title && <h2 id={titleId} className="text-lg font-semibold">{title}</h2>}
+                  {description && <p id={descriptionId} className="mt-1 text-sm text-secondary">{description}</p>}
+                </div>
+                <button type="button" aria-label="Close" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button>
               </div>
-              <button aria-label="Close" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="scrollbar-thin overflow-y-auto">{children}</div>
+            )}
+            <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    root
   );
+}
+
+export function Modal({ open, onClose, title, description, children, size = "md", closeOnBackdrop = true }) {
+  return <Overlay open={open} onClose={onClose} title={title} description={description} size={size} closeOnBackdrop={closeOnBackdrop}>{children}</Overlay>;
 }
 
 export function EmptyState({ icon: Icon, title, description, action, className }) {

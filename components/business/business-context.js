@@ -22,6 +22,7 @@ import {
 } from "@/lib/business-services";
 import { defaultOperationalSettings } from "@/data/business-config";
 import { businessArchetype, inferBusinessType } from "@/data/business-archetypes";
+import { readState, writeState } from "@/lib/browser-state";
 
 const BusinessContext = createContext(null);
 
@@ -80,13 +81,13 @@ export function BusinessDataProvider({ children }) {
       if (!active) return;
       const choices = items.filter((item) => item && item.status !== "archived");
       setBusinessChoices(choices);
-      const stored = typeof window !== "undefined" ? window.localStorage.getItem("spotly-business-id") : "";
+      const stored = readState("spotly-business-id", user, "", "local");
       const availableIds = choices.map((item) => item.id);
       const next = availableIds.includes(stored) ? stored : availableIds[0] || businessIds[0];
       setSelectedBusinessId((current) => availableIds.includes(current) ? current : next);
     });
     return () => { active = false; };
-  }, [businessIds, businessIdsKey]);
+  }, [businessIds, businessIdsKey, user]);
 
   const membership = useMemo(() => memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId)) || null, [memberships, selectedBusinessId]);
   const branches = useMemo(() => {
@@ -116,7 +117,7 @@ export function BusinessDataProvider({ children }) {
 
     setLoading(true);
     setError("");
-    if (typeof window !== "undefined") window.localStorage.setItem("spotly-business-id", selectedBusinessId);
+    writeState("spotly-business-id", user, selectedBusinessId, "local");
     const onError = (reason) => {
       setError(reason?.message || "Some business information could not be loaded.");
       setLoading(false);
@@ -144,7 +145,7 @@ export function BusinessDataProvider({ children }) {
       subscribeSupportConversations(setSupport, { businessId: selectedBusinessId, onError })
     ];
     return () => cleanups.forEach((cleanup) => cleanup?.());
-  }, [selectedBusinessId]);
+  }, [selectedBusinessId, user]);
 
   useEffect(() => {
     if (!branches.length) {
@@ -152,16 +153,14 @@ export function BusinessDataProvider({ children }) {
       return;
     }
     const storageKey = `spotly-branch-id:${selectedBusinessId}`;
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : "";
+    const stored = readState(storageKey, user, "", "local");
     const next = branches.some((branch) => branch.id === stored) ? stored : branches[0].id;
     setSelectedBranchId((current) => branches.some((branch) => branch.id === current) ? current : next);
-  }, [branches, selectedBusinessId]);
+  }, [branches, selectedBusinessId, user]);
 
   useEffect(() => {
-    if (selectedBusinessId && selectedBranchId && typeof window !== "undefined") {
-      window.localStorage.setItem(`spotly-branch-id:${selectedBusinessId}`, selectedBranchId);
-    }
-  }, [selectedBusinessId, selectedBranchId]);
+    if (selectedBusinessId && selectedBranchId) writeState(`spotly-branch-id:${selectedBusinessId}`, user, selectedBranchId, "local");
+  }, [selectedBusinessId, selectedBranchId, user]);
 
   useEffect(() => subscribeCatalogTemplates(setTemplates, () => {}), []);
 

@@ -1,97 +1,114 @@
 # Vercel deployment
 
-## 1. Prepare the repository
+## Required runtime
+
+- Node.js 22.x
+- npm 11 or later
+
+Use a committed lock file and install with:
 
 ```bash
-npm install
+npm ci
+npm test
 npm run check:js
 npm run lint
 npm run build
 ```
 
-Commit the generated `package-lock.json` after a successful local install so Vercel receives a reproducible dependency graph.
+Do not promote a deployment when any command fails.
 
-## 2. Import into Vercel
+## Import into Vercel
 
 - Framework preset: Next.js
 - Node.js: 22.x
-- Install command: `npm install`
+- Install command: `npm ci`
 - Build command: `npm run build`
 - Output: automatic Next.js output
 
-`vercel.json` is included with server-route duration settings.
+## Release metadata
 
-## 3. Add environment variables
+Set for Preview and Production:
 
-Add all public Firebase values and required server credentials from `.env.example`.
+```env
+NEXT_PUBLIC_APP_URL=https://<deployment-domain>
+NEXT_PUBLIC_APP_ENV=preview
+NEXT_PUBLIC_APP_VERSION=5.1.0-depth-pass
+NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
+NEXT_PUBLIC_BUILD_DATE=<ISO-8601 timestamp>
+```
 
-Configure values separately for Development, Preview, and Production. At minimum:
+Use `NEXT_PUBLIC_APP_ENV=production` only after the exact Preview build has passed acceptance testing.
 
-- `NEXT_PUBLIC_APP_URL`
-- Firebase Web variables
-- Firebase Admin variables
-- `BOOTSTRAP_ADMIN_EMAILS` during first setup
-- Paynow values when payments are tested
-- Resend values when transactional email is tested
-- VAPID and App Check values when notifications/security are tested
+## Environment variables
 
-Never add private keys or payment secrets to any `NEXT_PUBLIC_` variable or Firestore platform settings.
+Configure the Firebase Web and Firebase Admin variables from `.env.example` using Vercel secret storage. Add Paynow, Resend, push and lead-webhook values only when those integrations are actively tested.
 
-## 4. Firebase domain authorization
+Never put a private key, Paynow secret, service-account credential or server token in a `NEXT_PUBLIC_` variable.
 
-After the first Preview deployment, add the Preview/Production domains to Firebase Authentication authorized domains. Configure provider-specific redirect URLs for Google and Apple.
+## Firebase preparation
 
-## 5. Preview verification
+1. Add Preview and Production domains to Firebase Authentication authorized domains.
+2. Configure provider redirect URLs.
+3. Deploy required composite indexes.
+4. Validate Firestore and Storage rules in the Emulator Suite.
+5. Deploy rules only after the emulator test matrix passes.
+6. Confirm Storage CORS and upload policies for claim and support attachments.
 
-Verify:
+## Preview smoke test
+
+Test the exact build ID shown in Account/Admin:
 
 - `/`
 - `/login`
-- `/claim`
-- `/support`
 - `/marketplace`
+- `/claim`
+- `/claim/drafts`
+- one `/claim/status/[claimId]`
 - `/business`
+- `/driver` as training-only
+- `/staff`
 - `/admin`
-- `/devstatus`
+- one `/admin/queues/[queue]`
+- `/support`
 - `/account`
 - `/payment/return`
 
-Then test:
+Verify:
 
-- Email/password registration, verification, login, reset, and logout
-- Anonymous support session upgraded to email/password
-- Google, Apple, and phone linking
-- First-admin bootstrap
-- Seed import
-- Business claim and evidence upload
-- Branch/product/staff/finance saves
-- Customer cart and server-created order
-- Paynow sandbox initiation, return, result callback, and polling
-- Push token registration and admin delivery
-- Resend transactional email
-- Support chat and audited support view
-- Firestore/Storage permission-denied behavior for unauthorized roles
+- Waitlist submit, edit and reset
+- Keyboard business finder
+- Customer location changes results
+- User/session-scoped cart and logout cleanup
+- Branch-derived pickup slots and capacity rejection
+- Order idempotency
+- Claim save/resume and evidence persistence
+- Mobile merchant order cards
+- Driver training reset and scenario selection
+- Staff task deep link and learning progress
+- Admin exact queue filters, assignment and decisions
+- Support attachments, close/reopen and satisfaction
+- Keyboard focus for all overlays
+- Browser console and network failures
+- 320px reflow and zoom
 
-## 6. Production promotion
+## Production promotion
 
-Before Production:
+Before promotion:
 
-- Use tested production rules
-- Remove bootstrap variables
-- Confirm all credentials use Production scope
-- Set the final `NEXT_PUBLIC_APP_URL`
-- Confirm custom domain and HTTPS
-- Set error monitoring and uptime checks
-- Verify backups/export procedure
-- Approve legal content and support details
-- Complete controlled pilot sign-off
+1. Confirm the Preview commit SHA matches the candidate.
+2. Configure approved launch content and businesses.
+3. Confirm payment methods and currencies per location.
+4. Complete Paynow sandbox and reconciliation tests.
+5. Configure email/push notification delivery and preference enforcement.
+6. Staff support and escalation ownership.
+7. Approve legal content.
+8. Test cancellation/refund reservation release.
+9. Confirm backups, monitoring and rollback.
 
-## 7. Rollback
+## Rollback
 
-Keep the prior successful Vercel deployment available. If a release affects authentication, rules, ordering, payments, or business access:
-
-1. Pause the affected feature through admin settings where possible.
+1. Pause ordering or publication through platform configuration where possible.
 2. Promote the last known-good Vercel deployment.
-3. Restore the previous Firestore/Storage rules when required.
-4. Record the incident and affected records.
-5. Reconcile payment/provider state before reopening commerce.
+3. Restore the matching rules/indexes when required.
+4. Reconcile orders, reservations and provider payments created during the incident window.
+5. Record the incident, affected records, remediation and re-open decision.

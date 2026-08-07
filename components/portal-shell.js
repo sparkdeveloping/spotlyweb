@@ -29,9 +29,10 @@ import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 import { useTheme } from "@/components/providers";
 import { useAuth } from "@/components/firebase-provider";
-import { Badge } from "@/components/ui";
+import { Badge, Overlay } from "@/components/ui";
 import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
 import { adminSectionsForProfile } from "@/lib/admin-access";
+import { workspaceAccess, WORKSPACE_SETTINGS_ROUTES } from "@/lib/workspaces";
 
 
 function useOutsideClick(ref, callback) {
@@ -44,25 +45,19 @@ function useOutsideClick(ref, callback) {
   }, [callback, ref]);
 }
 
-function accessiblePortals(profile) {
-  const roles = new Set(profile?.roles || []);
-  const items = [portals.customer];
-  const hasBusiness = profile?.businessIds?.length || profile?.organizationIds?.length || [...roles].some((role) => /business|owner|branch|merchant|catalog|finance/.test(role));
-  const hasDriver = [...roles].some((role) => /driver|fleet|dispatch/.test(role));
-  const hasStaff = [...roles].some((role) => /staff|support|people|verification|operations|finance|content|manager|admin/.test(role));
-  const hasAdmin = [...roles].some((role) => /admin|super_admin|platform/.test(role));
-  if (hasBusiness) items.push(portals.business);
-  if (hasDriver) items.push(portals.driver);
-  if (hasStaff) items.push(portals.staff);
-  if (hasAdmin) items.push(portals.admin);
-  return items;
+function accessiblePortals(profile, memberships) {
+  const access = workspaceAccess({ profile, memberships });
+  return Object.entries(access)
+    .filter(([, allowed]) => allowed)
+    .map(([id]) => portals[id])
+    .filter(Boolean);
 }
 
 function PortalSwitcher({ portal, compact = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const { profile } = useAuth();
-  const available = useMemo(() => accessiblePortals(profile), [profile]);
+  const { profile, memberships } = useAuth();
+  const available = useMemo(() => accessiblePortals(profile, memberships), [profile, memberships]);
   useOutsideClick(ref, () => setOpen(false));
 
   return (
@@ -171,92 +166,53 @@ function NotificationPanel({ items, open, onClose, onRead, onReadAll }) {
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.button aria-label="Close notifications" className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[1px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-          <motion.aside initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 340, damping: 34 }} className="surface fixed inset-y-0 right-0 z-[60] flex w-full max-w-md flex-col border-y-0 border-r-0 shadow-elevated">
-            <div className="flex h-20 items-center justify-between border-b px-5">
-              <div>
-                <h2 className="text-lg font-semibold">Notifications</h2>
-                <p className="text-sm text-secondary">{unread ? `${unread} unread ${unread === 1 ? "update" : "updates"}` : "You’re all caught up"}</p>
-              </div>
-              <button aria-label="Close" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="flex items-center justify-between border-b px-5 py-3">
-              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-tertiary">Recent</span>
-              <button type="button" disabled={!unread} onClick={onReadAll} className="text-sm font-semibold text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40">Mark all read</button>
-            </div>
-            <div className="scrollbar-thin flex-1 overflow-y-auto p-3">
-              {items.length ? items.map((item) => (
-                <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-2xl p-3 text-left hover:bg-[var(--surface-2)]">
-                  <span className={cn("mt-2 h-2 w-2 shrink-0 rounded-full", !item.read ? "bg-[var(--accent)]" : "bg-transparent")} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold">{item.title || "Spotly update"}</span>
-                    <span className="mt-1 block text-sm leading-5 text-secondary">{item.body || item.message || "Open this update for more information."}</span>
-                    <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt)}</span>
-                  </span>
-                </button>
-              )) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
-            </div>
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
+    <Overlay open={open} onClose={onClose} title="Notifications" description={unread ? `${unread} unread ${unread === 1 ? "update" : "updates"}` : "You’re all caught up"} mode="drawer" label="Notifications">
+      <div className="flex items-center justify-between border-b px-5 py-3">
+        <span className="text-xs font-semibold tracking-[0.08em] text-tertiary">Recent</span>
+        <button type="button" disabled={!unread} onClick={onReadAll} className="text-sm font-semibold text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40">Mark all read</button>
+      </div>
+      <div className="p-3">
+        {items.length ? items.map((item) => (
+          <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-[var(--surface-2)]">
+            <span className={cn("mt-2 h-2 w-2 shrink-0 rounded-full", !item.read ? "bg-[var(--accent)]" : "bg-transparent")} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">{item.title || "Spotly update"}</span>
+              <span className="mt-1 block text-sm leading-5 text-secondary">{item.body || item.message || "Open this update for more information."}</span>
+              <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt)}</span>
+            </span>
+          </button>
+        )) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
+      </div>
+    </Overlay>
   );
 }
 
 function CommandPalette({ portal, open, onClose }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const commands = useMemo(() => portal.nav.map((item) => ({
-    label: item.label,
-    detail: `Open in ${portal.name}`,
-    href: item.href,
-    icon: item.icon
-  })), [portal]);
+  const commands = useMemo(() => portal.nav.map((item) => ({ label: item.label, detail: `Open in ${portal.name}`, href: item.href, icon: item.icon })), [portal]);
   const filtered = commands.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query.toLowerCase()));
 
-  function closePalette() {
-    setQuery("");
-    onClose();
-  }
-
-  function navigate(href) {
-    closePalette();
-    router.push(href);
-  }
+  function closePalette() { setQuery(""); onClose(); }
+  function navigate(href) { closePalette(); router.push(href); }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 px-4 pt-[10vh] backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={closePalette}>
-          <motion.div initial={{ opacity: 0, y: -16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }} className="surface w-full max-w-2xl overflow-hidden rounded-[24px] shadow-elevated" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center gap-3 border-b px-5">
-              <Search className="h-5 w-5 text-tertiary" />
-              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Go to a page in ${portal.name}…`} className="h-16 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-tertiary" />
-              <kbd className="rounded-lg border bg-[var(--surface-2)] px-2 py-1 text-xs text-tertiary">ESC</kbd>
-            </div>
-            <div className="max-h-[58vh] overflow-y-auto p-2">
-              {filtered.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button key={`${item.label}-${item.href}`} onClick={() => navigate(item.href)} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[var(--surface-2)]">
-                    {item.image ? <Image src={item.image} alt="" width={40} height={40} className="h-10 w-10 rounded-xl object-cover" /> : <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-5 w-5" /></span>}
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold">{item.label}</span>
-                      <span className="block truncate text-xs text-secondary">{item.detail}</span>
-                    </span>
-                    <Command className="h-4 w-4 text-tertiary" />
-                  </button>
-                );
-              })}
-              {!filtered.length && <p className="px-4 py-12 text-center text-sm text-secondary">No matching pages or actions.</p>}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <Overlay open={open} onClose={closePalette} title={`Go to a page in ${portal.name}`} description="Search this workspace’s available destinations." size="md" label="Workspace navigation">
+      <div className="flex items-center gap-3 border-b px-5">
+        <Search className="h-5 w-5 text-tertiary" />
+        <input data-autofocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Type a page name…" className="h-16 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-tertiary" />
+      </div>
+      <div className="max-h-[58vh] overflow-y-auto p-2">
+        {filtered.map((item) => { const Icon = item.icon; return (
+          <button key={`${item.label}-${item.href}`} onClick={() => navigate(item.href)} className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-[var(--surface-2)]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-5 w-5" /></span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="block truncate text-xs text-secondary">{item.detail}</span></span>
+            <Command className="h-4 w-4 text-tertiary" />
+          </button>
+        ); })}
+        {!filtered.length && <p className="px-4 py-12 text-center text-sm text-secondary">No matching pages.</p>}
+      </div>
+    </Overlay>
   );
 }
 
@@ -286,7 +242,7 @@ function UserMenu({ portal }) {
               <p className="mt-1 text-[11px] font-semibold capitalize text-tertiary">{role.replaceAll("_", " ")}</p>
             </div>
             <Link href="/account" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
-            <Link href={`${portal.href}${portal.id === "customer" ? "" : "/settings"}`} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>
+            {WORKSPACE_SETTINGS_ROUTES[portal.id] && <Link href={WORKSPACE_SETTINGS_ROUTES[portal.id]} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>}
             <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-red-50 dark:hover:bg-red-950/30"><LogOut className="h-4 w-4" /> Sign out</button>
           </motion.div>
         )}
@@ -335,21 +291,22 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = tr
   );
 }
 
-function MobileBottomNav({ portal, activeSection }) {
+function MobileBottomNav({ portal, activeSection, onOpenCommand }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const primary = portal.nav.slice(0, 4);
   const remaining = portal.nav.slice(4);
   return (
     <>
       <nav className="surface safe-bottom fixed inset-x-0 bottom-0 z-30 flex min-h-[70px] items-start justify-around border-x-0 border-b-0 px-2 pt-2 lg:hidden" aria-label="Mobile navigation">
-        {primary.map((item) => {
-          const Icon = item.icon;
-          const active = item.id === activeSection;
-          return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-white">{item.badge}</span> : null}</Link>;
-        })}
+        {primary.map((item) => { const Icon = item.icon; const active = item.id === activeSection; return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-white">{item.badge}</span> : null}</Link>; })}
         <button type="button" onClick={() => setMoreOpen(true)} className={cn("flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", remaining.some((item) => item.id === activeSection) ? "text-[var(--accent)]" : "text-tertiary")}><MoreHorizontal className="h-5 w-5" /><span>More</span></button>
       </nav>
-      <AnimatePresence>{moreOpen && <><motion.button aria-label="Close more navigation" className="fixed inset-0 z-40 bg-black/35 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMoreOpen(false)} /><motion.div role="dialog" aria-modal="true" aria-label="More navigation" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} className="surface safe-bottom fixed inset-x-0 bottom-0 z-50 rounded-t-[20px] p-4 lg:hidden"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">More</h2><button aria-label="Close" onClick={() => setMoreOpen(false)} className="rounded-lg p-2 hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button></div><div className="mt-3 grid grid-cols-2 gap-2">{remaining.map((item) => { const Icon=item.icon; return <Link key={item.id} href={item.href} onClick={() => setMoreOpen(false)} className={cn("flex items-center gap-3 rounded-lg border p-3 text-sm font-medium", item.id === activeSection && "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]")}><Icon className="h-5 w-5" />{item.label}</Link>; })}</div></motion.div></>}</AnimatePresence>
+      <Overlay open={moreOpen} onClose={() => setMoreOpen(false)} title="More" description={`More destinations in ${portal.name}.`} mode="sheet" label="More navigation">
+        <div className="grid grid-cols-2 gap-2 p-4">
+          <button type="button" onClick={() => { setMoreOpen(false); onOpenCommand(); }} className="flex items-center gap-3 rounded-lg border p-3 text-sm font-medium"><Search className="h-5 w-5" />Go to a page</button>
+          {remaining.map((item) => { const Icon=item.icon; return <Link key={item.id} href={item.href} onClick={() => setMoreOpen(false)} className={cn("flex items-center gap-3 rounded-lg border p-3 text-sm font-medium", item.id === activeSection && "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]")}><Icon className="h-5 w-5" />{item.label}</Link>; })}
+        </div>
+      </Overlay>
     </>
   );
 }
@@ -442,7 +399,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
           </motion.div>
         </main>
       </div>
-      {!hideSidebar && <MobileBottomNav portal={portal} activeSection={activeSection} />}
+      {!hideSidebar && <MobileBottomNav portal={portal} activeSection={activeSection} onOpenCommand={() => setCommandOpen(true)} />}
       <NotificationPanel items={notifications} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRead={readNotification} onReadAll={readAllNotifications} />
       <CommandPalette portal={portal} open={commandOpen} onClose={() => setCommandOpen(false)} />
     </div>

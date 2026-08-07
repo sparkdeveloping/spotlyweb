@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Banknote,
   CalendarDays,
   CheckCircle2,
-  Clock3,
   MessageSquareText,
   PackageCheck,
   Phone,
@@ -16,7 +15,7 @@ import {
   UserRoundCheck,
   XCircle
 } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, Tabs } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, TabPanel, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { formatCurrency } from "@/lib/format";
 import { updateBusinessOrder } from "@/lib/business-services";
@@ -271,7 +270,7 @@ function ActivityDetails({ record, open, onClose, user, products, archetype }) {
     <Modal open={open && !task.open} onClose={onClose} title={`${flow.singular[0].toUpperCase()}${flow.singular.slice(1)} ${reference(record)}`} size="xl">
       <div className="grid gap-0 lg:grid-cols-[1.1fr_.9fr]">
         <div className="border-b p-5 lg:border-b-0 lg:border-r">
-          <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><StatusBadge status={(record.status || "submitted").replaceAll("_", " ")} /><PaymentBadge record={record} /></div><h2 className="mt-4 text-2xl font-black">{customerName(record)}</h2><p className="mt-2 text-sm text-secondary">Created {created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Harare" }) : "recently"}</p></div><p className="text-2xl font-black">{total(record) > 0 ? formatCurrency(total(record), record.currency || "USD") : "—"}</p></div>
+          <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><StatusBadge status={(record.status || "submitted").replaceAll("_", " ")} /><PaymentBadge record={record} /></div><h2 className="mt-4 text-2xl font-semibold">{customerName(record)}</h2><p className="mt-2 text-sm text-secondary">Created {created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Harare" }) : "recently"}</p></div><p className="text-2xl font-semibold">{total(record) > 0 ? formatCurrency(total(record), record.currency || "USD") : "—"}</p></div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-bold"><CalendarDays className="h-4 w-4 text-business" />{scheduled.label}</div><p className="mt-2 text-sm">{scheduled.date} · {scheduled.time}</p><p className="mt-1 text-xs text-secondary">{locationName}</p></div><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-bold"><Phone className="h-4 w-4 text-business" />Contact</div><p className="mt-2 text-sm">{record.customerPhone || record.pickup?.contactPhone || "No phone supplied"}</p><p className="mt-1 text-xs text-secondary">{record.customerEmail || "No email supplied"}</p></div></div>
 
@@ -305,11 +304,25 @@ export function OrdersView() {
   const { orders, products, user, archetype, selectedBranchId } = useBusinessWorkspace();
   const flow = flowFor(archetype);
   const searchParams = useSearchParams();
-  const [filter, setFilter] = useState("active");
-  const [queryText, setQueryText] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const initialFilter = searchParams.get("status") || "active";
+  const [filter, setFilter] = useState(initialFilter);
+  const [queryText, setQueryText] = useState(searchParams.get("q") || "");
   const [selected, setSelected] = useState(null);
 
+  function updateView(nextFilter = filter, nextQuery = queryText) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("status", nextFilter);
+    if (nextQuery.trim()) params.set("q", nextQuery.trim()); else params.delete("q");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
   useEffect(() => {
+    const nextFilter = searchParams.get("status") || "active";
+    const nextQuery = searchParams.get("q") || "";
+    setFilter(nextFilter);
+    setQueryText(nextQuery);
     const recordId = searchParams.get("order") || searchParams.get("record");
     if (!recordId) return;
     const match = orders.find((item) => item.id === recordId);
@@ -339,11 +352,27 @@ export function OrdersView() {
   ];
   const EmptyIcon = archetype.id === "ticketing_events" ? TicketCheck : archetype.id === "appointments_services" ? UserRoundCheck : CheckCircle2;
 
+  function recordAge(record) {
+    const created = record.createdAt?.toDate?.() || (record.createdAt ? new Date(record.createdAt) : null);
+    if (!created || Number.isNaN(created.getTime())) return "Age unavailable";
+    const minutes = Math.max(0, Math.floor((Date.now() - created.getTime()) / 60000));
+    if (minutes < 60) return `${minutes} min old`;
+    if (minutes < 1440) return `${Math.floor(minutes / 60)} h old`;
+    return `${Math.floor(minutes / 1440)} d old`;
+  }
+
+  function OrderCard({ record }) {
+    const action = nextAction(record, flow);
+    const scheduled = scheduleFor(record, flow);
+    return <Card className="p-4" variant="bordered"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-tertiary">{reference(record)}</p><h3 className="mt-1 font-semibold">{customerName(record)}</h3><p className="mt-1 text-xs text-secondary">{recordAge(record)} · {record.items?.length || record.itemCount || 0} {archetype.nouns.items}</p></div><StatusBadge status={(record.status || "submitted").replaceAll("_", " ")} /></div><div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-[var(--surface-2)] p-3 text-sm"><div><p className="text-xs text-tertiary">{flow.schedule}</p><p className="mt-1 font-semibold">{scheduled.date} · {scheduled.time}</p></div><div><p className="text-xs text-tertiary">Payment</p><div className="mt-1"><PaymentBadge record={record} /></div></div><div><p className="text-xs text-tertiary">Location</p><p className="mt-1 truncate font-semibold">{record.branchName || record.locationName || "Selected location"}</p></div><div><p className="text-xs text-tertiary">Total</p><p className="mt-1 font-semibold">{total(record) > 0 ? formatCurrency(total(record), record.currency || "USD") : "—"}</p></div></div>{record.substitutionStatus && <div className="mt-3"><Badge tone={record.substitutionStatus === "required" ? "warning" : "neutral"}>Substitution {record.substitutionStatus.replaceAll("_", " ")}</Badge></div>}<Button className="mt-4 w-full" variant={action.next ? "primary" : "outline"} onClick={() => setSelected(record)}>{action.label}<ArrowRight className="h-4 w-4" /></Button></Card>;
+  }
+
   return <div className="space-y-6">
-    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.activity[0].toUpperCase() + archetype.nouns.activity.slice(1)} description={`Work through ${flow.plural} for the selected ${archetype.nouns.branch}, one clear next action at a time.`} /><BusinessSwitcher /></div>
-    <Card className="border-business/15 bg-business-soft/50 p-5"><div className="flex items-start gap-3"><Clock3 className="mt-0.5 h-5 w-5 text-business" /><div><p className="font-bold">A queue, not a dashboard maze</p><p className="mt-1 text-sm leading-6 text-secondary">Records move automatically between needs action, ready, completed, and cancelled. Open one record to see only the decisions relevant at that stage.</p></div></div></Card>
-    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><Tabs value={filter} onChange={setFilter} tabs={tabs} /><SearchField value={queryText} onChange={setQueryText} placeholder={`Reference, customer, ${archetype.nouns.branch}, or status`} className="w-full xl:max-w-md" /></div>
-    <SectionCard>{visible.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">Reference</th><th className="px-5 py-3">Customer</th><th className="px-5 py-3">{flow.schedule}</th><th className="px-5 py-3">Payment</th><th className="px-5 py-3">Total</th><th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((record) => { const action = nextAction(record, flow); const scheduled = scheduleFor(record, flow); return <tr key={record.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><p className="font-bold">{reference(record)}</p><p className="mt-1 text-xs text-secondary">{record.items?.length || record.itemCount || 0} {archetype.nouns.items}</p></td><td className="px-5 py-4"><p className="font-semibold">{customerName(record)}</p><p className="mt-1 text-xs text-secondary">{record.customerPhone || record.customerEmail || "No contact supplied"}</p></td><td className="px-5 py-4"><p className="font-semibold">{scheduled.date} · {scheduled.time}</p><p className="mt-1 text-xs text-secondary">{record.branchName || record.locationName || "Selected location"}</p></td><td className="px-5 py-4"><PaymentBadge record={record} /></td><td className="px-5 py-4 font-bold">{total(record) > 0 ? formatCurrency(total(record), record.currency || "USD") : "—"}</td><td className="px-5 py-4"><StatusBadge status={(record.status || "submitted").replaceAll("_", " ")} /></td><td className="px-5 py-4"><Button size="sm" variant={action.next ? "primary" : "outline"} onClick={() => setSelected(record)}>{action.label}<ArrowRight className="h-4 w-4" /></Button></td></tr>; })}</tbody></table></div> : <EmptyState icon={EmptyIcon} title={queryText ? `No matching ${flow.plural}` : filter === "active" ? `No ${flow.plural} need attention` : `No ${filter} ${flow.plural}`} description={queryText ? "Try another reference, customer, location, or status." : flow.empty} />}</SectionCard>
+    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.activity[0].toUpperCase() + archetype.nouns.activity.slice(1)} description={`Handle ${flow.plural} for the selected ${archetype.nouns.branch}. Older and time-sensitive work stays visible.`} /><BusinessSwitcher /></div>
+    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><Tabs idPrefix="business-orders" controlsPanels value={filter} onChange={(next) => { setFilter(next); updateView(next, queryText); }} tabs={tabs} /><SearchField value={queryText} onChange={(next) => { setQueryText(next); window.clearTimeout(window.__spotlyOrderSearch); window.__spotlyOrderSearch = window.setTimeout(() => updateView(filter, next), 250); }} placeholder={`Reference, customer, ${archetype.nouns.branch}, or status`} className="w-full xl:max-w-md" /></div>
+    <TabPanel idPrefix="business-orders" value={filter} active>
+      {visible.length ? <><div className="grid gap-3 md:grid-cols-2 lg:hidden">{visible.map((record) => <OrderCard key={record.id} record={record} />)}</div><SectionCard className="hidden lg:block"> <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">Reference</th><th className="px-5 py-3">Customer</th><th className="px-5 py-3">Age and {flow.schedule}</th><th className="px-5 py-3">Payment</th><th className="px-5 py-3">Total</th><th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((record) => { const action = nextAction(record, flow); const scheduled = scheduleFor(record, flow); return <tr key={record.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><p className="font-semibold">{reference(record)}</p><p className="mt-1 text-xs text-secondary">{record.items?.length || record.itemCount || 0} {archetype.nouns.items}</p></td><td className="px-5 py-4"><p className="font-semibold">{customerName(record)}</p><p className="mt-1 text-xs text-secondary">{record.customerPhone || record.customerEmail || "No contact supplied"}</p></td><td className="px-5 py-4"><p className="font-semibold">{recordAge(record)}</p><p className="mt-1 text-xs text-secondary">{scheduled.date} · {scheduled.time}</p></td><td className="px-5 py-4"><PaymentBadge record={record} /></td><td className="px-5 py-4 font-semibold">{total(record) > 0 ? formatCurrency(total(record), record.currency || "USD") : "—"}</td><td className="px-5 py-4"><StatusBadge status={(record.status || "submitted").replaceAll("_", " ")} /></td><td className="px-5 py-4"><Button size="sm" variant={action.next ? "primary" : "outline"} onClick={() => setSelected(record)}>{action.label}<ArrowRight className="h-4 w-4" /></Button></td></tr>; })}</tbody></table></div></SectionCard></> : <EmptyState icon={EmptyIcon} title={queryText ? `No matching ${flow.plural}` : filter === "active" ? `No ${flow.plural} need attention` : `No ${filter} ${flow.plural}`} description={queryText ? "Try another reference, customer, location, or status." : flow.empty} />}
+    </TabPanel>
     <ActivityDetails record={selectedRecord} open={Boolean(selectedRecord)} onClose={() => setSelected(null)} user={user} products={products} archetype={archetype} />
   </div>;
 }

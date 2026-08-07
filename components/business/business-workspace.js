@@ -69,7 +69,7 @@ function WorkspaceContent({ section }) {
   const workspace = useBusinessWorkspace();
   if (!workspace.businessIds.length) return <NoBusinessView user={user} />;
   if (workspace.loading && !workspace.business) return <div className="p-4 sm:p-6 lg:p-8"><LoadingState /></div>;
-  if (workspace.error && !workspace.business) return <div className="p-4 sm:p-6 lg:p-8"><Card className="flex min-h-72 flex-col items-center justify-center p-8 text-center"><AlertTriangle className="h-8 w-8 text-danger" /><h1 className="mt-4 text-xl font-black">The business workspace could not load</h1><p className="mt-2 max-w-lg text-sm leading-6 text-secondary">{workspace.error}</p><button className="mt-5 font-semibold text-business" onClick={() => window.location.reload()}>Try again</button></Card></div>;
+  if (workspace.error && !workspace.business) return <div className="p-4 sm:p-6 lg:p-8"><Card className="flex min-h-72 flex-col items-center justify-center p-8 text-center"><AlertTriangle className="h-8 w-8 text-danger" /><h1 className="mt-4 text-xl font-semibold">The business workspace could not load</h1><p className="mt-2 max-w-lg text-sm leading-6 text-secondary">{workspace.error}</p><button className="mt-5 font-semibold text-business" onClick={() => window.location.reload()}>Try again</button></Card></div>;
   const View = views[section] || BusinessDashboard;
   return <div className="p-4 sm:p-6 lg:p-8"><InvitationBanner /><View /></div>;
 }

@@ -1,6 +1,6 @@
 {
   "name": "spotly-web-platform",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "private": true,
   "engines": {
     "node": "22.x",
@@ -16,7 +16,8 @@
     "seed": "node scripts/seed-firestore.mjs",
     "firebase:emulators": "npx firebase-tools emulators:start",
     "firebase:deploy:indexes": "npx firebase-tools deploy --only firestore:indexes",
-    "firebase:deploy:rules": "npx firebase-tools deploy --only firestore:rules,storage"
+    "firebase:deploy:rules": "npx firebase-tools deploy --only firestore:rules,storage",
+    "test": "node --test"
   },
   "dependencies": {
     "clsx": "2.1.1",

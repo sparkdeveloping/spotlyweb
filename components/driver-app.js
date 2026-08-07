@@ -33,8 +33,10 @@ import { useToast } from "@/components/providers";
 import { activeJob as activeJobSeed, jobHistory, jobOffers as initialJobOffers, weeklyEarnings } from "@/data/driver";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
+import { readState, writeState, removeState } from "@/lib/browser-state";
+import { workspaceAccess } from "@/lib/workspaces";
 
-const STORE_KEY = "spotly-driver-workflow-v2";
+const STORE_KEY = "driver-training-workflow";
 const stages = [
   { id: "to_pickup", label: "Going to pickup", action: "I have arrived", helper: "Navigate to the business and confirm when you arrive." },
   { id: "at_pickup", label: "At pickup", action: "Order collected", helper: "Confirm the pickup code and check the order before leaving." },
@@ -53,26 +55,29 @@ const sectionMeta = {
   profile: { title: "Driver profile", description: "Your account, vehicle and verification information." }
 };
 
-function seededState() {
-  return { online: false, jobs: initialJobOffers, activeJob: null, stage: 0, completed: [] };
+function seededState(scenario = "standard") {
+  const jobs = scenario === "priority" ? [...initialJobOffers].sort((a, b) => Number(Boolean(b.priority)) - Number(Boolean(a.priority))) : initialJobOffers;
+  return { scenario, online: false, jobs, activeJob: null, stage: 0, completed: [], pickupCode: "", handoffPin: "" };
 }
 
-function useDriverWorkflow() {
+function useDriverWorkflow(user) {
   const [state, setState] = useState(seededState);
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(STORE_KEY) || "null");
-      if (saved) setState({ ...seededState(), ...saved });
-    } catch {}
+    const saved = readState(STORE_KEY, user, null, "session");
+    if (saved) setState({ ...seededState(saved.scenario), ...saved });
     setReady(true);
-  }, []);
-  useEffect(() => { if (ready) window.localStorage.setItem(STORE_KEY, JSON.stringify(state)); }, [ready, state]);
-  return [state, setState, ready];
+  }, [user?.uid]);
+  useEffect(() => { if (ready) writeState(STORE_KEY, user, state, "session"); }, [ready, state, user?.uid]);
+  const reset = (scenario = "standard") => {
+    removeState(STORE_KEY, user, "session");
+    setState(seededState(scenario));
+  };
+  return [state, setState, ready, reset];
 }
 
 function DemoNotice() {
-  return <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"><strong>Training preview:</strong> Sample offers are shown until a live driver profile and dispatch feed are connected.</div>;
+  return <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"><strong>Training only:</strong> These fictional jobs are not connected to dispatch, customers, payouts or live location services.</div>;
 }
 
 function Availability({ online, setOnline, hasActiveJob }) {
@@ -107,20 +112,28 @@ function ActiveJob({ state, setState }) {
   const stage = stages[state.stage] || stages[0];
   const destination = state.stage < 2 ? job.pickup : job.dropoff;
   function progress() {
+    if (state.stage === 1 && state.pickupCode.trim() !== String(job.orderCode || "8241")) {
+      toast("Enter the training pickup code shown for this scenario.", { type: "error", title: "Pickup code required" });
+      return;
+    }
+    if (state.stage === 3 && state.handoffPin.trim() !== "2468") {
+      toast("Enter the training customer PIN 2468 to complete the handoff.", { type: "error", title: "Customer PIN required" });
+      return;
+    }
     if (state.stage < 4) {
       const next = state.stage + 1;
       setState((current) => ({ ...current, stage: next }));
-      toast(next === 4 ? "Delivery completed." : `Moved to ${stages[next].label}.`, { title: next === 4 ? "Job complete" : "Job updated" });
+      toast(next === 4 ? "Training delivery completed." : `Moved to ${stages[next].label}.`, { title: next === 4 ? "Scenario complete" : "Training updated" });
     } else {
       setState((current) => ({ ...current, activeJob: null, stage: 0, completed: [{ ...job, completedAt: new Date().toISOString() }, ...current.completed] }));
       router.push("/driver/jobs");
     }
   }
-  return <div className="mx-auto max-w-2xl space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">{job.id}</p><h1 className="mt-1 text-3xl font-semibold tracking-[-.035em]">{stage.label}</h1></div><StatusBadge status={state.stage === 4 ? "Completed" : "Active job"} /></div><div className="rounded-xl bg-[#101827] p-5 text-white"><p className="text-xs font-semibold text-white/55">CURRENT DESTINATION</p><h2 className="mt-3 text-2xl font-semibold">{destination}</h2><p className="mt-2 text-sm text-white/65">{stage.helper}</p><div className="mt-6">{state.stage < 4 ? <MapsButton destination={destination} /> : <div className="rounded-lg bg-white/10 p-4 text-sm">This job is complete. Review the earnings, then return to available work.</div>}</div></div><Card className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-tertiary">PICKUP</p><p className="mt-2 font-semibold">{job.merchant}</p><p className="mt-1 text-sm text-secondary">{job.pickup}</p></div><div className="text-right"><p className="text-xs font-semibold text-tertiary">PAY</p><p className="mt-2 text-lg font-semibold">{formatCurrency((job.pay || 0) + (job.tip || 0))}</p></div></div>{state.stage === 1 && <div className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Pickup code: {job.orderCode || "Ask the business"}</p><p className="mt-1">Confirm the package and collection code before leaving.</p></div>}{state.stage === 3 && <div className="mt-5 rounded-lg bg-violet-soft p-4 text-sm text-violet-900"><p className="font-semibold">Customer handoff</p><p className="mt-1">Confirm the approved PIN or proof before completing the delivery.</p></div>}</Card><div className="grid grid-cols-2 gap-3"><Button asChild variant="outline"><Link href={`/support?topic=driver-job&reference=${encodeURIComponent(job.id)}`}><MessageCircle className="h-4 w-4" />Report a problem</Link></Button><Button onClick={progress}>{state.stage === 4 ? <><CheckCircle2 className="h-4 w-4" />Finish</> : <><Check className="h-4 w-4" />{stage.action}</>}</Button></div><div className="flex items-center justify-between gap-2">{stages.map((item, index) => <div key={item.id} className="min-w-0 flex-1"><div className={cn("h-1.5 rounded-full", index <= state.stage ? "bg-[var(--accent)]" : "bg-[var(--surface-2)]")} /><p className="mt-2 hidden truncate text-center text-[10px] text-secondary sm:block">{item.label}</p></div>)}</div></div>;
+  return <div className="mx-auto max-w-2xl space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">{job.id}</p><h1 className="mt-1 text-3xl font-semibold tracking-[-.035em]">{stage.label}</h1></div><StatusBadge status={state.stage === 4 ? "Completed" : "Active job"} /></div><div className="rounded-xl bg-[#101827] p-5 text-white"><p className="text-xs font-semibold text-white/55">CURRENT DESTINATION</p><h2 className="mt-3 text-2xl font-semibold">{destination}</h2><p className="mt-2 text-sm text-white/65">{stage.helper}</p><div className="mt-6">{state.stage < 4 ? <MapsButton destination={destination} /> : <div className="rounded-lg bg-white/10 p-4 text-sm">This job is complete. Review the earnings, then return to available work.</div>}</div></div><Card className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-tertiary">PICKUP</p><p className="mt-2 font-semibold">{job.merchant}</p><p className="mt-1 text-sm text-secondary">{job.pickup}</p></div><div className="text-right"><p className="text-xs font-semibold text-tertiary">PAY</p><p className="mt-2 text-lg font-semibold">{formatCurrency((job.pay || 0) + (job.tip || 0))}</p></div></div>{state.stage === 1 && <div className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Training pickup code: {job.orderCode || "8241"}</p><p className="mt-1">Enter the displayed code to practise the collection check.</p><input aria-label="Training pickup code" value={state.pickupCode || ""} onChange={(event) => setState((current) => ({ ...current, pickupCode: event.target.value }))} className="mt-3 h-11 w-full rounded-lg border border-amber-300 bg-white px-3 text-gray-900" inputMode="numeric" /></div>}{state.stage === 3 && <div className="mt-5 rounded-lg bg-violet-soft p-4 text-sm text-violet-900"><p className="font-semibold">Training customer PIN: 2468</p><p className="mt-1">Enter the displayed PIN to practise a verified handoff.</p><input aria-label="Training customer PIN" value={state.handoffPin || ""} onChange={(event) => setState((current) => ({ ...current, handoffPin: event.target.value }))} className="mt-3 h-11 w-full rounded-lg border bg-white px-3 text-gray-900" inputMode="numeric" /></div>}</Card><div className="grid grid-cols-2 gap-3"><Button asChild variant="outline"><Link href={`/support?topic=driver-job&reference=${encodeURIComponent(job.id)}`}><MessageCircle className="h-4 w-4" />Report a problem</Link></Button><Button onClick={progress}>{state.stage === 4 ? <><CheckCircle2 className="h-4 w-4" />Finish</> : <><Check className="h-4 w-4" />{stage.action}</>}</Button></div><div className="flex items-center justify-between gap-2">{stages.map((item, index) => <div key={item.id} className="min-w-0 flex-1"><div className={cn("h-1.5 rounded-full", index <= state.stage ? "bg-[var(--accent)]" : "bg-[var(--surface-2)]")} /><p className="mt-2 hidden truncate text-center text-[10px] text-secondary sm:block">{item.label}</p></div>)}</div></div>;
 }
 
 function Earnings() {
-  return <div className="space-y-6"><PageHeader {...sectionMeta.earnings} /><DemoNotice /><div className="grid gap-4 sm:grid-cols-3"><Card className="p-5"><p className="text-sm text-secondary">This week</p><p className="mt-3 text-3xl font-semibold">US$131.90</p></Card><Card className="p-5"><p className="text-sm text-secondary">Tips</p><p className="mt-3 text-3xl font-semibold">US$18.60</p></Card><Card className="p-5"><p className="text-sm text-secondary">Next payout</p><p className="mt-3 text-3xl font-semibold">Friday</p></Card></div><SectionCard title="Daily earnings" description="Training data for the current week"><div className="p-5"><BarChart data={weeklyEarnings} height={250} formatValue={(value) => formatCurrency(value)} /></div></SectionCard><SectionCard title="Pay breakdown"><div className="space-y-4 p-5">{[{ label: "Base pay", value: 89.3, pct: 68 }, { label: "Tips", value: 18.6, pct: 14 }, { label: "Bonuses", value: 24, pct: 18 }].map((item) => <div key={item.label}><div className="flex justify-between text-sm"><span className="text-secondary">{item.label}</span><span className="font-semibold">{formatCurrency(item.value)}</span></div><ProgressBar value={item.pct} className="mt-2" label={`${item.label} share`} /></div>)}</div></SectionCard></div>;
+  return <div className="space-y-6"><PageHeader {...sectionMeta.earnings} /><DemoNotice /><div className="grid gap-4 sm:grid-cols-3"><Card className="p-5"><p className="text-sm text-secondary">Scenario total</p><p className="mt-3 text-3xl font-semibold">US$131.90</p></Card><Card className="p-5"><p className="text-sm text-secondary">Tips</p><p className="mt-3 text-3xl font-semibold">US$18.60</p></Card><Card className="p-5"><p className="text-sm text-secondary">Training payout</p><p className="mt-3 text-3xl font-semibold">Not scheduled</p></Card></div><SectionCard title="Daily earnings" description="Training data for the current week"><div className="p-5"><BarChart data={weeklyEarnings} height={250} formatValue={(value) => formatCurrency(value)} /></div></SectionCard><SectionCard title="Pay breakdown"><div className="space-y-4 p-5">{[{ label: "Base pay", value: 89.3, pct: 68 }, { label: "Tips", value: 18.6, pct: 14 }, { label: "Bonuses", value: 24, pct: 18 }].map((item) => <div key={item.label}><div className="flex justify-between text-sm"><span className="text-secondary">{item.label}</span><span className="font-semibold">{formatCurrency(item.value)}</span></div><ProgressBar value={item.pct} className="mt-2" label={`${item.label} share`} /></div>)}</div></SectionCard></div>;
 }
 
 function HistoryView({ completed }) {
@@ -143,7 +156,8 @@ function Profile() {
 
 export function DriverApp({ section = "home" }) {
   const safeSection = sectionMeta[section] ? section : "home";
-  const [state, setState, ready] = useDriverWorkflow();
+  const { user, profile, memberships } = useAuth();
+  const [state, setState, ready, resetTraining] = useDriverWorkflow(user);
   const [offerModal, setOfferModal] = useState(null);
   const router = useRouter();
   const { toast } = useToast();
@@ -157,6 +171,7 @@ export function DriverApp({ section = "home" }) {
   }
 
   if (!ready) return <div className="flex min-h-screen items-center justify-center"><Bike className="h-8 w-8 animate-pulse text-driver" /></div>;
+  const canTrain = workspaceAccess({ profile, memberships }).has("driver") || workspaceAccess({ profile, memberships }).has("admin") || workspaceAccess({ profile, memberships }).has("staff");
 
-  return <AuthGate><PortalShell portalId="driver" activeSection={safeSection}><div className="mx-auto max-w-[1280px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{safeSection === "home" && <DriverHome state={state} setState={setState} onAccept={(job) => setOfferModal(job)} />}{safeSection === "jobs" && <Jobs state={state} setState={setState} onAccept={(job) => setOfferModal(job)} />}{safeSection === "active" && <ActiveJob state={state} setState={setState} />}{safeSection === "earnings" && <Earnings />}{safeSection === "history" && <HistoryView completed={state.completed || []} />}{safeSection === "support" && <Support />}{safeSection === "profile" && <Profile />}</div><Modal open={Boolean(offerModal)} onClose={() => setOfferModal(null)} title="Accept this job?" description="Confirm that you can travel to the pickup now and complete the delivery safely." size="sm">{offerModal && <div className="p-5"><JobOffer job={offerModal} onAccept={acceptJob} onDecline={(id) => { setState((current) => ({ ...current, jobs: current.jobs.filter((item) => item.id !== id) })); setOfferModal(null); }} /></div>}</Modal></PortalShell></AuthGate>;
+  return <AuthGate portal="driver"><PortalShell portalId="driver" activeSection={safeSection}><div className="mx-auto max-w-[1280px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{!canTrain ? <Card variant="bordered" className="mx-auto max-w-lg p-7 text-center"><ShieldCheck className="mx-auto h-8 w-8 text-driver" /><h1 className="mt-4 text-2xl font-semibold">Driver training access is not assigned</h1><p className="mt-3 text-sm leading-6 text-secondary">This internal training workspace is available only to approved driver, operations and administrator accounts.</p><Button asChild className="mt-6"><Link href="/account">Return to account</Link></Button></Card> : <><div className="mb-5 flex flex-col gap-3 rounded-xl border bg-[var(--surface)] p-4 sm:flex-row sm:items-center"><div className="flex-1"><p className="font-semibold">Training scenario</p><p className="mt-1 text-sm text-secondary">No action on this page is sent to live dispatch.</p></div><select aria-label="Training scenario" value={state.scenario || "standard"} onChange={(event) => resetTraining(event.target.value)} className="h-11 rounded-lg border bg-white px-3 text-sm font-semibold"><option value="standard">Standard pickup</option><option value="priority">Priority offer</option></select><Button variant="outline" onClick={() => resetTraining(state.scenario || "standard")}>Reset training</Button></div>{safeSection === "home" && <DriverHome state={state} setState={setState} onAccept={(job) => setOfferModal(job)} />}{safeSection === "jobs" && <Jobs state={state} setState={setState} onAccept={(job) => setOfferModal(job)} />}{safeSection === "active" && <ActiveJob state={state} setState={setState} />}{safeSection === "earnings" && <Earnings />}{safeSection === "history" && <HistoryView completed={state.completed || []} />}{safeSection === "support" && <Support />}{safeSection === "profile" && <Profile />}</>}</div><Modal open={Boolean(offerModal)} onClose={() => setOfferModal(null)} title="Accept this job?" description="Confirm that you can travel to the pickup now and complete the delivery safely." size="sm">{offerModal && <div className="p-5"><JobOffer job={offerModal} onAccept={acceptJob} onDecline={(id) => { setState((current) => ({ ...current, jobs: current.jobs.filter((item) => item.id !== id) })); setOfferModal(null); }} /></div>}</Modal></PortalShell></AuthGate>;
 }

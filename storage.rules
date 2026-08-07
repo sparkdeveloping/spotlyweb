@@ -33,7 +33,12 @@ service firebase.storage {
     }
     match /support/{conversationId}/{uid}/{fileName} {
       allow read: if signedIn() && (request.auth.uid == uid || admin());
-      allow write: if signedIn() && request.auth.uid == uid && request.resource.size < 15 * 1024 * 1024;
+      allow write: if signedIn() && request.auth.uid == uid && request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('(application/pdf|image/jpeg|image/png|text/plain)');
+    }
+    match /claim-evidence/{uid}/{draftId}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow write: if signedIn() && request.auth.uid == uid && safeDocument();
     }
     match /staff/{uid}/{category}/{fileName} {
       allow read: if signedIn() && (request.auth.uid == uid || peopleAdmin());

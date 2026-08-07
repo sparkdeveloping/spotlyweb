@@ -3,203 +3,125 @@
 Spotly is one operating network with five role-specific entrances:
 
 ```text
-/          Customer marketplace
-/business  Merchant and branch operations
-/driver    Delivery and field operations
+/          Public launch experience and customer marketplace
+/business  Merchant and location operations
+/driver    Internal driver training until live dispatch is connected
 /staff     Spotly workforce
-/admin     Platform governance
+/admin     Platform governance and operational queues
 ```
 
-Version 5 adds the complete Spotly workforce application, expands administrator People Operations and organization governance, and connects every portal to the same identity, permissions, notifications, support, audit, payment, and workflow foundations.
+This repository is the **5.1 production-depth candidate**. It preserves the organization → brand → location model while correcting product truth, account/session state, customer pickup availability, business claiming, merchant mobile operations, staff routing, admin queues, support context, accessibility overlays, and release traceability.
 
-## Included applications
+## Capability truth
+
+| Area | Current classification |
+|---|---|
+| Public homepage and waitlist | Pilot-ready UI; launch content and approved businesses require production configuration |
+| Customer marketplace | Pilot-ready candidate with real location/branch availability and transactional order creation; payments and cancellation release require production completion |
+| Business claiming | Pilot-ready progressive flow with account drafts and persisted evidence |
+| Merchant operations | Pilot-ready for pickup-oriented retail/food workflows; additional archetype depth remains staged |
+| Driver | Training-only; no live dispatch, earnings, GPS proof, or production job assignment |
+| Staff | Pilot-ready internal workflow foundation; external payroll and richer training content remain integrations |
+| Admin | Pilot-ready queue and review foundation; provider health and high-volume operations require production signals |
+| Payments and notifications | Pending production credentials, provider tests, reconciliation, and delivery enforcement |
+
+See [SPOTLY-CAPABILITY-MATRIX.md](./SPOTLY-CAPABILITY-MATRIX.md) for the detailed status.
+
+## Main routes
 
 | Route | Purpose |
 |---|---|
-| `/` | Coming-soon experience, launch waitlist, partnerships, discovery, and business claim entry |
-| `/marketplace` | Admin-controlled customer marketplace |
-| `/claim` | Search-first business listing and ownership-claim workflow |
-| `/business` | Guided merchant setup and adaptive retail, food, events, services, accommodation, and listing operations |
-| `/driver` | Driver onboarding, shifts, delivery work, earnings, safety, and fleet operations |
-| `/staff` | Spotly employee and contractor Today view, work, hiring, scheduling, leave, learning, performance, pay, assets, support, and profile |
-| `/admin` | Platform control centre, organizations, businesses, People Operations, drivers, customers, money, content, support, compliance, configuration, and audit |
-| `/admin/platform-map` | Interactive entity/workforce maps and plain-language record diagnostics |
-| `/admin/support-view/[businessId]` | Audited, read-only administrator business support context |
-| `/support` | Public and authenticated help centre and realtime support |
-| `/account` | Shared identity, linked providers, phone, and notification preferences |
-| `/devstatus` | Implementation and launch-readiness report |
-
-## Version 5 operating model
-
-### Organization hierarchy
-
-```text
-Organization
-└── Brand
-    ├── Location
-    └── Location
-```
-
-The organization owns legal identity and consolidated governance. The brand owns the customer-facing identity and shared catalogue. The location owns local hours, staff, availability, inventory, fulfilment, and location-specific operations.
-
-### Workforce separation
-
-```text
-/staff            Spotly internal workforce
-/business/team    Merchant employees and operators
-/driver           Drivers and fleet personnel
-```
-
-The three systems share people infrastructure without conflating their employment or membership relationships.
-
-### Staff lifecycle
-
-The `/staff` and `/admin/people` modules support the full relationship:
-
-```text
-Workforce request → vacancy → candidate → screening → interview → offer
-→ preboarding → first day → probation → active employment → development
-→ role change → leave/absence → exit → alumni record
-```
-
-Implemented workforce domains include:
-
-- Employee profiles and employment records
-- Reusable role packs, permissions, approval limits, and scopes
-- Role-adaptive Today queues and operational assignments
-- Workforce requests and recruitment pipeline
-- Shifts, attendance, exceptions, and scheduling
-- Leave requests, coverage, and manager approval
-- Training paths, acknowledgements, assessments, and manager sign-off
-- Probation, check-ins, goals, feedback, and performance reviews
-- Payroll preparation, allowances, deductions, reimbursements, and payslip records
-- Asset issue, condition, return, and incident history
-- Internal People Operations, technical support, policy, and concern channels
-- Offboarding, access revocation, ownership transfer, and audit history
+| `/` | Public launch page, waitlist, approved featured businesses, and business finder |
+| `/marketplace` | Customer discovery, basket, checkout, orders, and saved businesses |
+| `/claim` | Ten-stage business claim and access request |
+| `/claim/drafts` | Saved account claim drafts |
+| `/claim/status/[claimId]` | Claim review timeline and next actions |
+| `/business` | Merchant Today and capability-based operations |
+| `/driver` | Internal training scenarios only |
+| `/staff` | Staff agenda, scoped work, learning, leave, pay, assets, and support |
+| `/admin` | Urgent operations, queues, health, configuration, and governance |
+| `/admin/queues/[queue]` | Exact filtered operational queues |
+| `/support` | Context-aware customer, merchant, driver, and staff support |
+| `/account` | Profile, contact, preferences, workspaces, security, and build information |
 
 ## Technology
 
 - Next.js App Router
-- JavaScript only; no TypeScript source
 - React 19
+- JavaScript source only
 - Tailwind CSS 4
 - Framer Motion
-- Firebase Authentication
-- Cloud Firestore
-- Cloud Storage
-- Firebase Analytics and Messaging integration points
-- Firebase App Check integration point
-- Firebase Admin SDK in protected route handlers
-- Paynow Node SDK
-- Resend REST integration
+- Firebase Authentication, Firestore, Storage, Admin SDK, Analytics and Messaging integration points
+- Paynow integration routes
+- Resend integration point
 - Vercel deployment configuration
 
-## Start locally
+## Local setup
 
-Requirements: Node.js 22 and npm 11 or later.
+Requirements:
+
+- Node.js 22.x
+- npm 11 or later
 
 ```bash
 cp .env.example .env.local
-npm install
+npm ci
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
-Private Firebase Admin, Paynow, Resend, App Check, Web Push, and bootstrap values must be supplied by the project owner. Never commit `.env.local`, service-account JSON, or private keys.
+Do not commit `.env.local`, service-account JSON, private keys, payment secrets, or live provider credentials.
 
-## Validation
-
-Run the complete local release gate:
+## Release validation
 
 ```bash
-npm run check
+npm test
+npm run check:js
+npm run lint
+npm run build
 ```
 
-This executes the JavaScript-only source check, ESLint, and a production Next.js build. Also test Firestore and Storage rules using the Firebase Emulator Suite before production deployment.
+Also validate Firestore and Storage rules with the Firebase Emulator Suite and run authenticated browser smoke tests against the exact staging deployment.
 
-## First administrator
+The generation environment could not complete `npm ci` because outbound package downloads repeatedly failed with `EAI_AGAIN`; therefore lint and production build are **not claimed as passed** in this package. See [SPOTLY-VALIDATION-REPORT.md](./SPOTLY-VALIDATION-REPORT.md).
 
-1. Add the first administrator email to the server-only allowlist:
+## Release traceability
+
+Set these values for every preview and production deployment:
 
 ```env
-BOOTSTRAP_ADMIN_EMAILS=founder@example.com
+NEXT_PUBLIC_APP_VERSION=5.1.0-depth-pass
+NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
+NEXT_PUBLIC_BUILD_DATE=<ISO timestamp>
+NEXT_PUBLIC_APP_ENV=preview
 ```
 
-2. Add valid Firebase Admin credentials.
-3. Deploy or restart the application.
-4. Create a Spotly account using that email and password.
-5. Open `/admin` and request the one-time super-administrator bootstrap.
-6. Assign later platform roles from **Admin → People**.
-7. Remove `BOOTSTRAP_ADMIN_EMAILS` after confirming access.
+The safe version label appears in authenticated Account and Admin surfaces and can be included in support diagnostics.
 
-## Firebase data and security
+## Production dependencies still requiring owner configuration
 
-Production drafts are included:
+- Approved launch city, areas, categories, and featured businesses
+- Firebase web and Admin credentials
+- Firebase Authentication authorized domains and providers
+- Production Firestore indexes and rules deployment
+- Paynow credentials, callback URLs, settlement and reconciliation procedures
+- Resend and push notification configuration
+- Support staffing, response targets, escalation ownership and final help content
+- Final legal text and consent versions
+- Order cancellation/refund workflow that releases inventory and pickup reservations
+- Monitoring, backup/restore, incident and rollback procedures
 
-- `firestore.rules`
-- `storage.rules`
-- `firestore.indexes.json`
+## Documentation
 
-Development-only open rules are also included:
-
-- `firestore.test.rules`
-- `storage.test.rules`
-
-Do not deploy the test rules publicly.
-
-Version 5 introduces protected workforce collections for profiles, tasks, shifts, leave, training, performance, payroll, assets, workforce requests, candidates, and internal support. Access is resolved through employment or membership, role pack, permission set, scope, approval limits, and temporary exceptions.
-
-## Directory and starter data
-
-The project includes provisional Zimbabwe business and location starter data. Directory records remain unverified until Spotly reviews identity, location details, ownership evidence, media rights, catalogue accuracy, and source attribution.
-
-After deploying to a backup or non-production environment first, open `/admin/businesses` and run the directory upgrade/refresh flow. Review organizations, brands, locations, memberships, claims, and archived legacy branch-as-business records before production use.
-
-A command-line seed is also available:
-
-```bash
-npm run seed
-```
-
-It requires Firebase Admin environment variables.
-
-## Adaptive business operations
-
-Business setup is staged and resumable. Navigation and terminology adapt to the selected operating model:
-
-- Grocery and retail
-- Restaurant and prepared food
-- Events and ticketing
-- Services and appointments
-- Accommodation and activities
-- Public listing and enquiries
-
-Branch access is location-scoped. Parent-company policy can centrally control, accept suggestions, auto-approve changes, or delegate full control for each operational field.
-
-## Driver operations
-
-The driver portal supports Spotly-employed drivers, independent drivers, business-employed drivers, fleet partners, and dispatchers. The operational model covers onboarding, document review, shifts, job offers, pickup verification, delivery proof, failed-delivery recovery, cash handling, expenses, earnings, incidents, training, and fleet visibility.
-
-## Marketplace and payments
-
-Marketplace availability is controlled through platform settings and private-beta access. The first transaction focus remains grocery pickup, with architecture for products, food pickup, appointments, tickets, accommodation, activities, and enquiries.
-
-Paynow integration is handled by protected route handlers:
-
-- `/api/payments/paynow/initiate`
-- `/api/payments/paynow/status`
-- `/api/payments/paynow/result`
-
-The server re-reads orders and validates amounts rather than trusting browser totals. No real payment should be enabled until credentials, callbacks, settlement details, reconciliation, and commercial policies are configured and tested.
-
-## Supporting documentation
-
+- [SPOTLY-DEPTH-PASS-IMPLEMENTATION-REPORT.md](./SPOTLY-DEPTH-PASS-IMPLEMENTATION-REPORT.md)
+- [SPOTLY-CAPABILITY-MATRIX.md](./SPOTLY-CAPABILITY-MATRIX.md)
+- [SPOTLY-ROUTE-INVENTORY.md](./SPOTLY-ROUTE-INVENTORY.md)
+- [SPOTLY-INTERACTION-INVENTORY.md](./SPOTLY-INTERACTION-INVENTORY.md)
+- [SPOTLY-BROWSER-STATE-INVENTORY.md](./SPOTLY-BROWSER-STATE-INVENTORY.md)
+- [SPOTLY-VALIDATION-REPORT.md](./SPOTLY-VALIDATION-REPORT.md)
 - [SPOTLY-PLATFORM-BLUEPRINT.md](./SPOTLY-PLATFORM-BLUEPRINT.md)
-- [RELEASE-NOTES-PLATFORM-V5.md](./RELEASE-NOTES-PLATFORM-V5.md)
-- [BUILD-REPORT.md](./BUILD-REPORT.md)
 - [FIREBASE-SETUP.md](./FIREBASE-SETUP.md)
 - [VERCEL-DEPLOYMENT.md](./VERCEL-DEPLOYMENT.md)
-- [UX-ARCHITECTURE.md](./UX-ARCHITECTURE.md)
-- [BUSINESS-OPERATIONS.md](./BUSINESS-OPERATIONS.md)
-- [ADMIN-DIRECTORY.md](./ADMIN-DIRECTORY.md)
+
+Historical implementation reports are stored under `docs/history/` and must not be treated as current release status.
