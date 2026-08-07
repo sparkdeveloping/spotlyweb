@@ -176,7 +176,7 @@ export async function POST(request) {
       };
 
       transaction.create(orderRef, order);
-      transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", status: order.status, actorId: user.uid, metadata: { number, paymentMethod: body.paymentMethod, slotId: slot.id }, createdAt: FieldValue.serverTimestamp() });
+      transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", previousStatus: null, status: order.status, actorType: "customer", actorId: user.uid, source: "checkout", metadata: { number, paymentMethod: body.paymentMethod, slotId: slot.id }, createdAt: FieldValue.serverTimestamp() });
       transaction.create(notificationRef, { userId: user.uid, title: "Order created", body: `${number} was sent to ${businessSnapshot.data().name}.`, href: `/marketplace?order=${orderRef.id}`, category: "order", read: false, createdAt: FieldValue.serverTimestamp() });
       transaction.update(branchRef, { "pickup.bookedSlots": bookedSlots, updatedAt: FieldValue.serverTimestamp() });
       currentProducts.forEach(({ product, line }, index) => {

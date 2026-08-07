@@ -293,7 +293,7 @@ textarea.input {
 
 select.field-control,
 select.input {
-  color-scheme: light dark;
+  color-scheme: inherit;
 }
 
 .field-control:hover:not(:disabled),

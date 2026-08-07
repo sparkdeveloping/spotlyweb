@@ -40,7 +40,7 @@ export function PaymentReturnApp() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4 py-16 text-[var(--text)]">
       <div className="w-full max-w-xl rounded-[30px] border border-[var(--border)] bg-[var(--surface)] p-7 text-center shadow-[0_24px_80px_rgba(80,61,170,.12)] sm:p-10">
-        {checking ? <LoaderCircle className="mx-auto h-12 w-12 animate-spin text-violet-600" /> : paid ? <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" /> : <CircleAlert className="mx-auto h-14 w-14 text-amber-500" />}
+        {checking ? <LoaderCircle className="mx-auto h-12 w-12 animate-spin text-[var(--accent)]" /> : paid ? <CheckCircle2 className="mx-auto h-14 w-14 text-[var(--success)]" /> : <CircleAlert className="mx-auto h-14 w-14 text-[var(--warning)]" />}
         <h1 className="mt-6 text-3xl font-bold tracking-[-.04em]">{checking ? "Checking your payment" : paid ? "Payment confirmed" : "Payment is not confirmed yet"}</h1>
         <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[var(--text-2)]">{error || (paid ? "The order has been updated and the business can begin preparing it for pickup." : "Some Paynow transactions take a moment to settle. Refresh the status before attempting another payment.")}</p>
         {orderId && <p className="mt-4 rounded-xl bg-[var(--surface-2)] px-3 py-2 font-mono text-xs text-[var(--text-3)]">Order {orderId}</p>}

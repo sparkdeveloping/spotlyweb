@@ -36,6 +36,8 @@ for (const file of sourceFiles) {
   const source = readFileSync(file, "utf8");
   if (/\bbg-white\b/.test(source)) failures.push(`${rel}: fixed bg-white is not permitted`);
   if (/\b(?:bg|text|border|divide)-(?:gray|slate)-\d+\b/.test(source)) failures.push(`${rel}: fixed gray/slate palette is not permitted`);
+  const fixedNamedPalette = /\b(?:bg|text|border|divide)-(?:red|green|amber|yellow|orange|blue|violet|purple|emerald|cyan|teal|lime|rose|pink|indigo)-\d{2,3}(?:\/\d+)?\b/;
+  if (fixedNamedPalette.test(source) && !inverseAllowlist.has(rel)) failures.push(`${rel}: fixed named palette shades require semantic tokens or an approved fixed/inverse exception`);
   if (/className=(?:"|\{cn\(")input(?:\s|"|\))/.test(source)) failures.push(`${rel}: legacy input class is not permitted`);
   if (/style=\{\{[^\n}]*--accent/.test(source)) failures.push(`${rel}: inline accent variables break paired theme foregrounds`);
   if (/var\(--[^)]*\)\]\d/.test(source)) failures.push(`${rel}: malformed semantic utility detected`);

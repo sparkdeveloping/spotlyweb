@@ -243,7 +243,7 @@ function UserMenu({ portal }) {
             </div>
             <Link href="/account" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
             {WORKSPACE_SETTINGS_ROUTES[portal.id] && <Link href={WORKSPACE_SETTINGS_ROUTES[portal.id]} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>}
-            <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-[var(--danger-soft)] dark:hover:bg-red-950/30"><LogOut className="h-4 w-4" /> Sign out</button>
+            <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-[var(--danger-soft)]"><LogOut className="h-4 w-4" /> Sign out</button>
           </motion.div>
         )}
       </AnimatePresence>

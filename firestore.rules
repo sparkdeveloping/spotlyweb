@@ -3,57 +3,106 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function self(uid) { return signedIn() && request.auth.uid == uid; }
-    function anonymousUser() {
-      return signedIn() && request.auth.token.firebase.sign_in_provider == "anonymous";
-    }
-    function hasProfile() {
-      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
+    function anonymousUser() { return signedIn() && request.auth.token.firebase.sign_in_provider == "anonymous"; }
+    function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function hasRole(role) { return hasProfile() && role in profile().roles; }
+    function hasRole(role) { return hasProfile() && ("roles" in profile()) && role in profile().roles; }
     function hasPermission(permission) {
-      return hasProfile() && ("*" in profile().customPermissions || permission in profile().customPermissions);
-    }
-    function admin() {
-      return signedIn() && (
-        hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") ||
-        hasPermission("businesses.*") || hasPermission("support.*")
+      return hasProfile() && ("customPermissions" in profile()) && (
+        "*" in profile().customPermissions || permission in profile().customPermissions
       );
     }
-    function superAdmin() { return hasProfile() && (hasRole("super_admin") || "*" in profile().customPermissions); }
+    function platformAdmin() { return hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") || hasPermission("admin.*"); }
+    function admin() { return platformAdmin(); }
+    function superAdmin() { return hasRole("super_admin") || hasPermission("*"); }
+    function supportStaff() { return platformAdmin() || hasPermission("support.*") || hasPermission("support.read") || hasPermission("support.respond") || hasRole("support_manager") || hasRole("support_agent"); }
+    function financeStaff() { return platformAdmin() || hasPermission("finance.*") || hasPermission("finance.read") || hasRole("finance_admin"); }
+    function claimsStaff() { return platformAdmin() || hasPermission("claims.*") || hasPermission("claims.read") || hasPermission("claims.review") || hasRole("verification_officer"); }
     function activeAccount() { return anonymousUser() || (hasProfile() && !(profile().status in ["suspended", "disabled"])); }
+
     function business(businessId) { return get(/databases/$(database)/documents/businesses/$(businessId)).data; }
-    function businessOwner(businessId) {
-      return activeAccount() && (
-        admin() || request.auth.uid in business(businessId).ownerIds ||
-        exists(/databases/$(database)/documents/memberships/$(business(businessId).organizationId + "_" + request.auth.uid))
+    function membershipIdForBusiness(businessId) { return business(businessId).organizationId + "_" + request.auth.uid; }
+    function membershipExists(businessId) {
+      return activeAccount() && ("organizationId" in business(businessId)) && exists(/databases/$(database)/documents/memberships/$(membershipIdForBusiness(businessId)));
+    }
+    function membership(businessId) { return get(/databases/$(database)/documents/memberships/$(membershipIdForBusiness(businessId))).data; }
+    function membershipActive(businessId) {
+      return membershipExists(businessId) && membership(businessId).status == "active" && (
+        !("expiresAt" in membership(businessId)) || membership(businessId).expiresAt == null || membership(businessId).expiresAt > request.time
       );
     }
-    function hasStaffProfile() {
-      return signedIn() && exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid));
+    function businessScope(businessId) {
+      return membershipActive(businessId) && (
+        membership(businessId).role == "organization_owner" ||
+        ("businessId" in membership(businessId) && membership(businessId).businessId == businessId) ||
+        ("businessIds" in membership(businessId) && businessId in membership(businessId).businessIds)
+      );
     }
+    function memberPermission(businessId, permission) {
+      return businessScope(businessId) && ("permissions" in membership(businessId)) && (
+        "*" in membership(businessId).permissions || permission in membership(businessId).permissions
+      );
+    }
+    function ownerRole(businessId) {
+      return businessScope(businessId) && membership(businessId).role in ["organization_owner", "business_owner"];
+    }
+    function managerRole(businessId) {
+      return businessScope(businessId) && membership(businessId).role in ["organization_owner", "business_owner", "business_manager"];
+    }
+    function branchManagerRole(businessId) { return businessScope(businessId) && membership(businessId).role == "branch_manager"; }
+    function directOwner(businessId) { return activeAccount() && ("ownerIds" in business(businessId)) && request.auth.uid in business(businessId).ownerIds; }
+    function canViewBusiness(businessId) { return platformAdmin() || directOwner(businessId) || businessScope(businessId); }
+    function canManageBusiness(businessId) {
+      return platformAdmin() || directOwner(businessId) || managerRole(businessId) || memberPermission(businessId, "businesses.*") || memberPermission(businessId, "business.update");
+    }
+    function canViewBranches(businessId) { return canViewBusiness(businessId) || memberPermission(businessId, "branches.read") || memberPermission(businessId, "branches.*"); }
+    function canCreateBranches(businessId) { return platformAdmin() || directOwner(businessId) || managerRole(businessId) || memberPermission(businessId, "branches.*"); }
+    function canManageBranches(businessId) { return canCreateBranches(businessId) || branchManagerRole(businessId) || memberPermission(businessId, "branches.update"); }
+    function branchScope(businessId, branchId) {
+      return platformAdmin() || directOwner(businessId) || managerRole(businessId) || (
+        businessScope(businessId) && ("branchIds" in membership(businessId)) && branchId in membership(businessId).branchIds
+      );
+    }
+    function canReadCatalogue(businessId) { return canViewBusiness(businessId) || memberPermission(businessId, "catalog.*") || memberPermission(businessId, "catalog.read"); }
+    function canEditCatalogue(businessId) { return platformAdmin() || directOwner(businessId) || managerRole(businessId) || memberPermission(businessId, "catalog.*") || memberPermission(businessId, "catalog.update") || memberPermission(businessId, "inventory.*") || memberPermission(businessId, "inventory.update"); }
+    function canReadOrder(businessId, branchId) {
+      return platformAdmin() || directOwner(businessId) || managerRole(businessId) || (
+        businessScope(businessId) && branchScope(businessId, branchId) && (
+          memberPermission(businessId, "orders.*") || memberPermission(businessId, "orders.read") || memberPermission(businessId, "orders.update") || memberPermission(businessId, "orders.manage") || memberPermission(businessId, "orders.pick")
+        )
+      );
+    }
+    function canManageOrder(businessId, branchId) {
+      return platformAdmin() || directOwner(businessId) || managerRole(businessId) || (
+        businessScope(businessId) && branchScope(businessId, branchId) && (
+          memberPermission(businessId, "orders.*") || memberPermission(businessId, "orders.update") || memberPermission(businessId, "orders.manage") || memberPermission(businessId, "orders.pick")
+        )
+      );
+    }
+    function canViewTeam(businessId) { return platformAdmin() || directOwner(businessId) || managerRole(businessId) || memberPermission(businessId, "staff.*") || memberPermission(businessId, "staff.read") || memberPermission(businessId, "staff.manage"); }
+    function canManageTeam(businessId) { return platformAdmin() || directOwner(businessId) || ownerRole(businessId) || memberPermission(businessId, "staff.*") || memberPermission(businessId, "staff.manage"); }
+    function canReadFinance(businessId) { return financeStaff() || directOwner(businessId) || ownerRole(businessId) || memberPermission(businessId, "finance.*") || memberPermission(businessId, "finance.read"); }
+    function canConfigureFinance(businessId) { return platformAdmin() || directOwner(businessId) || ownerRole(businessId) || memberPermission(businessId, "finance.*") || memberPermission(businessId, "finance.configure"); }
+    function publicBusiness(businessId) { return business(businessId).public == true; }
+    function publicProduct() { return resource.data.published == true && resource.data.active == true && publicBusiness(resource.data.businessId); }
+
+    function hasStaffProfile() { return signedIn() && exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)); }
     function currentStaffProfile() { return get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data; }
     function hasStaffRole(roleId) { return hasStaffProfile() && currentStaffProfile().rolePackId == roleId; }
-    function hasStaffPermission(permission) {
-      return hasStaffProfile() && permission in currentStaffProfile().permissions;
-    }
+    function hasStaffPermission(permission) { return hasStaffProfile() && permission in currentStaffProfile().permissions; }
     function staffMember() {
       return activeAccount() && (
-        (hasStaffProfile() && currentStaffProfile().status in ["active", "probation", "preboarding", "leave"]) || hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") ||
-        hasRole("operations_manager") || hasRole("verification_officer") || hasRole("business_success") ||
-        hasRole("business_success_manager") || hasRole("finance_admin") || hasRole("support_manager") ||
-        hasRole("support_agent") || hasRole("driver_operations_coordinator") || hasRole("regional_operations_manager") ||
-        hasRole("content_editor") || hasRole("content_manager") || hasRole("marketing_manager") ||
-        hasRole("risk_compliance_officer") || hasRole("people_operations_admin") ||
-        hasRole("people_admin")
+        (hasStaffProfile() && currentStaffProfile().status in ["active", "probation", "preboarding", "leave"]) || platformAdmin() ||
+        hasRole("operations_manager") || hasRole("verification_officer") || hasRole("business_success") || hasRole("business_success_manager") ||
+        hasRole("finance_admin") || hasRole("support_manager") || hasRole("support_agent") || hasRole("driver_operations_coordinator") ||
+        hasRole("regional_operations_manager") || hasRole("content_editor") || hasRole("content_manager") || hasRole("marketing_manager") ||
+        hasRole("risk_compliance_officer") || hasRole("people_operations_admin") || hasRole("people_admin")
       );
     }
     function peopleAdmin() {
       return activeAccount() && (
-        hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") ||
-        hasRole("people_operations_admin") || hasRole("people_admin") ||
-        hasStaffRole("platform_admin") || hasStaffRole("people_operations_admin") ||
-        hasPermission("people.*") || hasPermission("people.write") ||
+        platformAdmin() || hasRole("people_operations_admin") || hasRole("people_admin") || hasStaffRole("platform_admin") ||
+        hasStaffRole("people_operations_admin") || hasPermission("people.*") || hasPermission("people.write") ||
         hasStaffPermission("people.*") || hasStaffPermission("people.write")
       );
     }
@@ -63,229 +112,206 @@ service cloud.firestore {
         hasStaffRole("business_success_manager") || hasPermission("people.approve") || hasStaffPermission("people.approve");
     }
     function recruitmentManager() {
-      return peopleAdmin() || hasRole("operations_manager") || hasRole("regional_operations_manager") ||
-        hasStaffRole("operations_manager") || hasStaffRole("regional_operations_manager") ||
-        hasPermission("recruitment.*") || hasStaffPermission("recruitment.*");
+      return peopleAdmin() || hasRole("operations_manager") || hasRole("regional_operations_manager") || hasStaffRole("operations_manager") ||
+        hasStaffRole("regional_operations_manager") || hasPermission("recruitment.*") || hasStaffPermission("recruitment.*");
     }
     function conversation(conversationId) { return get(/databases/$(database)/documents/supportConversations/$(conversationId)).data; }
     function conversationParticipant(conversationId) {
       return activeAccount() && (
-        admin() || conversation(conversationId).requesterId == request.auth.uid ||
-        (conversation(conversationId).businessId != null && businessOwner(conversation(conversationId).businessId))
+        supportStaff() || conversation(conversationId).requesterId == request.auth.uid ||
+        (conversation(conversationId).businessId != null && canViewBusiness(conversation(conversationId).businessId))
       );
     }
 
     match /users/{uid} {
       allow create: if self(uid) && request.resource.data.roles == ["customer"];
-      allow read: if self(uid) || admin();
+      allow read: if self(uid) || platformAdmin() || hasPermission("users.read");
       allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         "displayName", "phoneNumber", "phone", "photoURL", "providers", "locale", "lastSeenAt", "updatedAt", "email",
         "preferences", "preferredContact", "pickupContactName", "pickupContactPhone", "accessibilityPreferences"
       ]);
-      allow update, delete: if admin();
+      allow delete: if superAdmin();
     }
 
     match /platformSettings/{id} {
       allow read: if true;
-      allow write: if admin();
+      allow write: if platformAdmin() || hasPermission("admin.configuration");
     }
 
     match /businesses/{businessId} {
-      allow read: if resource.data.public == true || businessOwner(businessId);
-      // New businesses are created by authenticated Next.js route handlers after validation.
+      allow read: if resource.data.public == true || canViewBusiness(businessId) || hasPermission("businesses.read");
       allow create: if false;
-      allow update: if admin() || (
-        businessOwner(businessId) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          "name", "brandName", "legalName", "category", "categories", "description",
-          "phone", "email", "website", "instagram", "facebook", "whatsapp",
-          "city", "country", "address", "currency", "logo", "coverImage",
-          "openingHours", "specialHours", "paymentMethods", "searchTerms",
-          "onboardingProgress", "preferredLocale", "customerNotes", "public",
-          "teamReviewedAt", "status", "publicationReviewRequestedAt", "publicationReviewRequestedBy",
-          "updatedAt", "updatedBy"
-        ])
-      );
+      allow update: if canManageBusiness(businessId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "name", "brandName", "legalName", "category", "categories", "description", "phone", "email", "website", "instagram", "facebook", "whatsapp",
+        "city", "country", "address", "currency", "logo", "coverImage", "openingHours", "specialHours", "paymentMethods", "searchTerms",
+        "onboardingProgress", "preferredLocale", "customerNotes", "public", "teamReviewedAt", "status", "publicationReviewRequestedAt",
+        "publicationReviewRequestedBy", "updatedAt", "updatedBy"
+      ]);
       allow delete: if superAdmin();
     }
 
     match /organizations/{organizationId} {
-      allow read: if admin() || (signedIn() && request.auth.uid in resource.data.ownerIds);
-      // Organization creation is performed server-side with its first business claim.
+      allow read: if platformAdmin() || (signedIn() && ("ownerIds" in resource.data) && request.auth.uid in resource.data.ownerIds) ||
+        (signedIn() && exists(/databases/$(database)/documents/memberships/$(organizationId + "_" + request.auth.uid)) &&
+          get(/databases/$(database)/documents/memberships/$(organizationId + "_" + request.auth.uid)).data.status == "active");
       allow create: if false;
-      allow update: if admin() || (signedIn() && request.auth.uid in resource.data.ownerIds);
+      allow update: if platformAdmin() || (signedIn() && ("ownerIds" in resource.data) && request.auth.uid in resource.data.ownerIds);
       allow delete: if superAdmin();
     }
 
     match /branches/{branchId} {
-      allow read: if resource.data.public == true || businessOwner(resource.data.businessId);
-      allow create: if businessOwner(request.resource.data.businessId);
-      allow update, delete: if businessOwner(resource.data.businessId);
+      allow read: if resource.data.public == true || (canViewBranches(resource.data.businessId) && branchScope(resource.data.businessId, branchId)) || hasPermission("businesses.read");
+      allow create: if canCreateBranches(request.resource.data.businessId);
+      allow update, delete: if canManageBranches(resource.data.businessId) && branchScope(resource.data.businessId, branchId);
     }
 
     match /memberships/{membershipId} {
-      allow read: if signedIn() && (resource.data.userId == request.auth.uid || admin() || businessOwner(resource.data.businessId));
-      allow create: if admin() || businessOwner(request.resource.data.businessId);
-      allow update, delete: if admin() || businessOwner(resource.data.businessId);
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || platformAdmin());
+      allow create, update, delete: if false;
     }
 
     match /businessInvitations/{invitationId} {
-      allow read: if signedIn() && (resource.data.email == request.auth.token.email || admin() || businessOwner(resource.data.businessId));
-      allow create: if businessOwner(request.resource.data.businessId);
-      allow update: if admin() || businessOwner(resource.data.businessId) || resource.data.email == request.auth.token.email;
-      allow delete: if admin() || businessOwner(resource.data.businessId);
+      allow read: if signedIn() && (resource.data.email == request.auth.token.email || platformAdmin());
+      allow create, update, delete: if false;
     }
 
     match /businessClaims/{claimId} {
-      // Claim creation is server-validated to prevent forged approval and risk fields.
       allow create: if false;
-      allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || admin() || businessOwner(resource.data.businessId));
-      allow update: if admin();
+      allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || claimsStaff() || canViewBusiness(resource.data.businessId));
+      allow update: if false;
       allow delete: if superAdmin();
     }
 
     match /businessClaimDrafts/{draftId} {
       allow create: if activeAccount() && request.resource.data.applicantId == request.auth.uid;
-      allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || admin());
+      allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || claimsStaff());
       allow update: if activeAccount() && resource.data.applicantId == request.auth.uid && request.resource.data.applicantId == request.auth.uid;
-      allow delete: if activeAccount() && (resource.data.applicantId == request.auth.uid || admin());
+      allow delete: if activeAccount() && (resource.data.applicantId == request.auth.uid || platformAdmin());
     }
 
     match /products/{productId} {
-      allow read: if (resource.data.available != false && resource.data.status != "archived") || businessOwner(resource.data.businessId);
-      allow create: if businessOwner(request.resource.data.businessId);
-      allow update, delete: if businessOwner(resource.data.businessId);
+      allow read: if publicProduct() || canReadCatalogue(resource.data.businessId) || hasPermission("businesses.read");
+      allow create: if canEditCatalogue(request.resource.data.businessId);
+      allow update, delete: if canEditCatalogue(resource.data.businessId);
     }
 
     match /orders/{orderId} {
-      allow read: if activeAccount() && (resource.data.customerId == request.auth.uid || businessOwner(resource.data.businessId) || admin());
-      // Production order creation is performed by the authenticated Next.js route handler.
-      allow create: if false;
-      allow update: if businessOwner(resource.data.businessId) || admin();
+      allow read: if activeAccount() && (resource.data.customerId == request.auth.uid || canReadOrder(resource.data.businessId, resource.data.branchId) || hasPermission("orders.read"));
+      allow create, update: if false;
       allow delete: if superAdmin();
     }
 
     match /orderEvents/{eventId} {
       allow read: if activeAccount() && (
-        admin() ||
+        platformAdmin() || hasPermission("orders.read") ||
         get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.customerId == request.auth.uid ||
-        businessOwner(get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.businessId)
+        canReadOrder(
+          get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.businessId,
+          get(/databases/$(database)/documents/orders/$(resource.data.orderId)).data.branchId
+        )
       );
-      allow write: if admin() || (signedIn() && request.resource.data.actorId == request.auth.uid);
+      allow create, update, delete: if false;
     }
 
     match /businessFinanceSettings/{businessId} {
-      allow read, write: if businessOwner(businessId) || admin();
+      allow read: if canReadFinance(businessId);
+      allow write: if canConfigureFinance(businessId);
     }
 
-    match /paymentIntents/{intentId} {
-      allow read, write: if false;
-    }
+    match /paymentIntents/{intentId} { allow read, write: if false; }
 
     match /businessOperationalSettings/{businessId} {
-      allow read, write: if businessOwner(businessId) || admin();
+      allow read: if canViewBusiness(businessId);
+      allow write: if canManageBusiness(businessId) || memberPermission(businessId, "orders.*");
     }
 
     match /promotions/{promotionId} {
-      allow read: if resource.data.active == true || businessOwner(resource.data.businessId) || admin();
-      allow create: if businessOwner(request.resource.data.businessId) || admin();
-      allow update, delete: if businessOwner(resource.data.businessId) || admin();
+      allow read: if (resource.data.active == true && publicBusiness(resource.data.businessId)) || canViewBusiness(resource.data.businessId);
+      allow create: if canManageBusiness(request.resource.data.businessId);
+      allow update, delete: if canManageBusiness(resource.data.businessId);
     }
 
     match /catalogTemplates/{templateId} {
       allow read: if activeAccount();
-      allow write: if admin();
+      allow write: if platformAdmin();
     }
 
     match /payouts/{payoutId} {
-      allow read: if businessOwner(resource.data.businessId) || admin();
-      allow create: if businessOwner(request.resource.data.businessId) || admin();
-      allow update: if admin();
+      allow read: if canReadFinance(resource.data.businessId);
+      allow create, update: if false;
       allow delete: if superAdmin();
     }
 
     match /adminTasks/{taskId} {
       allow create: if activeAccount() && request.resource.data.requestedBy == request.auth.uid;
-      allow read: if admin() || (activeAccount() && resource.data.requestedBy == request.auth.uid);
-      allow update: if admin();
+      allow read: if platformAdmin() || hasPermission("claims.read") || hasPermission("support.read") || hasPermission("finance.read") || (activeAccount() && resource.data.requestedBy == request.auth.uid);
+      allow update: if platformAdmin();
       allow delete: if superAdmin();
     }
 
-    match /systemStatus/{statusId} {
-      allow read: if admin();
-      allow write: if false;
-    }
+    match /systemStatus/{statusId} { allow read: if platformAdmin(); allow write: if false; }
 
     match /supportConversations/{conversationId} {
-      allow create: if activeAccount() && request.resource.data.requesterId == request.auth.uid;
+      allow create: if false;
       allow read: if conversationParticipant(conversationId);
-      allow update: if conversationParticipant(conversationId) && (
-        admin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          "lastMessage", "lastMessageAt", "updatedAt", "status", "closedAt", "closedBy",
-          "reopenedAt", "reopenedBy", "satisfaction", "satisfactionAt", "satisfactionBy"
-        ])
-      );
+      allow update: if false;
       allow delete: if superAdmin();
     }
 
     match /supportMessages/{messageId} {
-      allow read: if conversationParticipant(resource.data.conversationId) && (resource.data.internal != true || admin());
-      allow create: if activeAccount() && conversationParticipant(request.resource.data.conversationId) && request.resource.data.senderId == request.auth.uid && (request.resource.data.internal != true || admin());
-      allow update, delete: if admin();
+      allow read: if conversationParticipant(resource.data.conversationId) && (resource.data.internal != true || supportStaff());
+      allow create, update, delete: if false;
     }
 
     match /waitlistEntries/{entryId} {
-      allow create: if request.resource.data.email is string && request.resource.data.email.size() <= 254;
-      allow update: if admin() || (
-        request.resource.data.email == resource.data.email &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          "name", "city", "interests", "locale", "consent", "source", "updatedAt"
-        ])
-      );
-      allow read, delete: if admin();
+      // Public writes use the rate-limited server endpoint so consent and abuse controls are authoritative.
+      allow create, update: if false;
+      allow read, delete: if platformAdmin() || hasPermission("content.*");
     }
+
+    match /rateLimits/{limitId} { allow read, write: if false; }
 
     match /partnershipLeads/{leadId} {
-      allow create: if request.resource.data.email is string && request.resource.data.email.size() <= 254;
-      allow read, update, delete: if admin();
+      allow create: if false;
+      allow read, update, delete: if platformAdmin() || hasPermission("content.*");
     }
 
-    match /helpResources/{resourceId} {
-      allow read: if resource.data.published == true || admin();
-      allow write: if admin();
-    }
-
-    match /announcements/{announcementId} {
-      allow read: if resource.data.active == true || admin();
-      allow write: if admin();
-    }
+    match /helpResources/{resourceId} { allow read: if resource.data.published == true || supportStaff(); allow write: if platformAdmin() || hasPermission("content.*"); }
+    match /announcements/{announcementId} { allow read: if resource.data.active == true || platformAdmin(); allow write: if platformAdmin() || hasPermission("content.*"); }
 
     match /notifications/{notificationId} {
       allow read: if activeAccount() && resource.data.userId == request.auth.uid;
       allow update: if activeAccount() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read", "readAt"]);
-      allow create: if admin() || (activeAccount() && request.resource.data.businessId is string && businessOwner(request.resource.data.businessId));
-      allow delete: if admin();
+      allow create, delete: if false;
     }
 
-    match /notificationPreferences/{uid} {
-      allow read, write: if self(uid) || admin();
-    }
-
+    match /notificationPreferences/{uid} { allow read, write: if self(uid) || platformAdmin(); }
     match /pushTokens/{tokenId} {
       allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if activeAccount() && resource.data.userId == request.auth.uid;
     }
-
     match /favorites/{favoriteId} {
       allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if activeAccount() && resource.data.userId == request.auth.uid;
     }
 
     match /auditLogs/{logId} {
-      allow create: if activeAccount() && request.resource.data.actorId == request.auth.uid;
-      allow read: if admin() || hasPermission("audit.read");
+      allow read: if platformAdmin() || hasPermission("audit.read");
+      allow create, update, delete: if false;
+    }
+
+    match /clientTelemetry/{eventId} {
+      allow create: if activeAccount() && request.resource.data.actorId == request.auth.uid && request.resource.data.diff({}).affectedKeys().hasOnly([
+        "action", "entityType", "entityId", "metadata", "actorId", "actorEmail", "createdAt"
+      ]);
+      allow read: if platformAdmin() || hasPermission("audit.read");
       allow update, delete: if false;
     }
+
+    match /paymentCallbacks/{callbackId} { allow read, write: if false; }
+    match /paymentInitiationLocks/{lockId} { allow read, write: if false; }
+    match /paymentReconciliationIssues/{issueId} { allow read: if financeStaff(); allow write: if false; }
+    match /refundRequests/{refundId} { allow read: if financeStaff(); allow write: if false; }
 
     match /roleTemplates/{roleId} {
       allow read: if activeAccount();

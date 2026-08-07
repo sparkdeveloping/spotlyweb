@@ -62,7 +62,7 @@ export const businessRoleTemplates = [
     id: "branch_manager",
     name: "Branch manager",
     description: "Runs assigned locations and the day-to-day customer operation there.",
-    permissions: ["branch.update", "catalog.read", "inventory.*", "orders.*", "staff.read"]
+    permissions: ["branches.update", "catalog.read", "inventory.*", "orders.*", "staff.read"]
   },
   {
     id: "catalog_manager",

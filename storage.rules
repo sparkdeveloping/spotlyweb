@@ -2,42 +2,64 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
+    function hasProfile() { return signedIn() && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)); }
     function profile() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data; }
-    function admin() { return signedIn() && ("super_admin" in profile().roles || "admin" in profile().roles || "platform_admin" in profile().roles || "*" in profile().customPermissions); }
-    function peopleAdmin() { return signedIn() && (admin() || "people_operations_admin" in profile().roles || "people_admin" in profile().roles || "people.*" in profile().customPermissions); }
-    function businessOwner(businessId) {
-      return signedIn() && (
-        admin() ||
-        request.auth.uid in firestore.get(/databases/(default)/documents/businesses/$(businessId)).data.ownerIds ||
-        firestore.exists(/databases/(default)/documents/memberships/$(firestore.get(/databases/(default)/documents/businesses/$(businessId)).data.organizationId + "_" + request.auth.uid))
+    function hasRole(role) { return hasProfile() && ("roles" in profile()) && role in profile().roles; }
+    function hasPermission(permission) { return hasProfile() && ("customPermissions" in profile()) && ("*" in profile().customPermissions || permission in profile().customPermissions); }
+    function activeAccount() { return signedIn() && (!hasProfile() || !(profile().status in ["suspended", "disabled"])); }
+    function platformAdmin() { return activeAccount() && (hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") || hasPermission("admin.*")); }
+    function peopleAdmin() { return platformAdmin() || hasRole("people_operations_admin") || hasRole("people_admin") || hasPermission("people.*"); }
+    function claimsStaff() { return platformAdmin() || hasRole("verification_officer") || hasPermission("claims.*") || hasPermission("claims.review") || hasPermission("documents.read"); }
+    function business(businessId) { return firestore.get(/databases/(default)/documents/businesses/$(businessId)).data; }
+    function membershipId(businessId) { return business(businessId).organizationId + "_" + request.auth.uid; }
+    function membershipExists(businessId) { return activeAccount() && ("organizationId" in business(businessId)) && firestore.exists(/databases/(default)/documents/memberships/$(membershipId(businessId))); }
+    function membership(businessId) { return firestore.get(/databases/(default)/documents/memberships/$(membershipId(businessId))).data; }
+    function activeBusinessAccess(businessId) {
+      return membershipExists(businessId) && membership(businessId).status == "active" &&
+        (!("expiresAt" in membership(businessId)) || membership(businessId).expiresAt == null || membership(businessId).expiresAt > request.time) && (
+        membership(businessId).role == "organization_owner" ||
+        ("businessId" in membership(businessId) && membership(businessId).businessId == businessId) ||
+        ("businessIds" in membership(businessId) && businessId in membership(businessId).businessIds)
       );
+    }
+    function businessPermission(businessId, permission) {
+      return activeBusinessAccess(businessId) && ("permissions" in membership(businessId)) && ("*" in membership(businessId).permissions || permission in membership(businessId).permissions);
+    }
+    function directOwner(businessId) { return activeAccount() && ("ownerIds" in business(businessId)) && request.auth.uid in business(businessId).ownerIds; }
+    function canManageBusinessMedia(businessId) {
+      return platformAdmin() || directOwner(businessId) || businessPermission(businessId, "businesses.*") || businessPermission(businessId, "business.update") || businessPermission(businessId, "catalog.*") || businessPermission(businessId, "catalog.update");
+    }
+    function canReadBusinessEvidence(businessId) {
+      return platformAdmin() || claimsStaff() || directOwner(businessId) || businessPermission(businessId, "staff.*") || businessPermission(businessId, "staff.manage");
     }
     function safeImage() { return request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*'); }
     function safeDocument() { return request.resource.size < 20 * 1024 * 1024 && request.resource.contentType.matches('(application/pdf|image/.*)'); }
 
     match /businesses/{businessId}/public/{fileName} {
       allow read: if true;
-      allow write: if businessOwner(businessId) && safeImage();
+      allow write: if canManageBusinessMedia(businessId) && safeImage();
     }
     match /businesses/{businessId}/catalog/{fileName} {
+      // Catalogue image URLs are public once referenced by a published product. Upload authority is scoped here;
+      // public/private publication is enforced on product documents.
       allow read: if true;
-      allow write: if businessOwner(businessId) && safeImage();
+      allow write: if canManageBusinessMedia(businessId) && safeImage();
     }
     match /verification/{businessId}/{uid}/{fileName} {
-      allow read: if admin() || (signedIn() && request.auth.uid == uid) || businessOwner(businessId);
-      allow write: if (signedIn() && request.auth.uid == uid || businessOwner(businessId)) && safeDocument();
+      allow read: if signedIn() && (request.auth.uid == uid || canReadBusinessEvidence(businessId));
+      allow write: if signedIn() && (request.auth.uid == uid || canReadBusinessEvidence(businessId)) && safeDocument();
     }
     match /users/{uid}/{fileName} {
-      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow read: if signedIn() && (request.auth.uid == uid || platformAdmin());
       allow write: if signedIn() && request.auth.uid == uid && safeImage();
     }
     match /support/{conversationId}/{uid}/{fileName} {
-      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow read: if signedIn() && (request.auth.uid == uid || platformAdmin() || hasPermission("support.read") || hasPermission("support.*"));
       allow write: if signedIn() && request.auth.uid == uid && request.resource.size < 10 * 1024 * 1024 &&
         request.resource.contentType.matches('(application/pdf|image/jpeg|image/png|text/plain)');
     }
     match /claim-evidence/{uid}/{draftId}/{fileName} {
-      allow read: if signedIn() && (request.auth.uid == uid || admin());
+      allow read: if signedIn() && (request.auth.uid == uid || claimsStaff());
       allow write: if signedIn() && request.auth.uid == uid && safeDocument();
     }
     match /staff/{uid}/{category}/{fileName} {

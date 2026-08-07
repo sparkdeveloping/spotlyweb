@@ -195,37 +195,45 @@ function useStaffData() {
     if (!user?.uid) return undefined;
     setReady(false);
     setError("");
-    let settled = false;
-    const markReady = () => {
-      if (!settled) {
-        settled = true;
-        setReady(true);
-      }
+    let active = true;
+    const baseSources = ["profile", "tasks", "shifts", "leave", "training", "performance", "payroll", "assets", "support"];
+    const expectedSources = manager ? [...baseSources, "directory", "workforce", "candidates"] : baseSources;
+    const settledSources = new Set();
+    const settle = (source) => {
+      if (!active || settledSources.has(source)) return;
+      settledSources.add(source);
+      if (settledSources.size >= expectedSources.length) setReady(true);
     };
-    const onError = (reason) => {
-      setError(reason?.message || "Some workforce information could not be loaded.");
-      markReady();
+    const onError = (source) => (reason) => {
+      if (!active) return;
+      const detail = reason?.message || "Some workforce information could not be loaded.";
+      setError((current) => current ? `${current} ${detail}` : detail);
+      settle(source);
+    };
+    const receive = (source, setter) => (value) => {
+      if (!active) return;
+      setter(value);
+      settle(source);
     };
     const personal = manager ? {} : { userId: user.uid };
     const cleanups = [
-      subscribeStaffProfile(user.uid, (value) => { setStaffProfile(value); markReady(); }, onError),
-      subscribeStaffTasks(setTasks, { assigneeId: manager ? undefined : user.uid, onError }),
-      subscribeStaffShifts(setShifts, { ...personal, onError }),
-      subscribeLeaveRequests(setLeave, { ...personal, onError }),
-      subscribeTrainingAssignments(setTraining, { ...personal, onError }),
-      subscribePerformanceRecords(setPerformance, { ...personal, onError }),
-      subscribePayrollRecords(setPayroll, { ...personal, onError }),
-      subscribeStaffAssets(setAssets, { userId: manager ? undefined : user.uid, onError }),
-      subscribeStaffSupportRequests(setSupportRequests, { ...personal, onError })
+      subscribeStaffProfile(user.uid, receive("profile", setStaffProfile), onError("profile")),
+      subscribeStaffTasks(receive("tasks", setTasks), { assigneeId: manager ? undefined : user.uid, onError: onError("tasks") }),
+      subscribeStaffShifts(receive("shifts", setShifts), { ...personal, onError: onError("shifts") }),
+      subscribeLeaveRequests(receive("leave", setLeave), { ...personal, onError: onError("leave") }),
+      subscribeTrainingAssignments(receive("training", setTraining), { ...personal, onError: onError("training") }),
+      subscribePerformanceRecords(receive("performance", setPerformance), { ...personal, onError: onError("performance") }),
+      subscribePayrollRecords(receive("payroll", setPayroll), { ...personal, onError: onError("payroll") }),
+      subscribeStaffAssets(receive("assets", setAssets), { userId: manager ? undefined : user.uid, onError: onError("assets") }),
+      subscribeStaffSupportRequests(receive("support", setSupportRequests), { ...personal, onError: onError("support") })
     ];
     if (manager) {
-      cleanups.push(subscribeStaffDirectory(setDirectory, onError));
-      cleanups.push(subscribeWorkforceRequests(setWorkforceRequests, onError));
-      cleanups.push(subscribeCandidates(setCandidates, onError));
+      cleanups.push(subscribeStaffDirectory(receive("directory", setDirectory), onError("directory")));
+      cleanups.push(subscribeWorkforceRequests(receive("workforce", setWorkforceRequests), onError("workforce")));
+      cleanups.push(subscribeCandidates(receive("candidates", setCandidates), onError("candidates")));
     }
-    const timeout = window.setTimeout(markReady, 1600);
     return () => {
-      window.clearTimeout(timeout);
+      active = false;
       cleanups.forEach((cleanup) => cleanup?.());
     };
   }, [user?.uid, manager]);
@@ -316,7 +324,7 @@ function Today({ data, openModal }) {
     ...pendingTraining.slice(0, 1).map((item) => ({ id: `training-${item.id}`, time: item.dueDate ? dateLabel(item.dueDate) : "Next", title: item.title || "Required learning", detail: "Continue your assigned learning and preserve your progress.", href: "/staff/learning", icon: GraduationCap }))
   ];
 
-  return <div className="space-y-6"><div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{new Intl.DateTimeFormat("en-ZW", { timeZone: "Africa/Harare", weekday: "long", day: "numeric", month: "long" }).format(new Date())}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.03em]">Good {harareNow().getHours() < 12 ? "morning" : harareNow().getHours() < 18 ? "afternoon" : "evening"}, {name.split(" ")[0]}</h1><p className="mt-2 text-sm text-secondary">{roleName} · {data.staffProfile?.department || data.rolePack?.department || "Spotly"}</p></div><div className="flex flex-wrap gap-2">{todaysShift ? <ShiftCard shift={todaysShift} user={data.user} compact /> : <Button asChild><Link href="/staff/schedule">View schedule</Link></Button>}<Button variant="outline" onClick={() => openModal("support")}><Headphones className="h-4 w-4" />Ask for help</Button></div></div><div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]"><SectionCard title="Today’s agenda" description="Your shift, due work, and required learning in one place"><div>{agenda.map(({ id, time, title, detail, href, icon: Icon }) => <Link key={id} href={href} className="grid grid-cols-[64px_40px_1fr_auto] items-start gap-3 border-b px-4 py-4 transition hover:bg-grouped last:border-b-0"><span className="pt-2 text-xs font-semibold text-tertiary">{time}</span><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-5 w-5" /></span><span><span className="block font-semibold">{title}</span><span className="mt-1 block text-sm leading-6 text-secondary">{detail}</span></span><ArrowRight className="mt-3 h-4 w-4 text-tertiary" /></Link>)}{!agenda.length && <EmptyState icon={CheckCircle2} title="Nothing is due right now" description="New assignments, learning, and schedule changes will appear here with a direct next action." />}</div></SectionCard><div className="space-y-5"><SectionCard title="Your work queue" description={queue.description}><div className="p-5"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><QueueIcon className="h-5 w-5" /></span><h2 className="mt-4 text-lg font-semibold">{queue.title}</h2><Button asChild className="mt-5 w-full"><Link href={queue.href}>Open queue<ArrowRight className="h-4 w-4" /></Link></Button></div></SectionCard>{data.manager && <SectionCard title="Approvals" description="Requests waiting for your decision"><div className="divide-y"><Link href="/staff/leave" className="flex items-center justify-between p-4 hover:bg-grouped"><span><span className="block font-semibold">Leave requests</span><span className="text-sm text-secondary">{pendingLeave.length} waiting</span></span><Badge tone={pendingLeave.length ? "warning" : "success"}>{pendingLeave.length}</Badge></Link><Link href="/staff/hiring" className="flex items-center justify-between p-4 hover:bg-grouped"><span><span className="block font-semibold">Workforce requests</span><span className="text-sm text-secondary">{pendingRequests.length} waiting</span></span><Badge tone={pendingRequests.length ? "warning" : "success"}>{pendingRequests.length}</Badge></Link></div></SectionCard>}</div></div><SectionCard title="Assigned work" description="Ordered by urgency and due date" action={<Link href="/staff/work" className="text-sm font-semibold text-[var(--accent)]">View all</Link>}><div>{openTasks.slice(0, 5).map((task) => <TaskRow key={task.id} task={task} user={data.user} />)}{!openTasks.length && <EmptyState icon={CheckCircle2} title="You are clear for now" description="New work will appear here with a direct next action." />}</div></SectionCard>{data.error && <Card className="border-amber-300 bg-[var(--warning-soft)] p-4 text-sm leading-6 text-[var(--on-warning-soft)]"><AlertTriangle className="mr-2 inline h-4 w-4" />{data.error}</Card>}</div>;
+  return <div className="space-y-6"><div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{new Intl.DateTimeFormat("en-ZW", { timeZone: "Africa/Harare", weekday: "long", day: "numeric", month: "long" }).format(new Date())}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.03em]">Good {harareNow().getHours() < 12 ? "morning" : harareNow().getHours() < 18 ? "afternoon" : "evening"}, {name.split(" ")[0]}</h1><p className="mt-2 text-sm text-secondary">{roleName} · {data.staffProfile?.department || data.rolePack?.department || "Spotly"}</p></div><div className="flex flex-wrap gap-2">{todaysShift ? <ShiftCard shift={todaysShift} user={data.user} compact /> : <Button asChild><Link href="/staff/schedule">View schedule</Link></Button>}<Button variant="outline" onClick={() => openModal("support")}><Headphones className="h-4 w-4" />Ask for help</Button></div></div><div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]"><SectionCard title="Today’s agenda" description="Your shift, due work, and required learning in one place"><div>{agenda.map(({ id, time, title, detail, href, icon: Icon }) => <Link key={id} href={href} className="grid grid-cols-[64px_40px_1fr_auto] items-start gap-3 border-b px-4 py-4 transition hover:bg-grouped last:border-b-0"><span className="pt-2 text-xs font-semibold text-tertiary">{time}</span><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-5 w-5" /></span><span><span className="block font-semibold">{title}</span><span className="mt-1 block text-sm leading-6 text-secondary">{detail}</span></span><ArrowRight className="mt-3 h-4 w-4 text-tertiary" /></Link>)}{!agenda.length && <EmptyState icon={CheckCircle2} title="Nothing is due right now" description="New assignments, learning, and schedule changes will appear here with a direct next action." />}</div></SectionCard><div className="space-y-5"><SectionCard title="Your work queue" description={queue.description}><div className="p-5"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><QueueIcon className="h-5 w-5" /></span><h2 className="mt-4 text-lg font-semibold">{queue.title}</h2><Button asChild className="mt-5 w-full"><Link href={queue.href}>Open queue<ArrowRight className="h-4 w-4" /></Link></Button></div></SectionCard>{data.manager && <SectionCard title="Approvals" description="Requests waiting for your decision"><div className="divide-y"><Link href="/staff/leave" className="flex items-center justify-between p-4 hover:bg-grouped"><span><span className="block font-semibold">Leave requests</span><span className="text-sm text-secondary">{pendingLeave.length} waiting</span></span><Badge tone={pendingLeave.length ? "warning" : "success"}>{pendingLeave.length}</Badge></Link><Link href="/staff/hiring" className="flex items-center justify-between p-4 hover:bg-grouped"><span><span className="block font-semibold">Workforce requests</span><span className="text-sm text-secondary">{pendingRequests.length} waiting</span></span><Badge tone={pendingRequests.length ? "warning" : "success"}>{pendingRequests.length}</Badge></Link></div></SectionCard>}</div></div><SectionCard title="Assigned work" description="Ordered by urgency and due date" action={<Link href="/staff/work" className="text-sm font-semibold text-[var(--accent)]">View all</Link>}><div>{openTasks.slice(0, 5).map((task) => <TaskRow key={task.id} task={task} user={data.user} />)}{!openTasks.length && <EmptyState icon={CheckCircle2} title="You are clear for now" description="New work will appear here with a direct next action." />}</div></SectionCard>{data.error && <Card className="border-[color-mix(in_srgb,var(--warning)_45%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm leading-6 text-[var(--on-warning-soft)]"><AlertTriangle className="mr-2 inline h-4 w-4" />{data.error}</Card>}</div>;
 }
 
 function Work({ data, openModal }) {

@@ -1,11 +1,10 @@
-import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { createPaynow, normalizePaynowStatus } from "@/lib/paynow-server";
-import { releaseOrderReservation } from "@/lib/order-reservations-server";
+import { applyProviderPaymentUpdate } from "@/lib/payment-processor-server";
+import { hasPlatformPermission, isPlatformAdmin } from "@/lib/access-control-server";
 
 export const runtime = "nodejs";
-
 const schema = z.object({ orderId: z.string().min(3).max(180) });
 
 export async function POST(request) {
@@ -17,47 +16,21 @@ export async function POST(request) {
     const orderSnapshot = await orderRef.get();
     if (!orderSnapshot.exists) throw Object.assign(new Error("The order was not found."), { status: 404 });
     const order = orderSnapshot.data();
-    const allowed = order.customerId === user.uid || user.profile?.roles?.some((role) => ["super_admin", "admin", "finance_admin", "support_agent"].includes(role));
+    const allowed = order.customerId === user.uid || isPlatformAdmin(user) || hasPlatformPermission(user, "finance.read") || hasPlatformPermission(user, "orders.read");
     if (!allowed) throw Object.assign(new Error("You cannot inspect this payment."), { status: 403 });
 
-    if (!order.paymentIntentReference) {
-      return Response.json({ ok: true, orderId: body.orderId, state: order.paymentStatus || "unpaid" });
-    }
-
-    const intentRef = db.collection("paymentIntents").doc(order.paymentIntentReference);
-    const intentSnapshot = await intentRef.get();
+    if (!order.paymentIntentReference) return Response.json({ ok: true, orderId: body.orderId, state: order.paymentStatus || "unpaid" });
+    const intentSnapshot = await db.collection("paymentIntents").doc(order.paymentIntentReference).get();
     if (!intentSnapshot.exists) throw Object.assign(new Error("The payment record was not found."), { status: 404 });
     const intent = intentSnapshot.data();
+    if (!intent.pollUrl) return Response.json({ ok: true, orderId: body.orderId, state: intent.status || order.paymentStatus || "initiated", providerStatus: intent.providerStatus || "" });
+
     const paynow = await createPaynow(intent.currency);
     const providerStatus = await paynow.pollTransaction(intent.pollUrl);
     const normalized = normalizePaynowStatus(providerStatus);
-
-    if (normalized.amount && Math.abs(normalized.amount - Number(intent.amount)) > 0.01) {
-      await intentRef.set({ status: "amount_mismatch", providerStatus: normalized.providerStatus, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      throw Object.assign(new Error("The payment amount did not match the order total."), { status: 409 });
-    }
-
-    await db.runTransaction(async (transaction) => {
-      transaction.set(intentRef, {
-        status: normalized.state,
-        providerStatus: normalized.providerStatus,
-        providerReference: normalized.providerReference || intent.providerReference || "",
-        checkedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
-      transaction.set(orderRef, {
-        paymentStatus: normalized.paid ? "paid" : normalized.state,
-        paidAt: normalized.paid ? FieldValue.serverTimestamp() : order.paidAt || null,
-        status: normalized.paid && order.status === "awaiting_payment" ? "confirmed" : order.status,
-        updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
-    });
-
-    if (["failed", "cancelled", "expired"].includes(normalized.state)) {
-      await releaseOrderReservation(body.orderId, { reason: normalized.state === "expired" ? "payment_expired" : "payment_failed", status: normalized.state === "expired" ? "expired" : "payment_failed", actorId: user.uid }).catch(() => null);
-    }
-
-    return Response.json({ ok: true, orderId: body.orderId, ...normalized });
+    normalized.reference = normalized.reference || order.paymentIntentReference;
+    const applied = await applyProviderPaymentUpdate(db, order.paymentIntentReference, normalized, { source: "paynow_status_poll" });
+    return Response.json({ ok: true, orderId: body.orderId, ...normalized, state: applied.state, transitionApplied: applied.transitionApplied, amountMismatch: applied.amountMismatch, deduplicated: applied.deduplicated });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "The order identifier is invalid." }, { status: 400 });
     return apiError(error);
