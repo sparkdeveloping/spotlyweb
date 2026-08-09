@@ -47,6 +47,17 @@ export async function POST(request) {
       const business = businessSnapshot.data();
       const status = body.decision === "approve" ? "approved" : body.decision === "request" ? "needs_information" : "rejected";
 
+      let memberRef = null;
+      let memberSnapshot = null;
+      let organizationId = null;
+      if (body.decision === "approve") {
+        organizationId = claim.organizationId || business.organizationId;
+        if (!organizationId) throw Object.assign(new Error("The approved claim must be linked to an organization."), { status: 409 });
+        memberRef = db.collection("memberships").doc(`${organizationId}_${claim.applicantId}`);
+        memberSnapshot = await transaction.get(memberRef);
+      }
+
+      // Firestore transactions require every read to complete before the first write.
       transaction.set(claimRef, {
         status,
         decisionReason: safeText(body.reason, 1000),
@@ -56,11 +67,7 @@ export async function POST(request) {
       }, { merge: true });
 
       if (body.decision === "approve") {
-        const organizationId = claim.organizationId || business.organizationId;
-        if (!organizationId) throw Object.assign(new Error("The approved claim must be linked to an organization."), { status: 409 });
-        const memberRef = db.collection("memberships").doc(`${organizationId}_${claim.applicantId}`);
-        const memberSnapshot = await transaction.get(memberRef);
-        const existing = memberSnapshot.exists ? memberSnapshot.data() : {};
+        const existing = memberSnapshot?.exists ? memberSnapshot.data() : {};
         const grant = approvedGrant(claim);
         const branchIds = [...new Set([...(existing.branchIds || []), ...(claim.branchIds || []), ...(claim.branchId ? [claim.branchId] : [])])];
         const businessIds = [...new Set([...(existing.businessIds || []), claim.businessId])];
@@ -77,7 +84,7 @@ export async function POST(request) {
           status: "active",
           grantedBy: user.uid,
           grantedFromClaimId: body.claimId,
-          ...(memberSnapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+          ...(memberSnapshot?.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
         transaction.set(businessRef, {

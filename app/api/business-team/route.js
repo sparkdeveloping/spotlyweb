@@ -82,7 +82,7 @@ export async function GET(request) {
 
     const [membersSnapshot, invitationsSnapshot] = await Promise.all([
       db.collection("memberships").where("businessIds", "array-contains", businessId).limit(250).get(),
-      db.collection("businessInvitations").where("businessId", "==", businessId).orderBy("createdAt", "desc").limit(100).get()
+      db.collection("businessInvitations").where("businessId", "==", businessId).limit(250).get()
     ]);
     const actorBranches = context.membership?.branchIds || [];
     const memberRecords = membersSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -98,7 +98,14 @@ export async function GET(request) {
         email: member.email || profile.email || ""
       };
     });
-    const invitationRecords = invitationsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const invitationRecords = invitationsSnapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const aMs = typeof a.createdAt?.toMillis === "function" ? a.createdAt.toMillis() : Date.parse(a.createdAt || 0) || 0;
+        const bMs = typeof b.createdAt?.toMillis === "function" ? b.createdAt.toMillis() : Date.parse(b.createdAt || 0) || 0;
+        return bMs - aMs;
+      })
+      .slice(0, 100);
     const invitations = context.businessWide ? invitationRecords : invitationRecords.filter((invite) => (invite.branchIds || []).some((id) => actorBranches.includes(id)));
     return Response.json({ ok: true, members: enrichedMembers, invitations });
   } catch (error) {
