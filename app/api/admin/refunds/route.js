@@ -5,6 +5,7 @@ import { requirePlatformPermission } from "@/lib/access-control-server";
 import { canTransitionPayment } from "@/lib/payment-state";
 import { releaseReservationInTransaction } from "@/lib/order-reservations-server";
 import { safeText } from "@/lib/server-helpers";
+import { merchantNetAmount, moneyEntryId, postLedgerEntry, refundLedgerEffects } from "@/lib/business-money-server";
 
 export const runtime = "nodejs";
 
@@ -102,6 +103,11 @@ export async function POST(request) {
         transaction.set(orderRef, { paymentStatus: "refunded", refundedAt: FieldValue.serverTimestamp(), refundRequestId: body.refundId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       }
       if (intentRef) transaction.set(intentRef, { status: "refunded", refundedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      const merchantRefund = merchantNetAmount(order);
+      if (order.businessId && merchantRefund > 0) {
+        postLedgerEntry(transaction, db, { id: moneyEntryId("refund", body.refundId), businessId: order.businessId, orderId: refund.orderId, paymentIntentId: refund.paymentIntentReference || null, refundId: body.refundId, currency: order.currency || "USD", amount: merchantRefund, direction: "debit", type: "refund", effects: refundLedgerEffects(merchantRefund, order.merchantSettlementStatus), reference: body.providerReference, source: "manual_refund", createdBy: user.uid });
+        transaction.set(orderRef, { merchantSettlementStatus: "refunded", merchantSettlementUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      }
       transaction.set(refundRef, { status: "refunded", providerReference: body.providerReference, completedBy: user.uid, refundedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       transaction.create(db.collection("orderEvents").doc(), { orderId: refund.orderId, type: "refund_completed", previousStatus: order.status || null, status: fulfilled ? order.status : "refunded", actorType: "admin", actorId: user.uid, source: "manual_refund", metadata: { refundId: body.refundId, amount: refund.amount, providerReference: body.providerReference }, createdAt: FieldValue.serverTimestamp() });
       audit(transaction, db, user, "refund.completed", body.refundId, { orderId: refund.orderId, amount: refund.amount, providerReference: body.providerReference });

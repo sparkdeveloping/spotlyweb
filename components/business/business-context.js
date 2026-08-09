@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/firebase-provider";
 import {
-  getBusiness,
   subscribeBranches,
   subscribeBusiness,
   subscribeBusinessCatalog,
@@ -20,20 +20,12 @@ import {
   subscribeCatalogTemplates,
   subscribePromotions
 } from "@/lib/business-services";
+import { authenticatedFetch } from "@/lib/api-client";
 import { defaultOperationalSettings } from "@/data/business-config";
 import { businessArchetype, inferBusinessType } from "@/data/business-archetypes";
 import { readState, writeState } from "@/lib/browser-state";
 
 const BusinessContext = createContext(null);
-
-function uniqueBusinessIds(memberships) {
-  const ids = new Set();
-  memberships.forEach((membership) => {
-    if (membership.businessId) ids.add(membership.businessId);
-    (membership.businessIds || []).forEach((id) => ids.add(id));
-  });
-  return [...ids];
-}
 
 function canUseEveryBranch(membership) {
   const role = membership?.role || "";
@@ -45,12 +37,22 @@ function canUseEveryBranch(membership) {
     || permissions.includes("branches.*");
 }
 
+function queryWithBusiness(pathname, searchParams, businessId) {
+  const params = new URLSearchParams(searchParams.toString());
+  if (businessId) params.set("business", businessId); else params.delete("business");
+  return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
+}
+
 export function BusinessDataProvider({ children }) {
   const { user, memberships } = useAuth();
-  const businessIds = useMemo(() => uniqueBusinessIds(memberships), [memberships]);
-  const businessIdsKey = useMemo(() => businessIds.join("|"), [businessIds]);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedBusinessId = searchParams.get("business") || "";
   const [businessChoices, setBusinessChoices] = useState([]);
-  const [selectedBusinessId, setSelectedBusinessId] = useState("");
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const [portfolioError, setPortfolioError] = useState("");
+  const [selectedBusinessId, setSelectedBusinessIdState] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [business, setBusiness] = useState(null);
   const [allBranches, setAllBranches] = useState([]);
@@ -68,33 +70,57 @@ export function BusinessDataProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!businessIds.length) {
-      setBusinessChoices([]);
-      setSelectedBusinessId("");
-      return undefined;
-    }
-    let active = true;
-    Promise.all(businessIds.map(async (id) => {
-      try { return await getBusiness(id); } catch { return null; }
-    })).then((items) => {
-      if (!active) return;
-      const choices = items.filter((item) => item && item.status !== "archived");
+  const refreshPortfolio = useCallback(async () => {
+    if (!user?.uid) return;
+    setPortfolioLoading(true);
+    setPortfolioError("");
+    try {
+      const payload = await authenticatedFetch("/api/business/portfolio");
+      const choices = payload.businesses || [];
       setBusinessChoices(choices);
-      const stored = readState("spotly-business-id", user, "", "local");
       const availableIds = choices.map((item) => item.id);
-      const next = availableIds.includes(stored) ? stored : availableIds[0] || businessIds[0];
-      setSelectedBusinessId((current) => availableIds.includes(current) ? current : next);
-    });
-    return () => { active = false; };
-  }, [businessIds, businessIdsKey, user]);
+      if (!availableIds.length) {
+        setSelectedBusinessIdState("");
+        return;
+      }
+      if (requestedBusinessId && !availableIds.includes(requestedBusinessId)) {
+        setSelectedBusinessIdState("");
+        setPortfolioError("This account does not currently have access to the business in this link.");
+        return;
+      }
+      const stored = readState("spotly-business-id", user, "", "local");
+      const next = requestedBusinessId || (availableIds.includes(stored) ? stored : availableIds[0]);
+      setSelectedBusinessIdState(next);
+      if (!requestedBusinessId && pathname.startsWith("/business/") && next) {
+        router.replace(queryWithBusiness(pathname, searchParams, next));
+      }
+    } catch (reason) {
+      setPortfolioError(reason?.message || "Your business portfolio could not be loaded.");
+      setBusinessChoices([]);
+      setSelectedBusinessIdState("");
+    } finally {
+      setPortfolioLoading(false);
+    }
+  }, [pathname, requestedBusinessId, router, searchParams, user]);
 
-  const membership = useMemo(() => memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId)) || null, [memberships, selectedBusinessId]);
+  useEffect(() => { refreshPortfolio(); }, [refreshPortfolio, memberships]);
+
+  const businessIds = useMemo(() => businessChoices.map((item) => item.id), [businessChoices]);
+  const selectedChoice = useMemo(() => businessChoices.find((item) => item.id === selectedBusinessId) || null, [businessChoices, selectedBusinessId]);
+  const membership = useMemo(() => memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId) || (selectedChoice?.organizationId && item.organizationId === selectedChoice.organizationId && item.role === "organization_owner")) || null, [memberships, selectedBusinessId, selectedChoice?.organizationId]);
+
+  const setSelectedBusinessId = useCallback((nextId) => {
+    if (!businessChoices.some((item) => item.id === nextId)) return;
+    setSelectedBusinessIdState(nextId);
+    writeState("spotly-business-id", user, nextId, "local");
+    router.push(queryWithBusiness(pathname, searchParams, nextId));
+  }, [businessChoices, pathname, router, searchParams, user]);
+
   const branches = useMemo(() => {
-    if (canUseEveryBranch(membership) || !(membership?.branchIds || []).length) return allBranches;
+    if (selectedChoice?.businessWide || canUseEveryBranch(membership) || !(membership?.branchIds || []).length) return allBranches;
     const allowed = new Set(membership.branchIds);
     return allBranches.filter((branch) => allowed.has(branch.id));
-  }, [allBranches, membership]);
+  }, [allBranches, membership, selectedChoice?.businessWide]);
 
   useEffect(() => {
     if (!selectedBusinessId) {
@@ -123,15 +149,7 @@ export function BusinessDataProvider({ children }) {
       setLoading(false);
     };
     const cleanups = [
-      subscribeBusiness(selectedBusinessId, (value) => {
-        setBusiness(value);
-        setBusinessChoices((current) => {
-          if (!value) return current;
-          const exists = current.some((item) => item.id === value.id);
-          return exists ? current.map((item) => item.id === value.id ? value : item) : [...current, value];
-        });
-        setLoading(false);
-      }, onError),
+      subscribeBusiness(selectedBusinessId, (value) => { setBusiness(value); setLoading(false); }, onError),
       subscribeBranches(selectedBusinessId, setAllBranches, onError),
       subscribeBusinessCatalog(selectedBusinessId, setProducts, onError),
       subscribeOrdersForBusiness(selectedBusinessId, setOrders, onError),
@@ -148,10 +166,7 @@ export function BusinessDataProvider({ children }) {
   }, [selectedBusinessId, user]);
 
   useEffect(() => {
-    if (!branches.length) {
-      setSelectedBranchId("");
-      return;
-    }
+    if (!branches.length) { setSelectedBranchId(""); return; }
     const storageKey = `spotly-branch-id:${selectedBusinessId}`;
     const stored = readState(storageKey, user, "", "local");
     const next = branches.some((branch) => branch.id === stored) ? stored : branches[0].id;
@@ -174,6 +189,9 @@ export function BusinessDataProvider({ children }) {
     membership,
     businessIds,
     businessChoices,
+    portfolioLoading,
+    portfolioError,
+    refreshPortfolio,
     selectedBusinessId,
     setSelectedBusinessId,
     business,
@@ -194,11 +212,11 @@ export function BusinessDataProvider({ children }) {
     support,
     templates,
     loading,
-    error,
+    error: error || portfolioError,
     businessType,
     archetype,
     setupComplete
-  }), [user, memberships, membership, businessIds, businessChoices, selectedBusinessId, business, allBranches, branches, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, error, businessType, archetype, setupComplete]);
+  }), [user, memberships, membership, businessIds, businessChoices, portfolioLoading, portfolioError, refreshPortfolio, selectedBusinessId, setSelectedBusinessId, business, allBranches, branches, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, error, businessType, archetype, setupComplete]);
 
   return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 }

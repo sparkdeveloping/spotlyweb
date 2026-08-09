@@ -1,40 +1,37 @@
 # Build and validation report
 
-Generated: August 6, 2026  
-Release: `5.0.0`
+Generated: August 9, 2026  
+Release: `5.4.0-business-os`
 
-## Completed checks
+## Passed
 
-- JavaScript and JSX parser-transpile validation across application pages, route handlers, components, libraries, data, and scripts
-- Local relative and `@/` import resolution
-- JavaScript-only project check through `node scripts/check-javascript.mjs`
-- No `.ts`, `.tsx`, `.mts`, or `.cts` source files
-- JSON configuration parsing
-- Source scan for unresolved local modules
+- JavaScript/JSX syntax/import integrity through `npm run check:js`
+- Semantic theme safety through `npm run check:theme`
+- Node test suite: 56 passed, 0 failed
+- JSON parsing: 7 files
+- SVG parsing: 5 files
 
-## Dependency-install limitation
+## Attempted but blocked
 
-The generation environment did not contain a usable dependency tree. A clean `npm install` attempted to use the restricted package gateway, which returned a 404 for the transitive package `zod-validation-error-4.0.2`. Because dependencies could not be installed, ESLint and the production Next.js build were not run here.
+`npm ci --ignore-scripts` failed because the configured internal npm registry returned HTTP 404 for `zod-validation-error-4.0.2.tgz`. The environment also has npm 10.9.2 while the repository requires npm 11+.
 
-Run the complete release gate after extraction:
+`npm run test:rules` could not retrieve `firebase-tools`.
+
+`npm run lint` could not run because `eslint` is not installed.
+
+`npm run build` could not run because `next` is not installed.
+
+## Required external release gate
 
 ```bash
-npm install
-npm run check
+npm ci
+npm run check:js
+npm run check:theme
+npm test
+npm run test:rules
+npm run lint
+npm run build
+npm run start
 ```
 
-Then test production rules and role boundaries in the Firebase Emulator Suite before deployment.
-
-## Required functional validation
-
-- `/staff` route access and portal switching
-- Role-adaptive Today queue for each staff role
-- Task, shift, leave, learning, performance, pay, asset, support, and profile flows
-- Manager-only team and hiring controls
-- People Operations employee, candidate, role-pack, and offboarding workflows
-- Payroll and sensitive-field isolation
-- Organization → brand → location governance
-- Parent-company branch approval and inherited policy behavior
-- Platform-map relationship and diagnostic links
-- Existing business, driver, customer, admin, support, notification, payment, and directory regressions
-- Mobile, tablet, desktop, keyboard, screen-reader, reduced-motion, offline, and low-bandwidth coverage
+Then run protected staging QA for multi-business portfolio/routing, claims/invitations, catalogue library/import/camera, AI media, Money/settlement/payouts, mobile, light/dark and accessibility.

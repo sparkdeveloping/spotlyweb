@@ -15,6 +15,7 @@ import { formatCurrency } from "@/lib/format";
 import { businessArchetype } from "@/data/business-archetypes";
 import { migrateLegacyState, readState, removeState, writeState } from "@/lib/browser-state";
 import { branchAcceptedCurrencies, branchPaymentMethods, pickupAvailability } from "@/lib/pickup-availability";
+import { resolveProductForBranch } from "@/lib/product-offers";
 
 const VIEW_VALUES = new Set(["discover", "search", "orders", "saved"]);
 const CART_KEY = "spotly-marketplace-cart";
@@ -222,7 +223,7 @@ export function MarketplaceApp() {
   const selectedArchetype=useMemo(()=>businessArchetype(selected||{}),[selected]);
   const selectedIsPickup=selectedArchetype.capabilities.includes("pickup_orders");
   const locationNoun=selectedArchetype.nouns.branch;
-  const branchProducts=useMemo(()=>products.filter((product)=>!product.branchIds?.length||!selectedBranchId||product.branchIds.includes(selectedBranchId)),[products,selectedBranchId]);
+  const branchProducts=useMemo(()=>products.filter((product)=>!product.branchIds?.length||!selectedBranchId||product.branchIds.includes(selectedBranchId)).map((product)=>resolveProductForBranch(product,selectedBranchId)),[products,selectedBranchId]);
   const categories=useMemo(()=>[...new Set(branchProducts.map((product)=>product.category).filter(Boolean))].sort(),[branchProducts]);
   const visibleProducts=useMemo(()=>branchProducts.filter((product)=>{const matchesCategory=category==="all"||product.category===category;const term=productQuery.trim().toLowerCase();return matchesCategory&&(!term||`${product.name} ${product.description||""} ${product.category||""}`.toLowerCase().includes(term));}),[branchProducts,category,productQuery]);
   const cartItems=useMemo(()=>products.filter((product)=>cart[product.id]&&priceFor(product,currency)).map((product)=>({...product,quantity:cart[product.id]})),[cart,products,currency]);

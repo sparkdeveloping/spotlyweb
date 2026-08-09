@@ -3,6 +3,8 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { zimbabweBusinesses } from "../data/zimbabwe-businesses.js";
 import { defaultHelpResources, defaultRoleTemplates } from "../data/production-seed.js";
 import { groceryCatalogTemplates } from "../data/catalog-templates.js";
+import { starterCatalogCollections, starterMasterProducts } from "../data/master-product-starter.js";
+import { catalogueSources } from "../data/catalogue-sources.js";
 import { DEFAULT_PLATFORM_SETTINGS } from "../lib/platform-defaults.js";
 
 const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "denzeltinashe-spotly";
@@ -32,4 +34,7 @@ await writeChunks("businesses", zimbabweBusinesses);
 await writeChunks("roleTemplates", defaultRoleTemplates);
 await writeChunks("helpResources", defaultHelpResources);
 await writeChunks("catalogTemplates", groceryCatalogTemplates);
+await writeChunks("masterProducts", starterMasterProducts);
+await writeChunks("catalogCollections", starterCatalogCollections);
+await writeChunks("catalogueSources", catalogueSources);
 console.log("Spotly seed complete.");

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, TabPanel, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
+import { authenticatedFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { removeProduct, saveProduct, uploadFile } from "@/lib/firebase-services";
 import {
@@ -31,6 +32,11 @@ import {
 import { businessCategories, emptyProduct } from "@/data/business-config";
 import { useBusinessWorkspace } from "@/components/business/business-context";
 import { BusinessSwitcher, ConfirmDialog, FieldLabel, FullScreenTask, fieldClass, selectClass, textAreaClass } from "@/components/business/shared";
+import { CatalogLibraryModal } from "@/components/business/catalog-library";
+import { ProductImageEnhancement } from "@/components/business/product-media";
+import { resetBranchOfferOverride, setBranchOfferOverride } from "@/lib/product-offers";
+import { parseCatalogueCsv } from "@/lib/catalog-import";
+import { PUBLISHABLE_IMAGE_RIGHTS } from "@/lib/catalog-library";
 
 function productPrice(product) {
   const value = Number(product.price ?? product.prices?.[product.currency || "USD"]);
@@ -86,6 +92,8 @@ function OfferingModal({ product, open, onClose }) {
 
   const update = (values) => setForm((current) => ({ ...current, ...values }));
   const toggleBranch = (id) => update({ branchIds: (form.branchIds || []).includes(id) ? form.branchIds.filter((item) => item !== id) : [...(form.branchIds || []), id] });
+  const patchBranchOverride = (id, values) => update({ branchOverrides: setBranchOfferOverride(form.branchOverrides || {}, id, values) });
+  const clearBranchOverride = (id) => update({ branchOverrides: resetBranchOfferOverride(form.branchOverrides || {}, id) });
 
   async function chooseImage(event) {
     const file = event.target.files?.[0];
@@ -96,8 +104,9 @@ function OfferingModal({ product, open, onClose }) {
     setUploadingImage(true);
     try {
       const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const url = await uploadFile(`businesses/${selectedBusinessId}/catalog/${crypto.randomUUID()}.${extension}`, file, { businessId: selectedBusinessId, kind: "offering_image" });
-      update({ image: url });
+      const storagePath = `businesses/${selectedBusinessId}/catalog/${crypto.randomUUID()}.${extension}`;
+      const url = await uploadFile(storagePath, file, { businessId: selectedBusinessId, kind: "offering_image", rightsStatus: "merchant_owned" });
+      update({ image: url, imageStoragePath: storagePath, imageRightsStatus: "merchant_owned", imageSourceType: "merchant_owned", imageVersionId: "", imageProvenance: { type: "original", sourceStoragePath: storagePath, createdBy: user?.uid || null } });
       toast("Image uploaded.", { title: "Image ready" });
     } catch (error) {
       toast(error.message, { type: "error", title: "Image upload failed" });
@@ -167,7 +176,10 @@ function OfferingModal({ product, open, onClose }) {
 
         {branches.length > 0 && <div><p className="text-sm font-semibold">Available at</p><p className="mt-1 text-xs text-secondary">Choose the exact locations where customers can use this offering.</p><div className="mt-3 flex flex-wrap gap-2">{branches.map((branch) => { const selected = (form.branchIds || []).includes(branch.id); return <button type="button" key={branch.id} onClick={() => toggleBranch(branch.id)} className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${selected ? "border-business bg-business-soft text-business" : "bg-[var(--surface)] text-secondary"}`}><MapPin className="h-4 w-4" />{branch.branchName || branch.name}{selected && <Check className="h-3.5 w-3.5" />}</button>; })}</div></div>}
 
-        <FieldLabel label={`${noun[0].toUpperCase()}${noun.slice(1)} image`} hint="Upload an image you own or are allowed to use."><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-business-soft text-business" style={form.image ? { backgroundImage: `url(${form.image})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>{!form.image && <ImagePlus className="h-6 w-6" />}</span><div className="flex-1"><label className={`inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-[var(--surface)] px-4 text-sm font-semibold transition hover:bg-grouped ${uploadingImage ? "pointer-events-none opacity-60" : ""}`}><UploadCloud className="h-4 w-4" />{uploadingImage ? "Uploading…" : form.image ? "Replace image" : "Upload image"}<input type="file" accept="image/*" className="sr-only" onChange={chooseImage} disabled={uploadingImage} /></label>{form.image && <button type="button" onClick={() => update({ image: "" })} className="ml-3 text-sm font-semibold text-danger">Remove</button>}<p className="mt-2 text-xs text-tertiary">Maximum 8 MB. Square or landscape images work best.</p></div></div></FieldLabel>
+        {isInventory && branches.length > 1 && (form.branchIds || []).length > 0 && <div className="space-y-3 rounded-2xl border p-4"><div><h3 className="font-bold">Location price and stock overrides</h3><p className="mt-1 text-xs leading-5 text-secondary">Every location inherits the business defaults above until you deliberately override it.</p></div>{branches.filter((branch) => (form.branchIds || []).includes(branch.id)).map((branch) => { const override = form.branchOverrides?.[branch.id]; return <div key={branch.id} className="rounded-xl bg-grouped p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold">{branch.branchName || branch.name}</p><p className="mt-1 text-xs text-secondary">{override ? "Overridden for this location" : "Inherited from business default"}</p></div>{override ? <Button type="button" size="sm" variant="ghost" onClick={() => clearBranchOverride(branch.id)}>Reset to default</Button> : <Button type="button" size="sm" variant="outline" onClick={() => patchBranchOverride(branch.id, { price: form.price ?? "", currency: form.currency || "USD", stockStatus: form.stockStatus || "in_stock", stockQuantity: form.stockQuantity || 0, pickupEligible: form.pickupEligible !== false, sku: form.sku || "" })}>Override</Button>}</div>{override && <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><FieldLabel label="Price"><input type="number" min="0" step="0.01" value={override.price ?? ""} onChange={(event) => patchBranchOverride(branch.id, { price: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Currency"><select value={override.currency || form.currency || "USD"} onChange={(event) => patchBranchOverride(branch.id, { currency: event.target.value })} className={selectClass}><option value="USD">USD</option><option value="ZWG">ZiG</option></select></FieldLabel><FieldLabel label="Availability"><select value={override.stockStatus || form.stockStatus || "in_stock"} onChange={(event) => patchBranchOverride(branch.id, { stockStatus: event.target.value })} className={selectClass}><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select></FieldLabel><FieldLabel label="Location SKU"><input value={override.sku || ""} onChange={(event) => patchBranchOverride(branch.id, { sku: event.target.value })} className={fieldClass} placeholder="Optional" /></FieldLabel></div>}</div>; })}</div>}
+
+        <FieldLabel label={`${noun[0].toUpperCase()}${noun.slice(1)} image`} hint="Upload an image you own or are allowed to use."><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-business-soft text-business" style={form.image ? { backgroundImage: `url(${form.image})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>{!form.image && <ImagePlus className="h-6 w-6" />}</span><div className="flex-1"><label className={`inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-[var(--surface)] px-4 text-sm font-semibold transition hover:bg-grouped ${uploadingImage ? "pointer-events-none opacity-60" : ""}`}><UploadCloud className="h-4 w-4" />{uploadingImage ? "Uploading…" : form.image ? "Replace image" : "Upload image"}<input type="file" accept="image/*" className="sr-only" onChange={chooseImage} disabled={uploadingImage} /></label>{form.image && <button type="button" onClick={() => update({ image: "", imageStoragePath: "", imageVersionId: "", imageProvenance: null })} className="ml-3 text-sm font-semibold text-danger">Remove</button>}<p className="mt-2 text-xs text-tertiary">Maximum 8 MB. Square or landscape images work best.</p></div></div></FieldLabel>
+        <ProductImageEnhancement businessId={selectedBusinessId} productId={product?.id || form.id || null} originalUrl={form.imageProvenance?.type === "ai_enhanced" ? null : form.image} sourceStoragePath={form.imageProvenance?.type === "ai_enhanced" ? form.imageProvenance.sourceStoragePath : form.imageStoragePath} onUseImage={(image) => update(image)} />
         <Button type="submit" loading={loading} className="w-full"><Check className="h-4 w-4" />Save {noun}</Button>
       </form>
     </Modal>
@@ -232,42 +244,139 @@ function TemplateModal({ open, onClose }) {
   return <Modal open={open} onClose={onClose} title={`Start ${archetype.nouns.catalog.toLowerCase()} with a useful structure`} size="lg"><div className="space-y-3 p-5">{relevant.length ? relevant.map((template) => <Card key={template.id} className="p-5"><div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-business-soft text-business"><Sparkles className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h3 className="font-bold">{template.name}</h3><p className="mt-1 text-sm leading-6 text-secondary">{template.description}</p><div className="mt-3 flex items-center gap-2"><Badge tone="neutral">{(template.products || template.items || []).length} drafts</Badge><Badge tone="warning">Prices need review</Badge></div></div><Button size="sm" onClick={() => apply(template)} loading={loading === template.id}>Use starter</Button></div></Card>) : <EmptyState icon={Sparkles} title="No starter is configured for this business type" description="Add the first offering manually or ask Spotly Support to publish a suitable starter." />}</div></Modal>;
 }
 
-function parseCsv(text, archetype, selectedBranchId) {
-  const lines = text.trim().split(/\r?\n/).filter(Boolean);
-  if (!lines.length) return [];
-  const first = lines[0].toLowerCase();
-  const hasHeader = first.includes("name") && first.includes("price");
-  const body = hasHeader ? lines.slice(1) : lines;
-  return body.map((line) => {
-    const [name, category, price, currency = "USD", code = ""] = line.split(",").map((item) => item.trim());
-    return {
-      name,
-      category: category || archetype.categoryHints?.[0] || "General",
-      price: Number(price || 0),
-      currency: currency || "USD",
-      sku: code,
-      itemType: itemDefaults(archetype).itemType,
-      pickupEligible: archetype.capabilities.includes("pickup_orders"),
-      substitutionAllowed: archetype.id === "grocery_retail",
-      branchIds: selectedBranchId ? [selectedBranchId] : []
-    };
-  }).filter((item) => item.name);
+const SHEETJS_URL = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+
+function importDefaults(archetype, selectedBranchId) {
+  return {
+    category: archetype.categoryHints?.[0] || "General",
+    currency: "USD",
+    itemType: itemDefaults(archetype).itemType,
+    pickupEligible: archetype.capabilities.includes("pickup_orders"),
+    substitutionAllowed: archetype.id === "grocery_retail",
+    branchIds: selectedBranchId ? [selectedBranchId] : [],
+    active: false,
+    published: false,
+    publicationState: "draft"
+  };
+}
+
+function loadSheetJs() {
+  if (typeof window === "undefined") return Promise.reject(new Error("Spreadsheet import is available in the browser."));
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${SHEETJS_URL}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.XLSX), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Could not load the spreadsheet reader. Try a CSV file instead.")), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = SHEETJS_URL;
+    script.async = true;
+    script.crossOrigin = "anonymous";
+    script.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error("The spreadsheet reader did not initialize."));
+    script.onerror = () => reject(new Error("Could not load the spreadsheet reader. Try a CSV file instead."));
+    document.head.appendChild(script);
+  });
+}
+
+async function fileToCsv(file) {
+  const name = String(file?.name || "").toLowerCase();
+  if (name.endsWith(".csv") || file?.type === "text/csv") return file.text();
+  if (!/\.(xlsx|xls)$/.test(name)) throw new Error("Use a CSV, XLSX, or XLS spreadsheet.");
+  const XLSX = await loadSheetJs();
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+  const firstSheet = workbook.SheetNames?.[0];
+  if (!firstSheet) throw new Error("That spreadsheet does not contain a worksheet.");
+  return XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheet]);
 }
 
 function CsvModal({ open, onClose }) {
   const { selectedBusinessId, user, archetype, selectedBranchId } = useBusinessWorkspace();
-  const [text, setText] = useState("name,category,price,currency,code\n");
+  const [text, setText] = useState("name,category,price,currency,sku,barcode,brand,variant,pack size,stock,availability\n");
+  const [fileName, setFileName] = useState("");
+  const [preview, setPreview] = useState([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  useEffect(() => { if (open) setText("name,category,price,currency,code\n"); }, [open]);
+  useEffect(() => {
+    if (open) {
+      setText("name,category,price,currency,sku,barcode,brand,variant,pack size,stock,availability\n");
+      setFileName("");
+      setPreview([]);
+    }
+  }, [open]);
+
+  async function matchRows(rows) {
+    if (!rows.length) return [];
+    const result = await authenticatedFetch("/api/business/catalog-library", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "match_import",
+        businessId: selectedBusinessId,
+        items: rows.slice(0, 100).map((item) => ({ name: item.name, brand: item.brand || "", barcode: item.barcode || "", gtin: item.gtin || "", variant: item.variant || "", packSize: item.packSize || "", sku: item.sku || "" }))
+      })
+    });
+    const byIndex = new Map((result.matches || []).map((item) => [item.index, item]));
+    return rows.map((item, index) => {
+      const match = byIndex.get(index);
+      const autoMatch = match?.masterProduct && ["exact", "strong"].includes(match.strength);
+      return {
+        ...item,
+        ...(autoMatch ? { masterProductId: match.masterProduct.id } : {}),
+        importMatchStrength: match?.strength || "none",
+        importMatchReason: match?.reason || "none",
+        importMatchCandidateId: match?.masterProduct?.id || "",
+        importMatchCandidateName: match?.masterProduct?.canonicalName || ""
+      };
+    });
+  }
+
+  async function preparePreview(csvText = text) {
+    const rows = parseCatalogueCsv(csvText, importDefaults(archetype, selectedBranchId));
+    if (!rows.length) { setPreview([]); return []; }
+    const matched = await matchRows(rows);
+    setPreview(matched);
+    return matched;
+  }
+
+  async function chooseFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const csv = await fileToCsv(file);
+      setText(csv);
+      setFileName(file.name);
+      const matched = await preparePreview(csv);
+      toast(`${file.name} is ready for review. ${matched.filter((item) => item.masterProductId).length} row${matched.filter((item) => item.masterProductId).length === 1 ? "" : "s"} matched Spotly Library.`, { title: "Spreadsheet loaded" });
+    } catch (error) {
+      toast(error.message, { type: "error", title: "Could not read spreadsheet" });
+    } finally {
+      setLoading(false);
+      event.target.value = "";
+    }
+  }
+
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
     try {
-      const items = parseCsv(text, archetype, selectedBranchId);
-      if (!items.length) throw new Error(`Add at least one ${archetype.nouns.item} row.`);
+      const batchId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `import-${Date.now()}`;
+      const rows = await preparePreview(text);
+      if (!rows.length) throw new Error(`Add at least one ${archetype.nouns.item} row.`);
+      const items = rows.map((item) => ({
+        ...item,
+        sourceType: "merchant_spreadsheet",
+        source: fileName || "Pasted CSV",
+        importSource: fileName || "Pasted CSV",
+        importBatchId: batchId,
+        active: false,
+        published: false,
+        publicationState: "draft"
+      }));
       const count = await quickAddProducts(items, selectedBusinessId, user);
-      toast(`${count} ${count === 1 ? archetype.nouns.item : archetype.nouns.items} imported.`, { title: "Import complete" });
+      toast(`${count} draft ${count === 1 ? archetype.nouns.item : archetype.nouns.items} imported for review.`, { title: "Import complete" });
       onClose();
     } catch (error) {
       toast(error.message, { type: "error", title: "Import failed" });
@@ -275,7 +384,16 @@ function CsvModal({ open, onClose }) {
       setLoading(false);
     }
   }
-  return <Modal open={open} onClose={onClose} title={`Paste a CSV ${archetype.nouns.item} list`} size="lg"><form onSubmit={submit} className="space-y-4 p-5"><p className="text-sm leading-6 text-secondary">Use one row per {archetype.nouns.item}: <strong>name, category, price, currency, code</strong>. Detailed schedules and capacity can be added after import.</p><textarea value={text} onChange={(event) => setText(event.target.value)} className="min-h-[320px] w-full rounded-2xl border p-4 font-mono text-sm outline-none" spellCheck="false" /><Button type="submit" className="w-full" loading={loading}><UploadCloud className="h-4 w-4" />Import {archetype.nouns.items}</Button></form></Modal>;
+
+  return <Modal open={open} onClose={onClose} title={`Import ${archetype.nouns.items} from a spreadsheet`} size="lg"><form onSubmit={submit} className="space-y-4 p-5">
+    <p className="text-sm leading-6 text-secondary">Upload CSV, XLSX, or XLS. Spotly imports records as private drafts so names, prices, product matches, images, and location availability can be reviewed before publication.</p>
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-[var(--surface)] p-4 text-sm font-semibold"><span><span className="block">Choose spreadsheet</span><span className="mt-1 block text-xs font-normal text-secondary">CSV, XLSX, or XLS · first worksheet is imported</span></span><span className="rounded-lg bg-business-soft px-3 py-2 text-business">Browse</span><input type="file" className="sr-only" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={chooseFile} /></label>
+    {fileName && <p className="text-sm text-secondary">Loaded: <strong className="text-[var(--text)]">{fileName}</strong></p>}
+    <FieldLabel label="Import preview" hint="Recognized columns include name, category, price, currency, SKU, barcode/GTIN, brand, variant, pack size, stock, availability, and location."><textarea value={text} onChange={(event) => { setText(event.target.value); setPreview([]); }} className={`${textAreaClass} min-h-[220px] font-mono text-sm`} spellCheck="false" /></FieldLabel>
+    <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-secondary">Spotly matches exact barcodes first, then strong product identity. Possible fuzzy matches are flagged but never merged automatically.</p><Button type="button" variant="outline" size="sm" onClick={async () => { setLoading(true); try { await preparePreview(text); } catch (error) { toast(error.message, { type: "error", title: "Could not match products" }); } finally { setLoading(false); } }}>Review matches</Button></div>
+    {preview.length > 0 && <div className="max-h-72 space-y-2 overflow-auto rounded-xl border bg-[var(--grouped)] p-3" aria-label="Spreadsheet match preview">{preview.slice(0, 30).map((item, index) => <div key={`${item.name}-${index}`} className="grid gap-2 rounded-lg bg-[var(--surface)] p-3 text-sm sm:grid-cols-[1fr_auto]"><div><p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{[item.brand, item.packSize, item.barcode ? `Barcode ${item.barcode}` : "", item.priceMissing ? "Price required" : `${item.currency} ${Number(item.price).toFixed(2)}`].filter(Boolean).join(" · ")}</p>{item.importMatchCandidateName && <p className="mt-1 text-xs text-secondary">Candidate: {item.importMatchCandidateName}</p>}</div><div className="self-center">{item.masterProductId ? <Badge tone="success">Library match</Badge> : item.importMatchStrength === "possible" ? <Badge tone="warning">Possible match — review</Badge> : <Badge tone="neutral">New / unmatched</Badge>}</div></div>)}</div>}
+    <Button type="submit" className="w-full" loading={loading}><UploadCloud className="h-4 w-4" />Import as drafts</Button>
+  </form></Modal>;
 }
 
 function OfferingSummary({ item, archetype }) {
@@ -310,6 +428,7 @@ export function CatalogView() {
   const [productOpen, setProductOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
   const [busyId, setBusyId] = useState("");
@@ -366,17 +485,25 @@ export function CatalogView() {
 
   const missingPrice = scopedProducts.filter((item) => item.active !== false && !productPrice(item));
   const draftItems = scopedProducts.filter((item) => item.active === false || item.published === false);
-  const importedItems = scopedProducts.filter((item) => item.source || item.importSource || item.templateId);
+  const importedItems = scopedProducts.filter((item) => item.source || item.importSource || item.importBatchId || item.sourceTemplateId || item.templateId);
+
+  function publicationIssues(item) {
+    const issues = [];
+    if (item.active === false) issues.push("Hidden");
+    if (!productPrice(item)) issues.push("Price required");
+    if (item.image && !PUBLISHABLE_IMAGE_RIGHTS.has(item.imageRightsStatus)) issues.push("Image rights need review");
+    return issues;
+  }
 
   async function publishReadyItems() {
-    const ready = scopedProducts.filter((item) => item.active !== false && productPrice(item));
+    const ready = scopedProducts.filter((item) => publicationIssues(item).length === 0);
     if (!ready.length) {
-      toast("Add a valid price and make at least one item visible before publishing.", { type: "error", title: "Nothing is ready" });
+      toast("Resolve visibility, price, and image-rights issues before publishing.", { type: "error", title: "Nothing is ready" });
       return;
     }
     setBusyId("publish");
     try {
-      await Promise.all(ready.map((item) => saveProduct({ ...item, published: true, publishedAt: new Date().toISOString() }, selectedBusinessId, user)));
+      await Promise.all(ready.map((item) => saveProduct({ ...item, published: true, publicationState: "published", publishedAt: new Date().toISOString() }, selectedBusinessId, user)));
       toast(`${ready.length} ${ready.length === 1 ? archetype.nouns.item : archetype.nouns.items} published for customer preview.`, { title: "Catalogue published" });
     } catch (error) {
       toast(error.message, { type: "error", title: "Could not publish" });
@@ -408,7 +535,7 @@ export function CatalogView() {
   ];
 
   return <div className="space-y-6">
-    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.catalog} description={`Create the ${archetype.nouns.items} customers can understand and act on at the selected ${archetype.nouns.branch}.`} actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><FileSpreadsheet className="h-4 w-4" />Quick add</Button><Button onClick={() => openOffering()}><Plus className="h-4 w-4" />Add {archetype.nouns.item}</Button></div>} /><BusinessSwitcher /></div>
+    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.catalog} description={`Create the ${archetype.nouns.items} customers can understand and act on at the selected ${archetype.nouns.branch}.`} actions={<div className="flex flex-wrap gap-2"><Button onClick={() => setLibraryOpen(true)}><BookOpenCheck className="h-4 w-4" />Spotly Library</Button><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Collections</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><FileSpreadsheet className="h-4 w-4" />Quick add</Button><Button variant="outline" onClick={() => openOffering()}><Plus className="h-4 w-4" />Create manually</Button></div>} /><BusinessSwitcher /></div>
 
 
     <Tabs idPrefix="catalog-mode" value={catalogMode} onChange={setCatalogMode} tabs={catalogModes} />
@@ -416,33 +543,34 @@ export function CatalogView() {
     <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="quick">
       <Card variant="bordered" className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder={`Search ${archetype.nouns.items}, category, or code`} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div className="mt-4"><Tabs idPrefix="catalog-status-quick" value={status} onChange={setStatus} tabs={tabs} /></div></Card>
       <div className="mt-5"><SectionCard>
-      {visible.length ? <><div className="space-y-3 md:hidden">{visible.map((item) => <MobileOfferingCard key={item.id} item={item} archetype={archetype} isInventory={isInventory} isPickup={isPickup} busyId={busyId} onAvailability={availability} onDuplicate={duplicate} onEdit={openOffering} onDelete={setRemoveTarget} />)}</div><div className="hidden overflow-x-auto md:block">      <table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{priceLabel(item)}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-[var(--surface)] px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div></> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><Plus className="h-4 w-4" />Quick add</Button></div>} />}
+      {visible.length ? <><div className="space-y-3 md:hidden">{visible.map((item) => <MobileOfferingCard key={item.id} item={item} archetype={archetype} isInventory={isInventory} isPickup={isPickup} busyId={busyId} onAvailability={availability} onDuplicate={duplicate} onEdit={openOffering} onDelete={setRemoveTarget} />)}</div><div className="hidden overflow-x-auto md:block">      <table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{priceLabel(item)}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-[var(--surface)] px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div></> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setLibraryOpen(true)}><BookOpenCheck className="h-4 w-4" />Search Spotly Library</Button><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a collection</Button></div>} />}
     </SectionCard></div>
     </TabPanel>
 
     <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="manage">
-      <Card variant="bordered" className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder={`Search ${archetype.nouns.items}, category, or code`} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import CSV</Button></div><div className="mt-4"><Tabs idPrefix="catalog-status-manage" value={status} onChange={setStatus} tabs={tabs} /></div></Card>
+      <Card variant="bordered" className="p-5"><div className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"><SearchField value={queryText} onChange={setQueryText} placeholder={`Search ${archetype.nouns.items}, category, or code`} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="surface h-[52px] rounded-xl px-4 text-sm font-semibold"><option value="all">All categories</option>{categories.filter((item) => item !== "all").map((item) => <option key={item} value={item}>{item}</option>)}</select><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import spreadsheet</Button></div><div className="mt-4"><Tabs idPrefix="catalog-status-manage" value={status} onChange={setStatus} tabs={tabs} /></div></Card>
       <div className="mt-5"><SectionCard>
-      {visible.length ? <><div className="space-y-3 md:hidden">{visible.map((item) => <MobileOfferingCard key={item.id} item={item} archetype={archetype} isInventory={isInventory} isPickup={isPickup} busyId={busyId} onAvailability={availability} onDuplicate={duplicate} onEdit={openOffering} onDelete={setRemoveTarget} />)}</div><div className="hidden overflow-x-auto md:block">      <table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{priceLabel(item)}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-[var(--surface)] px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div></> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a starter</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><Plus className="h-4 w-4" />Quick add</Button></div>} />}
+      {visible.length ? <><div className="space-y-3 md:hidden">{visible.map((item) => <MobileOfferingCard key={item.id} item={item} archetype={archetype} isInventory={isInventory} isPickup={isPickup} busyId={busyId} onAvailability={availability} onDuplicate={duplicate} onEdit={openOffering} onDelete={setRemoveTarget} />)}</div><div className="hidden overflow-x-auto md:block">      <table className="w-full min-w-[920px] text-left text-sm"><thead className="bg-[var(--surface-2)] text-xs uppercase tracking-wide text-tertiary"><tr><th className="px-5 py-3">{archetype.nouns.item}</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Price</th><th className="px-5 py-3">Customer availability</th>{isPickup && <th className="px-5 py-3">Pickup</th>}<th className="px-5 py-3">Status</th><th className="px-5 py-3"></th></tr></thead><tbody>{visible.map((item) => <tr key={item.id} className="border-t hover:bg-[var(--surface-2)]"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.image ? <span role="img" aria-label={`${item.name} image`} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} /> : <PackageCheck className="h-5 w-5" />}</span><div className="min-w-0"><p className="max-w-[280px] truncate font-bold">{item.name}</p><div className="mt-1"><OfferingSummary item={item} archetype={archetype} /></div></div></div></td><td className="px-5 py-4">{item.category || "General"}</td><td className="px-5 py-4"><p className="font-bold">{priceLabel(item)}</p></td><td className="px-5 py-4">{isInventory ? <select aria-label={`Availability for ${item.name}`} value={item.stockStatus || "in_stock"} onChange={(event) => availability(item, event.target.value)} disabled={busyId === item.id} className="h-10 rounded-xl border bg-[var(--surface)] px-3 text-sm font-semibold"><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select> : item.requiresBusinessReview ? <Badge tone="warning">Approval required</Badge> : <Badge tone="success">Bookable</Badge>}</td>{isPickup && <td className="px-5 py-4">{item.pickupEligible !== false ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</td>}<td className="px-5 py-4"><StatusBadge status={item.active === false ? "Hidden" : "Visible"} /></td><td className="px-5 py-4"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => duplicate(item)} loading={busyId === item.id} aria-label={`Duplicate ${item.name}`}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => openOffering(item)} aria-label={`Edit ${item.name}`}><Edit3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => setRemoveTarget(item)} aria-label={`Delete ${item.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button></div></td></tr>)}</tbody></table></div></> : <EmptyState icon={BookOpenCheck} title={queryText || category !== "all" || status !== "all" ? `No ${archetype.nouns.items} match this view` : `Add the first ${archetype.nouns.item}`} description={queryText || category !== "all" || status !== "all" ? "Clear a filter or search with a different name." : `Start with a relevant template, quick add, CSV, or one complete ${archetype.nouns.item}.`} action={!queryText && category === "all" && status === "all" && <div className="flex flex-col gap-2 sm:flex-row"><Button onClick={() => setLibraryOpen(true)}><BookOpenCheck className="h-4 w-4" />Search Spotly Library</Button><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use a collection</Button></div>} />}
     </SectionCard></div>
     </TabPanel>
 
     <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="import">
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Bring in a starter or CSV</h2><p className="mt-2 text-sm leading-6 text-secondary">Imported items stay hidden until names, prices, images and location availability have been reviewed.</p><div className="mt-5 flex flex-wrap gap-2"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use starter</Button><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import CSV</Button></div></Card>
+        <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Bring in a starter or spreadsheet</h2><p className="mt-2 text-sm leading-6 text-secondary">Imported items stay hidden until names, prices, images and location availability have been reviewed.</p><div className="mt-5 flex flex-wrap gap-2"><Button onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Use starter</Button><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import spreadsheet</Button></div></Card>
         <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Review queue</h2><p className="mt-2 text-sm leading-6 text-secondary">{importedItems.length ? `${importedItems.length} imported item${importedItems.length === 1 ? "" : "s"} can be reviewed below.` : "No imported items are waiting for review."}</p></Card>
       </div>
-      <div className="mt-5 space-y-3">{importedItems.length ? importedItems.map((item) => <Card key={item.id} variant="bordered" className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="font-semibold">{item.name}</p><p className="mt-1 text-sm text-secondary">{item.category || "General"} · {priceLabel(item)} · {item.active === false ? "Hidden draft" : "Visible"}</p></div><Button variant="outline" onClick={() => openOffering(item)}><Edit3 className="h-4 w-4" />Review item</Button></Card>) : <EmptyState icon={UploadCloud} title="No imported items" description="Use a starter or CSV when you have a catalogue list to review." />}</div>
+      <div className="mt-5 space-y-3">{importedItems.length ? importedItems.map((item) => <Card key={item.id} variant="bordered" className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="font-semibold">{item.name}</p><p className="mt-1 text-sm text-secondary">{item.category || "General"} · {priceLabel(item)} · {item.active === false ? "Hidden draft" : "Visible"}</p></div><Button variant="outline" onClick={() => openOffering(item)}><Edit3 className="h-4 w-4" />Review item</Button></Card>) : <EmptyState icon={UploadCloud} title="No imported items" description="Use a collection or spreadsheet when you have a catalogue list to review." />}</div>
     </TabPanel>
 
     <TabPanel idPrefix="catalog-mode" value={catalogMode} tabValue="publish">
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-        <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Customer publishing</h2><p className="mt-2 text-sm leading-6 text-secondary">Only visible items with a valid price can be published. Hidden drafts remain private until reviewed.</p>{missingPrice.length > 0 && <div className="mt-4 rounded-xl border border-warning/30 bg-warning-soft p-4"><p className="font-semibold text-warning">{missingPrice.length} visible item{missingPrice.length === 1 ? " needs" : "s need"} a price</p><p className="mt-1 text-sm text-secondary">Resolve every missing price before those items can appear to customers.</p></div>}<div className="mt-5 flex flex-wrap gap-2"><Button onClick={publishReadyItems} loading={busyId === "publish"} disabled={!scopedProducts.some((item) => item.active !== false && productPrice(item))}><Check className="h-4 w-4" />Publish ready items</Button><Button variant="outline" href="/marketplace">Customer preview</Button></div></Card>
-        <Card variant="bordered" className="p-5"><p className="text-sm text-secondary">Visible and priced</p><p className="mt-2 text-3xl font-semibold">{scopedProducts.filter((item) => item.active !== false && productPrice(item)).length}</p><p className="mt-5 text-sm text-secondary">Hidden drafts</p><p className="mt-2 text-2xl font-semibold">{draftItems.length}</p></Card>
+        <Card variant="bordered" className="p-5"><h2 className="text-lg font-semibold">Customer publishing</h2><p className="mt-2 text-sm leading-6 text-secondary">Only visible items with a valid price and publishable image rights can go live. Hidden drafts and reference-only imagery remain private until reviewed.</p>{missingPrice.length > 0 && <div className="mt-4 rounded-xl border border-warning/30 bg-warning-soft p-4"><p className="font-semibold text-warning">{missingPrice.length} visible item{missingPrice.length === 1 ? " needs" : "s need"} a price</p><p className="mt-1 text-sm text-secondary">Resolve every missing price before those items can appear to customers.</p></div>}<div className="mt-5 flex flex-wrap gap-2"><Button onClick={publishReadyItems} loading={busyId === "publish"} disabled={!scopedProducts.some((item) => publicationIssues(item).length === 0)}><Check className="h-4 w-4" />Publish ready items</Button><Button variant="outline" href="/marketplace">Customer preview</Button></div></Card>
+        <Card variant="bordered" className="p-5"><p className="text-sm text-secondary">Visible and priced</p><p className="mt-2 text-3xl font-semibold">{scopedProducts.filter((item) => publicationIssues(item).length === 0).length}</p><p className="mt-5 text-sm text-secondary">Hidden drafts</p><p className="mt-2 text-2xl font-semibold">{draftItems.length}</p></Card>
       </div>
-      <div className="mt-5 space-y-3">{scopedProducts.map((item) => <Card key={item.id} variant="bordered" className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{item.name}</p><StatusBadge status={item.active === false ? "Hidden" : item.published ? "Published" : "Ready for review"} /></div><p className="mt-1 text-sm text-secondary">{priceLabel(item)} · {(item.branchIds || []).length ? `${item.branchIds.length} location${item.branchIds.length === 1 ? "" : "s"}` : "All locations"}</p></div><Button variant="outline" onClick={() => openOffering(item)}><Edit3 className="h-4 w-4" />Review</Button></Card>)}</div>
+      <div className="mt-5 space-y-3">{scopedProducts.map((item) => <Card key={item.id} variant="bordered" className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{item.name}</p><StatusBadge status={item.active === false ? "Hidden" : item.published ? "Published" : "Ready for review"} /></div><p className="mt-1 text-sm text-secondary">{priceLabel(item)} · {(item.branchIds || []).length ? `${item.branchIds.length} location${item.branchIds.length === 1 ? "" : "s"}` : "All locations"}</p>{publicationIssues(item).length > 0 && <p className="mt-2 text-xs font-semibold text-warning">{publicationIssues(item).join(" · ")}</p>}</div><Button variant="outline" onClick={() => openOffering(item)}><Edit3 className="h-4 w-4" />Review</Button></Card>)}</div>
     </TabPanel>
 
+    <CatalogLibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     <OfferingModal product={editing} open={productOpen} onClose={() => setProductOpen(false)} />
     <QuickAddModal open={quickOpen} onClose={() => setQuickOpen(false)} />
     <TemplateModal open={templateOpen} onClose={() => setTemplateOpen(false)} />

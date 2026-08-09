@@ -189,6 +189,62 @@ service cloud.firestore {
       allow delete: if activeAccount() && (resource.data.applicantId == request.auth.uid || platformAdmin());
     }
 
+
+    match /masterProducts/{productId} {
+      allow read: if resource.data.verificationStatus == "verified" && (
+        !("primaryImage" in resource.data) || resource.data.primaryImage == "" ||
+        resource.data.imageRightsStatus in ["merchant_owned", "spotly_photographed", "manufacturer_provided", "licensed"]
+      ) || staffMember() || platformAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /masterProductSuggestions/{suggestionId} {
+      allow read: if platformAdmin() || staffMember() || (activeAccount() && resource.data.submittedBy == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    match /catalogCollections/{collectionId} {
+      allow read: if (activeAccount() && resource.data.publicationStatus == "active") || staffMember() || platformAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /productObservations/{observationId} {
+      allow read: if staffMember() || platformAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /productImageVersions/{imageId} {
+      allow read: if staffMember() || platformAdmin() || (activeAccount() && resource.data.businessId != null && canReadCatalogue(resource.data.businessId));
+      allow create, update, delete: if false;
+    }
+
+    match /businessLedgerEntries/{entryId} {
+      allow read: if resource.data.businessId != null && canReadFinance(resource.data.businessId);
+      allow create, update, delete: if false;
+    }
+
+    match /businessSettlementAccounts/{businessId} {
+      // Full settlement-account records can contain encrypted banking material and are API-only.
+      allow read, write: if false;
+    }
+
+    match /businessBalanceAccounts/{accountId} {
+      // Materialized merchant balances are server-authoritative and exposed only through scoped APIs.
+      allow read, write: if false;
+    }
+
+    match /catalogueSources/{sourceId} {
+      allow read: if staffMember() || platformAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /catalogImportBatches/{batchId} {
+      allow read: if resource.data.businessId != null && canReadCatalogue(resource.data.businessId);
+      allow create: if canEditCatalogue(request.resource.data.businessId);
+      allow update: if canEditCatalogue(resource.data.businessId) && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if false;
+    }
+
     match /products/{productId} {
       allow read: if publicProduct() || canReadCatalogue(resource.data.businessId) || hasPermission("businesses.read");
       allow create: if canEditCatalogue(request.resource.data.businessId);

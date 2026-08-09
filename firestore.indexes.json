@@ -399,6 +399,94 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "masterProducts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verificationStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "canonicalName",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "masterProducts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "searchTerms",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "verificationStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "canonicalName",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "catalogCollections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "publicationStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "productObservations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "masterProductId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "observedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "businessLedgerEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "businessId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "catalogImportBatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "businessId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

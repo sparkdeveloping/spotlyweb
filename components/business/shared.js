@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -11,9 +12,10 @@ import {
   ChevronDown,
   LoaderCircle,
   MapPin,
+  Search,
   Sparkles
 } from "lucide-react";
-import { Badge, Button, Card, Modal, Overlay, ProgressBar, StatusBadge } from "@/components/ui";
+import { Badge, Button, Card, Modal, Overlay, ProgressBar, SearchField, StatusBadge } from "@/components/ui";
 import { getBusinessReadiness } from "@/data/business-config";
 import { useBusinessWorkspace } from "@/components/business/business-context";
 
@@ -37,29 +39,57 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
     selectedBranch,
     archetype
   } = useBusinessWorkspace();
+  const [businessOpen, setBusinessOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return businessChoices;
+    return businessChoices.filter((item) => `${item.name || ""} ${item.brandName || ""} ${item.organizationName || ""} ${item.roleLabel || ""} ${item.city || ""}`.toLowerCase().includes(needle));
+  }, [businessChoices, query]);
 
-  return <div className={`surface flex flex-col gap-2 rounded-2xl p-2 shadow-card ${compact ? "min-w-[280px]" : "min-w-[300px] sm:flex-row"}`}>
-    <label className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 hover:bg-grouped">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><Building2 className="h-5 w-5" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">Business</span>
-        {businessChoices.length > 1 ? <select aria-label="Choose business" value={selectedBusinessId} onChange={(event) => setSelectedBusinessId(event.target.value)} className="mt-0.5 w-full appearance-none truncate bg-transparent pr-6 text-sm font-bold outline-none">{businessChoices.map((item) => <option key={item.id} value={item.id}>{item.brandName || item.name}</option>)}</select> : <span className="mt-0.5 block truncate text-sm font-bold">{business?.brandName || business?.name || "Spotly Business"}</span>}
-        <span className="mt-0.5 block truncate text-[11px] text-secondary">{archetype?.shortLabel || business?.category || "Business"}</span>
-      </span>
-      {businessChoices.length > 1 && <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-tertiary" />}
-    </label>
-    {showBranch && branches.length > 0 && <label className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl border-t px-3 py-2 hover:bg-grouped sm:border-l sm:border-t-0">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><MapPin className="h-5 w-5" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">{archetype?.nouns?.branch || "Location"}</span>
-        {branches.length > 1 ? <select aria-label="Choose location" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} className="mt-0.5 w-full appearance-none truncate bg-transparent pr-6 text-sm font-bold outline-none">{branches.map((item) => <option key={item.id} value={item.id}>{item.branchName || item.name || item.displayName}</option>)}</select> : <span className="mt-0.5 block truncate text-sm font-bold">{selectedBranch?.branchName || selectedBranch?.name || selectedBranch?.displayName || "Main location"}</span>}
-        <span className="mt-0.5 block truncate text-[11px] text-secondary">{selectedBranch?.city || "Zimbabwe"}{branches.length > 1 ? ` · ${branches.length} available` : ""}</span>
-      </span>
-      {branches.length > 1 && <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-tertiary" />}
-    </label>}
-  </div>;
+  function selectBusiness(id) {
+    setSelectedBusinessId(id);
+    setBusinessOpen(false);
+    setQuery("");
+  }
+
+  return <>
+    <div className={`surface flex flex-col gap-2 rounded-2xl p-2 shadow-card ${compact ? "min-w-[280px]" : "min-w-[300px] sm:flex-row"}`}>
+      <button type="button" onClick={() => businessChoices.length > 1 ? setBusinessOpen(true) : null} className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-grouped">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{business?.logo ? <img src={business.logo} alt="" className="h-full w-full object-cover" /> : <Building2 className="h-5 w-5" />}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">Business</span>
+          <span className="mt-0.5 block truncate text-sm font-bold">{business?.brandName || business?.name || "Spotly Business"}</span>
+          <span className="mt-0.5 block truncate text-[11px] text-secondary">{businessChoices.find((item) => item.id === selectedBusinessId)?.roleLabel || archetype?.shortLabel || business?.category || "Business"}</span>
+        </span>
+        {businessChoices.length > 1 && <ChevronDown className="h-4 w-4 shrink-0 text-tertiary" />}
+      </button>
+      {showBranch && branches.length > 0 && <label className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl border-t px-3 py-2 hover:bg-grouped sm:border-l sm:border-t-0">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><MapPin className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">{archetype?.nouns?.branch || "Location"}</span>
+          {branches.length > 1 ? <select aria-label="Choose location" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} className="mt-0.5 w-full appearance-none truncate bg-transparent pr-6 text-sm font-bold outline-none">{branches.map((item) => <option key={item.id} value={item.id}>{item.branchName || item.name || item.displayName}</option>)}</select> : <span className="mt-0.5 block truncate text-sm font-bold">{selectedBranch?.branchName || selectedBranch?.name || selectedBranch?.displayName || "Main location"}</span>}
+          <span className="mt-0.5 block truncate text-[11px] text-secondary">{selectedBranch?.city || "Zimbabwe"}{branches.length > 1 ? ` · ${branches.length} available` : ""}</span>
+        </span>
+        {branches.length > 1 && <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-tertiary" />}
+      </label>}
+    </div>
+    <Overlay open={businessOpen} onClose={() => { setBusinessOpen(false); setQuery(""); }} mode="sheet" title="Switch business" description="Choose another business in your Spotly Business account." label="Business switcher">
+      <div className="space-y-4 p-4">
+        <SearchField value={query} onChange={setQuery} placeholder="Search business, organization, role…" />
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+          {filtered.map((item) => <button key={item.id} type="button" onClick={() => selectBusiness(item.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left hover:bg-[var(--surface-2)] ${item.id === selectedBusinessId ? "border-business bg-business-soft" : ""}`}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.logo ? <img src={item.logo} alt="" className="h-full w-full object-cover" /> : <Building2 className="h-5 w-5" />}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.name || item.brandName}</span><span className="mt-1 block truncate text-xs text-secondary">{[item.roleLabel, item.organizationName, item.accessibleLocationCount ? `${item.accessibleLocationCount} locations` : ""].filter(Boolean).join(" · ")}</span></span>
+            {item.id === selectedBusinessId ? <Check className="h-4 w-4 text-business" /> : <ChevronDown className="h-4 w-4 -rotate-90 text-tertiary" />}
+          </button>)}
+          {!filtered.length && <div className="py-10 text-center text-sm text-secondary">No businesses match this search.</div>}
+        </div>
+        <div className="grid gap-2 border-t pt-4 sm:grid-cols-2"><Button asChild variant="outline"><Link href="/business"><Building2 className="h-4 w-4" />View portfolio</Link></Button><Button asChild variant="outline"><Link href="/claim"><Search className="h-4 w-4" />Claim another business</Link></Button></div>
+      </div>
+    </Overlay>
+  </>;
 }
-
 export function BusinessSwitcher(props) {
   return <WorkspaceContextSwitcher {...props} />;
 }

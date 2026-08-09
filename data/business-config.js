@@ -164,7 +164,8 @@ export const defaultBranch = {
   }
 };
 
-export function getBusinessReadiness({ business, branches = [], products = [], finance, operations, invitations = [], archetype }) {
+export function getBusinessReadiness({ business, branches = [], products = [], finance, operations, invitations = [], archetype, selectedBusinessId }) {
+  const withBusiness = (href) => selectedBusinessId ? `${href}${href.includes("?") ? "&" : "?"}business=${encodeURIComponent(selectedBusinessId)}` : href;
   const capabilities = business?.capabilities || archetype?.capabilities || [];
   const setupComplete = business?.onboardingStatus === "complete" || Boolean(business?.setupCompletedAt || business?.onboarding?.completedAt);
   const needsOfferings = capabilities.some((item) => ["catalog", "menu", "tickets", "appointments", "bookings"].includes(item));
@@ -179,7 +180,7 @@ export function getBusinessReadiness({ business, branches = [], products = [], f
       label: "Business setup confirmed",
       description: "Confirm the business type, operating model, first location, and customer actions.",
       done: setupComplete,
-      href: "/business/setup",
+      href: withBusiness("/business/setup"),
       primary: !setupComplete
     },
     {
@@ -187,49 +188,49 @@ export function getBusinessReadiness({ business, branches = [], products = [], f
       label: "Ownership or authority recorded",
       description: "Spotly has an approved owner, authorized representative, or an active verification review.",
       done: ["approved", "pending"].includes(business?.verificationStatus) || ["claimed", "claimed_pending_verification", "claim_pending"].includes(business?.claimStatus),
-      href: "/business/settings"
+      href: withBusiness("/business/settings")
     },
     {
       id: "profile",
       label: "Customer-facing profile complete",
       description: "Name, category, description, and a central contact method are ready. Location details are checked separately.",
       done: Boolean(business?.name && business?.category && business?.description && (business?.phone || business?.email)),
-      href: "/business/settings"
+      href: withBusiness("/business/settings")
     },
     {
       id: "location",
       label: `${locationNoun[0].toUpperCase()}${locationNoun.slice(1)} ready`,
       description: `At least one visible ${locationNoun} has a confirmed address or service area, contact method, and opening hours.`,
       done: branches.some((branch) => branch.status === "active" && branch.public !== false && (branch.address || branch.city) && (branch.phone || branch.email)),
-      href: branches.length > 1 || business?.operatingModel === "physical_multi" ? "/business/branches" : "/business/setup"
+      href: withBusiness(branches.length > 1 || business?.operatingModel === "physical_multi" ? "/business/branches" : "/business/setup")
     },
     ...(needsOfferings ? [{
       id: "catalog",
       label: `First ${offeringNoun} ready`,
       description: `Add at least one active ${offeringNoun} with the information a customer needs to act.`,
       done: products.some((product) => product.active !== false && (Number(product.price || product.prices?.USD || 0) > 0 || product.requiresBusinessReview || product.itemType === "listing")),
-      href: "/business/catalog"
+      href: withBusiness("/business/catalog")
     }] : []),
     ...(needsPickup ? [{
       id: "operations",
       label: "Pickup workflow confirmed",
       description: "Preparation time, pickup instructions, substitutions, and notifications match the way the team works.",
       done: Boolean(operations?.preparationMinutes && operations?.pickupInstructions),
-      href: "/business/settings"
+      href: withBusiness("/business/settings")
     }] : []),
     ...(needsPayments ? [{
       id: "finance",
       label: "Payment approach selected",
       description: "Choose accepted methods and currencies. Payout details can be completed before taking live online payments.",
-      done: Boolean(finance?.acceptedCurrencies?.length && finance?.paymentMethods?.length && finance?.paymentRecipient),
-      href: "/business/finance"
+      done: Boolean(business?.moneySetup?.customerSettingsConfigured && ((business.moneySetup.paymentMethods || []).every((method) => method === "cash") || business?.moneySetup?.settlementStatus === "verified")),
+      href: withBusiness("/business/finance")
     }] : []),
     {
       id: "team",
       label: "Team access reviewed",
       description: "Confirm who should have access. Inviting another teammate is optional for owner-operated businesses.",
       done: Boolean(business?.teamReviewedAt || invitations.some((item) => ["pending", "accepted"].includes(item.status))),
-      href: "/business/staff",
+      href: withBusiness("/business/staff"),
       optional: true
     }
   ];

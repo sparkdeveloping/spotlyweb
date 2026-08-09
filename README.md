@@ -10,7 +10,7 @@ Spotly is one operating network with five role-specific entrances:
 /admin     Platform governance and operational queues
 ```
 
-This repository is the **5.2 theme-integrity candidate**. It preserves the production-depth workflows while replacing the split light/dark styling system with semantic tokens, paired foreground/background colors, controlled form primitives, pre-hydration theme resolution, route theme policy, reservation release, and automated theme/contrast checks.
+This repository is the **5.4 Business Operating System candidate**. It preserves the hardened 5.3 security/commerce and 5.2 semantic-theme work while adding a permanent multi-business portfolio, claims/access centres, explicit business routing, the Spotly Master Product Library, Staff product capture, reviewed AI-assisted product media, and a server-authoritative Business Money ledger/settlement foundation.
 
 ## Capability truth
 
@@ -19,7 +19,7 @@ This repository is the **5.2 theme-integrity candidate**. It preserves the produ
 | Public homepage and waitlist | Pilot-ready UI; launch content and approved businesses require production configuration |
 | Customer marketplace | Pilot-ready candidate with real location/branch availability, transactional order creation, and reservation release; production payments and provider reconciliation remain |
 | Business claiming | Pilot-ready progressive flow with account drafts and persisted evidence |
-| Merchant operations | Pilot-ready for pickup-oriented retail/food workflows; additional archetype depth remains staged |
+| Merchant operations | Business OS candidate with portfolio, multi-business context, catalogue library and Money; exact staging/build verification remains |
 | Driver | Training-only; no live dispatch, earnings, GPS proof, or production job assignment |
 | Staff | Pilot-ready internal workflow foundation; external payroll and richer training content remain integrations |
 | Admin | Pilot-ready queue and review foundation; provider health and high-volume operations require production signals |
@@ -36,7 +36,7 @@ See [SPOTLY-CAPABILITY-MATRIX.md](./SPOTLY-CAPABILITY-MATRIX.md) for the detaile
 | `/claim` | Ten-stage business claim and access request |
 | `/claim/drafts` | Saved account claim drafts |
 | `/claim/status/[claimId]` | Claim review timeline and next actions |
-| `/business` | Merchant Today and capability-based operations |
+| `/business` | Business Portfolio; selected-business operations live under explicit `?business=` context |
 | `/driver` | Internal training scenarios only |
 | `/staff` | Staff agenda, scoped work, learning, leave, pay, assets, and support |
 | `/admin` | Urgent operations, queues, health, configuration, and governance |
@@ -76,22 +76,24 @@ Do not commit `.env.local`, service-account JSON, private keys, payment secrets,
 ## Release validation
 
 ```bash
-npm test
 npm run check:js
+npm run check:theme
+npm test
+npm run test:rules
 npm run lint
 npm run build
 ```
 
 Also validate Firestore and Storage rules with the Firebase Emulator Suite and run authenticated browser smoke tests against the exact staging deployment.
 
-The generation environment could not complete `npm ci` because its internal npm mirror returned HTTP 404 for `zod-validation-error-4.0.2.tgz`; therefore ESLint, Next.js build, browser screenshots, and runtime accessibility checks are **not claimed as passed**. See [SPOTLY-THEME-VALIDATION-REPORT.md](./SPOTLY-THEME-VALIDATION-REPORT.md).
+The generation environment could not complete `npm ci` because its internal npm mirror returned HTTP 404 for `zod-validation-error-4.0.2.tgz`; therefore ESLint, Next.js build, browser screenshots, and runtime accessibility checks are **not claimed as passed**. See [SPOTLY-BUSINESS-VALIDATION-REPORT.md](./SPOTLY-BUSINESS-VALIDATION-REPORT.md).
 
 ## Release traceability
 
 Set these values for every preview and production deployment:
 
 ```env
-NEXT_PUBLIC_APP_VERSION=5.2.0-theme-integrity
+NEXT_PUBLIC_APP_VERSION=5.4.0-business-os
 NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
 NEXT_PUBLIC_BUILD_DATE=<ISO timestamp>
 NEXT_PUBLIC_APP_ENV=preview

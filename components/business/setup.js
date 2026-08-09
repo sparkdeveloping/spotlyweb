@@ -196,7 +196,7 @@ export function BusinessSetupView() {
     const success = processing.state === "success";
     setProcessing((value) => ({ ...value, open: false }));
     if (!success) return;
-    if (processing.intent === "leave" || processing.intent === "finish" || nextIndex < 0) router.push("/business");
+    if (processing.intent === "leave" || processing.intent === "finish" || nextIndex < 0) router.push(`/business/today?business=${encodeURIComponent(selectedBusinessId)}`);
     else setCurrent(nextIndex);
   }
 

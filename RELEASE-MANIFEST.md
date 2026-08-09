@@ -1,59 +1,42 @@
-# Spotly Platform v5 release manifest
+# Spotly Platform 5.4 release manifest
 
-Generated: August 6, 2026  
+Generated: August 9, 2026  
 Project: `spotly-web-platform`  
-Version: `5.0.0`  
-Runtime: Next.js 16, JavaScript, React 19, Tailwind CSS 4, Framer Motion, Firebase
+Version: `5.4.0`  
+Release: Business Operating System candidate
 
 ## Release contents
 
-- Unified customer, business, driver, staff, and administrator applications
-- Complete `/staff` workforce workspace
-- Administrator People Operations centre
-- Organization, brand, and location governance
-- Interactive platform and workforce maps
-- Role packs, scoped access, approval limits, and role-adaptive queues
-- Recruitment, shifts, leave, learning, performance, payroll preparation, assets, support, and offboarding data models
-- Updated Firestore and Storage security rules
-- Updated production seed data and portal configuration
-- Existing adaptive merchant operations, marketplace, support, notifications, payments, and driver foundations
+- Permanent `/business` portfolio account layer
+- Claims, invitations and access centres
+- Server-authoritative multi-business access resolution
+- URL-addressable business context
+- Searchable business switcher
+- Existing selected-business Today, Orders, Locations, Team, Help and Settings preserved
+- Spotly Master Product Library and catalogue collections
+- Barcode lookup/scanning and CSV/XLS/XLSX merchant imports
+- Branch-level merchant offer overrides
+- Spotly Staff product capture and Admin catalogue governance
+- Product image provenance and reviewed OpenAI enhancement workflow
+- Business Money server ledger, balances, settlement-account verification and payout controls
+- Updated Firestore/Storage rules, indexes, tests and seed data
 
-## Validation completed in the generation environment
+## Validation completed here
 
-- JavaScript/JSX parser-transpile validation passed across source modules
-- Local relative and `@/` import resolution passed
-- JavaScript-only source check passed
-- JSON configuration parsing passed
-- No TypeScript source files are included
+- `npm run check:js` passed
+- `npm run check:theme` passed
+- `npm test` passed: 56/56
+- JSON and SVG parsing passed
 
-## Validation not completed in the generation environment
+## Validation blocked by environment
 
-A clean dependency installation, ESLint run, production Next.js build, and Firebase Emulator rules test could not be completed because the restricted package gateway returned a 404 for a transitive package. These checks must be run after extraction:
-
-```bash
-npm install
-npm run check
-npm run firebase:emulators
-```
-
-## Required production checks
-
-- Least-privilege testing for every staff role pack
-- Employee self-service versus manager visibility
-- People Operations access to sensitive profile sections
-- Payroll and document isolation
-- Recruitment and candidate consent workflows
-- Attendance, leave, and approval chains
-- Temporary support access and automatic expiry
-- Organization/brand/location governance and parent approvals
-- Business, driver, customer, payment, and support regression tests
-- Mobile, keyboard, screen-reader, reduced-motion, offline, and low-bandwidth behavior
+The internal npm registry returned HTTP 404 for `zod-validation-error-4.0.2.tgz`; `firebase-tools` is also unavailable. This prevents dependency installation, Firebase emulator execution, ESLint and Next.js production build in this environment. See `SPOTLY-BUSINESS-VALIDATION-REPORT.md`.
 
 ## Archive exclusions
 
 - `.git`
 - `.next`
 - `node_modules`
-- `.env.local` and private environment files
-- Service-account JSON and private keys
-- macOS metadata
+- `.env*`
+- private keys/secrets
+- logs/temp/OS metadata

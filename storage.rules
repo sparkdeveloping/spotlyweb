@@ -10,6 +10,7 @@ service firebase.storage {
     function platformAdmin() { return activeAccount() && (hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin") || hasPermission("admin.*")); }
     function peopleAdmin() { return platformAdmin() || hasRole("people_operations_admin") || hasRole("people_admin") || hasPermission("people.*"); }
     function claimsStaff() { return platformAdmin() || hasRole("verification_officer") || hasPermission("claims.*") || hasPermission("claims.review") || hasPermission("documents.read"); }
+    function catalogueStaff() { return platformAdmin() || hasRole("content_editor") || hasRole("content_manager") || hasRole("business_success") || hasRole("business_success_manager") || hasRole("operations_manager") || hasPermission("master_products.capture") || hasPermission("master_products.review") || hasPermission("master_products.*"); }
     function business(businessId) { return firestore.get(/databases/(default)/documents/businesses/$(businessId)).data; }
     function membershipId(businessId) { return business(businessId).organizationId + "_" + request.auth.uid; }
     function membershipExists(businessId) { return activeAccount() && ("organizationId" in business(businessId)) && firestore.exists(/databases/(default)/documents/memberships/$(membershipId(businessId))); }
@@ -35,6 +36,17 @@ service firebase.storage {
     function safeImage() { return request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*'); }
     function safeDocument() { return request.resource.size < 20 * 1024 * 1024 && request.resource.contentType.matches('(application/pdf|image/.*)'); }
 
+    match /master-products/drafts/{uid}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == uid || catalogueStaff());
+      allow write: if signedIn() && request.auth.uid == uid && catalogueStaff() && safeImage();
+    }
+    match /master-products/verified/{productId}/{fileName} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /settlement-proofs/{businessId}/{uid}/{fileName} {
+      allow read, write: if false;
+    }
     match /businesses/{businessId}/public/{fileName} {
       allow read: if true;
       allow write: if canManageBusinessMedia(businessId) && safeImage();

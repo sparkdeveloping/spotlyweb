@@ -50,6 +50,7 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
     owner: await createSignedClient("rules-owner", "owner@example.com"),
     branch: await createSignedClient("rules-branch", "branch@example.com"),
     support: await createSignedClient("rules-support", "support@example.com"),
+    catalogueStaff: await createSignedClient("rules-catalogue-staff", "catalogue@example.com"),
     invitee: await createSignedClient("rules-invitee", "invitee@example.com"),
     suspended: await createSignedClient("rules-suspended", "suspended@example.com"),
     outsider: await createSignedClient("rules-outsider", "outsider@example.com")
@@ -62,6 +63,7 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
     [uid.owner]: { roles: ["customer"], customPermissions: [], status: "active" },
     [uid.branch]: { roles: ["customer"], customPermissions: [], status: "active" },
     [uid.support]: { roles: ["support_agent"], customPermissions: ["support.*"], status: "active" },
+    [uid.catalogueStaff]: { roles: ["content_editor"], customPermissions: ["master_products.capture"], status: "active" },
     [uid.invitee]: { roles: ["customer"], customPermissions: [], status: "active" },
     [uid.suspended]: { roles: ["customer"], customPermissions: [], status: "suspended" },
     [uid.outsider]: { roles: ["customer"], customPermissions: [], status: "active" }
@@ -77,6 +79,10 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
   batch.set(adminDb.collection("branches").doc("branch-b"), { businessId: "biz-public", public: false, name: "B" });
   batch.set(adminDb.collection("products").doc("prod-public"), { businessId: "biz-public", published: true, active: true, name: "Milk" });
   batch.set(adminDb.collection("products").doc("prod-draft"), { businessId: "biz-public", published: false, active: true, name: "Draft" });
+  batch.set(adminDb.collection("masterProducts").doc("master-public"), { canonicalName: "Spotly Test Milk", verificationStatus: "verified", primaryImage: "", imageRightsStatus: "spotly_photographed" });
+  batch.set(adminDb.collection("masterProducts").doc("master-reference"), { canonicalName: "Reference Only", verificationStatus: "verified", primaryImage: "https://example.test/reference.jpg", imageRightsStatus: "reference_only" });
+  batch.set(adminDb.collection("businessLedgerEntries").doc("ledger-1"), { businessId: "biz-public", currency: "USD", type: "payment_captured", amount: 10 });
+  batch.set(adminDb.collection("businessSettlementAccounts").doc("biz-public"), { businessId: "biz-public", accountNumberLast4: "1234", encryptedAccountNumber: { ciphertext: "private" } });
   batch.set(adminDb.collection("orders").doc("order-a"), { customerId: uid.customer, businessId: "biz-public", branchId: "branch-a", status: "submitted" });
   batch.set(adminDb.collection("orders").doc("order-b"), { customerId: "someone-else", businessId: "biz-public", branchId: "branch-b", status: "submitted" });
   batch.set(adminDb.collection("memberships").doc(`org1_${uid.owner}`), { organizationId: "org1", userId: uid.owner, role: "organization_owner", businessIds: ["biz-public", "biz-private"], branchIds: ["branch-a", "branch-b"], permissions: ["businesses.*", "branches.*", "catalog.*", "orders.*", "staff.*", "finance.*"], status: "active" });
@@ -92,6 +98,11 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
   await denied(getDoc(doc(anon.db, "branches", "branch-b")), "anonymous private branch read");
   await allowed(getDoc(doc(anon.db, "products", "prod-public")), "anonymous published product read");
   await denied(getDoc(doc(anon.db, "products", "prod-draft")), "anonymous draft product read");
+  await allowed(getDoc(doc(anon.db, "masterProducts", "master-public")), "public verified master product read");
+  await denied(getDoc(doc(anon.db, "masterProducts", "master-reference")), "reference-only master image public read");
+  await denied(setDoc(doc(actors.owner.db, "masterProducts", "merchant-created"), { canonicalName: "Unsafe merchant master", verificationStatus: "verified" }), "merchant canonical master product write");
+  await allowed(getDoc(doc(actors.owner.db, "businessLedgerEntries", "ledger-1")), "owner finance ledger read");
+  await denied(getDoc(doc(actors.owner.db, "businessSettlementAccounts", "biz-public")), "settlement account direct client read");
 
   await allowed(getDoc(doc(actors.customer.db, "orders", "order-a")), "customer own order read");
   await allowed(getDoc(doc(actors.branch.db, "orders", "order-a")), "branch manager assigned order read");
@@ -105,6 +116,7 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
 
   // The image MIME rule is tested with a data URL so authorization and MIME validation both execute.
   await allowed(uploadString(ref(actors.owner.storage, `businesses/biz-public/catalog/owner-image.png`), "data:image/png;base64,iVBORw0KGgo=", "data_url"), "owner business image upload");
+  await allowed(uploadString(ref(actors.catalogueStaff.storage, `master-products/drafts/${uid.catalogueStaff}/field.png`), "data:image/png;base64,iVBORw0KGgo=", "data_url"), "catalogue staff master-product draft image upload");
   await denied(uploadString(ref(actors.branch.storage, `businesses/biz-public/catalog/branch-image.png`), "data:image/png;base64,iVBORw0KGgo=", "data_url"), "branch manager without catalogue edit upload");
   await allowed(uploadString(ref(actors.customer.storage, `support/case-1/${uid.customer}/note.txt`), "hello", "raw", { contentType: "text/plain" }), "support attachment own path");
   await denied(uploadString(ref(actors.customer.storage, `support/case-1/${uid.outsider}/note.txt`), "hello", "raw", { contentType: "text/plain" }), "support attachment other user path");

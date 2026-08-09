@@ -38,9 +38,11 @@ import {
   UserPlus,
   UserRound,
   UsersRound,
-  WalletCards
+  WalletCards,
+  ScanBarcode
 } from "lucide-react";
 import { AuthGate } from "@/components/auth-gate";
+import { StaffCatalogueCapture } from "@/components/staff-catalogue-capture";
 import { PortalShell } from "@/components/portal-shell";
 import { useAuth } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
@@ -108,7 +110,8 @@ const sectionMeta = {
   pay: { title: "Pay", description: "Pay records, allowances, reimbursements, payslips, and payroll status." },
   assets: { title: "Assets", description: "Equipment issued to Spotly staff and its return condition." },
   help: { title: "Help & support", description: "People support, technical help, confidential concerns, and incidents." },
-  profile: { title: "Profile", description: "Employment, role, access, documents, contacts, and account details." }
+  profile: { title: "Profile", description: "Employment, role, access, documents, contacts, and account details." },
+  catalogue: { title: "Product capture", description: "Build Spotly’s reusable product library from verified field observations." }
 };
 
 const inputClass = "surface h-12 w-full rounded-xl px-4 outline-none focus:ring-2 focus:ring-[var(--accent)]/20";
@@ -150,7 +153,10 @@ function sortByDate(items, field = "createdAt") {
   return [...items].sort((a, b) => (toDate(b[field])?.getTime() || 0) - (toDate(a[field])?.getTime() || 0));
 }
 
-function staffNavigation(manager) {
+function staffNavigation(data) {
+  const manager = data.manager;
+  const permissions = new Set([...(data.profile?.customPermissions || []), ...(data.staffProfile?.permissions || []), ...(data.rolePack?.permissions || [])]);
+  const canCaptureCatalogue = permissions.has("*") || permissions.has("master_products.capture") || permissions.has("master_products.*");
   const items = [
     { id: "today", label: "Today", icon: LayoutDashboard, href: "/staff" },
     { id: "work", label: "My work", icon: ListChecks, href: "/staff/work" }
@@ -159,6 +165,7 @@ function staffNavigation(manager) {
     items.push({ id: "team", label: "Team", icon: UsersRound, href: "/staff/team" });
     items.push({ id: "hiring", label: "Hiring", icon: UserPlus, href: "/staff/hiring" });
   }
+  if (canCaptureCatalogue) items.push({ id: "catalogue", label: "Product capture", icon: ScanBarcode, href: "/staff/catalogue" });
   items.push(
     { id: "schedule", label: "Schedule", icon: CalendarDays, href: "/staff/schedule" },
     { id: "leave", label: "Leave", icon: HandHeart, href: "/staff/leave" },
@@ -565,11 +572,11 @@ function Field({ label, children, wide = false }) {
 function StaffWorkspace({ section }) {
   const data = useStaffData();
   const [modal, setModal] = useState({ type: "", item: null });
-  const navigation = useMemo(() => staffNavigation(data.manager), [data.manager]);
+  const navigation = useMemo(() => staffNavigation(data), [data]);
   const allowed = new Set(navigation.map((item) => item.id));
   const safeSection = allowed.has(section) ? section : "today";
   const openModal = (type, item = null) => setModal({ type, item });
-  return <StaffAccess data={data}><PortalShell portalId="staff" activeSection={safeSection} navigation={navigation} footer={false}><div className="mx-auto max-w-[1550px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{safeSection === "today" && <Today data={data} openModal={openModal} />}{safeSection === "work" && <Work data={data} openModal={openModal} />}{safeSection === "team" && data.manager && <Team data={data} openModal={openModal} />}{safeSection === "hiring" && data.manager && <Hiring data={data} openModal={openModal} />}{safeSection === "schedule" && <Schedule data={data} openModal={openModal} />}{safeSection === "leave" && <Leave data={data} openModal={openModal} />}{safeSection === "learning" && <Learning data={data} />}{safeSection === "performance" && <Performance data={data} />}{safeSection === "pay" && <Pay data={data} />}{safeSection === "assets" && <Assets data={data} openModal={openModal} />}{safeSection === "help" && <Help data={data} openModal={openModal} />}{safeSection === "profile" && <Profile data={data} openModal={openModal} />}</div><StaffModal type={modal.type} item={modal.item} open={Boolean(modal.type)} onClose={() => setModal({ type: "", item: null })} data={data} /></PortalShell></StaffAccess>;
+  return <StaffAccess data={data}><PortalShell portalId="staff" activeSection={safeSection} navigation={navigation} footer={false}><div className="mx-auto max-w-[1550px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{safeSection === "today" && <Today data={data} openModal={openModal} />}{safeSection === "work" && <Work data={data} openModal={openModal} />}{safeSection === "catalogue" && <StaffCatalogueCapture data={data} />}{safeSection === "team" && data.manager && <Team data={data} openModal={openModal} />}{safeSection === "hiring" && data.manager && <Hiring data={data} openModal={openModal} />}{safeSection === "schedule" && <Schedule data={data} openModal={openModal} />}{safeSection === "leave" && <Leave data={data} openModal={openModal} />}{safeSection === "learning" && <Learning data={data} />}{safeSection === "performance" && <Performance data={data} />}{safeSection === "pay" && <Pay data={data} />}{safeSection === "assets" && <Assets data={data} openModal={openModal} />}{safeSection === "help" && <Help data={data} openModal={openModal} />}{safeSection === "profile" && <Profile data={data} openModal={openModal} />}</div><StaffModal type={modal.type} item={modal.item} open={Boolean(modal.type)} onClose={() => setModal({ type: "", item: null })} data={data} /></PortalShell></StaffAccess>;
 }
 
 export function StaffApp({ section = "today" }) {

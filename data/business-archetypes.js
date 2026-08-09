@@ -132,41 +132,41 @@ export function capabilitiesFor(type) {
 }
 
 
-export function businessNavigation(business = {}, setupComplete = false, branchCount = 0) {
+export function businessNavigation(business = {}, setupComplete = false, branchCount = 0, businessId = "") {
   const archetype = businessArchetype(business);
   const capabilities = new Set(business.capabilities?.length ? business.capabilities : archetype.capabilities);
+  const withBusiness = (href) => businessId ? `${href}${href.includes("?") ? "&" : "?"}business=${encodeURIComponent(businessId)}` : href;
   const items = [
-    { id: "setup", label: setupComplete ? "Setup centre" : "Continue setup", icon: CheckSquare2, href: "/business/setup", emphasis: !setupComplete },
-    { id: "dashboard", label: "Home", icon: LayoutDashboard, href: "/business" }
+    { id: "portfolio", label: "Business portfolio", icon: LayoutGrid, href: "/business", group: "Account" },
+    { id: "setup", label: setupComplete ? "Setup centre" : "Continue setup", icon: CheckSquare2, href: withBusiness("/business/setup"), emphasis: !setupComplete, group: "Business" },
+    { id: "today", label: "Today", icon: LayoutDashboard, href: withBusiness("/business/today"), group: "Business" }
   ];
 
-  // Until the guided setup is confirmed, keep the workspace focused. The setup
-  // centre reveals the relevant tools only after the business model is understood.
   if (!setupComplete) {
-    items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: "/business/support" });
-    items.push({ id: "settings", label: "Account & access", icon: Settings, href: "/business/settings" });
+    items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: withBusiness("/business/support"), group: "Business" });
+    items.push({ id: "settings", label: "Business settings", icon: Settings, href: withBusiness("/business/settings"), group: "Business" });
     return items;
   }
 
   if (["pickup_orders", "appointments", "bookings", "tickets", "enquiries"].some((id) => capabilities.has(id))) {
-    items.push({ id: "activity", label: archetype.nouns.activity[0].toUpperCase() + archetype.nouns.activity.slice(1), icon: ClipboardList, href: "/business/activity" });
+    items.push({ id: "activity", label: archetype.nouns.activity[0].toUpperCase() + archetype.nouns.activity.slice(1), icon: ClipboardList, href: withBusiness("/business/activity"), group: "Operations" });
   }
   if (["catalog", "menu", "events", "services", "listings", "profile"].some((id) => capabilities.has(id))) {
-    items.push({ id: "catalog", label: archetype.nouns.catalog, icon: PackageSearch, href: "/business/catalog" });
+    items.push({ id: "catalog", label: archetype.nouns.catalog, icon: PackageSearch, href: withBusiness("/business/catalog"), group: "Operations" });
   }
   if (branchCount > 1 || business.operatingModel === "physical_multi") {
-    items.push({ id: "branches", label: archetype.nouns.branch === "venue" ? "Venues" : archetype.nouns.branch === "property" ? "Properties" : "Locations", icon: MapPin, href: "/business/branches" });
+    items.push({ id: "branches", label: archetype.nouns.branch === "venue" ? "Venues" : archetype.nouns.branch === "property" ? "Properties" : "Locations", icon: MapPin, href: withBusiness("/business/branches"), group: "Operations" });
   }
   if (["kiosk_pickup", "kiosk_ordering", "kiosk_checkin"].some((id) => capabilities.has(id))) {
-    items.push({ id: "kiosk", label: "Kiosk", icon: ScanLine, href: "/business/kiosk" });
+    items.push({ id: "kiosk", label: "Kiosk", icon: ScanLine, href: withBusiness("/business/kiosk"), group: "Operations" });
   }
-  items.push({ id: "insights", label: "Insights", icon: BarChart3, href: "/business/insights" });
-  if (capabilities.has("promotions")) items.push({ id: "promotions", label: "Promotions", icon: BadgeDollarSign, href: "/business/promotions" });
-  items.push({ id: "staff", label: "Team", icon: UsersRound, href: "/business/staff" });
+  items.push({ id: "insights", label: "Insights", icon: BarChart3, href: withBusiness("/business/insights"), group: "Grow" });
+  if (capabilities.has("promotions")) items.push({ id: "promotions", label: "Promotions", icon: BadgeDollarSign, href: withBusiness("/business/promotions"), group: "Grow" });
+  items.push({ id: "staff", label: "Team", icon: UsersRound, href: withBusiness("/business/staff"), group: "Business" });
   if (["pickup_orders", "orders", "tickets", "appointments", "bookings", "reservations"].some((id) => capabilities.has(id))) {
-    items.push({ id: "finance", label: "Payments", icon: WalletCards, href: "/business/finance" });
+    items.push({ id: "finance", label: "Money", icon: WalletCards, href: withBusiness("/business/finance"), group: "Business" });
   }
-  items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: "/business/support" });
-  items.push({ id: "settings", label: "Business settings", icon: Settings, href: "/business/settings" });
+  items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: withBusiness("/business/support"), group: "Business" });
+  items.push({ id: "settings", label: "Business settings", icon: Settings, href: withBusiness("/business/settings"), group: "Business" });
   return items;
 }

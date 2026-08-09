@@ -1,17 +1,13 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 import { AuthGate } from "@/components/auth-gate";
 import { PortalShell } from "@/components/portal-shell";
 import { Button, Card } from "@/components/ui";
-import { useAuth } from "@/components/firebase-provider";
-import { useToast } from "@/components/providers";
-import { authenticatedFetch } from "@/lib/api-client";
 import { BusinessDataProvider, useBusinessWorkspace } from "@/components/business/business-context";
 import { LoadingState } from "@/components/business/shared";
-import { NoBusinessView } from "@/components/business/no-business";
+import { BusinessAccount } from "@/components/business/business-account";
 import { BusinessDashboard } from "@/components/business/dashboard";
 import { OrdersView } from "@/components/business/orders";
 import { CatalogView } from "@/components/business/catalog";
@@ -26,8 +22,10 @@ import { BusinessSetupView } from "@/components/business/setup";
 import { KioskView } from "@/components/business/kiosk";
 import { businessNavigation } from "@/data/business-archetypes";
 
+const ACCOUNT_SECTIONS = new Set(["portfolio", "claims", "invitations", "access"]);
 const views = {
   setup: BusinessSetupView,
+  today: BusinessDashboard,
   dashboard: BusinessDashboard,
   activity: OrdersView,
   catalog: CatalogView,
@@ -41,47 +39,26 @@ const views = {
   settings: SettingsView
 };
 
-function InvitationBanner() {
-  const searchParams = useSearchParams();
-  const invitationId = searchParams.get("invitation") || "";
-  const [accepting, setAccepting] = useState(false);
-  const { user } = useAuth();
-  const { toast } = useToast();
-  if (!invitationId) return null;
-
-  async function accept() {
-    setAccepting(true);
-    try {
-      await authenticatedFetch("/api/business-invitations/accept", { method: "POST", body: JSON.stringify({ invitationId }) });
-      await user.getIdToken(true);
-      toast("The invitation has been accepted and the assigned business is ready.", { title: "Access added" });
-      window.setTimeout(() => window.location.assign("/business"), 650);
-    } catch (error) {
-      toast(error.message || "The invitation could not be accepted.", { type: "error", title: "Could not accept invitation" });
-    } finally { setAccepting(false); }
-  }
-
-  return <Card className="mb-6 flex flex-col gap-4 border-business/25 bg-business-soft p-5 sm:flex-row sm:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface)] text-business shadow-sm"><CheckCircle2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 className="font-bold">A business invited this account</h2><p className="mt-1 text-sm leading-6 text-secondary">Accepting adds only the assigned business, location, and responsibilities. Your existing access will not be replaced.</p></div><Button onClick={accept} loading={accepting}>Accept invitation</Button></Card>;
-}
-
 function WorkspaceContent({ section }) {
-  const { user } = useAuth();
   const workspace = useBusinessWorkspace();
-  if (!workspace.businessIds.length) return <NoBusinessView user={user} />;
+  if (workspace.portfolioLoading && !workspace.businessChoices.length) return <div className="p-4 sm:p-6 lg:p-8"><LoadingState /></div>;
+  if (!workspace.businessIds.length) return <div className="mx-auto max-w-3xl p-4 sm:p-6 lg:p-8"><Card variant="bordered" className="p-8 text-center"><h1 className="text-2xl font-semibold">Choose a business from your portfolio</h1><p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-secondary">Claims and invitations stay in your Business account even before an operating workspace is available.</p><div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row"><Button asChild><Link href="/business">Open portfolio</Link></Button><Button asChild variant="outline"><Link href="/claim">Claim a business</Link></Button></div></Card></div>;
   if (workspace.loading && !workspace.business) return <div className="p-4 sm:p-6 lg:p-8"><LoadingState /></div>;
-  if (workspace.error && !workspace.business) return <div className="p-4 sm:p-6 lg:p-8"><Card className="flex min-h-72 flex-col items-center justify-center p-8 text-center"><AlertTriangle className="h-8 w-8 text-danger" /><h1 className="mt-4 text-xl font-semibold">The business workspace could not load</h1><p className="mt-2 max-w-lg text-sm leading-6 text-secondary">{workspace.error}</p><button className="mt-5 font-semibold text-business" onClick={() => window.location.reload()}>Try again</button></Card></div>;
+  if (workspace.error && !workspace.business) return <div className="p-4 sm:p-6 lg:p-8"><Card className="flex min-h-72 flex-col items-center justify-center p-8 text-center"><AlertTriangle className="h-8 w-8 text-danger" /><h1 className="mt-4 text-xl font-semibold">The business workspace could not load</h1><p className="mt-2 max-w-lg text-sm leading-6 text-secondary">{workspace.error}</p><Button className="mt-5" onClick={() => window.location.reload()}>Try again</Button></Card></div>;
   const View = views[section] || BusinessDashboard;
-  return <div className="p-4 sm:p-6 lg:p-8"><InvitationBanner /><View /></div>;
+  return <div className="p-4 sm:p-6 lg:p-8"><View /></div>;
 }
 
 function BusinessShell({ section }) {
   const workspace = useBusinessWorkspace();
-  const navigation = businessNavigation(workspace.business || {}, workspace.setupComplete, workspace.branches.length);
+  const navigation = businessNavigation(workspace.business || {}, workspace.setupComplete, workspace.branches.length, workspace.selectedBusinessId);
   const allowed = new Set(navigation.map((item) => item.id));
-  const safeSection = allowed.has(section) ? section : workspace.setupComplete ? "dashboard" : "setup";
+  const preferred = workspace.setupComplete ? "today" : "setup";
+  const safeSection = allowed.has(section) ? section : preferred;
   return <PortalShell portalId="business" activeSection={safeSection} navigation={navigation} footer={false}><WorkspaceContent section={safeSection} /></PortalShell>;
 }
 
-export function BusinessWorkspace({ section = "dashboard" }) {
+export function BusinessWorkspace({ section = "portfolio" }) {
+  if (ACCOUNT_SECTIONS.has(section)) return <BusinessAccount section={section} />;
   return <AuthGate portal="business" title="Sign in to manage your business"><BusinessDataProvider><BusinessShell section={section} /></BusinessDataProvider></AuthGate>;
 }
