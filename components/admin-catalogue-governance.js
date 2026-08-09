@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GitMerge, PackageSearch, RefreshCw, ShieldCheck } from "lucide-react";
 import { Badge, Button, Card, EmptyState, TabPanel, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
@@ -18,7 +18,7 @@ export function AdminCatalogueGovernance() {
   const [collection, setCollection] = useState({ name: "", description: "", publicationStatus: "draft", masterProductIds: "" });
   const { toast } = useToast();
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [queue, collectionResult, sourceResult] = await Promise.all([
@@ -31,8 +31,8 @@ export function AdminCatalogueGovernance() {
       setSources(sourceResult.items || []);
     } catch (error) { toast(error.message, { type: "error", title: "Catalogue governance could not load" }); }
     finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, []);
+  }, [toast]);
+  useEffect(() => { load(); }, [load]);
 
   async function reviewProduct(item, decision) {
     setBusy(item.id);

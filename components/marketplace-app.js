@@ -89,11 +89,11 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ checkoutId: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`, branchId: "", date: "", slot: "", slotId: "", paymentMethod: "", contactName: user?.displayName || "", contactPhone: user?.phoneNumber || "", alternativePhone: "", notes: "", substitutionPreference: "contact_me" });
+  const [form, setForm] = useState({ checkoutId: "", branchId: "", date: "", slot: "", slotId: "", paymentMethod: "", contactName: user?.displayName || "", contactPhone: user?.phoneNumber || "", alternativePhone: "", notes: "", substitutionPreference: "contact_me" });
   const steps = ["Basket", "Pickup", "Contact", "Payment", "Review"];
   const selectedBranch = branches.find((branch) => branch.id === form.branchId);
   const availability = useMemo(() => pickupAvailability(selectedBranch), [selectedBranch]);
-  const methods = branchPaymentMethods(selectedBranch);
+  const methods = useMemo(() => branchPaymentMethods(selectedBranch), [selectedBranch]);
   const total = cartItems.reduce((sum, item) => sum + (priceFor(item, currency) || 0) * item.quantity, 0);
   const unresolvedPrice = cartItems.some((item) => !priceFor(item, currency));
 
@@ -101,7 +101,8 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
     if (!open) return;
     const saved = migrateLegacyState(CHECKOUT_KEY, user) || readState(CHECKOUT_KEY, user, null);
     const preferred = branches.some((branch) => branch.id === selectedBranchId) ? selectedBranchId : branches[0]?.id || "";
-    setForm((current) => ({ ...current, ...(saved || {}), branchId: saved?.branchId && branches.some((branch) => branch.id === saved.branchId) ? saved.branchId : preferred, contactName: saved?.contactName || current.contactName || user?.displayName || "", contactPhone: saved?.contactPhone || current.contactPhone || user?.phoneNumber || "" }));
+    const checkoutId = saved?.checkoutId || globalThis.crypto?.randomUUID?.() || `checkout-${new Date().getTime().toString(36)}`;
+    setForm((current) => ({ ...current, ...(saved || {}), checkoutId: saved?.checkoutId || current.checkoutId || checkoutId, branchId: saved?.branchId && branches.some((branch) => branch.id === saved.branchId) ? saved.branchId : preferred, contactName: saved?.contactName || current.contactName || user?.displayName || "", contactPhone: saved?.contactPhone || current.contactPhone || user?.phoneNumber || "" }));
   }, [open, branches, selectedBranchId, user]);
 
   useEffect(() => { if (open) writeState(CHECKOUT_KEY, user, form); }, [form, open, user]);
@@ -115,7 +116,7 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
       const chosenSlot = validSlot || next.earliest?.slot || null;
       return { ...current, date: validDay ? current.date : next.earliest?.date || "", slot: chosenSlot?.label || "", slotId: chosenSlot?.id || "", paymentMethod: method };
     });
-  }, [selectedBranch?.id]);
+  }, [selectedBranch, methods]);
 
   const day = availability.days.find((item) => item.date === form.date);
   function validationFor(currentStep) {
@@ -196,7 +197,7 @@ export function MarketplaceApp() {
     const migratedCart = migrateLegacyState(CART_KEY,user);
     setCart(migratedCart || readState(CART_KEY,user,{}));
     setLocation(migrateLegacyState(LOCATION_KEY,user) || readState(LOCATION_KEY,user,defaultLocation));
-  }, [user?.uid,user?.isAnonymous]);
+  }, [user, defaultLocation]);
   useEffect(() => { writeState(CART_KEY,user,cart); }, [cart,user]);
   useEffect(() => { writeState(LOCATION_KEY,user,location); }, [location,user]);
   useEffect(() => {
@@ -217,8 +218,8 @@ export function MarketplaceApp() {
   useEffect(()=>{if(!requestedOrder||view!=="orders"||!orders.length)return;const timer=setTimeout(()=>orderRefs.current[requestedOrder]?.scrollIntoView({behavior:"smooth",block:"center"}),100);return()=>clearTimeout(timer);},[requestedOrder,view,orders]);
 
   const selectedBranch=branches.find((branch)=>branch.id===selectedBranchId);
-  const acceptedCurrencies=branchAcceptedCurrencies(selectedBranch);
-  useEffect(()=>{if(selectedBranch&& !acceptedCurrencies.includes(currency))setCurrency(acceptedCurrencies[0]||"USD");},[selectedBranchId]);
+  const acceptedCurrencies=useMemo(()=>branchAcceptedCurrencies(selectedBranch),[selectedBranch]);
+  useEffect(()=>{if(selectedBranch&& !acceptedCurrencies.includes(currency))setCurrency(acceptedCurrencies[0]||"USD");},[selectedBranch, acceptedCurrencies, currency]);
   const businessResults=useMemo(()=>businesses.map((business)=>{const coords=business.coordinates||business.location||((Number.isFinite(Number(business.latitude))&&Number.isFinite(Number(business.longitude)))?{lat:Number(business.latitude),lng:Number(business.longitude)}:null);const distance=location.coordinates&&coords?distanceKm(location.coordinates,coords):null;return{business,distance};}).filter(({business,distance})=>{const cityMatch=!location.city||String(business.city||"").toLowerCase()===location.city.toLowerCase()||!business.city;const areaTerm=location.area.trim().toLowerCase();const areaMatch=!areaTerm||`${business.area||""} ${business.suburb||""} ${business.address||""}`.toLowerCase().includes(areaTerm);const radiusMatch=distance===null||distance<=Number(location.radiusKm||20);return cityMatch&&areaMatch&&radiusMatch;}).sort((a,b)=>(a.distance??9999)-(b.distance??9999)),[businesses,location]);
   const selectedArchetype=useMemo(()=>businessArchetype(selected||{}),[selected]);
   const selectedIsPickup=selectedArchetype.capabilities.includes("pickup_orders");

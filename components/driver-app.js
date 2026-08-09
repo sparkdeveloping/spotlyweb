@@ -67,8 +67,8 @@ function useDriverWorkflow(user) {
     const saved = readState(STORE_KEY, user, null, "session");
     if (saved) setState({ ...seededState(saved.scenario), ...saved });
     setReady(true);
-  }, [user?.uid]);
-  useEffect(() => { if (ready) writeState(STORE_KEY, user, state, "session"); }, [ready, state, user?.uid]);
+  }, [user]);
+  useEffect(() => { if (ready) writeState(STORE_KEY, user, state, "session"); }, [ready, state, user]);
   const reset = (scenario = "standard") => {
     removeState(STORE_KEY, user, "session");
     setState(seededState(scenario));

@@ -64,11 +64,11 @@ function ChatPanel({ onClose, context = {} }) {
   useEffect(() => {
     const saved = readState("spotly-support-conversation", user, "", "session");
     if (saved) setConversationId(saved);
-  }, [user?.uid]);
+  }, [user]);
   useEffect(() => {
     if (!conversationId) return undefined;
     return subscribeSupportMessages(conversationId, setMessages, (error) => toast(error.message, { type: "error", title: "Conversation unavailable" }));
-  }, [conversationId]);
+  }, [conversationId, toast]);
   useEffect(() => {
     if (!conversationId || !user?.uid) return undefined;
     return subscribeSupportConversations((items) => setConversation(items.find((item) => item.id === conversationId) || null), { requesterId: user.uid, limit: 50, onError: () => {} });

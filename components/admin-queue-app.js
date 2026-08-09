@@ -85,7 +85,7 @@ function QueueBody({ queue }) {
   useEffect(() => {
     if (!user) return;
     setSavedViews(readState(`spotly-admin-queue-views:${queue}`, user, [], "local"));
-  }, [queue, user?.uid]);
+  }, [queue, user]);
 
   useEffect(() => {
     if (!user?.uid) return undefined;
@@ -108,7 +108,7 @@ function QueueBody({ queue }) {
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [cursor, owner, pageSize, priority, query, queue, reloadKey, status, user?.uid]);
+  }, [cursor, owner, pageSize, priority, query, queue, reloadKey, status, user]);
 
   function updateUrl(next = {}) {
     const search = new URLSearchParams(params.toString());

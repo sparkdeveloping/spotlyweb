@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpenCheck, Check, LoaderCircle, ScanBarcode, Search, X } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Modal, SearchField } from "@/components/ui";
 import { useToast } from "@/components/providers";
@@ -54,7 +54,7 @@ export function CatalogLibraryModal({ open, onClose }) {
   const { toast } = useToast();
 
   const defaultBranches = useMemo(() => selectedBranchId ? [selectedBranchId] : branches.map((branch) => branch.id), [selectedBranchId, branches]);
-  async function load(search = query, chosenCollection = collection) {
+  const load = useCallback(async (search = query, chosenCollection = collection) => {
     setLoading(true); setError("");
     try {
       const params = new URLSearchParams({ businessId: selectedBusinessId, limit: "40" });
@@ -64,8 +64,8 @@ export function CatalogLibraryModal({ open, onClose }) {
       setItems(result.items || []); setCollections(result.collections || []);
     } catch (caught) { setError(caught.message || "Spotly Library could not be loaded."); }
     finally { setLoading(false); }
-  }
-  useEffect(() => { if (open && selectedBusinessId) { setSelected({}); setQuery(""); setCollection(""); load("", ""); } }, [open, selectedBusinessId]);
+  }, [collection, query, selectedBusinessId]);
+  useEffect(() => { if (open && selectedBusinessId) { setSelected({}); setQuery(""); setCollection(""); load("", ""); } }, [load, open, selectedBusinessId]);
 
   function toggle(item) {
     setSelected((current) => current[item.id] ? Object.fromEntries(Object.entries(current).filter(([id]) => id !== item.id)) : { ...current, [item.id]: { masterProductId: item.id, price: "", currency: "USD", stockStatus: "in_stock", branchIds: defaultBranches } });

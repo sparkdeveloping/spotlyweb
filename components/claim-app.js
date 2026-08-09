@@ -101,11 +101,11 @@ export function ClaimApp({ initialBusinessId, newBusiness = false, initialName =
   const archetype = BUSINESS_ARCHETYPES[form.businessType] || BUSINESS_ARCHETYPES.directory_profile;
   const selectedBranches = useMemo(() => branches.filter((branch)=>selectedBranchIds.includes(branch.id)),[branches,selectedBranchIds]);
 
-  function snapshot() { return { id:draftId||undefined, stepIndex, mode, selected, branches, selectedBranchIds, form, evidence, savedAt:new Date().toISOString() }; }
-  function applyDraft(saved) {
+  const snapshot = useCallback(() => ({ id:draftId||undefined, stepIndex, mode, selected, branches, selectedBranchIds, form, evidence, savedAt:new Date().toISOString() }), [branches, draftId, evidence, form, mode, selected, selectedBranchIds, stepIndex]);
+  const applyDraft = useCallback((saved) => {
     if(!saved)return;
     setDraftId(saved.id||initialDraftId||""); setStepIndex(Math.max(0,Math.min(STEPS.length-1,Number(saved.stepIndex)||0))); setMode(saved.mode||mode); setSelected(saved.selected||null); setBranches(saved.branches||[]); setSelectedBranchIds(saved.selectedBranchIds||[]); setForm((current)=>({...current,...(saved.form||{})})); setEvidence(saved.evidence||[]); setLastSaved(saved.savedAt||saved.updatedAt?.toDate?.()?.toISOString?.()||"");
-  }
+  }, [initialDraftId, mode]);
 
   useEffect(()=>{let active=true;(async()=>{
     try {
@@ -115,11 +115,11 @@ export function ClaimApp({ initialBusinessId, newBusiness = false, initialName =
       if(initialBusinessId&&!local){const business=await getBusiness(initialBusinessId);if(active&&business){const locations=await getPublicBranchesForBusiness(business.id);setSelected(business);setMode("claim");setBranches(locations);setSelectedBranchIds(locations.length===1?[locations[0].id]:[]);setForm((current)=>({...current,name:business.brandName||business.name,organizationName:business.organizationName||"",category:business.category||"Other",businessType:business.businessType||inferBusinessType(business),email:business.email||current.email,phone:business.phone||current.phone,website:business.website||"",description:business.description||""}));setStepIndex(1);}}
     } catch { setError("The saved claim could not be restored."); }
     finally { if(active)setReady(true); }
-  })();return()=>{active=false;};},[initialBusinessId,initialDraftId,user?.uid]);
+  })();return()=>{active=false;};},[applyDraft,initialBusinessId,initialDraftId,user]);
 
   useEffect(()=>{if(user)setForm((current)=>({...current,applicantName:current.applicantName||user.displayName||"",email:current.email||user.email||"",phone:current.phone||user.phoneNumber||""}));},[user]);
 
-  async function persistDraft({ quiet = false } = {}) {
+  const persistDraft = useCallback(async ({ quiet = false } = {}) => {
     const data = snapshot();
     writeState(DRAFT_KEY, user, data);
     setLastSaved(data.savedAt);
@@ -127,9 +127,9 @@ export function ClaimApp({ initialBusinessId, newBusiness = false, initialName =
     setSaveState("saving"); setSaveMessage("Saving…");
     try { const id = await saveClaimDraft(user.uid, data); setDraftId(id); setSaveState("account"); setSaveMessage("Saved to your account"); return id; }
     catch (saveError) { setSaveState("failed"); setSaveMessage("Could not save to your account"); if (!quiet) setError(saveError.message || "The draft could not be saved to your account."); return null; }
-  }
+  }, [snapshot, user]);
 
-  useEffect(()=>{if(!ready||submitting)return;const timer=window.setTimeout(()=>{persistDraft({ quiet: true });},650);return()=>window.clearTimeout(timer);},[ready,stepIndex,mode,selected,branches,selectedBranchIds,form,evidence,user?.uid,submitting]);
+  useEffect(()=>{if(!ready||submitting)return;const timer=window.setTimeout(()=>{persistDraft({ quiet: true });},650);return()=>window.clearTimeout(timer);},[persistDraft,ready,submitting]);
 
   async function selectBusiness(business){setError("");if(business.isNew){setMode("new");setSelected(null);setBranches([]);setSelectedBranchIds([]);setForm((current)=>({...current,name:business.name}));}else{setMode("claim");setSelected(business);const locations=await getPublicBranchesForBusiness(business.id);setBranches(locations);setSelectedBranchIds(locations.length===1?[locations[0].id]:[]);setForm((current)=>({...current,name:business.brandName||business.name,organizationName:business.organizationName||"",category:business.category||"Other",businessType:business.businessType||inferBusinessType(business),email:business.email||current.email,phone:business.phone||current.phone,website:business.website||"",description:business.description||""}));}setStepIndex(1);track("business_claim_brand_selected",{business_id:business.id||"new"});}
   function toggleBranch(id){const limited=["branch_manager","authorized_staff"].includes(form.roleAtBusiness)||form.accessScope==="selected_locations";setSelectedBranchIds((current)=>limited?[id]:current.includes(id)?current.filter((item)=>item!==id):[...current,id]);}

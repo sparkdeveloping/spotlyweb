@@ -107,7 +107,7 @@ export function BusinessDataProvider({ children }) {
 
   const businessIds = useMemo(() => businessChoices.map((item) => item.id), [businessChoices]);
   const selectedChoice = useMemo(() => businessChoices.find((item) => item.id === selectedBusinessId) || null, [businessChoices, selectedBusinessId]);
-  const membership = useMemo(() => memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId) || (selectedChoice?.organizationId && item.organizationId === selectedChoice.organizationId && item.role === "organization_owner")) || null, [memberships, selectedBusinessId, selectedChoice?.organizationId]);
+  const membership = memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId) || (selectedChoice?.organizationId && item.organizationId === selectedChoice.organizationId && item.role === "organization_owner")) || null;
 
   const setSelectedBusinessId = useCallback((nextId) => {
     if (!businessChoices.some((item) => item.id === nextId)) return;

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -54,7 +55,7 @@ function PortfolioBusinessCard({ item }) {
   return <Card variant="bordered" className="group flex h-full flex-col p-5">
     <div className="flex items-start gap-4">
       <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">
-        {item.logo ? <img src={item.logo} alt="" className="h-full w-full object-cover" /> : <Store className="h-5 w-5" />}
+        {item.logo ? <Image unoptimized src={item.logo} alt="" width={48} height={48} className="h-full w-full object-cover" /> : <Store className="h-5 w-5" />}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-semibold">{item.name}</h2>{item.public ? <Badge tone="success">Public</Badge> : <Badge tone="neutral">Private</Badge>}</div>

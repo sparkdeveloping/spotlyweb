@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
@@ -56,7 +57,7 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
   return <>
     <div className={`surface flex flex-col gap-2 rounded-2xl p-2 shadow-card ${compact ? "min-w-[280px]" : "min-w-[300px] sm:flex-row"}`}>
       <button type="button" onClick={() => businessChoices.length > 1 ? setBusinessOpen(true) : null} className="relative flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-grouped">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{business?.logo ? <img src={business.logo} alt="" className="h-full w-full object-cover" /> : <Building2 className="h-5 w-5" />}</span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{business?.logo ? <Image unoptimized src={business.logo} alt="" width={40} height={40} className="h-full w-full object-cover" /> : <Building2 className="h-5 w-5" />}</span>
         <span className="min-w-0 flex-1">
           <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">Business</span>
           <span className="mt-0.5 block truncate text-sm font-bold">{business?.brandName || business?.name || "Spotly Business"}</span>
@@ -79,7 +80,7 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
         <SearchField value={query} onChange={setQuery} placeholder="Search business, organization, role…" />
         <div className="max-h-[55vh] space-y-2 overflow-y-auto">
           {filtered.map((item) => <button key={item.id} type="button" onClick={() => selectBusiness(item.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left hover:bg-[var(--surface-2)] ${item.id === selectedBusinessId ? "border-business bg-business-soft" : ""}`}>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.logo ? <img src={item.logo} alt="" className="h-full w-full object-cover" /> : <Building2 className="h-5 w-5" />}</span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{item.logo ? <Image unoptimized src={item.logo} alt="" width={40} height={40} className="h-full w-full object-cover" /> : <Building2 className="h-5 w-5" />}</span>
             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.name || item.brandName}</span><span className="mt-1 block truncate text-xs text-secondary">{[item.roleLabel, item.organizationName, item.accessibleLocationCount ? `${item.accessibleLocationCount} locations` : ""].filter(Boolean).join(" · ")}</span></span>
             {item.id === selectedBusinessId ? <Check className="h-4 w-4 text-business" /> : <ChevronDown className="h-4 w-4 -rotate-90 text-tertiary" />}
           </button>)}

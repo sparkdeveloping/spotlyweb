@@ -121,7 +121,7 @@ export async function POST(request) {
           const ranked = snapshots.map((snapshot) => {
             const data = snapshot.data();
             return { snapshot, data, comparison: compareMasterProduct(candidate, { id: snapshot.id, ...data }) };
-          }).filter((item) => item.comparison.strength !== "none").sort((a, b) => ({ exact: 3, strong: 2, possible: 1 }[b.comparison.strength] - ({ exact: 3, strong: 2, possible: 1 }[a.comparison.strength]));
+          }).filter((item) => item.comparison.strength !== "none").sort((a, b) => ({ exact: 3, strong: 2, possible: 1 }[b.comparison.strength] - { exact: 3, strong: 2, possible: 1 }[a.comparison.strength]));
           const best = ranked[0];
           return {
             index: start + offset,

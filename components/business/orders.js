@@ -351,11 +351,19 @@ export function OrdersView() {
     { value: "all", label: `All (${counts.all})` }
   ];
   const EmptyIcon = archetype.id === "ticketing_events" ? TicketCheck : archetype.id === "appointments_services" ? UserRoundCheck : CheckCircle2;
+  const [ageClock, setAgeClock] = useState(null);
+  useEffect(() => {
+    const update = () => setAgeClock(Date.now());
+    update();
+    const interval = window.setInterval(update, 60000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   function recordAge(record) {
     const created = record.createdAt?.toDate?.() || (record.createdAt ? new Date(record.createdAt) : null);
     if (!created || Number.isNaN(created.getTime())) return "Age unavailable";
-    const minutes = Math.max(0, Math.floor((Date.now() - created.getTime()) / 60000));
+    if (ageClock === null) return "Just now";
+    const minutes = Math.max(0, Math.floor((ageClock - created.getTime()) / 60000));
     if (minutes < 60) return `${minutes} min old`;
     if (minutes < 1440) return `${Math.floor(minutes / 60)} h old`;
     return `${Math.floor(minutes / 1440)} d old`;
