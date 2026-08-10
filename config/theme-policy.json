@@ -13,6 +13,7 @@
     "/payment/return",
     "/business",
     "/business/[section]",
+    "/drive",
     "/driver",
     "/driver/[section]",
     "/staff",

@@ -39,7 +39,7 @@ export const portals = {
     accentStrong: "#4E3FBF",
     accentSoft: "#F0EEFF",
     darkAccent: "#9B8CFF",
-    description: "Find nearby businesses, order ahead, and manage pickup.",
+    description: "Find nearby businesses, order ahead, and manage pickup or delivery.",
     nav: [
       { id: "home", label: "Home", icon: House, href: "/marketplace" },
       { id: "search", label: "Search", icon: Search, href: "/marketplace?view=search" },
@@ -64,6 +64,7 @@ export const portals = {
       { id: "activity", label: "Orders & bookings", icon: ClipboardList, href: "/business/activity" },
       { id: "catalog", label: "Offerings", icon: BookOpenCheck, href: "/business/catalog" },
       { id: "branches", label: "Locations", icon: MapPin, href: "/business/branches" },
+      { id: "delivery", label: "Delivery", icon: Truck, href: "/business/delivery" },
       { id: "insights", label: "Insights", icon: BarChart3, href: "/business/insights" },
       { id: "promotions", label: "Promotions", icon: BadgeDollarSign, href: "/business/promotions" },
       { id: "staff", label: "Staff", icon: UsersRound, href: "/business/staff" },

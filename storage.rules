@@ -78,6 +78,11 @@ service firebase.storage {
       allow read: if signedIn() && (request.auth.uid == uid || peopleAdmin());
       allow write: if signedIn() && (request.auth.uid == uid || peopleAdmin()) && safeDocument();
     }
+
+    match /driver-applications/{uid}/documents/{allPaths=**} {
+      allow read: if signedIn() && (request.auth.uid == uid || platformAdmin() || hasPermission("drivers.documents.read") || hasPermission("drivers.*"));
+      allow write: if signedIn() && request.auth.uid == uid && safeDocument();
+    }
     match /{allPaths=**} { allow read, write: if false; }
   }
 }

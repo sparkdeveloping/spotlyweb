@@ -29,6 +29,6 @@
 | Admin settlement reconciliation | Complete core | Admin Money API | Finance admin | Server | Responsive | Static/local | Pilot candidate; staging pending |
 | Admin product governance | Complete core | Staff catalogue API | Catalogue review permission | Server | Responsive | Static/local | Pilot candidate |
 | Public/customer marketplace | Existing | Firestore/API | Hardened 5.3 | Server | Responsive | Existing suite | Pending staging/emulator |
-| Driver | Training UI | No live dispatch | Training-only | Session | Yes | Local | Training-only |
+| Driver | Live application + operations UI | Driver lifecycle, presence, delivery offers, active delivery, incidents, earnings + payouts | Authenticated Driver + server-authoritative transition APIs | Firestore + protected Storage + current presence | Mobile-first web/PWA | Unit/static production tests | Activated in source; native OS background GPS remains a deployment/client enhancement |
 | Firebase rules emulator | Test matrix implemented | Emulator | Adversarial matrix | N/A | N/A | Not run here | Blocked by package registry |
-| Production lint/build | N/A | N/A | N/A | N/A | N/A | Not run | Blocked by package registry |
+| Production lint/build | N/A | N/A | N/A | N/A | N/A | Dependency restore attempted | Not run here: locked dependency download returned registry 404 |

@@ -15,9 +15,9 @@ import { BUILD_INFO, buildLabel } from "@/lib/build-info";
 function accountWorkspaces(profile, memberships) {
   const access = resolveWorkspaceAccess({ profile, memberships });
   const definitions = [
-    { id: "customer", href: "/marketplace", label: "Personal", description: "Orders, saved businesses and pickup activity", logo: "/brand/spotly.svg" },
+    { id: "customer", href: "/marketplace", label: "Personal", description: "Orders, saved businesses, pickup and delivery activity", logo: "/brand/spotly.svg" },
     { id: "business", href: "/business", label: "Business", description: "Operate assigned businesses and locations", logo: "/brand/spotly-business.svg" },
-    { id: "driver", href: "/driver", label: "Driver training", description: "Internal training scenarios until live dispatch is connected", logo: "/brand/spotly-driver.svg" },
+    { id: "driver", href: "/driver", label: "Driver", description: "Application, live deliveries, earnings and Driver account", logo: "/brand/spotly-driver.svg" },
     { id: "staff", href: "/staff", label: "Staff", description: "Work, schedule, learning and pay", logo: "/brand/spotly-admin.svg" },
     { id: "admin", href: "/admin", label: "Admin", description: "Platform operations and review queues", logo: "/brand/spotly-admin.svg" }
   ];

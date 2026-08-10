@@ -1,133 +1,58 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  ArrowRight,
-  CheckCircle2,
-  ExternalLink,
-  Keyboard,
-  LockKeyhole,
-  MonitorSmartphone,
-  ScanLine,
-  ShieldCheck,
-  Store,
-  XCircle
-} from "lucide-react";
-import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui";
-import { useToast } from "@/components/providers";
-import { useBusinessWorkspace, BusinessDataProvider } from "@/components/business/business-context";
-import { AuthGate } from "@/components/auth-gate";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, ExternalLink, Keyboard, LockKeyhole, MonitorSmartphone, RefreshCw, ScanLine, ShieldCheck, Store, Truck, XCircle } from "lucide-react";
+import { authenticatedFetch } from "@/lib/api-client";
+import { Badge, Button, Card, EmptyState, PageHeader, SectionCard, StatusBadge } from "@/components/ui";
+import { useBusinessWorkspace } from "@/components/business/business-context";
 import { WorkspaceContextSwitcher } from "@/components/business/shared";
-import { saveBusinessProfile } from "@/lib/firebase-services";
-import { updateBusinessOrder } from "@/lib/business-services";
-import { KIOSK_MODES } from "@/data/business-archetypes";
-import { businessHref } from "@/lib/business-routing";
 
-function availableModes(capabilities = []) {
-  const set = new Set(capabilities);
-  return KIOSK_MODES.filter((mode) => {
-    if (mode.id === "pickup_checkin") return set.has("kiosk_pickup") || set.has("pickup_orders");
-    if (mode.id === "self_order") return false; // Reserved until the unattended checkout flow is enabled.
-    if (mode.id === "ticket_checkin") return set.has("tickets") || set.has("kiosk_checkin");
-    if (mode.id === "appointment_checkin") return set.has("appointments") || set.has("bookings") || set.has("kiosk_checkin");
-    return false;
-  });
-}
+const STORAGE_KEY = "spotly-kiosk-device-v1";
+const modes = [
+  { id: "pickup_checkin", label: "Customer pickup check-in", description: "Customers enter an order code when they arrive.", icon: Store },
+  { id: "driver_pickup", label: "Driver pickup", description: "Drivers enter a delivery or pickup code when they reach this location.", icon: Truck }
+];
+const time = (value) => value ? new Date(value).toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }) : "Never";
 
 export function KioskView() {
-  const { business, user, archetype, selectedBranch, branches, selectedBusinessId } = useBusinessWorkspace();
-  const modes = availableModes(business?.capabilities || archetype.capabilities);
-  const [mode, setMode] = useState(business?.kiosk?.defaultMode || modes[0]?.id || "pickup_checkin");
-  const [requirePin, setRequirePin] = useState(business?.kiosk?.requireExitPin !== false);
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
-
-  async function save() {
-    setSaving(true);
-    try {
-      await saveBusinessProfile(business.id, {
-        kiosk: {
-          ...(business.kiosk || {}),
-          enabled: true,
-          defaultMode: mode,
-          requireExitPin: requirePin,
-          branchId: selectedBranch?.id || "",
-          updatedAt: new Date().toISOString()
-        }
-      }, user);
-      toast("Kiosk settings are ready for this business.", { title: "Kiosk configured" });
-    } catch (error) {
-      toast(error.message || "The kiosk settings could not be saved.", { type: "error", title: "Could not save kiosk" });
-    } finally { setSaving(false); }
-  }
-
-  return <div className="space-y-6">
-    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader eyebrow="Optional device mode" title="Kiosk" description="Turn a tablet or computer into a focused customer check-in or ordering screen without exposing the business workspace." /><WorkspaceContextSwitcher /></div>
-    {!modes.length ? <Card><EmptyState icon={MonitorSmartphone} title="Kiosk mode is not needed yet" description="Enable pickup, ticketing, appointments, or bookings from the guided setup centre. Spotly will then offer the matching kiosk mode." action={<Button asChild><Link href={businessHref("/business/settings", { businessId: selectedBusinessId })}>Review business settings</Link></Button>} /></Card> : <div className="grid gap-5 xl:grid-cols-[1fr_370px]">
-      <Card className="overflow-hidden"><div className="border-b p-6"><h2 className="text-xl font-semibold">Choose what this device does</h2><p className="mt-2 text-sm leading-6 text-secondary">Keep each kiosk focused on one customer task. Staff can still manage the full workflow from Spotly Business.</p></div><div className="grid gap-3 p-5 md:grid-cols-2">{modes.map((item) => { const Icon = item.icon; const selected = mode === item.id; return <button type="button" onClick={() => setMode(item.id)} key={item.id} className={`flex items-start gap-4 rounded-2xl border p-5 text-left transition ${selected ? "border-business bg-business-soft ring-2 ring-business/10" : "hover:border-business/30"}`}><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${selected ? "bg-business text-[var(--on-business)]" : "bg-grouped text-secondary"}`}><Icon className="h-5 w-5" /></span><span><span className="font-bold">{item.label}</span><span className="mt-1.5 block text-sm leading-6 text-secondary">{item.description}</span></span></button>; })}</div><div className="border-t p-5"><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input className="mt-1" type="checkbox" checked={requirePin} onChange={(event) => setRequirePin(event.target.checked)} /><span><span className="block text-sm font-bold">Require a staff PIN to leave kiosk mode</span><span className="mt-1 block text-xs leading-5 text-secondary">Prevents customers from opening the wider business portal on an unattended device.</span></span></label><div className="mt-5 flex flex-col gap-3 sm:flex-row"><Button onClick={save} loading={saving}>Save kiosk settings</Button><Button asChild variant="outline"><Link href={businessHref("/business/kiosk/live", { businessId: selectedBusinessId, mode, branch: selectedBranch?.id || "" })} target="_blank">Launch full-screen kiosk<ExternalLink className="h-4 w-4" /></Link></Button></div></div></Card>
-      <div className="space-y-5"><Card className="p-5"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-business-soft text-business"><ShieldCheck className="h-6 w-6" /></span><h3 className="mt-5 font-bold">Safe for shared devices</h3><p className="mt-2 text-sm leading-6 text-secondary">The full-screen view hides menus, finance, staff, and settings. All updates still use the signed-in user and are recorded in activity history.</p></Card><Card className="p-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-tertiary">Current location</p><h3 className="mt-3 font-bold">{selectedBranch?.branchName || selectedBranch?.name || selectedBranch?.displayName || "Choose a location"}</h3><p className="mt-1 text-sm text-secondary">{selectedBranch?.city || "Zimbabwe"} · {branches.length} accessible location{branches.length === 1 ? "" : "s"}</p></Card></div>
-    </div>}
+  const { selectedBusinessId, selectedBranchId, selectedBranch, branches, setSelectedBranchId } = useBusinessWorkspace();
+  const [devices,setDevices]=useState([]); const [loading,setLoading]=useState(true); const [creating,setCreating]=useState(false); const [error,setError]=useState(""); const [enrollment,setEnrollment]=useState(null);
+  const [form,setForm]=useState({name:"Pickup desk tablet",mode:"pickup_checkin",requireExitPin:true,exitPin:""});
+  const load=useCallback(async()=>{if(!selectedBusinessId)return;setLoading(true);try{const result=await authenticatedFetch(`/api/kiosk/enroll?businessId=${encodeURIComponent(selectedBusinessId)}`,{cache:"no-store"});setDevices(result.devices||[]);setError("");}catch(reason){setError(reason.message);}finally{setLoading(false);}},[selectedBusinessId]);
+  useEffect(()=>{load();},[load]);
+  async function create(){if(!selectedBranchId)return setError("Choose a location first.");setCreating(true);setError("");try{const result=await authenticatedFetch("/api/kiosk/enroll",{method:"POST",body:JSON.stringify({action:"create",businessId:selectedBusinessId,branchId:selectedBranchId,...form})});setEnrollment(result);await load();}catch(reason){setError(reason.message);}finally{setCreating(false);}}
+  async function revoke(device){if(!confirm(`Revoke ${device.name}? The device will stop working immediately.`))return;try{await authenticatedFetch("/api/kiosk/enroll",{method:"POST",body:JSON.stringify({action:"revoke",deviceId:device.id,businessId:selectedBusinessId})});await load();}catch(reason){setError(reason.message);}}
+  return <div className="space-y-6"><div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader eyebrow="Shared devices" title="Kiosk" description="Enroll branch-locked devices without signing a customer-facing tablet into the Business owner account."/><WorkspaceContextSwitcher/></div>{error&&<div className="rounded-xl bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{error}</div>}
+    <div className="grid gap-5 xl:grid-cols-[1fr_380px]"><SectionCard title="Add a kiosk device" description="Each credential is scoped to one location and one job."><div className="space-y-4">
+      {branches.length>1&&<label className="block text-sm font-semibold">Location<select className="field-control mt-2 w-full" value={selectedBranchId||""} onChange={(e)=>setSelectedBranchId(e.target.value)}>{branches.map((branch)=><option key={branch.id} value={branch.id}>{branch.branchName||branch.name||branch.displayName}</option>)}</select></label>}
+      <label className="block text-sm font-semibold">Device name<input className="field-control mt-2 w-full" value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></label>
+      <div className="grid gap-3 sm:grid-cols-2">{modes.map((item)=>{const Icon=item.icon;const on=form.mode===item.id;return <button key={item.id} type="button" onClick={()=>setForm({...form,mode:item.id})} className={`rounded-xl border p-4 text-left ${on?"border-[var(--accent)] bg-[var(--accent-soft)]":"bg-[var(--surface)]"}`}><Icon className="h-5 w-5"/><p className="mt-3 font-semibold">{item.label}</p><p className="mt-1 text-xs leading-5 text-secondary">{item.description}</p></button>})}</div>
+      <label className="flex items-start gap-3 rounded-xl bg-[var(--surface-2)] p-4"><input className="mt-1" type="checkbox" checked={form.requireExitPin} onChange={(e)=>setForm({...form,requireExitPin:e.target.checked})}/><span><span className="block text-sm font-semibold">Require staff PIN to leave kiosk mode</span><span className="mt-1 block text-xs text-secondary">Recommended for unattended or customer-facing devices.</span></span></label>
+      {form.requireExitPin&&<label className="block text-sm font-semibold">Staff exit PIN<input className="field-control mt-2 w-full" inputMode="numeric" type="password" minLength="4" maxLength="8" value={form.exitPin} onChange={(e)=>setForm({...form,exitPin:e.target.value.replace(/\D/g,"").slice(0,8)})} placeholder="4–8 digits"/></label>}
+      <Button loading={creating} onClick={create}>Generate enrollment code</Button>
+      {enrollment&&<div className="rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] p-5"><p className="text-xs font-semibold text-secondary">ONE-TIME ENROLLMENT CODE</p><p className="mt-2 font-mono text-3xl font-semibold tracking-[.12em]">{enrollment.enrollmentCode}</p><p className="mt-2 text-sm text-secondary">Open <strong>/business/kiosk/live</strong> on the kiosk and enter this within {enrollment.expiresInMinutes} minutes.</p><Button className="mt-4" asChild variant="outline"><a href="/business/kiosk/live" target="_blank" rel="noreferrer">Open kiosk enrollment<ExternalLink className="h-4 w-4"/></a></Button></div>}
+    </div></SectionCard><Card className="p-5"><ShieldCheck className="h-6 w-6 text-[var(--accent)]"/><h3 className="mt-4 font-semibold">Device-scoped security</h3><p className="mt-2 text-sm leading-6 text-secondary">The kiosk receives a revocable credential for only {selectedBranch?.branchName||selectedBranch?.name||"this location"}. It never receives the full Business order collection or owner session.</p></Card></div>
+    <SectionCard title="Enrolled devices" action={<Button size="sm" variant="outline" onClick={load}><RefreshCw className="h-4 w-4"/>Refresh</Button>}>{loading?<div className="py-12 text-center text-sm text-secondary">Loading devices…</div>:devices.length?<div className="divide-y">{devices.map((device)=><div key={device.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center"><MonitorSmartphone className="h-5 w-5 text-[var(--accent)]"/><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{device.name}</p><StatusBadge status={device.status}/></div><p className="mt-1 text-xs text-secondary">{modes.find((m)=>m.id===device.mode)?.label||device.mode} · Last seen {time(device.lastSeenAt)}</p></div>{device.status!=="revoked"&&<Button size="sm" variant="outline" onClick={()=>revoke(device)}>Revoke</Button>}</div>)}</div>:<EmptyState icon={MonitorSmartphone} title="No kiosk devices" description="Generate an enrollment code to add this branch's first shared device."/>}</SectionCard>
   </div>;
 }
 
-function codeFor(order) {
-  return String(order.pickupCode || order.ticketCode || order.orderNumber || order.number || order.id?.slice(0, 8) || "").replace(/\s/g, "").toUpperCase();
+function readDevice(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"null");}catch{return null;}}
+function headers(device){return {"content-type":"application/json","x-spotly-kiosk-device":device.deviceId,"x-spotly-kiosk-credential":device.credential};}
+async function kioskRequest(device,path,body={}){const response=await fetch(path,{method:"POST",headers:headers(device),body:JSON.stringify(body),cache:"no-store"});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||"The kiosk request failed.");return payload;}
+
+export function KioskLiveApp(){
+  const [device,setDevice]=useState(null); const [hydrated,setHydrated]=useState(false);
+  useEffect(()=>{setDevice(readDevice());setHydrated(true);},[]);
+  if(!hydrated)return <KioskShell><p className="text-center text-white/70">Starting kiosk…</p></KioskShell>;
+  return device?<LiveDevice device={device} onInvalidDevice={()=>{localStorage.removeItem(STORAGE_KEY);setDevice(null);}}/>:<EnrollDevice onEnrolled={(value)=>{localStorage.setItem(STORAGE_KEY,JSON.stringify(value));setDevice(value);}}/>;
 }
-
-function KioskLiveContent() {
-  const { business, orders, user, selectedBranch, selectedBranchId, branches, setSelectedBranchId } = useBusinessWorkspace();
-  const [code, setCode] = useState("");
-  const [result, setResult] = useState(null);
-  const [state, setState] = useState("idle");
-  const [message, setMessage] = useState("");
-  const mode = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("mode") || business?.kiosk?.defaultMode || "pickup_checkin" : "pickup_checkin";
-  const modeInfo = KIOSK_MODES.find((item) => item.id === mode) || KIOSK_MODES[0];
-  const visibleOrders = useMemo(() => orders.filter((order) => !selectedBranchId || !order.branchId || order.branchId === selectedBranchId), [orders, selectedBranchId]);
-
-  function find() {
-    const normalized = code.replace(/\s/g, "").toUpperCase();
-    const match = visibleOrders.find((order) => codeFor(order) === normalized);
-    if (!match) {
-      setResult(null);
-      setState("error");
-      setMessage("We could not find that reference at this location. Check the code or ask a team member.");
-      return;
-    }
-    setResult(match);
-    setState("found");
-    setMessage("");
-  }
-
-  async function confirmArrival() {
-    if (!result) return;
-    setState("processing");
-    try {
-      const nextStatus = mode === "ticket_checkin" ? "checked_in" : mode === "appointment_checkin" ? "arrived" : "customer_arrived";
-      await updateBusinessOrder(result, { status: nextStatus, checkedInAt: new Date().toISOString(), kioskMode: mode }, user, mode === "ticket_checkin" ? "Ticket checked in at kiosk." : "Customer checked in at kiosk.");
-      setState("success");
-      setMessage(mode === "ticket_checkin" ? "Ticket accepted. Welcome." : "You are checked in. The team has been notified.");
-    } catch (error) {
-      setState("error");
-      setMessage(error.message || "This check-in could not be completed. Ask a team member for help.");
-    }
-  }
-
-  function reset() { setCode(""); setResult(null); setState("idle"); setMessage(""); }
-
-  return <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-[#0d6a42] to-emerald-500 p-4 text-white sm:p-8">
-    <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-6xl flex-col rounded-[32px] bg-[var(--surface)]/10 p-5 shadow-2xl backdrop-blur-xl sm:min-h-[calc(100vh-4rem)] sm:p-8">
-      <header className="flex flex-col gap-4 border-b border-white/15 pb-6 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-4"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] text-business"><Store className="h-7 w-7" /></span><div><p className="text-xl font-semibold">{business?.brandName || business?.name || "Spotly Business"}</p><p className="mt-1 text-sm text-white/65">{modeInfo.label} · {selectedBranch?.displayName || selectedBranch?.name || "Main location"}</p></div></div>{branches.length > 1 && <select value={selectedBranch?.id || ""} onChange={(event) => setSelectedBranchId(event.target.value)} className="h-12 rounded-2xl border border-white/15 bg-[var(--surface)]/10 px-4 text-sm font-bold text-white outline-none">{branches.map((branch) => <option className="text-black" key={branch.id} value={branch.id}>{branch.branchName || branch.name || branch.displayName}</option>)}</select>}</header>
-      <div className="flex flex-1 items-center justify-center py-10"><AnimatePresence mode="wait">
-        {state === "success" ? <motion.section key="success" initial={{ opacity: 0, scale: .94 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-xl text-center"><motion.span initial={{ scale: .5 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: .45 }} className="mx-auto flex h-28 w-28 items-center justify-center rounded-[36px] bg-emerald-300 text-emerald-950"><CheckCircle2 className="h-14 w-14" /></motion.span><h1 className="mt-8 text-4xl font-semibold tracking-tight">All set</h1><p className="mx-auto mt-4 max-w-lg text-lg leading-8 text-white/75">{message}</p><Button onClick={reset} className="mt-8 bg-[var(--surface)] text-emerald-950 hover:bg-[var(--surface-hover)]/90">Done</Button></motion.section>
-          : <motion.section key="entry" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-2xl text-center"><span className="mx-auto flex h-20 w-20 items-center justify-center rounded-[28px] bg-[var(--surface)]/12"><ScanLine className="h-10 w-10" /></span><h1 className="mt-7 text-4xl font-semibold tracking-tight sm:text-5xl">{mode === "ticket_checkin" ? "Enter your ticket code" : mode === "appointment_checkin" ? "Check in for your booking" : "Tell us you have arrived"}</h1><p className="mx-auto mt-4 max-w-xl text-base leading-7 text-white/70">Enter the reference from your confirmation. No account details or business controls are shown on this device.</p><div className="mx-auto mt-8 flex max-w-xl flex-col gap-3 sm:flex-row"><label className="flex h-16 flex-1 items-center gap-3 rounded-2xl bg-[var(--surface)] px-5 text-emerald-950 shadow-xl"><Keyboard className="h-5 w-5 text-[var(--on-success-soft)]" /><input autoFocus value={code} onChange={(event) => { setCode(event.target.value.toUpperCase()); if (state === "error") setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") find(); }} placeholder="Example: SPOT-4821" className="min-w-0 flex-1 bg-transparent text-lg font-semibold uppercase tracking-[.12em] outline-none placeholder:text-emerald-900/30" /></label><Button onClick={find} disabled={!code.trim()} className="h-16 bg-emerald-300 px-7 text-emerald-950 hover:bg-emerald-200">Find</Button></div>{state === "error" && <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto mt-5 flex max-w-xl items-start gap-3 rounded-2xl bg-red-400/20 p-4 text-left"><XCircle className="mt-0.5 h-5 w-5 shrink-0" /><p className="text-sm leading-6">{message}</p></motion.div>}{state === "found" && result && <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto mt-6 max-w-xl rounded-3xl bg-[var(--surface)] p-6 text-left text-ink shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-tertiary">Reference</p><h2 className="mt-2 text-2xl font-semibold">{result.orderNumber || result.number || codeFor(result)}</h2><p className="mt-1 text-sm text-secondary">{result.customerName || result.customer?.name || "Customer"}</p></div><Badge tone="success">Found</Badge></div><div className="mt-5 rounded-2xl bg-grouped p-4"><p className="text-sm font-bold">{modeInfo.label}</p><p className="mt-1 text-sm leading-6 text-secondary">{mode === "ticket_checkin" ? `${result.quantity || result.items?.length || 1} ticket${(result.quantity || result.items?.length || 1) === 1 ? "" : "s"}` : `${result.items?.length || 0} item${result.items?.length === 1 ? "" : "s"} · ${String(result.status || "confirmed").replaceAll("_", " ")}`}</p></div><Button onClick={confirmArrival} loading={state === "processing"} className="mt-5 w-full">Confirm check-in<ArrowRight className="h-4 w-4" /></Button></motion.div>}</motion.section>}
-      </AnimatePresence></div>
-      <footer className="flex items-center justify-between border-t border-white/15 pt-5 text-xs text-white/55"><span>Powered by Spotly</span><span className="flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5" />Shared-device mode</span></footer>
-    </div>
-  </main>;
-}
-
-export function KioskLiveApp() {
-  return <AuthGate portal="business" title="Sign in to use this kiosk"><BusinessDataProvider><KioskLiveContent /></BusinessDataProvider></AuthGate>;
-}
+function KioskShell({children}){return <main className="min-h-screen bg-gradient-to-br from-emerald-950 via-[#0d6a42] to-emerald-500 p-4 text-white sm:p-8"><div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-5xl flex-col rounded-[32px] bg-[var(--surface)]/10 p-5 shadow-2xl backdrop-blur-xl sm:min-h-[calc(100vh-4rem)] sm:p-8">{children}</div></main>}
+function EnrollDevice({onEnrolled}){const [code,setCode]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");async function enroll(){setBusy(true);setError("");try{const response=await fetch("/api/kiosk/enroll",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"activate",enrollmentCode:code.trim().toUpperCase()})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||"Enrollment failed.");onEnrolled(payload);}catch(reason){setError(reason.message);}finally{setBusy(false);}}return <KioskShell><header className="flex items-center gap-4 border-b border-white/15 pb-6"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] text-[var(--accent)]"><MonitorSmartphone className="h-7 w-7"/></span><div><h1 className="text-xl font-semibold">Enroll this Spotly kiosk</h1><p className="mt-1 text-sm text-white/65">Use the one-time code generated in Spotly Business.</p></div></header><div className="flex flex-1 items-center justify-center"><section className="w-full max-w-xl text-center"><LockKeyhole className="mx-auto h-12 w-12"/><h2 className="mt-6 text-3xl font-semibold">Enter enrollment code</h2><input autoFocus value={code} onChange={(e)=>setCode(e.target.value.toUpperCase())} onKeyDown={(e)=>e.key==="Enter"&&enroll()} className="mt-7 h-16 w-full rounded-2xl bg-[var(--surface)] px-5 text-center font-mono text-xl font-semibold tracking-[.16em] text-[var(--text)] outline-none" placeholder="ENROLLMENT CODE"/>{error&&<p className="mt-4 rounded-xl bg-red-400/20 p-3 text-sm">{error}</p>}<Button className="mt-5 h-14 bg-emerald-300 text-emerald-950 hover:bg-emerald-200" loading={busy} disabled={!code.trim()} onClick={enroll}>Enroll this device</Button></section></div></KioskShell>}
+function LiveDevice({device,onInvalidDevice}){const [code,setCode]=useState("");const [state,setState]=useState("idle");const [result,setResult]=useState(null);const [message,setMessage]=useState("");const [exitOpen,setExitOpen]=useState(false);const [pin,setPin]=useState("");
+  const mode=useMemo(()=>modes.find((item)=>item.id===device.mode)||modes[0],[device.mode]); const ModeIcon=mode.icon;
+  useEffect(()=>{const beat=()=>kioskRequest(device,"/api/kiosk/heartbeat").catch(()=>{});beat();const timer=setInterval(beat,60000);return()=>clearInterval(timer);},[device]);
+  useEffect(()=>{if(!["success","found"].includes(state))return;const timer=setTimeout(()=>{setCode("");setState("idle");setResult(null);setMessage("");},12000);return()=>clearTimeout(timer);},[state]);
+  async function find(){setState("processing");setMessage("");try{const payload=device.mode==="driver_pickup"?await kioskRequest(device,"/api/kiosk/driver-pickup",{code}):await kioskRequest(device,"/api/kiosk/lookup",{code});setResult(payload);setState(device.mode==="driver_pickup"?"success":"found");setMessage(device.mode==="driver_pickup"?"Driver arrival recorded. The team can prepare the handoff.":"");}catch(reason){setState("error");setMessage(reason.message);}}
+  async function checkIn(){setState("processing");try{await kioskRequest(device,"/api/kiosk/check-in",{orderId:result.order.id});setState("success");setMessage("You're checked in. The team has been notified.");}catch(reason){setState("error");setMessage(reason.message);}}
+  async function exit(){try{await kioskRequest(device,"/api/kiosk/exit",{pin});window.location.assign("/");}catch(reason){if(/revoked|device|credential/i.test(reason.message||""))onInvalidDevice?.();else setMessage(reason.message);}}
+  return <KioskShell><header className="flex items-center gap-4 border-b border-white/15 pb-6"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] text-[var(--accent)]"><ModeIcon className="h-7 w-7"/></span><div className="flex-1"><h1 className="text-xl font-semibold">Spotly kiosk</h1><p className="mt-1 text-sm text-white/65">{mode.label}</p></div><button className="rounded-lg px-3 py-2 text-xs text-white/60 hover:bg-[var(--surface)]/10" onClick={()=>setExitOpen(true)}>Staff exit</button></header><div className="flex flex-1 items-center justify-center py-10"><section className="w-full max-w-2xl text-center">{state==="success"?<><span className="mx-auto flex h-24 w-24 items-center justify-center rounded-[30px] bg-emerald-300 text-emerald-950"><CheckCircle2 className="h-12 w-12"/></span><h2 className="mt-7 text-4xl font-semibold">All set</h2><p className="mx-auto mt-3 max-w-lg text-white/75">{message}</p></>:<><ScanLine className="mx-auto h-12 w-12"/><h2 className="mt-6 text-4xl font-semibold">{device.mode==="driver_pickup"?"Driver pickup":"Tell us you have arrived"}</h2><p className="mx-auto mt-3 max-w-lg text-white/70">Enter the reference shown in Spotly. This shared device only receives the information needed for this check-in.</p><div className="mx-auto mt-7 flex max-w-xl gap-3"><label className="flex h-16 flex-1 items-center gap-3 rounded-2xl bg-[var(--surface)] px-5 text-[var(--text)]"><Keyboard className="h-5 w-5"/><input autoFocus value={code} onChange={(e)=>{setCode(e.target.value.toUpperCase());if(state==="error")setState("idle");}} onKeyDown={(e)=>e.key==="Enter"&&find()} className="min-w-0 flex-1 bg-transparent font-semibold uppercase tracking-[.1em] outline-none" placeholder="SP-..."/></label><Button className="h-16 bg-emerald-300 text-emerald-950 hover:bg-emerald-200" disabled={!code.trim()||state==="processing"} loading={state==="processing"} onClick={find}>Find</Button></div>{state==="error"&&<div className="mx-auto mt-4 flex max-w-xl items-center gap-3 rounded-xl bg-red-400/20 p-4 text-left"><XCircle className="h-5 w-5"/><p className="text-sm">{message}</p></div>}{state==="found"&&result?.order&&<div className="mx-auto mt-5 max-w-xl rounded-2xl bg-[var(--surface)] p-5 text-left text-[var(--text)]"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold text-tertiary">ORDER</p><h3 className="mt-1 text-xl font-semibold">{result.order.number}</h3><p className="mt-1 text-sm text-secondary">{result.order.contactName} · {result.order.itemCount} item{result.order.itemCount===1?"":"s"}</p></div><Badge tone="success">Found</Badge></div><Button className="mt-5 w-full" onClick={checkIn}>Confirm arrival</Button></div>}</>}</section></div>{exitOpen&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><Card className="w-full max-w-sm p-5 text-[var(--text)]"><h3 className="text-lg font-semibold">Staff exit</h3><p className="mt-2 text-sm text-secondary">Enter the staff PIN to leave kiosk mode. This device stays enrolled until it is revoked in Spotly Business.</p>{device.requireExitPin&&<input autoFocus className="field-control mt-4 w-full" type="password" inputMode="numeric" value={pin} onChange={(e)=>setPin(e.target.value.replace(/\D/g,"").slice(0,8))} placeholder="Staff PIN"/>}{message&&<p className="mt-3 text-sm text-danger">{message}</p>}<div className="mt-4 flex gap-2"><Button onClick={exit}>Exit kiosk</Button><Button variant="outline" onClick={()=>{setExitOpen(false);setMessage("");}}>Cancel</Button></div></Card></div>}</KioskShell>}

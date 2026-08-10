@@ -11,6 +11,7 @@ The application now treats state as device preference, session state, account st
 | `spotly-admin-queue-views:<queue>:<user scope>` | localStorage | Authenticated user on device | Saved filter/view definitions | User removes view, logout cleanup where applicable, browser clear | Low; no case content should be stored |
 | `spotly-business-id:<user scope>` | localStorage | Authenticated user on device | Last selected business identifier | Logout/account change or browser clear | Moderate identifier only |
 | `spotly-branch-id:<business>:<user scope>` | localStorage | Authenticated user on device | Last selected location identifier | Logout/account change or browser clear | Moderate identifier only |
+| `spotly-kiosk-device-v1` | localStorage | Revocable kiosk device ID + scoped credential returned after one-time enrollment | Device revocation/invalid credential or browser data clear | Sensitive shared-device credential; branch/mode scoped and never a Business owner session |
 
 ## Session-scoped state
 
@@ -21,10 +22,9 @@ All keys use `:<user:UID>` or `:<session:UUID>` suffixes.
 | `spotly-anonymous-session` | sessionStorage | Random anonymous session ID | Browser tab/session close | Low |
 | `spotly-marketplace-location` | sessionStorage | Selected city/area and optional coordinates | Logout, account switch, session close or reset | Moderate location preference |
 | `spotly-marketplace-cart` | sessionStorage | Business/location IDs and basket items | Successful order, logout, account switch, session close or clear basket | Moderate shopping data |
-| `spotly-checkout-draft` | sessionStorage | Checkout step, contact, pickup and payment preference | Successful order, logout, account switch, session close or reset | Sensitive contact/transaction draft; scoped and temporary |
+| `spotly-checkout-draft` | sessionStorage | Checkout step, contact, fulfilment, pickup/delivery address and payment preference | Successful order, logout, account switch, session close or reset | Sensitive contact/location/transaction draft; scoped and temporary |
 | `spotly-support-conversation` | sessionStorage | Active conversation identifier | Close/reset, logout, account switch or session close | Moderate; server enforces participant access |
 | `spotly-business-claim-draft` | sessionStorage | Temporary anonymous claim draft before sign-in | Transfer to account, reset, session close | Sensitive business draft; account draft becomes authoritative after sign-in |
-| `spotly-driver-training` | sessionStorage | Fictional scenario and training stage | Reset, logout, account switch or session close | Low; no real dispatch data |
 
 ## Account/server state
 
@@ -35,7 +35,7 @@ All keys use `:<user:UID>` or `:<session:UUID>` suffixes.
 | Claim evidence Storage objects | Persisted evidence uploads | Authenticated claimant and authorized reviewers |
 | `staffTrainingAssignments` | Learning progress, quiz and completion | Staff/manager records |
 | `supportConversations` | Participant, context, lifecycle, messages and satisfaction | Server/authorized participants |
-| Driver assignments | Reserved for future operational driver state | Server; current Driver remains training-only |
+| Driver applications, presence, offers, deliveries, earnings and payouts | Driver identity, operational eligibility, current work and money state | Server-authoritative APIs/Firestore; client only caches transient render state |
 | Orders/order requests | Order truth and idempotency | Server transaction |
 | Branch booked slots/product reservations | Pickup capacity and stock allocation | Server transaction |
 

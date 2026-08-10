@@ -482,6 +482,37 @@ service cloud.firestore {
       allow write: if false;
     }
 
+
+    // Driver, delivery, dispatch and kiosk operational records are server-authoritative.
+    // UI clients use scoped API routes; privileged Admin SDK writes bypass these rules.
+    match /driverApplications/{uid} {
+      allow read: if self(uid) || platformAdmin() || hasPermission("drivers.read") || hasPermission("drivers.*");
+      allow create, update, delete: if false;
+    }
+    match /drivers/{uid} {
+      allow read: if self(uid) || platformAdmin() || hasPermission("drivers.read") || hasPermission("drivers.*");
+      allow create, update, delete: if false;
+    }
+    match /driverDocuments/{documentId} {
+      allow read: if activeAccount() && (resource.data.driverId == request.auth.uid || platformAdmin() || hasPermission("drivers.documents.read") || hasPermission("drivers.*"));
+      allow create, update, delete: if false;
+    }
+    match /driverVehicles/{vehicleId} {
+      allow read: if activeAccount() && (resource.data.driverId == request.auth.uid || platformAdmin() || hasPermission("drivers.read") || hasPermission("drivers.*"));
+      allow create, update, delete: if false;
+    }
+    match /driverPayoutAccounts/{uid} { allow read, write: if false; }
+    match /driverPresence/{uid} { allow read, write: if false; }
+    match /deliveryJobs/{jobId} { allow read, write: if false; }
+    match /deliveryOffers/{offerId} { allow read, write: if false; }
+    match /deliveryEvents/{eventId} { allow read, write: if false; }
+    match /driverEarningsLedger/{entryId} { allow read, write: if false; }
+    match /driverBalanceAccounts/{accountId} { allow read, write: if false; }
+    match /driverPayouts/{payoutId} { allow read, write: if false; }
+    match /driverIncidents/{incidentId} { allow read, write: if false; }
+    match /dispatchZones/{zoneId} { allow read: if activeAccount(); allow write: if false; }
+    match /kioskDevices/{deviceId} { allow read, write: if false; }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -18,6 +18,7 @@ import { SupportView } from "@/components/business/support";
 import { SettingsView } from "@/components/business/settings";
 import { BusinessSetupView } from "@/components/business/setup";
 import { KioskView } from "@/components/business/kiosk";
+import { DeliveryView } from "@/components/business/delivery";
 import { BusinessLaunchView, BusinessLifecycleBanner, LockedBusinessFeature } from "@/components/business/launch";
 import { BUSINESS_ACCOUNT_SECTIONS } from "@/lib/business-routing";
 
@@ -29,6 +30,7 @@ const views = {
   activity: OrdersView,
   catalog: CatalogView,
   branches: BranchesView,
+  delivery: DeliveryView,
   kiosk: KioskView,
   insights: InsightsView,
   promotions: PromotionsView,

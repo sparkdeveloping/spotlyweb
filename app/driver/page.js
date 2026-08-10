@@ -1,4 +1,3 @@
 import { DriverApp } from "@/components/driver-app";
-
-export const metadata = { title: "Driver training", description: "Internal Spotly Driver training scenarios. No live dispatch or earnings are connected." };
+export const metadata = { title: "Spotly Driver", description: "Apply, go online, receive live delivery offers, complete deliveries and track earnings with Spotly Driver." };
 export default function DriverPage() { return <DriverApp section="home" />; }

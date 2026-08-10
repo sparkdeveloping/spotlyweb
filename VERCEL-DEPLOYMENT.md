@@ -65,7 +65,8 @@ Test the exact build ID shown in Account/Admin:
 - `/claim/drafts`
 - one `/claim/status/[claimId]`
 - `/business`
-- `/driver` as training-only
+- `/drive` public Driver acquisition
+- `/driver` live Driver application/operations
 - `/staff`
 - `/admin`
 - one `/admin/queues/[queue]`
@@ -83,7 +84,9 @@ Verify:
 - Order idempotency
 - Claim save/resume and evidence persistence
 - Mobile merchant order cards
-- Driver training reset and scenario selection
+- Driver application save/resume, review state, online/location state and live delivery progression
+- Driver offer accept/decline, pickup verification, handoff PIN and earnings refresh
+- Business delivery configuration and dedicated kiosk device enrollment
 - Staff task deep link and learning progress
 - Admin exact queue filters, assignment and decisions
 - Support attachments, close/reopen and satisfaction
