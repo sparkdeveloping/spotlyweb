@@ -1,39 +1,39 @@
-# Spotly Platform 5.5.1 release manifest
+# Spotly Platform 5.5.3 release manifest
 
-Generated: August 9, 2026
+Generated: August 10, 2026
 Project: `spotly-web-platform`
-Version: `5.5.1`
-Release: Business Lifecycle Orchestration claim runtime hotfix
+Version: `5.5.3`
+Release: Business Lifecycle Consistency Full Fix
 
 ## Release contents
 
-- One authoritative five-stage Business lifecycle: Access → Basics → Prepare → Final review → Live
-- `/business/launch?business=<id>` Launch Checklist as the pre-live selected-business home
-- Completion-based foundational setup progress and deterministic next-incomplete-step resume
-- URL-addressable setup steps through `step=`
-- Merchant-controlled progress separated from Spotly-owned reviews
-- Exact next-action routing into Business details, Products, Locations, Money and other launch requirements
-- Lifecycle-gated Business navigation and locked-feature explanations
-- Persistent `/business` provider/shell architecture to remove sidebar collapse during section navigation
-- Canonical Business URL helper preserving explicit `business=<id>` deep-link context
-- Server-authoritative final launch-review submission and Admin decision workflow
-- Live-business re-review policy for launch-critical edits without reopening foundational onboarding
-- Trusted business suspension/resume controls
-- Trusted branch structural API and hardened public customer-live gates
-- Existing 5.4 Portfolio, claims/access, Master Product Library, Staff capture, AI media and Business Money preserved
-- Updated Firestore rules and emulator test matrix
+- One authoritative five-stage Business lifecycle: Access → Basics → Prepare → Final review → Live.
+- Server-authoritative selected-business lifecycle endpoint with no client readiness fallback.
+- Portfolio/selected-business lifecycle synchronization using one public lifecycle snapshot shape.
+- Canonical primary Business location established by Stage-2 setup through the trusted branch API.
+- Branch normalization that never trusts first-array ordering for lifecycle readiness.
+- Foundational setup completion separated from current launch-readiness health.
+- Stage-3 preparation navigation preserved when a later launch requirement needs attention.
+- Correct Business Basics progress: Review is confirmation, not a percentage unit.
+- Review blocker aggregation instead of silent multi-step bounce-back.
+- Protected settlement-account status included in authoritative lifecycle evaluation.
+- Structured final launch-review 422 blockers and visible merchant Fix actions.
+- Duplicate launch-submit protection in both client and server layers.
+- Trusted direct-owner access parity between Portfolio and selected-business APIs.
+- Explicit no-store lifecycle/Portfolio API behavior.
+- Existing security, commerce integrity, Master Product Library, Staff capture, AI media and Business Money functionality preserved.
 
 ## Validation completed here
 
-- `npm run check:js` passed
-- `npm run check:theme` passed
-- `npm test` passed: 86/86
-- All `app/api/**/route.js` files passed `node --check`
-- JSON and SVG parsing passed
+- `npm run check:js` passed.
+- `npm run check:theme` passed: 123 source files / 23 classified route patterns.
+- `npm test` passed: 102/102.
+- Modified non-JSX server/library/test modules passed `node --check`.
+- JSON and SVG parsing passed.
 
 ## Validation blocked by environment
 
-The internal npm registry returns HTTP 404 for `zod-validation-error-4.0.2.tgz` and `firebase-tools`. Dependency installation cannot complete, so ESLint, Next.js production build and Firebase emulator execution cannot be claimed as passed in this environment. See `SPOTLY-BUSINESS-LIFECYCLE-VALIDATION-REPORT.md`.
+The internal npm registry returns HTTP 404 for `zod-validation-error-4.0.2.tgz` and `firebase-tools`. Dependency installation cannot complete, so ESLint, Next.js production build and Firebase emulator execution cannot be claimed as passed in this environment. See `SPOTLY-5.5.3-VALIDATION-REPORT.md`.
 
 ## Archive exclusions
 

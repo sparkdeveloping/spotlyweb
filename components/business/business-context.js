@@ -24,7 +24,6 @@ import { authenticatedFetch } from "@/lib/api-client";
 import { defaultOperationalSettings } from "@/data/business-config";
 import { businessArchetype, inferBusinessType } from "@/data/business-archetypes";
 import { readState, writeState } from "@/lib/browser-state";
-import { getBusinessLifecycle } from "@/lib/business-lifecycle";
 import { businessHref, businessSectionFromPath, isBusinessAccountSection } from "@/lib/business-routing";
 
 const BusinessContext = createContext(null);
@@ -73,6 +72,10 @@ export function BusinessDataProvider({ children }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [authoritativeLifecycle, setAuthoritativeLifecycle] = useState(null);
+  const [lifecycleBusinessId, setLifecycleBusinessId] = useState("");
+  const [lifecycleLoading, setLifecycleLoading] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState("");
 
   const refreshPortfolio = useCallback(async () => {
     if (!user?.uid) {
@@ -83,7 +86,7 @@ export function BusinessDataProvider({ children }) {
     setPortfolioLoading(true);
     setPortfolioError("");
     try {
-      const payload = await authenticatedFetch("/api/business/portfolio");
+      const payload = await authenticatedFetch("/api/business/portfolio", { cache: "no-store" });
       setBusinessChoices(payload.businesses || []);
     } catch (reason) {
       setPortfolioError(reason?.message || "Your business portfolio could not be loaded.");
@@ -94,6 +97,42 @@ export function BusinessDataProvider({ children }) {
   }, [user?.uid]);
 
   useEffect(() => { refreshPortfolio(); }, [refreshPortfolio, memberships]);
+
+  const refreshLifecycle = useCallback(async (businessId = selectedBusinessId, { silent = false } = {}) => {
+    if (!user?.uid || !businessId) return null;
+    if (!silent) setLifecycleLoading(true);
+    setLifecycleError("");
+    try {
+      const payload = await authenticatedFetch(`/api/business/lifecycle?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store" });
+      const nextLifecycle = payload.lifecycle || null;
+      setAuthoritativeLifecycle(nextLifecycle);
+      setLifecycleBusinessId(businessId);
+      if (nextLifecycle) {
+        // Keep the Portfolio card synchronized with the exact selected-business snapshot instead
+        // of waiting for a separately timed portfolio refresh to recalculate the same lifecycle.
+        setBusinessChoices((current) => current.map((choice) => choice.id === businessId ? {
+          ...choice,
+          setupComplete: Boolean(nextLifecycle.setup?.complete),
+          lifecycleStage: nextLifecycle.stage,
+          lifecycleLabel: nextLifecycle.statusLabel,
+          merchantProgress: nextLifecycle.merchantProgress,
+          defaultHref: nextLifecycle.defaultHref,
+          lifecycleActionLabel: nextLifecycle.nextAction?.actionLabel || (nextLifecycle.stage === "live" ? "Open business" : nextLifecycle.stage === "review" ? "View Spotly review" : "Open launch checklist"),
+          launchReviewStatus: nextLifecycle.launchReview?.status || "",
+          externalReviewCount: nextLifecycle.externalReviewCount || 0,
+          merchantActionCount: nextLifecycle.merchantActionCount || 0,
+          attention: nextLifecycle.nextAction && nextLifecycle.stage !== "live" ? [{ type: nextLifecycle.nextAction.id, label: nextLifecycle.nextAction.label, href: nextLifecycle.nextAction.href }] : []
+        } : choice));
+      }
+      return nextLifecycle;
+    } catch (reason) {
+      setLifecycleError(reason?.message || "The authoritative launch status could not be loaded.");
+      setLifecycleBusinessId(businessId);
+      return null;
+    } finally {
+      if (!silent) setLifecycleLoading(false);
+    }
+  }, [selectedBusinessId, user?.uid]);
 
   const businessIds = useMemo(() => businessChoices.map((item) => item.id), [businessChoices]);
   const selectedChoice = useMemo(() => businessChoices.find((item) => item.id === selectedBusinessId) || null, [businessChoices, selectedBusinessId]);
@@ -153,6 +192,10 @@ export function BusinessDataProvider({ children }) {
       setPromotions([]);
       setPayouts([]);
       setSupport([]);
+      setAuthoritativeLifecycle(null);
+      setLifecycleBusinessId("");
+      setLifecycleLoading(false);
+      setLifecycleError("");
       setLoading(false);
       return undefined;
     }
@@ -187,6 +230,19 @@ export function BusinessDataProvider({ children }) {
   }, [selectedBusinessId, user]);
 
   useEffect(() => {
+    if (!selectedBusinessId) return;
+    setAuthoritativeLifecycle(null);
+    setLifecycleBusinessId("");
+    refreshLifecycle(selectedBusinessId);
+  }, [refreshLifecycle, selectedBusinessId]);
+
+  useEffect(() => {
+    if (!selectedBusinessId || loadedBusinessId !== selectedBusinessId) return undefined;
+    const timer = setTimeout(() => { refreshLifecycle(selectedBusinessId, { silent: true }); }, 180);
+    return () => clearTimeout(timer);
+  }, [allBranches, business, claims, invitations, loadedBusinessId, members, operations, products, refreshLifecycle, selectedBusinessId]);
+
+  useEffect(() => {
     if (!branches.length) { setSelectedBranchId(""); return; }
     const storageKey = `spotly-branch-id:${selectedBusinessId}`;
     const stored = readState(storageKey, user, "", "local");
@@ -200,24 +256,18 @@ export function BusinessDataProvider({ children }) {
 
   useEffect(() => subscribeCatalogTemplates(setTemplates, () => {}), []);
 
-  const selectedBranch = useMemo(() => branches.find((branch) => branch.id === selectedBranchId) || branches[0] || null, [branches, selectedBranchId]);
+  const authoritativeBranch = authoritativeLifecycle?.canonicalLocation || null;
+  const selectedBranch = useMemo(() => branches.find((branch) => branch.id === selectedBranchId) || branches.find((branch) => branch.id === authoritativeBranch?.id) || branches[0] || authoritativeBranch || null, [authoritativeBranch, branches, selectedBranchId]);
   const businessType = inferBusinessType(business || {});
   const archetype = businessArchetype(business || {});
-  const contextSwitching = Boolean(selectedBusinessId && loadedBusinessId !== selectedBusinessId);
-  const lifecycle = useMemo(() => getBusinessLifecycle({
-    business: loadedBusinessId === selectedBusinessId ? business || {} : {},
-    branches: loadedBusinessId === selectedBusinessId ? branches : [],
-    products: loadedBusinessId === selectedBusinessId ? products : [],
-    claims: loadedBusinessId === selectedBusinessId ? claims : [],
-    invitations: loadedBusinessId === selectedBusinessId ? invitations : [],
-    members: loadedBusinessId === selectedBusinessId ? members : [],
-    operations: loadedBusinessId === selectedBusinessId ? operations : defaultOperationalSettings,
-    membership: loadedBusinessId === selectedBusinessId ? membership : null,
-    selectedBusinessId,
-    archetype,
-    platformSettings
-  }), [archetype, branches, business, claims, invitations, loadedBusinessId, members, membership, operations, platformSettings, products, selectedBusinessId]);
-  const setupComplete = lifecycle.setup.complete;
+  const businessSwitching = Boolean(selectedBusinessId && loadedBusinessId !== selectedBusinessId);
+  const lifecycleSwitching = Boolean(selectedBusinessId && lifecycleBusinessId !== selectedBusinessId && !lifecycleError);
+  const contextSwitching = businessSwitching || lifecycleSwitching;
+  // Selected-business lifecycle state is server authoritative. Portfolio cards and the final
+  // submit endpoint use the same lifecycle engine against Admin SDK data; the browser never
+  // substitutes a second readiness calculation when that authoritative snapshot is unavailable.
+  const lifecycle = lifecycleBusinessId === selectedBusinessId ? authoritativeLifecycle : null;
+  const setupComplete = Boolean(lifecycle?.setup?.complete);
 
   const value = useMemo(() => ({
     user,
@@ -228,6 +278,7 @@ export function BusinessDataProvider({ children }) {
     portfolioLoading,
     portfolioError,
     refreshPortfolio,
+    refreshLifecycle,
     selectedBusinessId,
     setSelectedBusinessId,
     business,
@@ -250,12 +301,16 @@ export function BusinessDataProvider({ children }) {
     support,
     templates,
     loading,
-    error: error || portfolioError,
+    lifecycleLoading,
+    lifecycleError,
+    lifecycleBusinessId,
+    lifecycleAuthoritative: lifecycleBusinessId === selectedBusinessId && Boolean(authoritativeLifecycle),
+    error: error || lifecycleError || portfolioError,
     businessType,
     archetype,
     setupComplete,
     lifecycle
-  }), [user, memberships, membership, businessIds, businessChoices, portfolioLoading, portfolioError, refreshPortfolio, selectedBusinessId, setSelectedBusinessId, business, loadedBusinessId, contextSwitching, allBranches, branches, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, error, businessType, archetype, setupComplete, lifecycle]);
+  }), [user, memberships, membership, businessIds, businessChoices, portfolioLoading, portfolioError, refreshPortfolio, refreshLifecycle, selectedBusinessId, setSelectedBusinessId, business, loadedBusinessId, contextSwitching, allBranches, branches, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, lifecycleLoading, lifecycleError, lifecycleBusinessId, authoritativeLifecycle, error, businessType, archetype, setupComplete, lifecycle]);
 
   return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 }

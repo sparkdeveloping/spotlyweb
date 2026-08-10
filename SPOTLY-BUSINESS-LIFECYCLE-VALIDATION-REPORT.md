@@ -1,14 +1,14 @@
-# Spotly Business 5.5 — Validation Report
+# Spotly Business 5.5.3 — Validation Report
 
-Generated: August 9, 2026
+Generated: August 10, 2026
 
 This report is updated during final packaging. See `BUILD-REPORT.md` for the environment limitation rationale.
 
 ## Dependency-independent checks
 
 - `npm run check:js`: **PASS**
-- `npm run check:theme`: **PASS** — 122 source files / 23 classified route patterns at the final pre-package run
-- `npm test`: **PASS** — 85 passed, 0 failed
+- `npm run check:theme`: **PASS** — 123 source files / 23 classified route patterns at the final pre-package run
+- `npm test`: **PASS** — 102 passed, 0 failed
 - all `app/api/**/route.js`: **PASS** with `node --check`
 - JSON parse: **PASS** — 7 files
 - SVG parse: **PASS** — 5 files
@@ -63,4 +63,4 @@ Then perform protected staging/browser/accessibility QA. Do not interpret the un
 - Clean release tree excludes `.git`, `.next`, `node_modules`, runtime environment files, logs and OS metadata.
 - `.env.example` is included with placeholders only.
 - Final ZIP integrity: **PASS** using `unzip -t`.
-- Final SHA-256 is distributed alongside the archive in `spotly-web-platform-business-lifecycle-v5.5.zip.sha256`.
+- Final SHA-256 is distributed alongside the archive in `spotly-web-platform-business-lifecycle-v5.5.3-consistency-fix.zip.sha256`.

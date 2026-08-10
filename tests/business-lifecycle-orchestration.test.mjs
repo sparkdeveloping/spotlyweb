@@ -21,15 +21,18 @@ test("setup completion is data-derived and progress is based on completed requir
   assert.doesNotMatch(source, /currentPosition \/.*steps\.length/);
 });
 
-test("setup location completion ignores stale incomplete branches and accepts any valid saved location", () => {
+test("setup location completion canonicalizes valid saved locations instead of trusting array order", () => {
   const source = read("lib/business-lifecycle.js");
-  assert.match(source, /location: \(\) => branches\.some\(\(branch\) => Boolean/);
+  assert.match(source, /normalizeBusinessLifecycleInput/);
+  assert.match(source, /branchSetupValid/);
+  assert.match(source, /location: \(\) => branches\.some\(\(branch\) => branchSetupValid\(branch, business\)\)/);
   assert.doesNotMatch(source, /const firstBranch = branches\[0\]/);
 });
 
-test("setup resume validates the requested step against the first incomplete prerequisite", () => {
+test("setup resume validates prerequisites but Review aggregates blockers instead of silently bouncing", () => {
   const source = read("lib/business-lifecycle.js");
   assert.match(source, /resolveSetupStep/);
+  assert.match(source, /requestedStep === "review"/);
   assert.match(source, /requestedIndex <= firstIncompleteIndex/);
   assert.match(source, /redirectToLaunch: true/);
   const setup = read("components/business/setup.js");
@@ -292,4 +295,106 @@ test("customer order creation rechecks live business state inside the transactio
   assert.match(source, /businessData\?\.status === "active" \|\| businessData\?\.lifecycleStatus === "live"/);
   assert.match(source, /transaction\.get\(businessRef\)/);
   assert.match(source, /This business is no longer accepting customer orders/);
+});
+
+
+test("selected Business lifecycle is server authoritative with no client readiness fallback", () => {
+  const context = read("components/business/business-context.js");
+  const route = read("app/api/business/lifecycle/route.js");
+  assert.match(context, /\/api\/business\/lifecycle\?businessId=/);
+  assert.match(context, /const lifecycle = lifecycleBusinessId === selectedBusinessId \? authoritativeLifecycle : null/);
+  assert.doesNotMatch(context, /getBusinessLifecycle\(/);
+  const workspace = read("components/business/business-workspace.js");
+  assert.match(workspace, /Spotly will not guess your setup or launch state/);
+  assert.match(route, /loadBusinessLifecycleData/);
+  assert.match(route, /publicLifecycleSnapshot/);
+  assert.match(route, /Cache-Control.*no-store/);
+  assert.match(route, /"custom"/);
+});
+
+test("authoritative lifecycle refresh synchronizes the selected Portfolio card", () => {
+  const context = read("components/business/business-context.js");
+  assert.match(context, /setBusinessChoices\(\(current\) => current\.map/);
+  for (const field of ["lifecycleStage", "lifecycleLabel", "merchantProgress", "defaultHref", "launchReviewStatus", "externalReviewCount", "merchantActionCount"]) {
+    assert.match(context, new RegExp(field));
+  }
+});
+
+test("server lifecycle and Portfolio both merge protected settlement status", () => {
+  const server = read("lib/business-lifecycle-server.js");
+  const portfolio = read("lib/business-portfolio-server.js");
+  assert.match(server, /businessSettlementAccounts/);
+  assert.match(server, /settlementStatus/);
+  assert.match(portfolio, /businessSettlementAccounts/);
+  assert.match(portfolio, /mergeLifecycleBusinessState/);
+});
+
+test("setup-created first location becomes the canonical primary location", () => {
+  const setup = read("components/business/setup.js");
+  const service = read("lib/firebase-services.js");
+  const route = read("app/api/business/branches/route.js");
+  assert.match(setup, /makePrimary: true/);
+  assert.match(service, /makePrimary: Boolean\(options\.makePrimary\)/);
+  assert.match(route, /body\.makePrimary \|\| !currentPrimary/);
+  assert.match(route, /primaryBranchId: branchRef\.id/);
+  assert.match(route, /primaryLocationId: branchRef\.id/);
+});
+
+test("Review is confirmation rather than a required progress unit", () => {
+  const lifecycle = read("lib/business-lifecycle.js");
+  assert.match(lifecycle, /required: item\.id !== "review"/);
+  assert.match(lifecycle, /foundationEstablished/);
+  assert.match(lifecycle, /currentBasicsValid/);
+  assert.match(lifecycle, /structuralBasicsValid/);
+  assert.match(lifecycle, /step\.id === "review"[\s\S]{0,180}requiredBasicsComplete && foundationEstablished/);
+});
+
+test("completed foundational onboarding does not collapse back to Stage 2 when a launch item later degrades", () => {
+  const lifecycle = read("lib/business-lifecycle.js");
+  assert.match(lifecycle, /stage = setup\.foundationEstablished \? "prepare" : "basics"/);
+  assert.match(lifecycle, /setup\.structuralBasicsValid/);
+  assert.match(lifecycle, /locationCheck/);
+  const nav = read("data/business-archetypes.js");
+  assert.match(nav, /if \(mode === "prelaunch"\)/);
+  assert.match(nav, /label: archetype\.nouns\.catalog/);
+});
+
+test("launch submit returns the exact authoritative blockers and lifecycle snapshot on 422", () => {
+  const route = read("app/api/business/launch-review/submit/route.js");
+  const client = read("lib/api-client.js");
+  const launch = read("components/business/launch.js");
+  assert.match(route, /blockers, lifecycle: publicLifecycleSnapshot\(lifecycle\)/);
+  assert.match(route, /blockers: error\.blockers \|\| \[\], lifecycle: error\.lifecycle \|\| null/);
+  assert.match(route, /lifecycle: submittedLifecycle/);
+  assert.match(route, /Cache-Control.*no-store/);
+  assert.match(client, /error\.payload = payload/);
+  assert.match(client, /error\.blockers = payload\.blockers/);
+  assert.match(launch, /Launch requirements changed/);
+});
+
+test("lifecycle endpoint and Portfolio bypass intermediary caching", () => {
+  for (const file of ["app/api/business/lifecycle/route.js", "app/api/business/portfolio/route.js"]) {
+    const source = read(file);
+    assert.match(source, /dynamic = "force-dynamic"/);
+    assert.match(source, /revalidate = 0/);
+    assert.match(source, /Cache-Control.*no-store/);
+  }
+});
+
+test("direct trusted ownerIds access cannot appear in Portfolio but fail selected-business APIs", () => {
+  const access = read("lib/access-control-server.js");
+  assert.match(access, /ownerIds\.includes\(user\.uid\)/);
+  assert.match(access, /role: "business_owner"/);
+  assert.match(access, /directOwner: true/);
+  const rules = read("firestore.rules");
+  const businessBlock = rules.slice(rules.indexOf("match /businesses/{businessId}"), rules.indexOf("match /organizations/{organizationId}"));
+  assert.doesNotMatch(businessBlock, /"ownerIds"/);
+});
+
+test("launch review submit has a synchronous client lock as well as server duplicate protection", () => {
+  const launch = read("components/business/launch.js");
+  const submit = read("app/api/business/launch-review/submit/route.js");
+  assert.match(launch, /submissionLock = useRef\(false\)/);
+  assert.match(launch, /if \(submissionLock\.current \|\| submitting\) return/);
+  assert.match(submit, /A final launch review is already active/);
 });

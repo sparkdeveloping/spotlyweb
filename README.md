@@ -10,7 +10,7 @@ Spotly is one operating network with five role-specific entrances:
 /admin     Platform governance and operational queues
 ```
 
-This repository is the **5.5 Business Lifecycle Orchestration candidate**. It preserves the hardened 5.3 security/commerce and 5.2 semantic-theme work while retaining the 5.4 multi-business portfolio, Master Product Library and Business Money foundation and adding one five-stage merchant lifecycle, deterministic setup resume, a Launch Checklist, final Spotly launch review, lifecycle-gated navigation, persistent Business shell state, and server-authoritative go-live/suspension controls.
+This repository is the **5.5.3 Business Lifecycle Consistency candidate**. It preserves the hardened 5.3 security/commerce and 5.2 semantic-theme work while retaining the 5.4 multi-business portfolio, Master Product Library and Business Money foundation and adding one five-stage merchant lifecycle, deterministic setup resume, a Launch Checklist, final Spotly launch review, lifecycle-gated navigation, persistent Business shell state, and server-authoritative go-live/suspension controls.
 
 ## Capability truth
 
@@ -104,7 +104,7 @@ The generation environment could not complete `npm ci` because its internal npm 
 Set these values for every preview and production deployment:
 
 ```env
-NEXT_PUBLIC_APP_VERSION=5.5.1-business-lifecycle-hotfix
+NEXT_PUBLIC_APP_VERSION=5.5.3-lifecycle-consistency
 NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
 NEXT_PUBLIC_BUILD_DATE=<ISO timestamp>
 NEXT_PUBLIC_APP_ENV=preview
@@ -126,6 +126,8 @@ The safe version label appears in authenticated Account and Admin surfaces and c
 
 ## Documentation
 
+- [SPOTLY-5.5.3-LIFECYCLE-CONSISTENCY-REPORT.md](./SPOTLY-5.5.3-LIFECYCLE-CONSISTENCY-REPORT.md)
+- [SPOTLY-5.5.3-VALIDATION-REPORT.md](./SPOTLY-5.5.3-VALIDATION-REPORT.md)
 - [SPOTLY-BUSINESS-LIFECYCLE-IMPLEMENTATION-REPORT.md](./SPOTLY-BUSINESS-LIFECYCLE-IMPLEMENTATION-REPORT.md)
 - [SPOTLY-BUSINESS-SETUP-RESUME-REPORT.md](./SPOTLY-BUSINESS-SETUP-RESUME-REPORT.md)
 - [SPOTLY-BUSINESS-NAVIGATION-ARCHITECTURE-REPORT.md](./SPOTLY-BUSINESS-NAVIGATION-ARCHITECTURE-REPORT.md)

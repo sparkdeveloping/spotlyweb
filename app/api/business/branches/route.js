@@ -36,7 +36,7 @@ const branchSchema = z.object({
 });
 
 const schema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("upsert"), businessId: z.string().min(3).max(200), branch: branchSchema }),
+  z.object({ action: z.literal("upsert"), businessId: z.string().min(3).max(200), branch: branchSchema, makePrimary: z.boolean().optional().default(false) }),
   z.object({ action: z.literal("delete"), businessId: z.string().min(3).max(200), branchId: z.string().min(1).max(220) })
 ]);
 
@@ -138,14 +138,16 @@ export async function POST(request) {
         }
 
         transaction.set(branchRef, payload, { merge: true });
-        if (!existingId) {
-          transaction.set(businessRef, {
-            branchIds: FieldValue.arrayUnion(branchRef.id),
-            branchCount: FieldValue.increment(1),
-            updatedAt: FieldValue.serverTimestamp(),
-            updatedBy: user.uid
-          }, { merge: true });
-        }
+        const currentBusinessData = currentBusiness.data();
+        const linkedBranchIds = Array.isArray(currentBusinessData.branchIds) ? currentBusinessData.branchIds : [];
+        const wasLinked = linkedBranchIds.includes(branchRef.id);
+        const currentPrimary = currentBusinessData.primaryBranchId || currentBusinessData.primaryLocationId || currentBusinessData.defaultBranchId || "";
+        transaction.set(businessRef, {
+          ...(!wasLinked ? { branchIds: FieldValue.arrayUnion(branchRef.id), branchCount: FieldValue.increment(1) } : {}),
+          ...((body.makePrimary || !currentPrimary) ? { primaryBranchId: branchRef.id, primaryLocationId: branchRef.id } : {}),
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: user.uid
+        }, { merge: true });
         writeAudit(transaction, db, user, existingId ? "branch.updated" : "branch.created", branchRef.id, body.businessId);
       });
 
@@ -160,8 +162,9 @@ export async function POST(request) {
     const businessRef = db.collection("businesses").doc(body.businessId);
     const branchRef = db.collection("branches").doc(body.branchId);
     // Keep this query single-field so no composite Firestore index is required.
-    const branchList = await db.collection("branches").where("businessId", "==", body.businessId).limit(2).get();
+    const branchList = await db.collection("branches").where("businessId", "==", body.businessId).limit(100).get();
     if (branchList.size <= 1) throw Object.assign(new Error("A business must keep at least one location. Edit this location instead."), { status: 409 });
+    const replacementPrimaryId = branchList.docs.find((doc) => doc.id !== body.branchId)?.id || "";
 
     await db.runTransaction(async (transaction) => {
       const [businessSnapshot, branchSnapshot] = await Promise.all([
@@ -174,9 +177,12 @@ export async function POST(request) {
       }
 
       transaction.delete(branchRef);
+      const currentBusinessData = businessSnapshot.data();
+      const deletingPrimary = [currentBusinessData.primaryBranchId, currentBusinessData.primaryLocationId, currentBusinessData.defaultBranchId].filter(Boolean).includes(body.branchId);
       transaction.set(businessRef, {
         branchIds: FieldValue.arrayRemove(body.branchId),
         branchCount: FieldValue.increment(-1),
+        ...(deletingPrimary && replacementPrimaryId ? { primaryBranchId: replacementPrimaryId, primaryLocationId: replacementPrimaryId } : {}),
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: user.uid
       }, { merge: true });

@@ -20,7 +20,7 @@ export async function POST(request) {
     if (lifecycle.launchReview.state === "in_review") throw Object.assign(new Error(isLiveReReview ? "A review of your launch-critical changes is already active." : "A final launch review is already active for this business."), { status: 409 });
     if (!lifecycle.canSubmitLaunchReview) {
       const blockers = lifecycle.launchBlockers.map((item) => ({ id: item.id, label: item.label, description: item.description, owner: item.owner, state: item.state, href: item.href }));
-      const error = Object.assign(new Error("Complete the required launch items before submitting for final review."), { status: 422, blockers });
+      const error = Object.assign(new Error("Complete the required launch items before submitting for final review."), { status: 422, blockers, lifecycle: publicLifecycleSnapshot(lifecycle) });
       throw error;
     }
 
@@ -130,10 +130,19 @@ export async function POST(request) {
       });
     });
 
-    return Response.json({ ok: true, reviewId: reviewRef.id, reviewType: isLiveReReview ? "re_review" : "initial_launch", lifecycle: publicLifecycleSnapshot({ ...lifecycle, stage: isLiveReReview ? "live" : "review" }) }, { status: 201 });
+    // Return a freshly reloaded lifecycle snapshot rather than mutating only the old stage field.
+    // This keeps stage number/label, navigation mode, review ownership, blockers and default route
+    // internally consistent with the business document written by the transaction above.
+    const { lifecycle: submittedLifecycle } = await loadBusinessLifecycleData(db, body.businessId, { membership: context.membership, userId: user.uid });
+    return Response.json({
+      ok: true,
+      reviewId: reviewRef.id,
+      reviewType: isLiveReReview ? "re_review" : "initial_launch",
+      lifecycle: publicLifecycleSnapshot(submittedLifecycle)
+    }, { status: 201, headers: { "Cache-Control": "private, no-store, max-age=0" } });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Choose a valid business before submitting launch review.", details: error.flatten() }, { status: 400 });
-    if (error?.status === 422) return Response.json({ ok: false, error: error.message, blockers: error.blockers || [] }, { status: 422 });
+    if (error?.status === 422) return Response.json({ ok: false, error: error.message, blockers: error.blockers || [], lifecycle: error.lifecycle || null }, { status: 422, headers: { "Cache-Control": "private, no-store, max-age=0" } });
     return apiError(error);
   }
 }

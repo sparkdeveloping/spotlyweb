@@ -1,4 +1,4 @@
-# Spotly Business 5.5 — Test Report
+# Spotly Business 5.5.3 — Test Report
 
 ## Automated source/unit suite
 
@@ -34,7 +34,9 @@ Coverage includes:
 - marketplace customer-live discovery;
 - order creation live-state transaction recheck.
 
-Final dependency-independent Node suite result: **85 passed, 0 failed**.
+Final dependency-independent Node suite result: **102 passed, 0 failed**.
+
+The 5.5.3 additions specifically exercise authoritative lifecycle consistency, canonical location selection, completed-foundation Stage-3 stability, Portfolio synchronization, structured submit blockers, settlement parity, direct-owner access parity and duplicate submit protection.
 
 ## Firestore emulator matrix
 
