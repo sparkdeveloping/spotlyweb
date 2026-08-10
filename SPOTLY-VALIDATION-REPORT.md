@@ -2,8 +2,8 @@
 
 # Spotly Validation Report
 
-**Candidate:** 5.1 production-depth pass  
-**Environment:** Node.js `v22.16.0`, npm `10.9.2`  
+**Candidate:** 5.1 production-depth pass
+**Environment:** Node.js `v22.16.0`, npm `10.9.2`
 **Repository requirement:** Node.js 22.x, npm 11 or later
 
 ## Passed checks

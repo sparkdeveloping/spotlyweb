@@ -1,3 +1,5 @@
+import { getBusinessLifecycle } from "@/lib/business-lifecycle";
+
 export const businessCategories = [
   "Groceries",
   "Restaurants",
@@ -164,87 +166,26 @@ export const defaultBranch = {
   }
 };
 
-export function getBusinessReadiness({ business, branches = [], products = [], finance, operations, invitations = [], archetype, selectedBusinessId }) {
-  const withBusiness = (href) => selectedBusinessId ? `${href}${href.includes("?") ? "&" : "?"}business=${encodeURIComponent(selectedBusinessId)}` : href;
-  const capabilities = business?.capabilities || archetype?.capabilities || [];
-  const setupComplete = business?.onboardingStatus === "complete" || Boolean(business?.setupCompletedAt || business?.onboarding?.completedAt);
-  const needsOfferings = capabilities.some((item) => ["catalog", "menu", "tickets", "appointments", "bookings"].includes(item));
-  const needsPayments = capabilities.some((item) => ["pickup_orders", "orders", "tickets", "appointments", "bookings", "reservations"].includes(item));
-  const needsPickup = capabilities.includes("pickup_orders");
-  const offeringNoun = archetype?.nouns?.item || (business?.businessType === "ticketing_events" ? "ticket" : business?.businessType === "appointments_services" ? "service" : "item");
-  const locationNoun = archetype?.nouns?.branch || "location";
-
-  const checks = [
-    {
-      id: "setup",
-      label: "Business setup confirmed",
-      description: "Confirm the business type, operating model, first location, and customer actions.",
-      done: setupComplete,
-      href: withBusiness("/business/setup"),
-      primary: !setupComplete
-    },
-    {
-      id: "ownership",
-      label: "Ownership or authority recorded",
-      description: "Spotly has an approved owner, authorized representative, or an active verification review.",
-      done: ["approved", "pending"].includes(business?.verificationStatus) || ["claimed", "claimed_pending_verification", "claim_pending"].includes(business?.claimStatus),
-      href: withBusiness("/business/settings")
-    },
-    {
-      id: "profile",
-      label: "Customer-facing profile complete",
-      description: "Name, category, description, and a central contact method are ready. Location details are checked separately.",
-      done: Boolean(business?.name && business?.category && business?.description && (business?.phone || business?.email)),
-      href: withBusiness("/business/settings")
-    },
-    {
-      id: "location",
-      label: `${locationNoun[0].toUpperCase()}${locationNoun.slice(1)} ready`,
-      description: `At least one visible ${locationNoun} has a confirmed address or service area, contact method, and opening hours.`,
-      done: branches.some((branch) => branch.status === "active" && branch.public !== false && (branch.address || branch.city) && (branch.phone || branch.email)),
-      href: withBusiness(branches.length > 1 || business?.operatingModel === "physical_multi" ? "/business/branches" : "/business/setup")
-    },
-    ...(needsOfferings ? [{
-      id: "catalog",
-      label: `First ${offeringNoun} ready`,
-      description: `Add at least one active ${offeringNoun} with the information a customer needs to act.`,
-      done: products.some((product) => product.active !== false && (Number(product.price || product.prices?.USD || 0) > 0 || product.requiresBusinessReview || product.itemType === "listing")),
-      href: withBusiness("/business/catalog")
-    }] : []),
-    ...(needsPickup ? [{
-      id: "operations",
-      label: "Pickup workflow confirmed",
-      description: "Preparation time, pickup instructions, substitutions, and notifications match the way the team works.",
-      done: Boolean(operations?.preparationMinutes && operations?.pickupInstructions),
-      href: withBusiness("/business/settings")
-    }] : []),
-    ...(needsPayments ? [{
-      id: "finance",
-      label: "Payment approach selected",
-      description: "Choose accepted methods and currencies. Payout details can be completed before taking live online payments.",
-      done: Boolean(business?.moneySetup?.customerSettingsConfigured && ((business.moneySetup.paymentMethods || []).every((method) => method === "cash") || business?.moneySetup?.settlementStatus === "verified")),
-      href: withBusiness("/business/finance")
-    }] : []),
-    {
-      id: "team",
-      label: "Team access reviewed",
-      description: "Confirm who should have access. Inviting another teammate is optional for owner-operated businesses.",
-      done: Boolean(business?.teamReviewedAt || invitations.some((item) => ["pending", "accepted"].includes(item.status))),
-      href: withBusiness("/business/staff"),
-      optional: true
-    }
-  ];
-
-  const required = checks.filter((item) => !item.optional);
-  const complete = checks.filter((item) => item.done).length;
+export function getBusinessReadiness(input = {}) {
+  const lifecycle = input.lifecycle || getBusinessLifecycle(input);
+  const checks = [lifecycle.access, ...lifecycle.launchChecks].map((item) => ({
+    ...item,
+    done: item.state === "complete" || item.state === "not_required",
+    optional: !item.required,
+    primary: lifecycle.nextAction?.id === item.id
+  }));
+  const required = checks.filter((item) => item.required);
   const requiredComplete = required.filter((item) => item.done).length;
   return {
     checks,
-    complete,
+    complete: checks.filter((item) => item.done).length,
     total: checks.length,
     requiredComplete,
     requiredTotal: required.length,
-    percent: required.length ? Math.round((requiredComplete / required.length) * 100) : 100,
-    ready: requiredComplete === required.length
+    percent: lifecycle.merchantProgress,
+    ready: lifecycle.canSubmitLaunchReview,
+    lifecycle,
+    nextAction: lifecycle.nextAction,
+    externalReviews: lifecycle.externalReviews
   };
 }

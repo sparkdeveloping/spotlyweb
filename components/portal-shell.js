@@ -142,11 +142,12 @@ function ThemeMenu() {
   );
 }
 
-function notificationTime(value) {
+function notificationTime(value, nowMs = 0) {
   if (!value) return "Just now";
   const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
   if (Number.isNaN(date.getTime())) return "Recently";
-  const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (!nowMs) return "Recently";
+  const minutes = Math.max(0, Math.round((nowMs - date.getTime()) / 60000));
   if (minutes < 1) return "Just now";
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.round(minutes / 60);
@@ -157,7 +158,15 @@ function notificationTime(value) {
 
 function NotificationPanel({ items, open, onClose, onRead, onReadAll }) {
   const router = useRouter();
+  const [clock, setClock] = useState(0);
   const unread = items.filter((item) => !item.read).length;
+  useEffect(() => {
+    if (!open) return undefined;
+    const update = () => setClock(Date.now());
+    update();
+    const timer = window.setInterval(update, 60_000);
+    return () => window.clearInterval(timer);
+  }, [open]);
 
   async function openItem(item) {
     if (!item.read) await onRead(item.id);
@@ -178,7 +187,7 @@ function NotificationPanel({ items, open, onClose, onRead, onReadAll }) {
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{item.title || "Spotly update"}</span>
               <span className="mt-1 block text-sm leading-5 text-secondary">{item.body || item.message || "Open this update for more information."}</span>
-              <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt)}</span>
+              <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt, clock)}</span>
             </span>
           </button>
         )) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}

@@ -13,10 +13,12 @@ const read = (file) => readFileSync(join(root, file), "utf8");
 test("business root is a permanent portfolio and account routes remain first class", () => {
   assert.match(read("app/business/page.js"), /section="portfolio"/);
   const workspace = read("components/business/business-workspace.js");
-  assert.match(workspace, /portfolio/);
-  assert.match(workspace, /claims/);
-  assert.match(workspace, /invitations/);
-  assert.match(workspace, /access/);
+  const routing = read("lib/business-routing.js");
+  assert.match(workspace, /BUSINESS_ACCOUNT_SECTIONS/);
+  assert.match(routing, /portfolio/);
+  assert.match(routing, /claims/);
+  assert.match(routing, /invitations/);
+  assert.match(routing, /access/);
   assert.match(read("components/business/business-account.js"), /Claims & applications/);
 });
 

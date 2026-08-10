@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -16,10 +16,12 @@ import {
 import { Badge, Button, Card, ProgressBar } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { useBusinessWorkspace } from "@/components/business/business-context";
-import { FieldLabel, FullScreenTask, WorkspaceContextSwitcher, fieldClass, selectClass, textAreaClass } from "@/components/business/shared";
+import { FieldLabel, WorkspaceContextSwitcher, fieldClass, selectClass, textAreaClass } from "@/components/business/shared";
 import { saveBranch, saveBusinessProfile } from "@/lib/firebase-services";
-import { importCatalogTemplate, saveBusinessOperationalSettings } from "@/lib/business-services";
+import { importCatalogTemplate, markLaunchCriticalBusinessChange, saveBusinessOperationalSettings } from "@/lib/business-services";
 import { businessCategories, defaultBranch, zimbabweCities } from "@/data/business-config";
+import { evaluateSetupSteps, resolveSetupStep } from "@/lib/business-lifecycle";
+import { businessHref } from "@/lib/business-routing";
 import {
   BUSINESS_ARCHETYPES,
   BUSINESS_OPERATING_MODELS,
@@ -27,12 +29,6 @@ import {
   capabilitiesFor,
   inferBusinessType
 } from "@/data/business-archetypes";
-
-function setupIndex(business) {
-  const step = business?.onboarding?.currentStep;
-  const found = SETUP_STEPS.findIndex((item) => item.id === step);
-  return found >= 0 ? found : 0;
-}
 
 function ChoiceCard({ selected, icon: Icon, title, description, onClick, badge }) {
   return <button type="button" onClick={onClick} className={`relative flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition ${selected ? "border-business bg-business-soft shadow-sm ring-2 ring-business/10" : "bg-[var(--surface)] hover:border-business/30 hover:shadow-card"}`}>
@@ -44,7 +40,7 @@ function ChoiceCard({ selected, icon: Icon, title, description, onClick, badge }
 
 function StepRail({ steps, currentId, completed }) {
   const currentPosition = steps.findIndex((item) => item.id === currentId);
-  return <aside className="hidden w-[290px] shrink-0 xl:block"><div className="sticky top-28 rounded-3xl border bg-[var(--surface)] p-4 shadow-card"><p className="px-3 pb-3 text-xs font-semibold uppercase tracking-[.16em] text-business">Your launch path</p><div className="space-y-1">{steps.map((step, index) => { const Icon = step.icon; const done = completed.includes(step.id) || index < currentPosition; const active = step.id === currentId; return <div key={step.id} aria-current={active ? "step" : undefined} className={`flex items-center gap-3 rounded-2xl p-3 ${active ? "bg-business-soft" : ""}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${done ? "bg-[var(--success)] text-[var(--on-success)]" : active ? "bg-business text-[var(--on-business)]" : "bg-grouped text-tertiary"}`}>{done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}</span><span className="min-w-0"><span className={`block text-sm font-bold ${active ? "text-business" : ""}`}>{step.short}</span><span className="mt-0.5 block text-[11px] leading-4 text-secondary">{step.label}</span></span></div>; })}</div></div></aside>;
+  return <aside className="hidden w-[290px] shrink-0 xl:block"><div className="sticky top-28 rounded-3xl border bg-[var(--surface)] p-4 shadow-card"><p className="px-3 pb-3 text-xs font-semibold uppercase tracking-[.16em] text-business">Your launch path</p><div className="space-y-1">{steps.map((step, index) => { const Icon = step.icon; const done = completed.includes(step.id); const active = step.id === currentId; return <div key={step.id} aria-current={active ? "step" : undefined} className={`flex items-center gap-3 rounded-2xl p-3 ${active ? "bg-business-soft" : ""}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${done ? "bg-[var(--success)] text-[var(--on-success)]" : active ? "bg-business text-[var(--on-business)]" : "bg-grouped text-tertiary"}`}>{done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}</span><span className="min-w-0"><span className={`block text-sm font-bold ${active ? "text-business" : ""}`}>{step.short}</span><span className="mt-0.5 block text-[11px] leading-4 text-secondary">{step.label}</span></span></div>; })}</div></div></aside>;
 }
 
 function IdentityStep({ draft, setDraft }) {
@@ -78,17 +74,32 @@ function StarterStep({ templates, selectedTemplateIds, setSelectedTemplateIds, a
 
 function ReviewStep({ draft, branchDraft, selectedTemplateIds }) {
   const archetype = BUSINESS_ARCHETYPES[draft.businessType] || BUSINESS_ARCHETYPES.directory_profile;
-  return <div className="space-y-6"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-business">Final step</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">A focused workspace is ready to be created</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-secondary">Review the essentials. Detailed finance, staff, and publication settings will appear later—when they are useful.</p></div><div className="grid gap-4 md:grid-cols-2"><Card className="p-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-tertiary">Business</p><h3 className="mt-3 text-xl font-semibold">{draft.name}</h3><p className="mt-1 text-sm text-secondary">{archetype.label} · {draft.category}</p><p className="mt-4 text-sm leading-6 text-secondary">{draft.description || "Description can be completed from the guided setup centre."}</p></Card><Card className="p-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-tertiary">First {archetype.nouns.branch}</p><h3 className="mt-3 text-xl font-semibold">{branchDraft.branchName || branchDraft.name || "Main location"}</h3><p className="mt-1 text-sm text-secondary">{branchDraft.city || "Zimbabwe"}</p><p className="mt-4 text-sm leading-6 text-secondary">{branchDraft.address || "Address will be confirmed before publication."}</p></Card></div><Card className="p-5"><div className="flex items-start gap-4"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-business-soft text-business"><CheckCircle2 className="h-5 w-5" /></span><div><h3 className="font-bold">Spotly will now prepare</h3><ul className="mt-2 space-y-2 text-sm leading-6 text-secondary"><li>• A workspace shaped around {archetype.shortLabel.toLowerCase()} operations</li><li>• Clear business and location separation</li><li>• {selectedTemplateIds.length ? `${selectedTemplateIds.length} selected starter template${selectedTemplateIds.length === 1 ? "" : "s"}` : "A guided empty state for the first offering"}</li><li>• A single recommended next action instead of every setting at once</li></ul></div></div></Card></div>;
+  return <div className="space-y-6"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-business">Final step</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">Finish the business basics</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-secondary">Review the essentials you have confirmed. Finishing this step does not make the business live; it takes you to the Launch Checklist for products, locations, Money, team, and the final Spotly review.</p></div><div className="grid gap-4 md:grid-cols-2"><Card className="p-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-tertiary">Business</p><h3 className="mt-3 text-xl font-semibold">{draft.name}</h3><p className="mt-1 text-sm text-secondary">{archetype.label} · {draft.category}</p><p className="mt-4 text-sm leading-6 text-secondary">{draft.description || "Description can be completed from the guided setup centre."}</p></Card><Card className="p-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-tertiary">First {archetype.nouns.branch}</p><h3 className="mt-3 text-xl font-semibold">{branchDraft.branchName || branchDraft.name || "Main location"}</h3><p className="mt-1 text-sm text-secondary">{branchDraft.city || "Zimbabwe"}</p><p className="mt-4 text-sm leading-6 text-secondary">{branchDraft.address || "Address will be confirmed before publication."}</p></Card></div><Card className="p-5"><div className="flex items-start gap-4"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-business-soft text-business"><CheckCircle2 className="h-5 w-5" /></span><div><h3 className="font-bold">What happens next</h3><ul className="mt-2 space-y-2 text-sm leading-6 text-secondary"><li>• Your business basics are saved</li><li>• The Launch Checklist identifies the exact remaining launch requirements</li><li>• {selectedTemplateIds.length ? `${selectedTemplateIds.length} selected starter template${selectedTemplateIds.length === 1 ? "" : "s"}` : "Your catalogue can be prepared from the launch checklist"}</li><li>• Spotly reviews are shown separately from work that still belongs to you</li></ul></div></div></Card></div>;
+}
+
+function currentFieldProgress(stepId, draft, branchDraft) {
+  const fields = stepId === "identity" ? [
+    ["Business name", Boolean(draft.name?.trim())],
+    ["Business type", Boolean(draft.businessType)],
+    ["Primary category", Boolean(draft.category)]
+  ] : stepId === "operation" ? [["Operating model", Boolean(draft.operatingModel)]]
+    : stepId === "location" ? [["Location name", Boolean((branchDraft.branchName || branchDraft.name)?.trim())], ["City or town", Boolean(branchDraft.city)]]
+      : stepId === "offering" ? [["Customer capabilities", Boolean(draft.capabilities?.length)]]
+        : [];
+  return { fields, complete: fields.filter(([, done]) => done).length, total: fields.length };
 }
 
 export function BusinessSetupView() {
   const workspace = useBusinessWorkspace();
   const { business, branches, selectedBranch, templates, user, selectedBusinessId } = workspace;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const headingRef = useRef(null);
   const initialType = inferBusinessType(business || {});
-  const [current, setCurrent] = useState(() => setupIndex(business));
-  const [completed, setCompleted] = useState(business?.onboarding?.completedSteps || []);
+  const initialOperatingModel = business?.operatingModel || (branches.length > 1 ? "physical_multi" : "physical_single");
+  const initialName = business?.brandName || business?.name || "";
+  const initialCategory = business?.category || "Other";
   const [draft, setDraft] = useState({
     name: business?.brandName || business?.name || "",
     legalName: business?.legalName || "",
@@ -98,79 +109,87 @@ export function BusinessSetupView() {
     capabilities: business?.capabilities || capabilitiesFor(initialType),
     operatingModel: business?.operatingModel || (branches.length > 1 ? "physical_multi" : "physical_single")
   });
-  const [branchDraft, setBranchDraft] = useState({ ...defaultBranch, ...(selectedBranch || branches[0] || {}), name: selectedBranch?.branchName || selectedBranch?.name || "Main location", branchName: selectedBranch?.branchName || selectedBranch?.name || "Main location" });
+  const [branchDraft, setBranchDraft] = useState({ ...defaultBranch, ...(selectedBranch || branches[0] || {}), name: selectedBranch?.branchName || selectedBranch?.name || branches[0]?.branchName || branches[0]?.name || "Main location", branchName: selectedBranch?.branchName || selectedBranch?.name || branches[0]?.branchName || branches[0]?.name || "Main location" });
   const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
-  const [processing, setProcessing] = useState({ open: false, state: "processing", active: 0, intent: "continue", title: "Saving your progress", description: "Spotly is keeping the business and location structure consistent." });
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(business?.onboarding?.lastSavedAt || null);
+  const [dirty, setDirty] = useState(false);
+  const [optimisticBusiness, setOptimisticBusiness] = useState(null);
+  const [optimisticBranches, setOptimisticBranches] = useState(null);
+  const [optimisticOperations, setOptimisticOperations] = useState(null);
+  const requestedStep = searchParams.get("step") || "";
   const archetype = BUSINESS_ARCHETYPES[draft.businessType] || BUSINESS_ARCHETYPES.directory_profile;
   const activeSteps = SETUP_STEPS.filter((item) => archetype.setup.includes(item.id));
-  const normalizedCurrent = archetype.setup.includes(SETUP_STEPS[current]?.id) ? current : SETUP_STEPS.findIndex((item) => archetype.setup.includes(item.id));
-  const step = SETUP_STEPS[normalizedCurrent];
-  const visiblePosition = activeSteps.findIndex((item) => item.id === step.id);
-  const progress = Math.round(((visiblePosition + 1) / activeSteps.length) * 100);
+  const setupBusiness = optimisticBusiness || business;
+  const setupBranches = optimisticBranches || branches;
+  const setupOperations = optimisticOperations || workspace.operations;
+  const persistedResolution = resolveSetupStep({ requestedStep, business: setupBusiness, branches: setupBranches, products: workspace.products, operations: setupOperations });
+  const resolvedStepId = requestedStep && activeSteps.some((item) => item.id === requestedStep)
+    ? (persistedResolution.stepId || requestedStep)
+    : (persistedResolution.stepId || activeSteps[0]?.id || "identity");
+  const currentPosition = Math.max(0, activeSteps.findIndex((item) => item.id === resolvedStepId));
+  const step = activeSteps[currentPosition] || activeSteps[0];
+  const previousStep = activeSteps[currentPosition - 1] || null;
+  const nextStep = activeSteps[currentPosition + 1] || null;
+  const persistedEvaluation = evaluateSetupSteps({ business: setupBusiness, branches: setupBranches, products: workspace.products, operations: setupOperations });
+  const fieldProgress = currentFieldProgress(step.id, draft, branchDraft);
+  const typeChanged = draft.businessType !== initialType;
+  const launchCriticalBasicsChanged = step?.id === "identity"
+    ? (typeChanged || draft.name.trim() !== initialName.trim() || draft.category !== initialCategory)
+    : step?.id === "operation"
+      ? draft.operatingModel !== initialOperatingModel
+      : false;
 
-  const nextIndex = useMemo(() => {
-    for (let index = normalizedCurrent + 1; index < SETUP_STEPS.length; index += 1) if (archetype.setup.includes(SETUP_STEPS[index].id)) return index;
-    return -1;
-  }, [normalizedCurrent, archetype]);
-  const previousIndex = useMemo(() => {
-    for (let index = normalizedCurrent - 1; index >= 0; index -= 1) if (archetype.setup.includes(SETUP_STEPS[index].id)) return index;
-    return -1;
-  }, [normalizedCurrent, archetype]);
-
-  async function persist({ intent = "continue" } = {}) {
-    const finish = intent === "finish";
-    const leave = intent === "leave";
-    const completedSteps = [...new Set([...completed, step.id])];
-    setProcessing({ open: true, state: "processing", active: 0, intent, title: finish ? "Preparing your workspace" : "Saving your progress", description: finish ? "Spotly is shaping the workspace around this business." : leave ? "Spotly is saving this exact step so you can return without losing your place." : "Your setup can be safely continued from any device." });
-    try {
-      await saveBusinessProfile(selectedBusinessId, {
-        name: draft.name,
-        brandName: draft.name,
-        legalName: draft.legalName,
-        category: draft.category,
-        categories: [draft.category],
-        description: draft.description,
-        businessType: draft.businessType,
-        capabilities: draft.capabilities,
-        operatingModel: draft.operatingModel,
-        onboardingStatus: finish ? "complete" : "in_progress",
-        onboarding: {
-          ...(business?.onboarding || {}),
-          currentStep: finish ? "review" : leave ? step.id : (SETUP_STEPS[nextIndex]?.id || "review"),
-          completedSteps,
-          percent: finish ? 100 : progress,
-          startedAt: business?.onboarding?.startedAt || new Date().toISOString(),
-          lastSavedAt: new Date().toISOString(),
-          ...(finish ? { completedAt: new Date().toISOString() } : {})
-        }
-      }, user);
-      setProcessing((value) => ({ ...value, active: 1 }));
-      let resolvedBranchId = branchDraft.id || "";
-      if (["location", "review"].includes(step.id) || finish) {
-        resolvedBranchId = await saveBranch({ ...branchDraft, id: branchDraft.id, name: branchDraft.branchName || branchDraft.name || "Main location", branchName: branchDraft.branchName || branchDraft.name || "Main location", status: branchDraft.status === "provisional" ? "draft" : branchDraft.status || "draft" }, selectedBusinessId, business?.organizationId, user);
-        if (!branchDraft.id && resolvedBranchId) setBranchDraft((current) => ({ ...current, id: resolvedBranchId }));
-      }
-      setProcessing((value) => ({ ...value, active: 2 }));
-      if (step.id === "offering" || finish) {
-        await saveBusinessOperationalSettings(selectedBusinessId, {
-          ...workspace.operations,
-          businessType: draft.businessType,
-          capabilities: draft.capabilities,
-          pickupInstructions: workspace.operations.pickupInstructions || (draft.capabilities.includes("pickup_orders") ? "Bring your order number and collect from the designated pickup point." : "")
-        }, user);
-      }
-      if ((step.id === "starter" || finish) && selectedTemplateIds.length) {
-        for (const templateId of selectedTemplateIds) {
-          const template = templates.find((item) => item.id === templateId);
-          if (template) await importCatalogTemplate(template, selectedBusinessId, user, { active: false, currency: workspace.operations.defaultCurrency || "USD", pickupEligible: archetype.capabilities.includes("pickup_orders"), substitutionAllowed: archetype.id === "grocery_retail", branchIds: resolvedBranchId ? [resolvedBranchId] : [] });
-        }
-      }
-      setCompleted(completedSteps);
-      setProcessing({ open: true, state: "success", active: 3, intent, title: finish ? "Your focused workspace is ready" : "Progress saved", description: finish ? "Open the workspace to see one clear next action and only the tools this business needs." : leave ? "Your place is saved. The home screen will show exactly where to continue." : "This step is complete and the next one is ready." });
-    } catch (error) {
-      setProcessing({ open: true, state: "error", active: 0, intent, title: "This step was not saved", description: error.message || "Check the information and try again." });
+  useEffect(() => {
+    if (persistedResolution.redirectToLaunch && !requestedStep) {
+      router.replace(businessHref("/business/launch", { businessId: selectedBusinessId }));
     }
-  }
+  }, [persistedResolution.redirectToLaunch, requestedStep, router, selectedBusinessId]);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [step.id]);
+
+  useEffect(() => {
+    if (!optimisticBusiness || !savedAt || business?.onboarding?.lastSavedAt !== savedAt) return;
+    const actual = evaluateSetupSteps({ business, branches, products: workspace.products, operations: workspace.operations });
+    const optimistic = evaluateSetupSteps({ business: optimisticBusiness, branches: optimisticBranches || branches, products: workspace.products, operations: optimisticOperations || workspace.operations });
+    if (actual.requiredComplete >= optimistic.requiredComplete) {
+      setOptimisticBusiness(null);
+      setOptimisticBranches(null);
+      setOptimisticOperations(null);
+    }
+  }, [business, branches, optimisticBranches, optimisticBusiness, optimisticOperations, savedAt, workspace.operations, workspace.products]);
+
+  useEffect(() => {
+    function beforeUnload(event) {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    function interceptLink(event) {
+      if (!dirty || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = event.target.closest?.("a[href]");
+      if (!anchor) return;
+      const target = new URL(anchor.href, window.location.href);
+      if (target.origin !== window.location.origin) return;
+      if (window.confirm("You have unsaved changes. Leave this step and discard them?")) {
+        setDirty(false);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", interceptLink, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", interceptLink, true);
+    };
+  }, [dirty]);
+
+  function patchDraft(next) { setDraft(next); setDirty(true); }
+  function patchBranch(next) { setBranchDraft(next); setDirty(true); }
 
   function validateCurrentStep() {
     if (step.id === "identity" && !draft.name.trim()) { toast("Enter the business or brand name.", { type: "error", title: "Business name required" }); return false; }
@@ -181,31 +200,165 @@ export function BusinessSetupView() {
     return true;
   }
 
-  async function continueFlow() {
+  async function persist(intent = "continue") {
     if (!validateCurrentStep()) return;
-    const finish = nextIndex < 0;
-    await persist({ intent: finish ? "finish" : "continue" });
+    const finish = !nextStep;
+    const leave = intent === "leave";
+    const now = new Date().toISOString();
+    const metadataCompletedSteps = [...new Set([...(business?.onboarding?.completedSteps || []), step.id])];
+    setSaving(true);
+    try {
+      let resolvedBranchId = branchDraft.id || "";
+      let projectedBranches = branches;
+      let projectedOperations = workspace.operations;
+
+      if (step.id === "location") {
+        resolvedBranchId = await saveBranch({
+          ...branchDraft,
+          id: branchDraft.id,
+          name: branchDraft.branchName || branchDraft.name || "Main location",
+          branchName: branchDraft.branchName || branchDraft.name || "Main location",
+          status: branchDraft.status === "provisional" ? "draft" : branchDraft.status || "draft"
+        }, selectedBusinessId, business?.organizationId, user);
+        const savedBranch = {
+          ...branchDraft,
+          id: resolvedBranchId,
+          businessId: selectedBusinessId,
+          name: branchDraft.branchName || branchDraft.name || "Main location",
+          branchName: branchDraft.branchName || branchDraft.name || "Main location",
+          status: branchDraft.status === "provisional" ? "draft" : branchDraft.status || "draft"
+        };
+        projectedBranches = branches.some((item) => item.id === resolvedBranchId)
+          ? branches.map((item) => item.id === resolvedBranchId ? { ...item, ...savedBranch } : item)
+          : [savedBranch, ...branches];
+        if (!branchDraft.id && resolvedBranchId) setBranchDraft((current) => ({ ...current, id: resolvedBranchId }));
+      }
+
+      if (step.id === "offering") {
+        projectedOperations = {
+          ...workspace.operations,
+          businessType: draft.businessType,
+          capabilities: draft.capabilities,
+          pickupInstructions: workspace.operations.pickupInstructions || (draft.capabilities.includes("pickup_orders") ? "Bring your order number and collect from the designated pickup point." : "")
+        };
+        await saveBusinessOperationalSettings(selectedBusinessId, projectedOperations, user);
+      }
+
+      if (step.id === "starter" && selectedTemplateIds.length) {
+        for (const templateId of selectedTemplateIds) {
+          const template = templates.find((item) => item.id === templateId);
+          if (template) await importCatalogTemplate(template, selectedBusinessId, user, {
+            active: false,
+            currency: workspace.operations.defaultCurrency || "USD",
+            pickupEligible: archetype.capabilities.includes("pickup_orders"),
+            substitutionAllowed: archetype.id === "grocery_retail",
+            branchIds: resolvedBranchId ? [resolvedBranchId] : []
+          });
+        }
+      }
+
+      const profileChanges = {};
+      if (step.id === "identity") Object.assign(profileChanges, {
+        name: draft.name,
+        brandName: draft.name,
+        legalName: draft.legalName,
+        category: draft.category,
+        categories: [draft.category],
+        description: draft.description,
+        businessType: draft.businessType
+      });
+      if (step.id === "operation") profileChanges.operatingModel = draft.operatingModel;
+      if (step.id === "offering") profileChanges.capabilities = draft.capabilities;
+
+      const baseOnboarding = {
+        ...(business?.onboarding || {}),
+        currentStep: finish ? "review" : leave ? step.id : (nextStep?.id || step.id),
+        lastVisitedStep: leave ? step.id : (nextStep?.id || step.id),
+        completedSteps: metadataCompletedSteps,
+        startedAt: business?.onboarding?.startedAt || now,
+        updatedAt: now,
+        lastSavedAt: now,
+        ...(finish ? { completedAt: now } : {})
+      };
+      const projectedBusinessBeforeProgress = {
+        ...business,
+        ...profileChanges,
+        onboarding: baseOnboarding
+      };
+      const projectedEvaluation = evaluateSetupSteps({
+        business: projectedBusinessBeforeProgress,
+        branches: projectedBranches,
+        products: workspace.products,
+        operations: projectedOperations
+      });
+      const completedSteps = projectedEvaluation.steps.filter((item) => item.complete).map((item) => item.id);
+      const nextIncomplete = projectedEvaluation.firstIncompleteId;
+      const onboarding = {
+        ...baseOnboarding,
+        currentStep: projectedEvaluation.complete ? "review" : leave ? step.id : (nextIncomplete || nextStep?.id || step.id),
+        lastVisitedStep: projectedEvaluation.complete ? "review" : leave ? step.id : (nextIncomplete || nextStep?.id || step.id),
+        completedSteps,
+        percent: projectedEvaluation.percent
+      };
+      const onboardingStatus = projectedEvaluation.complete ? "complete" : "in_progress";
+      const projectedBusiness = { ...projectedBusinessBeforeProgress, onboarding, onboardingStatus };
+
+      await saveBusinessProfile(selectedBusinessId, {
+        ...profileChanges,
+        onboardingStatus,
+        onboarding
+      }, user);
+
+      if (launchCriticalBasicsChanged) {
+        await markLaunchCriticalBusinessChange(selectedBusinessId, {
+          id: "business_basics",
+          label: "Business basics changed",
+          description: "A launch-critical business identity, category, type, or operating-model detail changed after a launch review decision.",
+          href: businessHref("/business/setup", { businessId: selectedBusinessId, step: "identity" })
+        });
+      }
+
+      // Keep navigation/progress stable while Firestore listeners catch up with the confirmed writes.
+      setOptimisticBusiness(projectedBusiness);
+      setOptimisticBranches(projectedBranches);
+      setOptimisticOperations(projectedOperations);
+      setDirty(false);
+      setSavedAt(now);
+      toast(projectedEvaluation.complete ? "Business basics are complete. Continue with the launch checklist." : "This setup step is saved.", {
+        title: projectedEvaluation.complete ? "Business basics complete" : "Progress saved"
+      });
+
+      if (projectedEvaluation.complete || leave) {
+        router.push(businessHref("/business/launch", { businessId: selectedBusinessId }));
+      } else {
+        const currentIndex = projectedEvaluation.steps.findIndex((item) => item.id === step.id);
+        const nextVisible = projectedEvaluation.steps.slice(currentIndex + 1).find((item) => !item.complete || !item.required);
+        const targetStep = nextVisible?.id || projectedEvaluation.firstIncompleteId || step.id;
+        router.push(businessHref("/business/setup", { businessId: selectedBusinessId, step: targetStep }));
+      }
+    } catch (error) {
+      toast(error.message || "This step could not be saved.", { type: "error", title: "Save failed" });
+    } finally { setSaving(false); }
   }
 
-  async function saveAndLeave() {
-    if (!validateCurrentStep()) return;
-    await persist({ intent: "leave" });
+  function goBack() {
+    if (!previousStep) return;
+    if (dirty && !window.confirm("Discard the unsaved changes on this step?")) return;
+    setDirty(false);
+    router.push(businessHref("/business/setup", { businessId: selectedBusinessId, step: previousStep.id }));
   }
 
-  function afterTask() {
-    const success = processing.state === "success";
-    setProcessing((value) => ({ ...value, open: false }));
-    if (!success) return;
-    if (processing.intent === "leave" || processing.intent === "finish" || nextIndex < 0) router.push(`/business/today?business=${encodeURIComponent(selectedBusinessId)}`);
-    else setCurrent(nextIndex);
-  }
-
-  const content = step.id === "identity" ? <IdentityStep draft={draft} setDraft={setDraft} />
-    : step.id === "operation" ? <OperationStep draft={draft} setDraft={setDraft} />
-      : step.id === "location" ? <LocationStep branchDraft={branchDraft} setBranchDraft={setBranchDraft} operatingModel={draft.operatingModel} />
-        : step.id === "offering" ? <OfferingStep draft={draft} setDraft={setDraft} />
-          : step.id === "starter" ? <StarterStep templates={templates} selectedTemplateIds={selectedTemplateIds} setSelectedTemplateIds={setSelectedTemplateIds} archetype={archetype} />
+  const content = step.id === "identity" ? <IdentityStep draft={draft} setDraft={patchDraft} />
+    : step.id === "operation" ? <OperationStep draft={draft} setDraft={patchDraft} />
+      : step.id === "location" ? <LocationStep branchDraft={branchDraft} setBranchDraft={patchBranch} operatingModel={draft.operatingModel} />
+        : step.id === "offering" ? <OfferingStep draft={draft} setDraft={patchDraft} />
+          : step.id === "starter" ? <StarterStep templates={templates} selectedTemplateIds={selectedTemplateIds} setSelectedTemplateIds={(value) => { setSelectedTemplateIds(value); setDirty(true); }} archetype={archetype} />
             : <ReviewStep draft={draft} branchDraft={branchDraft} selectedTemplateIds={selectedTemplateIds} />;
 
-  return <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-business">Guided business setup</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Build the right workspace, step by step</h1></div><WorkspaceContextSwitcher showBranch={false} compact /></div><div className="rounded-3xl border bg-[var(--surface)] p-4 shadow-card sm:p-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-bold">{step.label}</p><p className="mt-1 text-xs text-secondary">Step {visiblePosition + 1} of {activeSteps.length}</p></div><Badge tone="accent">{progress}%</Badge></div><ProgressBar value={progress} className="mt-4 h-2.5" /></div><div className="flex items-start gap-6"><StepRail steps={activeSteps} currentId={step.id} completed={completed} /><Card className="min-w-0 flex-1 overflow-hidden"><div className="p-6 sm:p-8 lg:p-10"><AnimatePresence mode="wait"><motion.div key={step.id} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .25 }}>{content}</motion.div></AnimatePresence></div><div className="flex flex-col-reverse gap-3 border-t bg-grouped/50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Button variant="ghost" disabled={previousIndex < 0} onClick={() => previousIndex >= 0 && setCurrent(previousIndex)}><ArrowLeft className="h-4 w-4" />Back</Button><div className="flex flex-col-reverse gap-2 sm:flex-row"><Button variant="outline" onClick={saveAndLeave}>Save and leave</Button><Button onClick={continueFlow}>{nextIndex < 0 ? "Prepare my workspace" : "Save and continue"}<ArrowRight className="h-4 w-4" /></Button></div></div></Card></div><FullScreenTask open={processing.open} state={processing.state} title={processing.title} description={processing.description} steps={["Save the business structure", "Confirm the location", "Shape the operational workspace", "Finish"]} activeStep={processing.active} onDone={afterTask} doneLabel={processing.intent === "leave" ? "Return to business home" : nextIndex < 0 ? "Open workspace" : "Continue setup"} /></div>;
+  return <div className="space-y-6">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-business">Stage 2 of 5 · Business basics</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Set up the business, step by step</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">This short wizard establishes the business structure. Products, Money, Team and other launch preparation continue separately on the Launch Checklist.</p></div><WorkspaceContextSwitcher showBranch={false} compact /></div>
+    <div className="rounded-3xl border bg-[var(--surface)] p-4 shadow-card sm:p-6"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold">{step.label}</p><p className="mt-1 text-xs text-secondary">Step {currentPosition + 1} of {activeSteps.length} · {persistedEvaluation.requiredComplete} of {persistedEvaluation.requiredTotal} required basics complete</p></div><div className="flex items-center gap-2"><Badge tone={persistedEvaluation.percent === 100 ? "success" : "accent"}>{persistedEvaluation.percent}%</Badge>{saving ? <Badge tone="info">Saving…</Badge> : savedAt ? <Badge tone="neutral">Saved {new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Badge> : null}</div></div><ProgressBar value={persistedEvaluation.percent} label="Business basics completion" className="mt-4 h-2.5" /></div>
+    {typeChanged && <Card variant="bordered" className="border-warning/30 bg-[var(--warning-soft)] p-4"><p className="font-semibold text-warning">Changing the business type will update your launch requirements.</p><p className="mt-1 text-sm leading-6 text-secondary">Products, customer workflows and Money requirements may change after you save this step.</p></Card>}
+    <div className="flex items-start gap-6"><StepRail steps={activeSteps} currentId={step.id} completed={persistedEvaluation.steps.filter((item) => item.complete).map((item) => item.id)} /><Card className="min-w-0 flex-1 overflow-hidden"><div className="p-6 sm:p-8 lg:p-10"><div ref={headingRef} tabIndex={-1} className="outline-none"><AnimatePresence mode="wait"><motion.div key={step.id} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .2 }}>{content}</motion.div></AnimatePresence></div>{fieldProgress.total > 0 && <div className="mt-8 rounded-2xl bg-grouped p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">Required details on this step</p><span className="text-xs text-secondary">{fieldProgress.complete} of {fieldProgress.total}</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{fieldProgress.fields.map(([label, done]) => <div key={label} className="flex items-center gap-2 text-sm"><span className={`flex h-5 w-5 items-center justify-center rounded-full ${done ? "bg-[var(--success)] text-[var(--on-success)]" : "border text-tertiary"}`}>{done ? <Check className="h-3 w-3" /> : <Circle className="h-2.5 w-2.5" />}</span><span className={done ? "" : "text-secondary"}>{label}</span></div>)}</div></div>}</div><div className="flex flex-col-reverse gap-3 border-t bg-grouped/50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Button variant="ghost" disabled={!previousStep || saving} onClick={goBack}><ArrowLeft className="h-4 w-4" />Back</Button><div className="flex flex-col-reverse gap-2 sm:flex-row"><Button variant="outline" disabled={saving} onClick={() => persist("leave")}>Save and leave</Button><Button loading={saving} onClick={() => persist("continue")}>{!nextStep ? "Finish business basics" : "Save and continue"}<ArrowRight className="h-4 w-4" /></Button></div></div></Card></div>
+  </div>;
 }

@@ -1,7 +1,12 @@
-# Spotly 5.4 Capability Matrix
+# Spotly 5.5 Capability Matrix
 
 | Feature | UI | Backend | Authorization | Persistence | Mobile | Test evidence | Status |
 |---|---|---|---|---|---|---|---|
+| Business Lifecycle orchestration | Complete core | Shared lifecycle engine + server review APIs | Server-authoritative high-impact transitions | Server + derived state | Responsive | Unit/static | Pilot candidate; staging/browser QA pending |
+| Launch Checklist | Complete | Shared lifecycle data | Business scoped | Derived + server review records | Responsive | Unit/static | Pilot candidate |
+| Setup resume/progress | Complete | Firestore business/location data | Business scoped | Server-persisted metadata + data-derived validation | Responsive | Unit/static | Pilot candidate |
+| Final launch review | Complete core | Merchant submit + Admin decision APIs | Business/Admin permissions | Server | Responsive | Unit/static | Pilot candidate; emulator/staging pending |
+| Lifecycle-gated navigation | Complete | Shared lifecycle engine | Business scoped | URL + server state | Responsive | Unit/static | Pilot candidate |
 | Business Portfolio | Complete | Server portfolio API | Scoped active memberships | Server | Responsive | Local/static | Pilot candidate; staging pending |
 | Business Claims centre | Complete | Claims server/Firestore | Account/claim scoped | Server + drafts | Responsive | Local/static | Pilot candidate; staging pending |
 | Business Invitations centre | Complete | Server accept/decline | Immutable grants | Server | Responsive | Local/static | Pilot candidate; emulator pending |

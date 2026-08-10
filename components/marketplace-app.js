@@ -9,7 +9,7 @@ import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Badge, Button, Card, EmptyState, Modal, Overlay, SearchField, StatusBadge, TabPanel, Tabs } from "@/components/ui";
 import { authenticatedFetch } from "@/lib/api-client";
-import { saveFavorite, searchBusinesses, subscribePublicBranches, subscribePublicBusinessCatalog, subscribeCustomerOrders, subscribeFavorites } from "@/lib/firebase-services";
+import { saveFavorite, searchLiveBusinesses, subscribePublicBranches, subscribePublicBusinessCatalog, subscribeCustomerOrders, subscribeFavorites } from "@/lib/firebase-services";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { businessArchetype } from "@/data/business-archetypes";
@@ -202,7 +202,7 @@ export function MarketplaceApp() {
   useEffect(() => { writeState(LOCATION_KEY,user,location); }, [location,user]);
   useEffect(() => {
     let active = true; setLoading(true); setLoadError("");
-    const timer = window.setTimeout(async () => { try { const result = await searchBusinesses(query,100); if (active) setBusinesses(result); } catch { if (active) { setBusinesses([]); setLoadError("Business discovery is temporarily unavailable. Check your connection and try again."); } } finally { if (active) setLoading(false); } }, query ? 250 : 0);
+    const timer = window.setTimeout(async () => { try { const result = await searchLiveBusinesses(query,100); if (active) setBusinesses(result); } catch { if (active) { setBusinesses([]); setLoadError("Business discovery is temporarily unavailable. Check your connection and try again."); } } finally { if (active) setLoading(false); } }, query ? 250 : 0);
     return () => { active=false; clearTimeout(timer); };
   }, [query,reloadKey]);
   useEffect(() => { if (!requestedBusiness || selected || !businesses.length) return; const found=businesses.find((business)=>business.id===requestedBusiness); if(found)setSelected(found); }, [requestedBusiness,businesses,selected]);

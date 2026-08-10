@@ -418,7 +418,7 @@ function MobileOfferingCard({ item, archetype, isInventory, isPickup, busyId, on
 }
 
 export function CatalogView() {
-  const { products, user, archetype, selectedBranchId, selectedBusinessId } = useBusinessWorkspace();
+  const { products, user, archetype, selectedBranchId, selectedBusinessId, lifecycle } = useBusinessWorkspace();
   const { toast } = useToast();
   const [catalogMode, setCatalogMode] = useState("quick");
   const [queryText, setQueryText] = useState("");
@@ -536,6 +536,7 @@ export function CatalogView() {
 
   return <div className="space-y-6">
     <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.catalog} description={`Create the ${archetype.nouns.items} customers can understand and act on at the selected ${archetype.nouns.branch}.`} actions={<div className="flex flex-wrap gap-2"><Button onClick={() => setLibraryOpen(true)}><BookOpenCheck className="h-4 w-4" />Spotly Library</Button><Button variant="outline" onClick={() => setTemplateOpen(true)}><Sparkles className="h-4 w-4" />Collections</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><FileSpreadsheet className="h-4 w-4" />Quick add</Button><Button variant="outline" onClick={() => openOffering()}><Plus className="h-4 w-4" />Create manually</Button></div>} /><BusinessSwitcher /></div>
+    {lifecycle?.businessState !== "live" && <Card variant="bordered" className="p-4"><p className="font-semibold">Prepare your {archetype.nouns.catalog.toLowerCase()}</p><p className="mt-1 text-sm leading-6 text-secondary">These {archetype.nouns.items} remain private to customers until this business completes the final Spotly launch review and becomes live.</p></Card>}
 
 
     <Tabs idPrefix="catalog-mode" value={catalogMode} onChange={setCatalogMode} tabs={catalogModes} />

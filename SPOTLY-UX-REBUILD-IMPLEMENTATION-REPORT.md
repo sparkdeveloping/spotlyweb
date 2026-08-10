@@ -1,7 +1,7 @@
 # Spotly Functionality, UI and UX Rebuild — Implementation Report
 
-**Implementation date:** 6 August 2026  
-**Repository:** Spotly web platform v5  
+**Implementation date:** 6 August 2026
+**Repository:** Spotly web platform v5
 **Primary scope:** Public website, customer marketplace, business claiming and operations, driver workflow, staff workflow, admin operations, support, shared UI, mobile behavior, accessibility and brand assets.
 
 ## Executive summary

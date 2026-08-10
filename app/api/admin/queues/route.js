@@ -65,7 +65,7 @@ function decodeCursor(value) {
 }
 
 function queueSpecific(queue, item) {
-  if (queue === "publication-review") return item.type === "business_publication_review";
+  if (queue === "publication-review") return ["business_publication_review", "business_launch_review"].includes(item.type);
   if (queue === "staff-approvals") return String(item.type || "").includes("staff") || String(item.type || "").includes("leave") || String(item.type || "").includes("people");
   if (queue === "incidents") return ["failed", "urgent", "escalated"].includes(String(item.status || "")) || item.priority === "urgent";
   return true;

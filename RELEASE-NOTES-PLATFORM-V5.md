@@ -1,6 +1,6 @@
 # Spotly Platform v5 release notes
 
-Generated: August 6, 2026  
+Generated: August 6, 2026
 Version: `5.0.0`
 
 ## Release objective

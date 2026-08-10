@@ -1,6 +1,6 @@
 # Spotly Platform v5 implementation report
 
-Generated: August 6, 2026  
+Generated: August 6, 2026
 Project version: `5.0.0`
 
 ## Delivered

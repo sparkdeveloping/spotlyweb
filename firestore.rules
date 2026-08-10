@@ -83,7 +83,7 @@ service cloud.firestore {
     function canManageTeam(businessId) { return platformAdmin() || directOwner(businessId) || ownerRole(businessId) || memberPermission(businessId, "staff.*") || memberPermission(businessId, "staff.manage"); }
     function canReadFinance(businessId) { return financeStaff() || directOwner(businessId) || ownerRole(businessId) || memberPermission(businessId, "finance.*") || memberPermission(businessId, "finance.read"); }
     function canConfigureFinance(businessId) { return platformAdmin() || directOwner(businessId) || ownerRole(businessId) || memberPermission(businessId, "finance.*") || memberPermission(businessId, "finance.configure"); }
-    function publicBusiness(businessId) { return business(businessId).public == true; }
+    function publicBusiness(businessId) { return business(businessId).public == true && (business(businessId).status in ["active", "paused"] || business(businessId).lifecycleStatus in ["live", "paused"]); }
     function publicProduct() { return resource.data.published == true && resource.data.active == true && publicBusiness(resource.data.businessId); }
 
     function hasStaffProfile() { return signedIn() && exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)); }
@@ -141,11 +141,13 @@ service cloud.firestore {
     match /businesses/{businessId} {
       allow read: if resource.data.public == true || canViewBusiness(businessId) || hasPermission("businesses.read");
       allow create: if false;
+      // Merchants may edit business configuration, but lifecycle/publication authority is server-only.
+      // In particular public/status/launchReview fields cannot be forged by a browser client.
       allow update: if canManageBusiness(businessId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         "name", "brandName", "legalName", "category", "categories", "description", "phone", "email", "website", "instagram", "facebook", "whatsapp",
         "city", "country", "address", "currency", "logo", "coverImage", "openingHours", "specialHours", "paymentMethods", "searchTerms",
-        "onboardingProgress", "preferredLocale", "customerNotes", "public", "teamReviewedAt", "status", "publicationReviewRequestedAt",
-        "publicationReviewRequestedBy", "updatedAt", "updatedBy"
+        "businessType", "capabilities", "operatingModel", "onboardingProgress", "onboardingStatus", "onboarding", "preferredLocale", "customerNotes",
+        "teamReviewedAt", "kiosk", "updatedAt", "updatedBy"
       ]);
       allow delete: if superAdmin();
     }
@@ -160,9 +162,9 @@ service cloud.firestore {
     }
 
     match /branches/{branchId} {
-      allow read: if resource.data.public == true || (canViewBranches(resource.data.businessId) && branchScope(resource.data.businessId, branchId)) || hasPermission("businesses.read");
-      allow create: if canCreateBranches(request.resource.data.businessId);
-      allow update, delete: if canManageBranches(resource.data.businessId) && branchScope(resource.data.businessId, branchId);
+      allow read: if (resource.data.public == true && publicBusiness(resource.data.businessId)) || (canViewBranches(resource.data.businessId) && branchScope(resource.data.businessId, branchId)) || hasPermission("businesses.read");
+      // Location structure and denormalized branch counts are maintained atomically by /api/business/branches.
+      allow create, update, delete: if false;
     }
 
     match /memberships/{membershipId} {
@@ -187,6 +189,13 @@ service cloud.firestore {
       allow read: if activeAccount() && (resource.data.applicantId == request.auth.uid || claimsStaff());
       allow update: if activeAccount() && resource.data.applicantId == request.auth.uid && request.resource.data.applicantId == request.auth.uid;
       allow delete: if activeAccount() && (resource.data.applicantId == request.auth.uid || platformAdmin());
+    }
+
+    match /businessLaunchReviews/{reviewId} {
+      allow read: if platformAdmin() || hasPermission("businesses.read") || (activeAccount() && resource.data.businessId != null && canViewBusiness(resource.data.businessId));
+      // Submission and decisions run through trusted server endpoints so merchants cannot
+      // approve themselves, make a business live, or forge a Spotly review.
+      allow create, update, delete: if false;
     }
 
 

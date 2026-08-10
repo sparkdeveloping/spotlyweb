@@ -77,12 +77,14 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
   batch.set(adminDb.collection("businesses").doc("biz-other"), { name: "Other", organizationId: "org2", public: false, ownerIds: [] });
   batch.set(adminDb.collection("branches").doc("branch-a"), { businessId: "biz-public", public: true, name: "A" });
   batch.set(adminDb.collection("branches").doc("branch-b"), { businessId: "biz-public", public: false, name: "B" });
+  batch.set(adminDb.collection("branches").doc("branch-prelive"), { businessId: "biz-private", public: true, name: "Pre-live location" });
   batch.set(adminDb.collection("products").doc("prod-public"), { businessId: "biz-public", published: true, active: true, name: "Milk" });
   batch.set(adminDb.collection("products").doc("prod-draft"), { businessId: "biz-public", published: false, active: true, name: "Draft" });
   batch.set(adminDb.collection("masterProducts").doc("master-public"), { canonicalName: "Spotly Test Milk", verificationStatus: "verified", primaryImage: "", imageRightsStatus: "spotly_photographed" });
   batch.set(adminDb.collection("masterProducts").doc("master-reference"), { canonicalName: "Reference Only", verificationStatus: "verified", primaryImage: "https://example.test/reference.jpg", imageRightsStatus: "reference_only" });
   batch.set(adminDb.collection("businessLedgerEntries").doc("ledger-1"), { businessId: "biz-public", currency: "USD", type: "payment_captured", amount: 10 });
   batch.set(adminDb.collection("businessSettlementAccounts").doc("biz-public"), { businessId: "biz-public", accountNumberLast4: "1234", encryptedAccountNumber: { ciphertext: "private" } });
+  batch.set(adminDb.collection("businessLaunchReviews").doc("launch-review-1"), { businessId: "biz-public", submittedBy: uid.owner, status: "submitted", merchantProgress: 100 });
   batch.set(adminDb.collection("orders").doc("order-a"), { customerId: uid.customer, businessId: "biz-public", branchId: "branch-a", status: "submitted" });
   batch.set(adminDb.collection("orders").doc("order-b"), { customerId: "someone-else", businessId: "biz-public", branchId: "branch-b", status: "submitted" });
   batch.set(adminDb.collection("memberships").doc(`org1_${uid.owner}`), { organizationId: "org1", userId: uid.owner, role: "organization_owner", businessIds: ["biz-public", "biz-private"], branchIds: ["branch-a", "branch-b"], permissions: ["businesses.*", "branches.*", "catalog.*", "orders.*", "staff.*", "finance.*"], status: "active" });
@@ -96,6 +98,7 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
   await allowed(getDocs(query(collection(anon.db, "businesses"), where("public", "==", true))), "public business query");
   await allowed(getDoc(doc(anon.db, "branches", "branch-a")), "anonymous public branch read");
   await denied(getDoc(doc(anon.db, "branches", "branch-b")), "anonymous private branch read");
+  await denied(getDoc(doc(anon.db, "branches", "branch-prelive")), "anonymous pre-live business branch read even when branch is marked public");
   await allowed(getDoc(doc(anon.db, "products", "prod-public")), "anonymous published product read");
   await denied(getDoc(doc(anon.db, "products", "prod-draft")), "anonymous draft product read");
   await allowed(getDoc(doc(anon.db, "masterProducts", "master-public")), "public verified master product read");
@@ -103,6 +106,16 @@ test("Firestore and Storage enforce Spotly scoped authorization", async () => {
   await denied(setDoc(doc(actors.owner.db, "masterProducts", "merchant-created"), { canonicalName: "Unsafe merchant master", verificationStatus: "verified" }), "merchant canonical master product write");
   await allowed(getDoc(doc(actors.owner.db, "businessLedgerEntries", "ledger-1")), "owner finance ledger read");
   await denied(getDoc(doc(actors.owner.db, "businessSettlementAccounts", "biz-public")), "settlement account direct client read");
+  await allowed(getDoc(doc(actors.owner.db, "businessLaunchReviews", "launch-review-1")), "owner launch review read");
+  await denied(updateDoc(doc(actors.owner.db, "businessLaunchReviews", "launch-review-1"), { status: "approved" }), "merchant launch review decision write");
+  await denied(setDoc(doc(actors.owner.db, "businessLaunchReviews", "merchant-launch-review"), { businessId: "biz-public", submittedBy: uid.owner, status: "approved" }), "merchant launch review creation");
+  await allowed(updateDoc(doc(actors.owner.db, "businesses", "biz-public"), { description: "Updated merchant description" }), "merchant safe business configuration update");
+  await allowed(updateDoc(doc(actors.owner.db, "businesses", "biz-public"), { kiosk: { enabled: true, defaultMode: "pickup_checkin" } }), "merchant kiosk configuration update");
+  await denied(updateDoc(doc(actors.owner.db, "branches", "branch-a"), { city: "Harare" }), "direct merchant branch update is server-controlled");
+  await denied(setDoc(doc(actors.owner.db, "branches", "merchant-branch"), { businessId: "biz-public", name: "Unsafe direct location", public: true }), "direct merchant branch creation is server-controlled");
+  await denied(deleteDoc(doc(actors.owner.db, "branches", "branch-a")), "direct merchant branch deletion is server-controlled");
+  await denied(updateDoc(doc(actors.owner.db, "businesses", "biz-public"), { public: false }), "merchant business publication mutation");
+  await denied(updateDoc(doc(actors.owner.db, "businesses", "biz-public"), { status: "active" }), "merchant business lifecycle status mutation");
 
   await allowed(getDoc(doc(actors.customer.db, "orders", "order-a")), "customer own order read");
   await allowed(getDoc(doc(actors.branch.db, "orders", "order-a")), "branch manager assigned order read");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   CheckCircle2,
@@ -14,6 +14,7 @@ import { Badge, Button, Card, EmptyState, MetricCard, PageHeader, ProgressBar, S
 import { formatCurrency } from "@/lib/format";
 import { useBusinessWorkspace } from "@/components/business/business-context";
 import { BusinessSwitcher } from "@/components/business/shared";
+import { businessHref } from "@/lib/business-routing";
 
 const INSIGHT_MODELS = {
   grocery_retail: {
@@ -85,10 +86,10 @@ function valueOf(record) {
   return Number(record.totals?.total ?? record.total ?? 0);
 }
 
-function withinDays(record, days) {
+function withinDays(record, days, nowMs) {
   if (days === "all") return true;
   const created = toDate(record.createdAt);
-  return created ? created >= new Date(Date.now() - Number(days) * 86400000) : false;
+  return created && nowMs ? created.getTime() >= nowMs - Number(days) * 86400000 : false;
 }
 
 function elapsedMinutes(record, model) {
@@ -110,11 +111,13 @@ function locationName(branch) {
 }
 
 export function InsightsView() {
-  const { orders, products, branches, finance, archetype, selectedBranch, selectedBranchId } = useBusinessWorkspace();
+  const { orders, products, branches, finance, archetype, selectedBranch, selectedBranchId, selectedBusinessId } = useBusinessWorkspace();
   const [range, setRange] = useState("30");
+  const [nowMs, setNowMs] = useState(0);
   const model = INSIGHT_MODELS[archetype.id] || INSIGHT_MODELS.directory_profile;
+  useEffect(() => { setNowMs(Date.now()); }, []);
   const scopedRecords = useMemo(() => orders.filter((record) => !selectedBranchId || record.branchId === selectedBranchId), [orders, selectedBranchId]);
-  const filtered = useMemo(() => scopedRecords.filter((record) => withinDays(record, range)), [scopedRecords, range]);
+  const filtered = useMemo(() => scopedRecords.filter((record) => withinDays(record, range, nowMs)), [scopedRecords, range, nowMs]);
   const completed = filtered.filter((record) => model.completed.includes(record.status));
   const cancelled = filtered.filter((record) => model.cancelled.includes(record.status));
   const revenue = completed.reduce((sum, record) => sum + valueOf(record), 0);
@@ -193,7 +196,7 @@ export function InsightsView() {
       <MetricCard label="Exception rate" value={`${percentage(cancelled.length, filtered.length)}%`} hint={cancelled.length ? `Review exceptions in ${model.records}` : "No exceptions in this period"} icon={XCircle} tone={cancelled.length ? "warning" : "success"} />
     </div>
 
-    {!filtered.length ? <Card><EmptyState icon={BarChart3} title="Nothing to measure yet" description={model.empty} action={<Button variant="outline" href="/business/setup">Review setup</Button>} /></Card> : <>
+    {!filtered.length ? <Card><EmptyState icon={BarChart3} title="Nothing to measure yet" description={model.empty} action={<Button variant="outline" href={businessHref("/business/settings", { businessId: selectedBusinessId })}>Review business settings</Button>} /></Card> : <>
       <div className="grid gap-5 xl:grid-cols-2">
         <SectionCard title={`${locationLabel} performance`} description={`Volume and completion across the business for the selected period.`}>
           <div className="p-5">{locationPerformance.length ? locationPerformance.map((item) => <div key={item.id} className="mb-5 last:mb-0"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.completed}/{item.records} completed{item.revenue ? ` · ${formatCurrency(item.revenue, currency)}` : ""}</p></div><Badge tone={percentage(item.completed, item.records) >= 85 ? "success" : "warning"}>{percentage(item.completed, item.records)}%</Badge></div><ProgressBar value={(item.records / maxLocation) * 100} className="mt-3" /></div>) : <p className="text-sm text-secondary">No location comparison is available yet.</p>}</div>

@@ -1,7 +1,7 @@
 # Spotly Theme-Integrity Implementation Report
 
-**Candidate:** Spotly 5.2 theme-integrity pass  
-**Date:** 6 August 2026  
+**Candidate:** Spotly 5.2 theme-integrity pass
+**Date:** 6 August 2026
 **Implementation base:** Spotly 5.1 production-depth candidate
 
 ## Purpose

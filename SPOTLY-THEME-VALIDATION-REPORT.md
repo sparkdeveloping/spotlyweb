@@ -1,6 +1,6 @@
 # Spotly Theme-Integrity Validation Report
 
-**Candidate:** 5.2 theme-integrity pass  
+**Candidate:** 5.2 theme-integrity pass
 **Date:** 6 August 2026
 
 ## Commands completed

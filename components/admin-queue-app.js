@@ -15,7 +15,7 @@ import { readState, writeState } from "@/lib/browser-state";
 
 const QUEUES = {
   "business-claims": { title: "Business claims", description: "Ownership and authority reviews awaiting a clear decision.", icon: Store, slaHours: 48 },
-  "publication-review": { title: "Publication review", description: "Businesses requesting customer publication.", icon: CheckCircle2, slaHours: 48 },
+  "publication-review": { title: "Final launch reviews", description: "Businesses waiting for Spotly's final customer-readiness decision before going live.", icon: CheckCircle2, slaHours: 48 },
   support: { title: "Support conversations", description: "Open, escalated and assigned customer or business support.", icon: Headphones, slaHours: 24 },
   "payment-exceptions": { title: "Payment and payout exceptions", description: "Held, pending or failed money movement requiring review.", icon: WalletCards, slaHours: 24 },
   "staff-approvals": { title: "Staff approvals", description: "Internal People Operations decisions due for review.", icon: UserCheck, slaHours: 48 },
@@ -27,13 +27,13 @@ function dateValue(value) {
   return date && !Number.isNaN(date.getTime()) ? date : null;
 }
 
-function ageHours(record) {
+function ageHours(record, nowMs = 0) {
   const date = dateValue(record.createdAt || record.submittedAt || record.requestedAt);
-  return date ? Math.max(0, Math.floor((Date.now() - date.getTime()) / 3_600_000)) : null;
+  return date && nowMs ? Math.max(0, Math.floor((nowMs - date.getTime()) / 3_600_000)) : null;
 }
 
-function ageLabel(record) {
-  const hours = ageHours(record);
+function ageLabel(record, nowMs = 0) {
+  const hours = ageHours(record, nowMs);
   if (hours === null) return "Age unavailable";
   return hours < 24 ? `${hours}h old` : `${Math.floor(hours / 24)}d old`;
 }
@@ -44,7 +44,8 @@ function escapeCsv(value) {
 }
 
 function exportCsv(queue, records) {
-  const rows = [["reference", "title", "status", "priority", "assigned_to", "age_hours"], ...records.map((record) => [record.id, record.title || record.subject || record.applicantName || "", record.status || "open", record.priority || "", record.assignedTo || "", ageHours(record) ?? ""])]
+  const nowMs = Date.now();
+  const rows = [["reference", "title", "status", "priority", "assigned_to", "age_hours"], ...records.map((record) => [record.id, record.title || record.subject || record.applicantName || "", record.status || "open", record.priority || "", record.assignedTo || "", ageHours(record, nowMs) ?? ""])]
     .map((row) => row.map(escapeCsv).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([rows], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
@@ -72,12 +73,14 @@ function QueueBody({ queue }) {
   const [busy, setBusy] = useState("");
   const [decision, setDecision] = useState("");
   const [reason, setReason] = useState("");
+  const [changeTarget, setChangeTarget] = useState("customer_profile");
   const [savedViews, setSavedViews] = useState([]);
   const [pageSize] = useState(50);
   const [cursor, setCursor] = useState(null);
   const [nextCursor, setNextCursor] = useState(null);
   const [cursorHistory, setCursorHistory] = useState([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const [ageClock, setAgeClock] = useState(0);
 
   const meta = QUEUES[queue] || { title: "Admin queue", description: "Operational records requiring review.", icon: ClipboardList, slaHours: 48 };
   const Icon = meta.icon;
@@ -86,6 +89,13 @@ function QueueBody({ queue }) {
     if (!user) return;
     setSavedViews(readState(`spotly-admin-queue-views:${queue}`, user, [], "local"));
   }, [queue, user]);
+
+  useEffect(() => {
+    const update = () => setAgeClock(Date.now());
+    update();
+    const timer = window.setInterval(update, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!user?.uid) return undefined;
@@ -155,9 +165,23 @@ function QueueBody({ queue }) {
     setBusy(selected.id);
     try {
       if (queue === "business-claims") await decideBusinessClaim(selected, decision === "request_information" ? "request" : decision, user, reason);
-      else await authenticatedFetch("/api/admin/queues", { method: "PATCH", body: JSON.stringify({ queue, id: selected.id, action: "decision", decision, reason }) });
+      else if (queue === "publication-review") {
+        const reviewId = selected.reviewId || selected.id;
+        const businessId = selected.businessId || "";
+        const targets = {
+          customer_profile: { label: "Customer-facing profile", href: `/business/settings?business=${encodeURIComponent(businessId)}&tab=profile` },
+          location: { label: "Location details", href: `/business/branches?business=${encodeURIComponent(businessId)}` },
+          catalog: { label: "Products or catalogue", href: `/business/catalog?business=${encodeURIComponent(businessId)}` },
+          operations: { label: "Pickup or operating setup", href: `/business/settings?business=${encodeURIComponent(businessId)}&tab=operations` },
+          money: { label: "Money or settlement", href: `/business/finance?business=${encodeURIComponent(businessId)}&tab=setup` },
+          business_details: { label: "Business basics", href: `/business/setup?business=${encodeURIComponent(businessId)}&step=identity` }
+        };
+        const target = targets[changeTarget] || targets.customer_profile;
+        const requestedChanges = decision === "request_changes" ? [{ id: changeTarget, label: target.label, description: reason.trim(), href: target.href }] : [];
+        await authenticatedFetch("/api/admin/business-launch-reviews/decision", { method: "POST", body: JSON.stringify({ reviewId, decision, reason, requestedChanges }) });
+      } else await authenticatedFetch("/api/admin/queues", { method: "PATCH", body: JSON.stringify({ queue, id: selected.id, action: "decision", decision, reason }) });
       toast("The decision was recorded.", { title: "Queue updated" });
-      setSelected(null); setDecision(""); setReason(""); setReloadKey((value) => value + 1);
+      setSelected(null); setDecision(""); setReason(""); setChangeTarget("customer_profile"); setReloadKey((value) => value + 1);
     } catch (reasonValue) { toast(reasonValue.message, { type: "error", title: "Decision not saved" }); }
     finally { setBusy(""); }
   }
@@ -177,7 +201,9 @@ function QueueBody({ queue }) {
   }
 
   const decisionOptions = queue === "business-claims"
-    ? [["approve", "Approve"], ["request_information", "Request information"], ["reject", "Reject"]]
+    ? [["approve", "Approve business access"], ["request_information", "Request information"], ["reject", "Reject business access"]]
+    : queue === "publication-review"
+      ? [["approve", "Approve for launch"], ["request_changes", "Request changes"], ["reject", "Reject launch"]]
     : queue === "support"
       ? [["assigned", "Keep assigned"], ["escalated", "Escalate"], ["resolved", "Resolve"]]
       : queue === "payment-exceptions"
@@ -191,9 +217,9 @@ function QueueBody({ queue }) {
     {savedViews.length > 0 && <div className="flex flex-wrap gap-2" aria-label="Saved queue views">{savedViews.map((view) => <Button key={view.name} size="sm" variant="ghost" onClick={() => applyView(view)}>{view.name}</Button>)}</div>}
     {selectedIds.size > 0 && <Card variant="bordered" className="flex flex-wrap items-center gap-3 p-3"><p className="flex-1 text-sm font-semibold">{selectedIds.size} selected</p><Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>Clear</Button><Button size="sm" onClick={bulkAssign} loading={busy === "bulk"}>Assign selected to me</Button></Card>}
     {error && <Card variant="bordered" className="border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}<Button variant="ghost" size="sm" onClick={() => window.location.reload()} className="ml-2">Retry</Button></Card>}
-    {loading ? <Card variant="bordered" className="p-8 text-center text-sm text-secondary">Loading queue…</Card> : visible.length ? <div className="space-y-3">{visible.map((record) => { const business = record.businessName ? { name: record.businessName } : null; const overdue = (ageHours(record) ?? 0) > meta.slaHours; const checked = selectedIds.has(record.id); return <Card key={record.id} variant="bordered" className="p-4"><div className="flex flex-col gap-4 lg:flex-row lg:items-center"><label className="flex items-center gap-2"><input type="checkbox" checked={checked} onChange={(event) => setSelectedIds((current) => { const next = new Set(current); if (event.target.checked) next.add(record.id); else next.delete(record.id); return next; })} /><span className="sr-only">Select {record.id}</span></label><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-admin-soft text-admin"><Icon className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{record.title || record.subject || business?.name || record.applicantName || record.id}</p><StatusBadge status={record.status || "open"} />{record.priority && <Badge tone={record.priority === "urgent" ? "danger" : "warning"}>{record.priority}</Badge>}{overdue && <Badge tone="danger">SLA overdue</Badge>}</div><p className="mt-1 text-sm text-secondary">{record.description || record.lastMessage || record.applicantEmail || record.type || "Review the linked record and record the next decision."}</p><p className="mt-2 text-xs text-tertiary">{ageLabel(record)} · {record.assignedTo ? "Assigned" : "Unassigned"} · SLA {meta.slaHours}h</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => assign(record)} loading={busy === record.id}>Assign to me</Button><Button size="sm" onClick={() => { setSelected({ ...record, businessName: business?.name }); setDecision(""); setReason(""); }}>Review</Button></div></div></Card>; })}</div> : <EmptyState icon={Icon} title="This queue is clear" description="No records match the current filters." />}
+    {loading ? <Card variant="bordered" className="p-8 text-center text-sm text-secondary">Loading queue…</Card> : visible.length ? <div className="space-y-3">{visible.map((record) => { const business = record.businessName ? { name: record.businessName } : null; const overdue = (ageHours(record, ageClock) ?? 0) > meta.slaHours; const checked = selectedIds.has(record.id); return <Card key={record.id} variant="bordered" className="p-4"><div className="flex flex-col gap-4 lg:flex-row lg:items-center"><label className="flex items-center gap-2"><input type="checkbox" checked={checked} onChange={(event) => setSelectedIds((current) => { const next = new Set(current); if (event.target.checked) next.add(record.id); else next.delete(record.id); return next; })} /><span className="sr-only">Select {record.id}</span></label><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-admin-soft text-admin"><Icon className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{record.title || record.subject || business?.name || record.applicantName || record.id}</p><StatusBadge status={record.status || "open"} />{record.priority && <Badge tone={record.priority === "urgent" ? "danger" : "warning"}>{record.priority}</Badge>}{overdue && <Badge tone="danger">SLA overdue</Badge>}</div><p className="mt-1 text-sm text-secondary">{record.description || record.lastMessage || record.applicantEmail || record.type || "Review the linked record and record the next decision."}</p><p className="mt-2 text-xs text-tertiary">{ageLabel(record, ageClock)} · {record.assignedTo ? "Assigned" : "Unassigned"} · SLA {meta.slaHours}h</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => assign(record)} loading={busy === record.id}>Assign to me</Button><Button size="sm" onClick={() => { setSelected({ ...record, businessName: business?.name }); setDecision(""); setReason(""); setChangeTarget("customer_profile"); }}>Review</Button></div></div></Card>; })}</div> : <EmptyState icon={Icon} title="This queue is clear" description="No records match the current filters." />}
     {!loading && (cursorHistory.length > 0 || nextCursor) && <div className="flex justify-center gap-2"><Button variant="outline" disabled={!cursorHistory.length} onClick={() => { const previous = cursorHistory[cursorHistory.length - 1] || null; setCursorHistory((items) => items.slice(0, -1)); setCursor(previous); }}>Previous</Button><Button variant="outline" disabled={!nextCursor} onClick={() => { setCursorHistory((items) => [...items, cursor]); setCursor(nextCursor); }}>Next {pageSize}</Button></div>}
-    <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.title || selected?.subject || selected?.businessName || "Queue record"} description="Review the linked record, owner, SLA and current status before recording a decision.">{selected && <form onSubmit={applyDecision} className="space-y-5 p-5"><div className="flex flex-wrap gap-2"><StatusBadge status={selected.status || "open"} />{selected.priority && <Badge tone="warning">{selected.priority}</Badge>}<Badge tone={(ageHours(selected) ?? 0) > meta.slaHours ? "danger" : "neutral"}>{ageLabel(selected)}</Badge></div><dl className="grid gap-4 sm:grid-cols-2">{[["Reference", selected.id], ["Assigned to", selected.assignedTo || "Unassigned"], ["Business", selected.businessName || selected.businessId || "Not linked"], ["Requester", selected.requesterEmail || selected.applicantEmail || selected.requestedByEmail || "Not recorded"]].map(([label, value]) => <div key={label} className="rounded-lg bg-grouped p-4"><dt className="text-xs text-tertiary">{label}</dt><dd className="mt-1 break-words font-semibold">{value}</dd></div>)}</dl><div><h3 className="font-semibold">Record context</h3><p className="mt-2 text-sm leading-7 text-secondary">{selected.description || selected.lastMessage || selected.decisionReason || "No additional plain-language context was recorded."}</p></div><label className="block"><span className="mb-2 block text-sm font-semibold">Decision</span><select required value={decision} onChange={(event) => setDecision(event.target.value)} className="field-control w-full"><option value="">Choose a decision</option>{decisionOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="block"><span className="mb-2 block text-sm font-semibold">Reason or internal note</span><textarea required={decision === "reject" || decision === "request_information" || decision === "rejected" || decision === "escalated"} value={reason} onChange={(event) => setReason(event.target.value)} className="field-control min-h-28 w-full py-3" placeholder="Record enough context for the next reviewer." /></label><div className="flex flex-wrap justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={() => assign(selected)} loading={busy === selected.id}>Assign to me</Button><Button type="button" variant="ghost" onClick={() => setSelected(null)}>Cancel</Button><Button type="submit" loading={busy === selected.id}>Record decision</Button></div></form>}</Modal>
+    <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.title || selected?.subject || selected?.businessName || "Queue record"} description="Review the linked record, owner, SLA and current status before recording a decision.">{selected && <form onSubmit={applyDecision} className="space-y-5 p-5"><div className="flex flex-wrap gap-2"><StatusBadge status={selected.status || "open"} />{selected.priority && <Badge tone="warning">{selected.priority}</Badge>}<Badge tone={(ageHours(selected, ageClock) ?? 0) > meta.slaHours ? "danger" : "neutral"}>{ageLabel(selected, ageClock)}</Badge></div><dl className="grid gap-4 sm:grid-cols-2">{[["Reference", selected.id], ["Assigned to", selected.assignedTo || "Unassigned"], ["Business", selected.businessName || selected.businessId || "Not linked"], ["Requester", selected.requesterEmail || selected.applicantEmail || selected.requestedByEmail || "Not recorded"]].map(([label, value]) => <div key={label} className="rounded-lg bg-grouped p-4"><dt className="text-xs text-tertiary">{label}</dt><dd className="mt-1 break-words font-semibold">{value}</dd></div>)}</dl><div><h3 className="font-semibold">Record context</h3><p className="mt-2 text-sm leading-7 text-secondary">{selected.description || selected.lastMessage || selected.decisionReason || "No additional plain-language context was recorded."}</p></div><label className="block"><span className="mb-2 block text-sm font-semibold">Decision</span><select required value={decision} onChange={(event) => setDecision(event.target.value)} className="field-control w-full"><option value="">Choose a decision</option>{decisionOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{queue === "publication-review" && decision === "request_changes" && <label className="block"><span className="mb-2 block text-sm font-semibold">Where is the change?</span><select value={changeTarget} onChange={(event) => setChangeTarget(event.target.value)} className="field-control w-full"><option value="customer_profile">Customer-facing profile</option><option value="location">Location details</option><option value="catalog">Products or catalogue</option><option value="operations">Pickup or operating setup</option><option value="money">Money or settlement</option><option value="business_details">Business basics</option></select></label>}<label className="block"><span className="mb-2 block text-sm font-semibold">{queue === "publication-review" && decision === "request_changes" ? "Changes the business must make" : "Reason or internal note"}</span><textarea required={decision === "reject" || decision === "request_information" || decision === "request_changes" || decision === "rejected" || decision === "escalated"} value={reason} onChange={(event) => setReason(event.target.value)} className="field-control min-h-28 w-full py-3" placeholder={queue === "publication-review" && decision === "request_changes" ? "Describe exactly what the merchant must correct before resubmitting." : "Record enough context for the next reviewer."} /></label><div className="flex flex-wrap justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={() => assign(selected)} loading={busy === selected.id}>Assign to me</Button><Button type="button" variant="ghost" onClick={() => setSelected(null)}>Cancel</Button><Button type="submit" loading={busy === selected.id}>Record decision</Button></div></form>}</Modal>
   </div>;
 }
 

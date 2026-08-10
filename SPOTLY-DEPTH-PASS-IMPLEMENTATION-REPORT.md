@@ -2,9 +2,9 @@
 
 # Spotly 5.1 Production-Depth Implementation Report
 
-**Candidate:** Spotly 5.1 production-depth pass  
-**Prepared:** 6 August 2026  
-**Source basis:** the supplied completion brief and post-rebuild audit  
+**Candidate:** Spotly 5.1 production-depth pass
+**Prepared:** 6 August 2026
+**Source basis:** the supplied completion brief and post-rebuild audit
 **Release status:** staging candidate; not represented as a completed public launch
 
 ## Executive summary

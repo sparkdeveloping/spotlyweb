@@ -91,7 +91,9 @@ export async function POST(request) {
       db.collection("businessFinanceSettings").doc(body.businessId).get()
     ]);
     if (!authUser.providerData.some((provider) => provider.providerId === "password")) throw Object.assign(new Error("Create or link an email-and-password credential before ordering."), { status: 409 });
-    if (!businessSnapshot.exists || !businessSnapshot.data().public) throw Object.assign(new Error("This business is not available."), { status: 404 });
+    const businessData = businessSnapshot.exists ? businessSnapshot.data() : null;
+    const businessLive = Boolean(businessData?.public) && (businessData?.status === "active" || businessData?.lifecycleStatus === "live");
+    if (!businessLive) throw Object.assign(new Error("This business is not accepting customer orders yet."), { status: 404 });
     if (!branchSnapshot.exists || branchSnapshot.data().businessId !== body.businessId) throw Object.assign(new Error("Choose a valid pickup branch."), { status: 422 });
 
     const settings = settingsSnapshot.data() || {};
@@ -125,6 +127,7 @@ export async function POST(request) {
     const orderRef = db.collection("orders").doc();
     const eventRef = db.collection("orderEvents").doc();
     const notificationRef = db.collection("notifications").doc();
+    const businessRef = db.collection("businesses").doc(body.businessId);
     const branchRef = db.collection("branches").doc(body.branchId);
     const paymentRequired = body.paymentMethod !== "cash" && body.paymentMethod !== "bank_transfer";
     const number = orderNumber();
@@ -133,9 +136,16 @@ export async function POST(request) {
     const result = await db.runTransaction(async (transaction) => {
       const freshRequest = await transaction.get(requestRef);
       if (freshRequest.exists) return freshRequest.data();
-      const freshBranch = await transaction.get(branchRef);
+      const [freshBusiness, freshBranch, productSnapshots] = await Promise.all([
+        transaction.get(businessRef),
+        transaction.get(branchRef),
+        Promise.all(productRefs.map((ref) => transaction.get(ref)))
+      ]);
+      const currentBusiness = freshBusiness.exists ? freshBusiness.data() : null;
+      if (!currentBusiness?.public || !(currentBusiness.status === "active" || currentBusiness.lifecycleStatus === "live")) {
+        throw Object.assign(new Error("This business is no longer accepting customer orders."), { status: 409 });
+      }
       if (!freshBranch.exists) throw Object.assign(new Error("This pickup location is no longer available."), { status: 409 });
-      const productSnapshots = await Promise.all(productRefs.map((ref) => transaction.get(ref)));
       const branchData = freshBranch.data();
       const availability = pickupAvailability(branchData, { days: 14 });
       const day = availability.days.find((item) => item.date === body.pickup.date);

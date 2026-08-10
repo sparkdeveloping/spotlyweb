@@ -10,7 +10,7 @@ Spotly is one operating network with five role-specific entrances:
 /admin     Platform governance and operational queues
 ```
 
-This repository is the **5.4 Business Operating System candidate**. It preserves the hardened 5.3 security/commerce and 5.2 semantic-theme work while adding a permanent multi-business portfolio, claims/access centres, explicit business routing, the Spotly Master Product Library, Staff product capture, reviewed AI-assisted product media, and a server-authoritative Business Money ledger/settlement foundation.
+This repository is the **5.5 Business Lifecycle Orchestration candidate**. It preserves the hardened 5.3 security/commerce and 5.2 semantic-theme work while retaining the 5.4 multi-business portfolio, Master Product Library and Business Money foundation and adding one five-stage merchant lifecycle, deterministic setup resume, a Launch Checklist, final Spotly launch review, lifecycle-gated navigation, persistent Business shell state, and server-authoritative go-live/suspension controls.
 
 ## Capability truth
 
@@ -19,7 +19,7 @@ This repository is the **5.4 Business Operating System candidate**. It preserves
 | Public homepage and waitlist | Pilot-ready UI; launch content and approved businesses require production configuration |
 | Customer marketplace | Pilot-ready candidate with real location/branch availability, transactional order creation, and reservation release; production payments and provider reconciliation remain |
 | Business claiming | Pilot-ready progressive flow with account drafts and persisted evidence |
-| Merchant operations | Business OS candidate with portfolio, multi-business context, catalogue library and Money; exact staging/build verification remains |
+| Merchant operations | Business Lifecycle candidate with portfolio, deterministic basics setup, Launch Checklist, lifecycle-gated preparation and live operations; exact staging/build verification remains |
 | Driver | Training-only; no live dispatch, earnings, GPS proof, or production job assignment |
 | Staff | Pilot-ready internal workflow foundation; external payroll and richer training content remain integrations |
 | Admin | Pilot-ready queue and review foundation; provider health and high-volume operations require production signals |
@@ -36,13 +36,24 @@ See [SPOTLY-CAPABILITY-MATRIX.md](./SPOTLY-CAPABILITY-MATRIX.md) for the detaile
 | `/claim` | Ten-stage business claim and access request |
 | `/claim/drafts` | Saved account claim drafts |
 | `/claim/status/[claimId]` | Claim review timeline and next actions |
-| `/business` | Business Portfolio; selected-business operations live under explicit `?business=` context |
+| `/business` | Business Portfolio; preparing businesses open their Launch Checklist and live businesses open Today under explicit `?business=` context |
 | `/driver` | Internal training scenarios only |
 | `/staff` | Staff agenda, scoped work, learning, leave, pay, assets, and support |
 | `/admin` | Urgent operations, queues, health, configuration, and governance |
 | `/admin/queues/[queue]` | Exact filtered operational queues |
 | `/support` | Context-aware customer, merchant, driver, and staff support |
 | `/account` | Profile, contact, preferences, workspaces, security, and build information |
+
+
+## Business lifecycle
+
+Selected businesses now use one merchant-facing lifecycle:
+
+```text
+Verify access → Set up business basics → Prepare for launch → Spotly launch review → Live
+```
+
+Before launch, `/business/launch?business=<id>` is the authoritative home. It separates merchant-controlled progress from Spotly reviews, points to the exact next task, and keeps operational pages such as Orders, Insights, Promotions and Kiosk gated until the business is actually live.
 
 ## Technology
 
@@ -61,7 +72,7 @@ See [SPOTLY-CAPABILITY-MATRIX.md](./SPOTLY-CAPABILITY-MATRIX.md) for the detaile
 Requirements:
 
 - Node.js 22.x
-- npm 11 or later
+- npm 10.9 or later
 
 ```bash
 cp .env.example .env.local
@@ -86,14 +97,14 @@ npm run build
 
 Also validate Firestore and Storage rules with the Firebase Emulator Suite and run authenticated browser smoke tests against the exact staging deployment.
 
-The generation environment could not complete `npm ci` because its internal npm mirror returned HTTP 404 for `zod-validation-error-4.0.2.tgz`; therefore ESLint, Next.js build, browser screenshots, and runtime accessibility checks are **not claimed as passed**. See [SPOTLY-BUSINESS-VALIDATION-REPORT.md](./SPOTLY-BUSINESS-VALIDATION-REPORT.md).
+The generation environment could not complete `npm ci` because its internal npm mirror returned HTTP 404 for `zod-validation-error-4.0.2.tgz`; therefore ESLint, the Next.js production build, Firebase emulator execution, browser screenshots, and runtime accessibility checks are **not claimed as passed in this environment**. See [SPOTLY-BUSINESS-LIFECYCLE-VALIDATION-REPORT.md](./SPOTLY-BUSINESS-LIFECYCLE-VALIDATION-REPORT.md).
 
 ## Release traceability
 
 Set these values for every preview and production deployment:
 
 ```env
-NEXT_PUBLIC_APP_VERSION=5.4.0-business-os
+NEXT_PUBLIC_APP_VERSION=5.5.0-business-lifecycle
 NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
 NEXT_PUBLIC_BUILD_DATE=<ISO timestamp>
 NEXT_PUBLIC_APP_ENV=preview
@@ -115,6 +126,15 @@ The safe version label appears in authenticated Account and Admin surfaces and c
 
 ## Documentation
 
+- [SPOTLY-BUSINESS-LIFECYCLE-IMPLEMENTATION-REPORT.md](./SPOTLY-BUSINESS-LIFECYCLE-IMPLEMENTATION-REPORT.md)
+- [SPOTLY-BUSINESS-SETUP-RESUME-REPORT.md](./SPOTLY-BUSINESS-SETUP-RESUME-REPORT.md)
+- [SPOTLY-BUSINESS-NAVIGATION-ARCHITECTURE-REPORT.md](./SPOTLY-BUSINESS-NAVIGATION-ARCHITECTURE-REPORT.md)
+- [SPOTLY-BUSINESS-LAUNCH-CHECKLIST-REPORT.md](./SPOTLY-BUSINESS-LAUNCH-CHECKLIST-REPORT.md)
+- [SPOTLY-BUSINESS-LAUNCH-REVIEW-REPORT.md](./SPOTLY-BUSINESS-LAUNCH-REVIEW-REPORT.md)
+- [SPOTLY-BUSINESS-LIFECYCLE-ROUTE-INVENTORY.md](./SPOTLY-BUSINESS-LIFECYCLE-ROUTE-INVENTORY.md)
+- [SPOTLY-BUSINESS-STATE-VOCABULARY.md](./SPOTLY-BUSINESS-STATE-VOCABULARY.md)
+- [SPOTLY-BUSINESS-LIFECYCLE-TEST-REPORT.md](./SPOTLY-BUSINESS-LIFECYCLE-TEST-REPORT.md)
+- [SPOTLY-BUSINESS-LIFECYCLE-VALIDATION-REPORT.md](./SPOTLY-BUSINESS-LIFECYCLE-VALIDATION-REPORT.md)
 - [SPOTLY-DEPTH-PASS-IMPLEMENTATION-REPORT.md](./SPOTLY-DEPTH-PASS-IMPLEMENTATION-REPORT.md)
 - [SPOTLY-CAPABILITY-MATRIX.md](./SPOTLY-CAPABILITY-MATRIX.md)
 - [SPOTLY-ROUTE-INVENTORY.md](./SPOTLY-ROUTE-INVENTORY.md)

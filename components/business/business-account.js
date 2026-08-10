@@ -20,9 +20,7 @@ import {
   Store,
   UserRoundCheck
 } from "lucide-react";
-import { AuthGate } from "@/components/auth-gate";
-import { PortalShell } from "@/components/portal-shell";
-import { Badge, Button, Card, EmptyState, PageHeader, SearchField, StatusBadge } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, PageHeader, ProgressBar, SearchField, StatusBadge } from "@/components/ui";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useToast } from "@/components/providers";
 
@@ -44,6 +42,17 @@ function humanStatus(value = "") {
   return String(value || "").replaceAll("_", " ");
 }
 
+function claimStatusLabel(value = "") {
+  const current = String(value || "").toLowerCase();
+  if (["submitted", "under_review", "parent_approval_required", "claim_pending", "claimed_pending_verification", "pending"].includes(current)) return "Waiting on Spotly";
+  if (["information_requested", "changes_requested", "claim_needs_information", "needs_information"].includes(current)) return "Your action";
+  if (["approved", "claimed", "verified"].includes(current)) return "Business access approved";
+  if (["rejected", "declined"].includes(current)) return "Business access rejected";
+  if (current === "draft") return "Draft";
+  if (["closed", "withdrawn"].includes(current)) return "Closed";
+  return humanStatus(current || "submitted");
+}
+
 function scopeLabel(item) {
   if (item.businessWide) return "All locations";
   const count = item.branchIds?.length || item.accessibleLocationCount || 0;
@@ -51,22 +60,25 @@ function scopeLabel(item) {
 }
 
 function PortfolioBusinessCard({ item }) {
-  const openHref = `/business/today?business=${encodeURIComponent(item.id)}`;
+  const openHref = item.defaultHref || `/business/launch?business=${encodeURIComponent(item.id)}`;
+  const live = item.lifecycleStage === "live";
+  const waiting = item.lifecycleStage === "review";
   return <Card variant="bordered" className="group flex h-full flex-col p-5">
     <div className="flex items-start gap-4">
       <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">
         {item.logo ? <Image unoptimized src={item.logo} alt="" width={48} height={48} className="h-full w-full object-cover" /> : <Store className="h-5 w-5" />}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-semibold">{item.name}</h2>{item.public ? <Badge tone="success">Public</Badge> : <Badge tone="neutral">Private</Badge>}</div>
+        <div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-semibold">{item.name}</h2><Badge tone={live ? "success" : waiting ? "info" : "accent"}>{item.lifecycleLabel || (live ? "Live" : "Preparing")}</Badge></div>
         <p className="mt-1 text-sm text-secondary">{item.roleLabel} · {scopeLabel(item)}</p>
         {(item.organizationName || item.city) && <p className="mt-1 truncate text-xs text-tertiary">{[item.organizationName, item.city].filter(Boolean).join(" · ")}</p>}
       </div>
     </div>
+    {!live && <div className="mt-5"><div className="flex items-center justify-between text-xs"><span className="font-semibold">Your launch setup</span><span className="text-secondary">{item.merchantProgress || 0}%</span></div><ProgressBar value={item.merchantProgress || 0} label={`${item.name} launch setup progress`} className="mt-2" /></div>}
     <div className="mt-5 flex-1 space-y-2">
-      {item.attention?.length ? item.attention.slice(0, 2).map((attention) => <Link key={attention.href} href={attention.href} className="flex items-start gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5 text-sm hover:bg-[var(--surface-hover)]"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" /><span className="min-w-0 flex-1">{attention.label}</span><ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-tertiary" /></Link>) : <div className="flex items-center gap-2 rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-sm text-[var(--on-success-soft)]"><Check className="h-4 w-4" />No account-level setup issue</div>}
+      {item.attention?.length ? item.attention.slice(0, 2).map((attention) => <Link key={attention.href} href={attention.href} className="flex items-start gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5 text-sm hover:bg-[var(--surface-hover)]"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" /><span className="min-w-0 flex-1">{attention.label}</span><ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-tertiary" /></Link>) : <div className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm ${live ? "bg-[var(--success-soft)] text-[var(--on-success-soft)]" : waiting ? "bg-[var(--info-soft)] text-[var(--on-info-soft)]" : "bg-[var(--surface-2)] text-secondary"}`}><Check className="h-4 w-4" />{live ? "No account-level issue" : waiting ? "No action needed while Spotly reviews" : "Continue from the launch checklist"}</div>}
     </div>
-    <Button asChild variant="outline" className="mt-5 w-full"><Link href={openHref}>Open business<ArrowRight className="h-4 w-4" /></Link></Button>
+    <Button asChild variant={live ? "primary" : "outline"} className="mt-5 w-full"><Link href={openHref}>{item.lifecycleActionLabel || (live ? "Open business" : "Continue preparation")}<ArrowRight className="h-4 w-4" /></Link></Button>
   </Card>;
 }
 
@@ -91,7 +103,7 @@ function PortfolioView({ data, search, setSearch }) {
     {(data.attention || []).length > 0 && <Card variant="bordered" className="overflow-hidden"><div className="border-b p-5"><h2 className="text-lg font-semibold">Needs your attention</h2><p className="mt-1 text-sm text-secondary">The most important cross-business actions, not another metrics dashboard.</p></div><div className="divide-y">{data.attention.slice(0, 12).map((item) => <Link href={item.href} key={item.id} className="flex items-center gap-4 p-4 hover:bg-[var(--surface-2)]"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--warning-soft)] text-warning"><CircleAlert className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.businessName || "Spotly Business"}</span><span className="mt-1 block text-sm text-secondary">{item.title}</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link>)}</div></Card>}
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-xl font-semibold">Your businesses</h2><p className="mt-1 text-sm text-secondary">Own, manage, or operate each business from the access assigned to you.</p></div>{(data.businesses || []).length > 4 && <div className="w-full sm:max-w-sm"><SearchField value={search} onChange={setSearch} placeholder="Search businesses, organization, role…" /></div>}</div>
     {businesses.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{businesses.map((item) => <PortfolioBusinessCard key={item.id} item={item} />)}</div> : <EmptyState icon={Building2} title={search ? "No businesses match your search" : "No active business access yet"} description={search ? "Try another business name, organization, city, or role." : "Claims and invitations stay available here while Spotly verifies your first business."} action={!search && <Button asChild><Link href="/claim">Start a business claim</Link></Button>} />}
-    {(data.claims || []).length > 0 && <Card variant="bordered" className="overflow-hidden"><div className="flex items-center justify-between gap-4 border-b p-5"><div><h2 className="font-semibold">Applications</h2><p className="mt-1 text-sm text-secondary">Claims stay visible even after other businesses are approved.</p></div><Button asChild variant="outline" size="sm"><Link href="/business/claims">View all</Link></Button></div><div className="divide-y">{data.claims.slice(0, 4).map((claim) => <Link key={claim.id} href={`/claim/status/${claim.id}`} className="flex items-center gap-4 p-4 hover:bg-[var(--surface-2)]"><FileCheck2 className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{claim.businessName}</span><span className="mt-1 block text-xs text-secondary">Updated {formatDate(claim.updatedAt)}</span></span><StatusBadge status={humanStatus(claim.status)} /><ArrowRight className="h-4 w-4 text-tertiary" /></Link>)}</div></Card>}
+    {(data.claims || []).length > 0 && <Card variant="bordered" className="overflow-hidden"><div className="flex items-center justify-between gap-4 border-b p-5"><div><h2 className="font-semibold">Business access applications</h2><p className="mt-1 text-sm text-secondary">Claims stay visible even after access to other businesses is approved.</p></div><Button asChild variant="outline" size="sm"><Link href="/business/claims">View all</Link></Button></div><div className="divide-y">{data.claims.slice(0, 4).map((claim) => <Link key={claim.id} href={`/claim/status/${claim.id}`} className="flex items-center gap-4 p-4 hover:bg-[var(--surface-2)]"><FileCheck2 className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{claim.businessName}</span><span className="mt-1 block text-xs text-secondary">Updated {formatDate(claim.updatedAt)}</span></span><StatusBadge status={claimStatusLabel(claim.status)} /><ArrowRight className="h-4 w-4 text-tertiary" /></Link>)}</div></Card>}
   </div>;
 }
 
@@ -99,12 +111,12 @@ function ClaimsView({ data }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const claims = useMemo(() => (data.claims || []).filter((item) => {
-    const statusMatch = filter === "all" || (filter === "needs_action" && item.needsAction) || (filter === "drafts" && item.status === "draft") || (filter === "review" && ["submitted", "under_review", "parent_approval_required", "information_requested", "changes_requested"].includes(item.status)) || (filter === "approved" && item.status === "approved") || (filter === "closed" && item.closed);
+    const statusMatch = filter === "all" || (filter === "needs_action" && item.needsAction) || (filter === "drafts" && item.status === "draft") || (filter === "review" && ["submitted", "under_review", "parent_approval_required", "claim_pending", "claimed_pending_verification", "pending"].includes(item.status)) || (filter === "approved" && item.status === "approved") || (filter === "closed" && item.closed);
     const queryMatch = !query.trim() || `${item.businessName} ${item.id} ${item.claimType}`.toLowerCase().includes(query.trim().toLowerCase());
     return statusMatch && queryMatch;
   }), [data.claims, filter, query]);
-  const filters = [{ id: "all", label: "All" }, { id: "needs_action", label: "Needs action" }, { id: "drafts", label: "Drafts" }, { id: "review", label: "Under review" }, { id: "approved", label: "Approved" }, { id: "closed", label: "Closed" }];
-  return <div className="space-y-6"><PageHeader eyebrow="Business account" title="Claims & applications" description="Track every business you are claiming, correcting, or requesting access to—even while you already manage other businesses." action={<Button asChild><Link href="/claim"><Plus className="h-4 w-4" />Start a claim</Link></Button>} /><Card variant="bordered" className="p-4"><div className="grid gap-3 lg:grid-cols-[1fr_auto]"><SearchField value={query} onChange={setQuery} placeholder="Search business or claim reference" /><div className="flex flex-wrap gap-2">{filters.map((item) => <button key={item.id} onClick={() => setFilter(item.id)} className={`rounded-xl border px-3 py-2 text-sm font-semibold ${filter === item.id ? "border-business bg-business-soft text-[var(--on-business-soft)]" : "hover:bg-[var(--surface-2)]"}`}>{item.label}</button>)}</div></div></Card>{claims.length ? <div className="space-y-3">{claims.map((claim) => <Card key={claim.id} variant="bordered" className="p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><FileCheck2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{claim.businessName}</h2><StatusBadge status={humanStatus(claim.status)} /></div><p className="mt-1 text-sm text-secondary">{humanStatus(claim.claimType)} · Updated {formatDate(claim.updatedAt)}</p>{claim.nextAction && <p className="mt-2 text-sm text-warning">{claim.nextAction}</p>}</div><Button asChild variant={claim.needsAction ? "primary" : "outline"}><Link href={`/claim/status/${claim.id}`}>{claim.needsAction ? "Continue" : "View status"}<ArrowRight className="h-4 w-4" /></Link></Button></div></Card>)}</div> : <EmptyState icon={FileCheck2} title="No claims in this view" description="Claims never disappear just because another business is already active." />}</div>;
+  const filters = [{ id: "all", label: "All" }, { id: "needs_action", label: "Needs action" }, { id: "drafts", label: "Drafts" }, { id: "review", label: "Waiting on Spotly" }, { id: "approved", label: "Access approved" }, { id: "closed", label: "Closed" }];
+  return <div className="space-y-6"><PageHeader eyebrow="Business account" title="Claims & applications" description="Track every business you are claiming, correcting, or requesting access to—even while you already manage other businesses." action={<Button asChild><Link href="/claim"><Plus className="h-4 w-4" />Start a claim</Link></Button>} /><Card variant="bordered" className="p-4"><div className="grid gap-3 lg:grid-cols-[1fr_auto]"><SearchField value={query} onChange={setQuery} placeholder="Search business or claim reference" /><div className="flex flex-wrap gap-2">{filters.map((item) => <button key={item.id} onClick={() => setFilter(item.id)} className={`rounded-xl border px-3 py-2 text-sm font-semibold ${filter === item.id ? "border-business bg-business-soft text-[var(--on-business-soft)]" : "hover:bg-[var(--surface-2)]"}`}>{item.label}</button>)}</div></div></Card>{claims.length ? <div className="space-y-3">{claims.map((claim) => <Card key={claim.id} variant="bordered" className="p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><FileCheck2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{claim.businessName}</h2><StatusBadge status={claimStatusLabel(claim.status)} /></div><p className="mt-1 text-sm text-secondary">{humanStatus(claim.claimType)} · Updated {formatDate(claim.updatedAt)}</p>{claim.nextAction && <p className="mt-2 text-sm text-warning">{claim.nextAction}</p>}</div><Button asChild variant={claim.needsAction ? "primary" : "outline"}><Link href={`/claim/status/${claim.id}`}>{claim.needsAction ? "Continue" : "View status"}<ArrowRight className="h-4 w-4" /></Link></Button></div></Card>)}</div> : <EmptyState icon={FileCheck2} title="No claims in this view" description="Claims never disappear just because another business is already active." />}</div>;
 }
 
 function InvitationsView({ data, refresh }) {
@@ -125,7 +137,7 @@ function InvitationsView({ data, refresh }) {
 }
 
 function AccessView({ data }) {
-  return <div className="space-y-6"><PageHeader eyebrow="Business account" title="Your access" description="Understand exactly which businesses and locations this account can operate. Team management remains inside each business." />{(data.businesses || []).length ? <div className="space-y-3">{data.businesses.map((item) => <Card key={item.id} variant="bordered" className="p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><ShieldCheck className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{item.name}</h2><Badge tone={item.businessWide ? "success" : "neutral"}>{item.roleLabel}</Badge></div><p className="mt-1 text-sm text-secondary">{item.businessWide ? "All business locations" : scopeLabel(item)}{item.organizationName ? ` · ${item.organizationName}` : ""}</p><p className="mt-2 text-xs leading-5 text-tertiary">{item.permissions?.length ? `${item.permissions.length} effective permission ${item.permissions.length === 1 ? "grant" : "grants"}. Business-specific Team controls determine who else can access this business.` : "Access is defined by your assigned business role."}</p></div><Button asChild variant="outline"><Link href={`/business/today?business=${encodeURIComponent(item.id)}`}>Open business</Link></Button></div></Card>)}</div> : <EmptyState icon={UserRoundCheck} title="No active business access" description="Approved claims and accepted invitations will appear here." />}</div>;
+  return <div className="space-y-6"><PageHeader eyebrow="Business account" title="Your access" description="Understand exactly which businesses and locations this account can operate. Team management remains inside each business." />{(data.businesses || []).length ? <div className="space-y-3">{data.businesses.map((item) => <Card key={item.id} variant="bordered" className="p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-center"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><ShieldCheck className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{item.name}</h2><Badge tone={item.businessWide ? "success" : "neutral"}>{item.roleLabel}</Badge></div><p className="mt-1 text-sm text-secondary">{item.businessWide ? "All business locations" : scopeLabel(item)}{item.organizationName ? ` · ${item.organizationName}` : ""}</p><p className="mt-2 text-xs leading-5 text-tertiary">{item.permissions?.length ? `${item.permissions.length} effective permission ${item.permissions.length === 1 ? "grant" : "grants"}. Business-specific Team controls determine who else can access this business.` : "Access is defined by your assigned business role."}</p></div><Button asChild variant="outline"><Link href={item.defaultHref || `/business/launch?business=${encodeURIComponent(item.id)}`}>{item.lifecycleActionLabel || "Open business"}</Link></Button></div></Card>)}</div> : <EmptyState icon={UserRoundCheck} title="No active business access" description="Approved claims and accepted invitations will appear here." />}</div>;
 }
 
 function BusinessAccountContent({ section }) {
@@ -147,5 +159,5 @@ function BusinessAccountContent({ section }) {
 }
 
 export function BusinessAccount({ section = "portfolio" }) {
-  return <AuthGate portal="business" title="Sign in to manage your businesses"><PortalShell portalId="business" activeSection={section} navigation={businessAccountNavigation} footer={false}><BusinessAccountContent section={section} /></PortalShell></AuthGate>;
+  return <BusinessAccountContent section={section} />;
 }

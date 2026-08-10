@@ -1,25 +1,28 @@
 # Build and validation report
 
-Generated: August 9, 2026  
-Release: `5.4.0-business-os`
+Generated: August 9, 2026
+Release: `5.5.0-business-lifecycle`
 
-## Passed
+## Passed in this environment
 
-- JavaScript/JSX syntax/import integrity through `npm run check:js`
+- JavaScript/JSX source integrity through `npm run check:js`
 - Semantic theme safety through `npm run check:theme`
-- Node test suite: 56 passed, 0 failed
+- Node test suite; final count is recorded in `SPOTLY-BUSINESS-LIFECYCLE-VALIDATION-REPORT.md`
+- All API `route.js` modules passed `node --check`
 - JSON parsing: 7 files
 - SVG parsing: 5 files
 
+## Dependency installation attempt
+
+`npm ci --ignore-scripts` failed because the configured internal npm registry returned HTTP 404 for `zod-validation-error-4.0.2.tgz`. A direct public-registry install attempt is not available from this execution environment.
+
 ## Attempted but blocked
 
-`npm ci --ignore-scripts` failed because the configured internal npm registry returned HTTP 404 for `zod-validation-error-4.0.2.tgz`. The environment also has npm 10.9.2 while the repository requires npm 11+.
+- `npm run test:rules`: `npx` could not retrieve `firebase-tools` from the internal registry. Java 21 is installed, so Java is not the blocker here.
+- `npm run lint`: `eslint` is unavailable because dependency installation did not complete.
+- `npm run build`: `next` is unavailable because dependency installation did not complete.
 
-`npm run test:rules` could not retrieve `firebase-tools`.
-
-`npm run lint` could not run because `eslint` is not installed.
-
-`npm run build` could not run because `next` is not installed.
+These are environment validation gaps, not claimed passes.
 
 ## Required external release gate
 
@@ -34,4 +37,4 @@ npm run build
 npm run start
 ```
 
-Then run protected staging QA for multi-business portfolio/routing, claims/invitations, catalogue library/import/camera, AI media, Money/settlement/payouts, mobile, light/dark and accessibility.
+Then run protected staging QA for lifecycle transitions, setup resume, multi-business switching, slow-network sidebar stability, launch review, requested changes, settlement review, catalogue readiness, mobile, light/dark and accessibility.
