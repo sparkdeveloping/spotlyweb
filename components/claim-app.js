@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, BadgeCheck, Check, ChevronRight, FileCheck2, MapPin, ShieldCheck, Store, Trash2, UploadCloud } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button, Card, ProgressBar, SearchField } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { useAuth } from "@/components/firebase-provider";

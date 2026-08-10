@@ -104,7 +104,7 @@ The generation environment could not complete `npm ci` because its internal npm 
 Set these values for every preview and production deployment:
 
 ```env
-NEXT_PUBLIC_APP_VERSION=5.5.0-business-lifecycle
+NEXT_PUBLIC_APP_VERSION=5.5.1-business-lifecycle-hotfix
 NEXT_PUBLIC_BUILD_COMMIT=<git commit SHA>
 NEXT_PUBLIC_BUILD_DATE=<ISO timestamp>
 NEXT_PUBLIC_APP_ENV=preview

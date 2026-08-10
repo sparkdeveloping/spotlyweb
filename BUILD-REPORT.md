@@ -1,7 +1,7 @@
 # Build and validation report
 
 Generated: August 9, 2026
-Release: `5.5.0-business-lifecycle`
+Release: `5.5.1-business-lifecycle-hotfix`
 
 ## Passed in this environment
 

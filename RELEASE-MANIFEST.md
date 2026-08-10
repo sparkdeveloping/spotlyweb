@@ -1,9 +1,9 @@
-# Spotly Platform 5.5 release manifest
+# Spotly Platform 5.5.1 release manifest
 
 Generated: August 9, 2026
 Project: `spotly-web-platform`
-Version: `5.5.0`
-Release: Business Lifecycle Orchestration candidate
+Version: `5.5.1`
+Release: Business Lifecycle Orchestration claim runtime hotfix
 
 ## Release contents
 
@@ -27,7 +27,7 @@ Release: Business Lifecycle Orchestration candidate
 
 - `npm run check:js` passed
 - `npm run check:theme` passed
-- `npm test` passed: 85/85
+- `npm test` passed: 86/86
 - All `app/api/**/route.js` files passed `node --check`
 - JSON and SVG parsing passed
 
