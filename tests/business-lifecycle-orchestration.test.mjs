@@ -21,6 +21,12 @@ test("setup completion is data-derived and progress is based on completed requir
   assert.doesNotMatch(source, /currentPosition \/.*steps\.length/);
 });
 
+test("setup location completion ignores stale incomplete branches and accepts any valid saved location", () => {
+  const source = read("lib/business-lifecycle.js");
+  assert.match(source, /location: \(\) => branches\.some\(\(branch\) => Boolean/);
+  assert.doesNotMatch(source, /const firstBranch = branches\[0\]/);
+});
+
 test("setup resume validates the requested step against the first incomplete prerequisite", () => {
   const source = read("lib/business-lifecycle.js");
   assert.match(source, /resolveSetupStep/);
