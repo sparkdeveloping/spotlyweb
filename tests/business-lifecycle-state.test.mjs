@@ -166,3 +166,36 @@ test("explicit Review can aggregate an earlier blocker while ordinary future ste
   const starter = lifecycleModule.resolveSetupStep({ requestedStep: "starter", business, branches: [] });
   assert.equal(starter.stepId, "location");
 });
+
+test("published pickup business without a persisted location is operationally blocked instead of falsely 100% live", () => {
+  const lifecycle = lifecycleModule.getBusinessLifecycle({
+    business: completedBusiness({ status: "active", public: true, operatingModel: "online_only" }),
+    branches: [],
+    products: [{ id: "p1", active: true, price: 2 }],
+    operations: { preparationMinutes: 20, pickupInstructions: "Collect at desk" },
+    membership: { role: "business_owner", status: "active" },
+    platformSettings: {}
+  });
+  const location = lifecycle.launchChecks.find((item) => item.id === "location");
+  assert.equal(location.required, true);
+  assert.equal(location.blocksLaunch, true);
+  assert.equal(lifecycle.operationallyBlocked, true);
+  assert.equal(lifecycle.canOperate, false);
+  assert.equal(lifecycle.navigationMode, "prelaunch");
+  assert.equal(lifecycle.statusLabel, "Live · Action required");
+  assert.match(lifecycle.defaultHref, /\/business\/launch/);
+});
+
+test("online-only non-fulfilment business can still treat a physical location as optional", () => {
+  const lifecycle = lifecycleModule.getBusinessLifecycle({
+    business: completedBusiness({ operatingModel: "online_only", capabilities: ["profile"], status: "draft", public: false }),
+    branches: [],
+    products: [],
+    operations: {},
+    membership: { role: "business_owner", status: "active" },
+    platformSettings: {}
+  });
+  const location = lifecycle.launchChecks.find((item) => item.id === "location");
+  assert.equal(location.required, false);
+  assert.equal(location.blocksLaunch, false);
+});

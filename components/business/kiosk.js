@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, ExternalLink, Keyboard, LockKeyhole, MonitorSmartphone, RefreshCw, ScanLine, ShieldCheck, Store, Truck, XCircle } from "lucide-react";
 import { authenticatedFetch } from "@/lib/api-client";
 import { Badge, Button, Card, EmptyState, PageHeader, SectionCard, StatusBadge } from "@/components/ui";
@@ -22,6 +23,7 @@ export function KioskView() {
   useEffect(()=>{load();},[load]);
   async function create(){if(!selectedBranchId)return setError("Choose a location first.");setCreating(true);setError("");try{const result=await authenticatedFetch("/api/kiosk/enroll",{method:"POST",body:JSON.stringify({action:"create",businessId:selectedBusinessId,branchId:selectedBranchId,...form})});setEnrollment(result);await load();}catch(reason){setError(reason.message);}finally{setCreating(false);}}
   async function revoke(device){if(!confirm(`Revoke ${device.name}? The device will stop working immediately.`))return;try{await authenticatedFetch("/api/kiosk/enroll",{method:"POST",body:JSON.stringify({action:"revoke",deviceId:device.id,businessId:selectedBusinessId})});await load();}catch(reason){setError(reason.message);}}
+  if (!branches.length) return <div className="space-y-6"><div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader eyebrow="Shared devices" title="Kiosk" description="Kiosk devices are always locked to one real business location."/><WorkspaceContextSwitcher/></div><Card variant="bordered" className="p-8 text-center"><Store className="mx-auto h-9 w-9 text-[var(--accent)]"/><h2 className="mt-4 text-xl font-semibold">Add a location before enrolling a kiosk</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-secondary">Spotly will not invent a “Main location.” Create the exact customer pickup or Driver handoff location first, then return here to enroll the device.</p><Button asChild className="mt-5"><Link href={`/business/branches?business=${encodeURIComponent(selectedBusinessId)}`}>Add location</Link></Button></Card></div>;
   return <div className="space-y-6"><div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader eyebrow="Shared devices" title="Kiosk" description="Enroll branch-locked devices without signing a customer-facing tablet into the Business owner account."/><WorkspaceContextSwitcher/></div>{error&&<div className="rounded-xl bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{error}</div>}
     <div className="grid gap-5 xl:grid-cols-[1fr_380px]"><SectionCard title="Add a kiosk device" description="Each credential is scoped to one location and one job."><div className="space-y-4">
       {branches.length>1&&<label className="block text-sm font-semibold">Location<select className="field-control mt-2 w-full" value={selectedBranchId||""} onChange={(e)=>setSelectedBranchId(e.target.value)}>{branches.map((branch)=><option key={branch.id} value={branch.id}>{branch.branchName||branch.name||branch.displayName}</option>)}</select></label>}

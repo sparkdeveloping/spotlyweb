@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Bike, CheckCircle2, Clock3, MapPin, PackageCheck, RefreshCw, Truck } from "lucide-react";
 import { authenticatedFetch } from "@/lib/api-client";
 import { Badge, Button, Card, EmptyState, PageHeader, SectionCard, StatusBadge } from "@/components/ui";
@@ -68,6 +69,8 @@ export function DeliveryView() {
 
   const branchJobs = useMemo(() => jobs.filter((job) => !selectedBranchId || job.branchId === selectedBranchId).sort((a,b)=>String(b.updatedAt||b.createdAt||"").localeCompare(String(a.updatedAt||a.createdAt||""))), [jobs, selectedBranchId]);
   const active = branchJobs.filter((job) => !terminal.has(job.state));
+
+  if (!branches.length) return <div className="space-y-6"><PageHeader eyebrow="Fulfilment" title="Delivery" description="Delivery is configured per exact business location."/><Card variant="bordered" className="p-8 text-center"><MapPin className="mx-auto h-9 w-9 text-[var(--accent)]"/><h2 className="mt-4 text-xl font-semibold">Add the pickup location first</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-secondary">Drivers need a real branch with an address before Spotly can configure pickup coordinates, service radius, handoff instructions, or dispatch.</p><Button asChild className="mt-5"><Link href={`/business/branches?business=${encodeURIComponent(selectedBusinessId)}`}>Add location</Link></Button></Card></div>;
 
   return <div className="space-y-6"><PageHeader eyebrow="Fulfilment" title="Delivery" description="Configure this location, prepare delivery orders, and hand them to the assigned Driver without leaving Spotly Business." actions={<Button variant="outline" onClick={load}><RefreshCw className="h-4 w-4"/>Refresh</Button>} />
     {error && <div className="rounded-xl bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]"><AlertTriangle className="mr-2 inline h-4 w-4"/>{error}</div>}

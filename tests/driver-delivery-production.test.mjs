@@ -72,3 +72,12 @@ test("Admin Driver approval validates evidence before writing approval state", a
   assert.ok(block.indexOf('approvedTypes.has("identity")') < block.indexOf("batch.set(appRef"));
   assert.ok(block.indexOf('approvedTypes.has("licence")') < block.indexOf("batch.set(appRef"));
 });
+
+test("Business delivery is visible in live commerce navigation and branchless kiosk/delivery refuse fake Main location", async () => {
+  const [archetypes, kiosk, delivery] = await Promise.all([read("data/business-archetypes.js"), read("components/business/kiosk.js"), read("components/business/delivery.js")]);
+  assert.match(archetypes, /id: "delivery"/);
+  assert.match(archetypes, /href\("\/business\/delivery"\)/);
+  assert.match(kiosk, /Add a location before enrolling a kiosk/);
+  assert.match(kiosk, /will not invent a “Main location.”/);
+  assert.match(delivery, /Add the pickup location first/);
+});

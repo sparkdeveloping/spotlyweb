@@ -121,7 +121,7 @@ export function BusinessDataProvider({ children }) {
           launchReviewStatus: nextLifecycle.launchReview?.status || "",
           externalReviewCount: nextLifecycle.externalReviewCount || 0,
           merchantActionCount: nextLifecycle.merchantActionCount || 0,
-          attention: nextLifecycle.nextAction && nextLifecycle.stage !== "live" ? [{ type: nextLifecycle.nextAction.id, label: nextLifecycle.nextAction.label, href: nextLifecycle.nextAction.href }] : []
+          attention: nextLifecycle.nextAction && (nextLifecycle.stage !== "live" || !nextLifecycle.canOperate) ? [{ type: nextLifecycle.nextAction.id, label: nextLifecycle.nextAction.label, href: nextLifecycle.nextAction.href }] : []
         } : choice));
       }
       return nextLifecycle;

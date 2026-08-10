@@ -41,6 +41,10 @@ const views = {
 };
 
 function sectionAllowed(section, lifecycle) {
+  // The lifecycle snapshot is loaded independently from the business document. During
+  // initial hydration, business switching, or a failed lifecycle request it can be null.
+  // Never let navigation policy turn that recoverable state into a render crash.
+  if (!lifecycle) return ["launch", "setup", "support"].includes(section);
   if (lifecycle.navigationMode === "suspended") return ["launch", "support", "settings"].includes(section);
   if (lifecycle.navigationMode === "live") return true;
   if (lifecycle.navigationMode === "access") return ["launch", "support"].includes(section);

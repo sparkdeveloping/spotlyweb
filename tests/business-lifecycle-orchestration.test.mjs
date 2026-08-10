@@ -65,6 +65,8 @@ test("pre-live navigation is lifecycle-gated instead of setup-complete gated", (
   assert.match(nav, /Launch checklist/);
   assert.match(nav, /Business details/);
   assert.match(workspace, /navigationMode === "basics"/);
+  // recoverable null lifecycle must not crash workspace navigation while lifecycle loads/fails
+  assert.match(workspace, /if \(!lifecycle\) return/);
   assert.match(workspace, /LockedBusinessFeature/);
   assert.doesNotMatch(nav, /onboardingStatus === "complete"/);
 });
