@@ -240,7 +240,7 @@ export function BusinessSetupView() {
           id: resolvedBranchId || undefined,
           name: branchDraft.branchName || branchDraft.name || "Main location",
           branchName: branchDraft.branchName || branchDraft.name || "Main location",
-          status: branchDraft.status === "provisional" ? "draft" : branchDraft.status || "draft"
+          status: ["provisional", "draft"].includes(branchDraft.status) ? "active" : branchDraft.status || "active"
         }, selectedBusinessId, business?.organizationId, user, { makePrimary: true });
         const savedBranch = {
           ...branchDraft,
@@ -248,12 +248,16 @@ export function BusinessSetupView() {
           businessId: selectedBusinessId,
           name: branchDraft.branchName || branchDraft.name || "Main location",
           branchName: branchDraft.branchName || branchDraft.name || "Main location",
-          status: branchDraft.status === "provisional" ? "draft" : branchDraft.status || "draft"
+          status: ["provisional", "draft"].includes(branchDraft.status) ? "active" : branchDraft.status || "active"
         };
         projectedBranches = branches.some((item) => item.id === resolvedBranchId)
           ? branches.map((item) => item.id === resolvedBranchId ? { ...item, ...savedBranch } : item)
           : [savedBranch, ...branches];
         if (!branchDraft.id && resolvedBranchId) setBranchDraft((current) => ({ ...current, id: resolvedBranchId }));
+        // Force a server-authoritative location refresh after the write. The Business workspace
+        // must not depend on a separately-deployed Firestore composite index to discover the
+        // location it just created.
+        await workspace.refreshBranches(selectedBusinessId, { silent: true });
       }
 
       if (step.id === "offering") {

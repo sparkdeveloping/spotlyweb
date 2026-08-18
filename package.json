@@ -22,7 +22,8 @@
     "test:integrity": "node --test tests/theme-integrity.test.mjs tests/contrast.test.mjs tests/reservation-release.test.mjs",
     "check:theme": "node scripts/theme-safety.mjs",
     "test:rules": "npx --yes firebase-tools emulators:exec --project demo-spotly-rules --only auth,firestore,storage \"node --test tests/emulator/rules-emulator.mjs\"",
-    "test:security": "node --test tests/security-commerce-integrity.test.mjs"
+    "test:security": "node --test tests/security-commerce-integrity.test.mjs",
+    "audit:locations": "node scripts/audit-business-locations.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

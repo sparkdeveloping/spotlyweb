@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { requirePlatformPermission } from "@/lib/access-control-server";
 import { safeText } from "@/lib/server-helpers";
+import { notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 
@@ -65,7 +66,7 @@ function decodeCursor(value) {
 }
 
 function queueSpecific(queue, item) {
-  if (queue === "publication-review") return ["business_publication_review", "business_launch_review"].includes(item.type);
+  if (queue === "publication-review") return ["business_publication_review", "business_launch_review", "business_location_review"].includes(item.type);
   if (queue === "staff-approvals") return String(item.type || "").includes("staff") || String(item.type || "").includes("leave") || String(item.type || "").includes("people");
   if (queue === "incidents") return ["failed", "urgent", "escalated"].includes(String(item.status || "")) || item.priority === "urgent";
   return true;
@@ -156,7 +157,7 @@ export async function PATCH(request) {
     const body = actionSchema.parse(await request.json());
     const meta = authorize(user, body.queue);
     if (body.queue === "business-claims" && body.action === "decision") throw Object.assign(new Error("Use the claim decision workflow for verification decisions."), { status: 409 });
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const ref = db.collection(meta.collection).doc(body.id);
     const snapshot = await ref.get();
     if (!snapshot.exists) throw Object.assign(new Error("The queue record was not found."), { status: 404 });
@@ -187,6 +188,17 @@ export async function PATCH(request) {
       createdAt: FieldValue.serverTimestamp()
     });
     await batch.commit();
+    if (body.action === "decision" && record.requestedBy && ["staff-approvals", "publication-review"].includes(body.queue)) {
+      const workspace = body.queue === "staff-approvals" ? "staff" : "business";
+      await notifyUser({
+        db, messaging, auth, userId: record.requestedBy,
+        title: body.decision === "completed" ? "Review completed" : body.decision === "escalated" ? "Review escalated" : "Review updated",
+        body: safeText(body.reason || record.title || "Open Spotly to see the latest review activity.", 700),
+        href: workspace === "staff" ? "/staff/notifications" : "/business/notifications",
+        category: `${workspace}_review`, workspace, module: "reviews", eventType: `${body.queue}.${body.decision}`, importance: "high",
+        businessId: record.businessId || null, entityType: meta.collection, entityId: body.id, email: true, forceOperationalEmail: true
+      }).catch(() => {});
+    }
     return Response.json({ ok: true, id: body.id, changes: { ...changes, updatedAt: undefined, assignedAt: undefined, reviewedAt: undefined } });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the queue action.", details: error.flatten() }, { status: 400 });

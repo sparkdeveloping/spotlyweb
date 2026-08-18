@@ -6,6 +6,7 @@ import { requireBusinessPermission } from "@/lib/access-control-server";
 import { accountLast4, encryptFinancialValue, moneyAccountId, moneyEntryId, normalizeMoneyCurrency, payoutReserveEffects, postLedgerEntry, sanitizeBalance } from "@/lib/business-money-server";
 import { safeText, toPlainTimestamp } from "@/lib/server-helpers";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
+import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 
@@ -48,7 +49,7 @@ export async function POST(request) {
     const user = await authenticateRequest(request);
     await enforceRateLimit(request, { key: "business-money", identity: user.uid, limit: 40, windowMs: 60 * 60_000 });
     const raw = await request.json();
-    const { db, storage } = getAdminServices();
+    const { db, storage, messaging, auth } = getAdminServices();
     if (raw.action === "customer_settings") {
       const body = settingsSchema.parse(raw);
       await requireBusinessPermission(db, user, body.businessId, "finance.configure", { allowRoles: ["organization_owner", "business_owner", "business_manager", "finance_manager"] });
@@ -83,6 +84,10 @@ export async function POST(request) {
       await db.collection("businessSettlementAccounts").doc(body.businessId).set({ businessId: body.businessId, country: safeText(body.country, 80), bank: safeText(body.bank, 160), branch: safeText(body.branch, 160), accountHolder: safeText(body.accountHolder, 180), accountNumberEncrypted: encrypted, accountNumberLast4: last4, currency: body.currency, proofStoragePath: safeText(body.proofStoragePath, 1000), status: "details_submitted", rejectionReason: "", submittedAt: FieldValue.serverTimestamp(), submittedBy: user.uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await db.collection("businesses").doc(body.businessId).set({ "moneySetup.settlementStatus": "details_submitted", "moneySetup.updatedAt": FieldValue.serverTimestamp() }, { merge: true });
       await db.collection("auditLogs").add({ action: "settlement_account.submitted", entityType: "businessSettlementAccount", entityId: body.businessId, actorId: user.uid, actorEmail: user.email || "", metadata: { businessId: body.businessId, bank: safeText(body.bank, 160), accountNumberLast4: last4, currency: body.currency }, createdAt: FieldValue.serverTimestamp() });
+      await Promise.allSettled([
+        notifyUser({ db, messaging, auth, userId: user.uid, title: "Settlement details sent to Spotly", body: "Your Business payout destination is saved and waiting for finance review.", href: `/business/money?business=${encodeURIComponent(body.businessId)}`, category: "business_money_review", workspace: "business", module: "money", eventType: "settlement_account.submitted", importance: "high", businessId: body.businessId, entityType: "businessSettlementAccount", entityId: body.businessId, email: true, forceOperationalEmail: true }),
+        notifyRoleAudience({ db, messaging, auth, title: "Business settlement account needs review", body: `${safeText(body.accountHolder, 180)} submitted a Business settlement destination for verification.`, href: "/admin/money", category: "admin_review", workspace: "admin", module: "money", eventType: "settlement_account.submitted", importance: "high", businessId: body.businessId, entityType: "businessSettlementAccount", entityId: body.businessId, email: true, forceOperationalEmail: true }, ["super_admin", "finance_admin", "operations_manager"])
+      ]);
       return Response.json({ ok: true, status: "details_submitted", accountNumberLast4: last4 });
     }
     const body = payoutSchema.parse(raw);

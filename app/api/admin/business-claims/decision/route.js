@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { requirePlatformPermission } from "@/lib/access-control-server";
 import { businessRoleTemplates } from "@/data/business-config";
 import { safeText } from "@/lib/server-helpers";
+import { notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 
@@ -31,13 +32,15 @@ export async function POST(request) {
     const user = await authenticateRequest(request);
     requirePlatformPermission(user, "claims.review", { roles: ["verification_officer"] });
     const body = schema.parse(await request.json());
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const claimRef = db.collection("businessClaims").doc(body.claimId);
+    let reviewedClaim = null;
 
     await db.runTransaction(async (transaction) => {
       const claimSnapshot = await transaction.get(claimRef);
       if (!claimSnapshot.exists) throw Object.assign(new Error("The business claim was not found."), { status: 404 });
       const claim = claimSnapshot.data();
+      reviewedClaim = { id: claimSnapshot.id, ...claim };
       if (!["submitted", "needs_information", "under_review"].includes(claim.status)) {
         throw Object.assign(new Error("This claim has already reached a terminal decision."), { status: 409 });
       }
@@ -111,6 +114,18 @@ export async function POST(request) {
         createdAt: FieldValue.serverTimestamp()
       });
     });
+
+    if (reviewedClaim?.applicantId) {
+      const decisionTitle = body.decision === "approve" ? "Business access approved" : body.decision === "request" ? "Spotly needs more information" : "Business claim not approved";
+      const decisionBody = body.decision === "approve"
+        ? "Your business claim was approved. Open Spotly Business to continue setup and manage your approved locations."
+        : safeText(body.reason || (body.decision === "request" ? "Open your claim to review what Spotly needs next." : "Open Spotly to review the decision."), 700);
+      await notifyUser({
+        db, messaging, auth, userId: reviewedClaim.applicantId, title: decisionTitle, body: decisionBody, href: "/business",
+        category: "business_claim_review", workspace: "business", module: "reviews", eventType: `business_claim.${body.decision === "request" ? "changes_requested" : body.decision === "approve" ? "approved" : "rejected"}`,
+        importance: "high", businessId: reviewedClaim.businessId, entityType: "businessClaim", entityId: body.claimId, email: true, forceOperationalEmail: true
+      }).catch(() => {});
+    }
 
     return Response.json({ ok: true });
   } catch (error) {

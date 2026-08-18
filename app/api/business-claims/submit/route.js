@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { safeText } from "@/lib/server-helpers";
+import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,7 +116,7 @@ export async function POST(request) {
     if (!actor.email) throw Object.assign(new Error("A primary email-and-password account is required."), { status: 409 });
 
     const input = schema.parse(await request.json());
-    const { auth, db } = getAdminServices();
+    const { auth, db, messaging } = getAdminServices();
     const authUser = await auth.getUser(actor.uid);
     if (!authUser.providerData.some((provider) => provider.providerId === "password")) {
       throw Object.assign(new Error("Create or link an email-and-password credential before claiming a business."), { status: 409 });
@@ -207,6 +208,8 @@ export async function POST(request) {
           email: safeText(provisional.email || "", 254),
           status: "draft",
           public: false,
+          requestedPublic: true,
+          reviewStatus: "pending_launch_review",
           fulfilment: defaultFulfilment(capabilities),
           paymentMethods: ["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"],
           acceptedCurrencies: ["USD", "ZWG"],
@@ -344,18 +347,26 @@ export async function POST(request) {
         },
         createdAt: FieldValue.serverTimestamp()
       });
-      transaction.create(db.collection("notifications").doc(), {
-        userId: actor.uid,
-        title: autoApproved ? "Business access approved" : "Business claim received",
-        body: autoApproved
-          ? "Your claim passed the configured review policy. The approved locations are ready in Spotly Business."
-          : "Spotly received your claim. You can continue preparing the business while the verification team reviews it.",
-        href: "/business",
-        category: "business_verification",
-        read: false,
-        createdAt: FieldValue.serverTimestamp()
-      });
     });
+
+    await Promise.allSettled([
+      notifyUser({
+        db, messaging, auth, userId: actor.uid,
+        title: autoApproved ? "Business access approved" : "Business claim sent to Spotly",
+        body: autoApproved
+          ? "Your business access was approved. Open Spotly Business to continue setup and operations."
+          : "Your claim is saved and waiting for Spotly review. We will notify you here and by email when the review changes.",
+        href: "/business", category: "business_claim_review", workspace: "business", module: "reviews",
+        eventType: autoApproved ? "business_claim.approved" : "business_claim.submitted", importance: "high",
+        businessId: input.businessId, entityType: "businessClaim", entityId: claimId, email: true, forceOperationalEmail: true
+      }),
+      ...(!autoApproved ? [notifyRoleAudience({
+        db, messaging, auth, title: `Business claim ready · ${input.provisionalBusiness?.name || input.businessId}`,
+        body: `${safeText(input.applicantName || actor.name || actor.email, 160)} submitted a business claim that needs review.`,
+        href: "/admin/queues/business-claims?status=open", category: "admin_review", workspace: "admin", module: "reviews",
+        eventType: "business_claim.submitted", importance: "high", businessId: input.businessId, entityType: "businessClaim", entityId: claimId, email: true, forceOperationalEmail: true
+      }, ["super_admin", "verification_officer", "operations_manager"])] : [])
+    ]);
 
     return Response.json({
       ok: true,

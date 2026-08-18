@@ -33,6 +33,7 @@ import { Badge, Overlay } from "@/components/ui";
 import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
 import { adminSectionsForProfile } from "@/lib/admin-access";
 import { workspaceAccess, WORKSPACE_SETTINGS_ROUTES } from "@/lib/workspaces";
+import { isReviewNotification, notificationWorkspace } from "@/components/notification-center";
 
 
 function useOutsideClick(ref, callback) {
@@ -45,19 +46,16 @@ function useOutsideClick(ref, callback) {
   }, [callback, ref]);
 }
 
-function accessiblePortals(profile, memberships) {
-  const access = workspaceAccess({ profile, memberships });
-  return Object.entries(access)
-    .filter(([, allowed]) => allowed)
-    .map(([id]) => portals[id])
-    .filter(Boolean);
+function accessiblePortals(profile, memberships, staffProfile, driverProfile, driverApplication) {
+  const access = workspaceAccess({ profile, memberships, staffProfile, driverProfile: driverProfile || driverApplication });
+  return [...access].map((id) => portals[id]).filter(Boolean);
 }
 
 function PortalSwitcher({ portal, compact = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const { profile, memberships } = useAuth();
-  const available = useMemo(() => accessiblePortals(profile, memberships), [profile, memberships]);
+  const { profile, memberships, staffProfile, driverProfile, driverApplication } = useAuth();
+  const available = useMemo(() => accessiblePortals(profile, memberships, staffProfile, driverProfile, driverApplication), [profile, memberships, staffProfile, driverProfile, driverApplication]);
   useOutsideClick(ref, () => setOpen(false));
 
   return (
@@ -156,10 +154,12 @@ function notificationTime(value, nowMs = 0) {
   return days === 1 ? "Yesterday" : `${days} days ago`;
 }
 
-function NotificationPanel({ items, open, onClose, onRead, onReadAll }) {
+function NotificationPanel({ items, open, onClose, onRead, onReadAll, workspace }) {
   const router = useRouter();
   const [clock, setClock] = useState(0);
-  const unread = items.filter((item) => !item.read).length;
+  const [filter, setFilter] = useState("all");
+  const scoped = filter === "workspace" ? items.filter((item) => notificationWorkspace(item) === workspace) : filter === "reviews" ? items.filter(isReviewNotification) : items;
+  const unread = scoped.filter((item) => !item.read).length;
   useEffect(() => {
     if (!open) return undefined;
     const update = () => setClock(Date.now());
@@ -176,18 +176,18 @@ function NotificationPanel({ items, open, onClose, onRead, onReadAll }) {
 
   return (
     <Overlay open={open} onClose={onClose} title="Notifications" description={unread ? `${unread} unread ${unread === 1 ? "update" : "updates"}` : "You’re all caught up"} mode="drawer" label="Notifications">
-      <div className="flex items-center justify-between border-b px-5 py-3">
-        <span className="text-xs font-semibold tracking-[0.08em] text-tertiary">Recent</span>
-        <button type="button" disabled={!unread} onClick={onReadAll} className="text-sm font-semibold text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40">Mark all read</button>
+      <div className="border-b px-5 py-3">
+        <div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold tracking-[0.08em] text-tertiary">Recent</span><button type="button" disabled={!unread} onClick={onReadAll} className="text-sm font-semibold text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40">Mark all read</button></div>
+        <div className="mt-3 flex gap-2 overflow-x-auto">{[["all", "All"], ["workspace", "This workspace"], ["reviews", "Reviews"]].map(([value, label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={cn("rounded-full border px-3 py-1.5 text-xs font-semibold", filter === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary")}>{label}</button>)}</div>
       </div>
       <div className="p-3">
-        {items.length ? items.map((item) => (
+        {scoped.length ? scoped.map((item) => (
           <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-[var(--surface-2)]">
             <span className={cn("mt-2 h-2 w-2 shrink-0 rounded-full", !item.read ? "bg-[var(--accent)]" : "bg-transparent")} />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{item.title || "Spotly update"}</span>
               <span className="mt-1 block text-sm leading-5 text-secondary">{item.body || item.message || "Open this update for more information."}</span>
-              <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt, clock)}</span>
+              <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt, clock)} · {notificationWorkspace(item)}{isReviewNotification(item) ? " · Review" : ""}</span>
             </span>
           </button>
         )) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
@@ -336,6 +336,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const unreadCount = notifications.filter((item) => !item.read).length;
+  const attentionNotification = notifications.find((item) => !item.read && notificationWorkspace(item) === portalId && (["high", "critical"].includes(item.importance) || isReviewNotification(item)));
 
   useEffect(() => {
     setSidebarCollapsed(window.localStorage.getItem("spotly-sidebar-collapsed") === "1");
@@ -396,6 +397,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
             <UserMenu portal={portal} />
           </div>
         </header>
+        {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 truncate text-xs text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = attentionNotification.href; }} className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">Open</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
         <main key={pathname} className={cn("portal-gradient min-h-[calc(100vh-5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
             {children}
@@ -403,7 +405,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
         </main>
       </div>
       {!hideSidebar && <MobileBottomNav portal={portal} activeSection={activeSection} onOpenCommand={() => setCommandOpen(true)} />}
-      <NotificationPanel items={notifications} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRead={readNotification} onReadAll={readAllNotifications} />
+      <NotificationPanel items={notifications} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRead={readNotification} onReadAll={readAllNotifications} workspace={portalId} />
       <CommandPalette portal={portal} open={commandOpen} onClose={() => setCommandOpen(false)} />
     </div>
   );

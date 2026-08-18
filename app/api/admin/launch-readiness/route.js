@@ -29,7 +29,7 @@ export async function GET(request) {
     const pushCredentials = present(process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY);
     const appCheckCredentials = present(process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY);
     const appCheckEnforced = process.env.SPOTLY_ENFORCE_APP_CHECK === "true";
-    const legalConfigured = present(legal.legalName) && present(legal.registeredAddress) && present(legal.privacyEmail) && present(legal.termsEmail);
+    const legalConfigured = present(legal.legalName) && present(legal.companyNumber) && present(legal.registeredAddress) && present(legal.privacyEmail) && present(legal.termsEmail);
     const refundConfigured = present(legal.refundPolicyUrl);
     const supportConfigured = present(support.hours) && (present(support.email) || present(support.phone) || present(support.whatsapp));
     const rulesVerified = present(process.env.SPOTLY_RULES_VERIFIED_AT) && present(process.env.SPOTLY_STORAGE_RULES_VERIFIED_AT);
@@ -42,7 +42,7 @@ export async function GET(request) {
       item("email", "Transactional email", integrations.emailEnabled && emailCredentials ? "ready" : integrations.emailEnabled ? "blocked" : "not_configured", integrations.emailEnabled ? (emailCredentials ? "Enabled with Resend credentials present." : "Enabled, but Resend credentials are incomplete.") : "Email delivery is disabled."),
       item("push", "Push notifications", integrations.pushEnabled && pushCredentials ? "ready" : integrations.pushEnabled ? "blocked" : "not_configured", integrations.pushEnabled ? (pushCredentials ? "Enabled with a VAPID key present." : "Enabled, but the VAPID key is missing.") : "Push delivery is disabled."),
       item("app-check", "Firebase App Check", integrations.appCheckEnabled && appCheckCredentials && appCheckEnforced ? "ready" : integrations.appCheckEnabled ? "blocked" : "not_configured", integrations.appCheckEnabled ? (appCheckCredentials && appCheckEnforced ? "Enabled, a site key is present, and API enforcement is active." : "App Check is enabled in settings, but the site key or SPOTLY_ENFORCE_APP_CHECK enforcement flag is missing.") : "App Check is disabled in platform settings."),
-      item("legal", "Legal identity & contacts", legalConfigured ? "ready" : "not_configured", legalConfigured ? "Legal identity and primary privacy/terms contacts are configured." : "Legal name, registered address, privacy contact, and terms contact must be configured."),
+      item("legal", "Legal identity & contacts", legalConfigured ? "ready" : "not_configured", legalConfigured ? "Legal identity and primary privacy/terms contacts are configured." : "Legal name, company registration number, registered address, privacy contact, and terms contact must be configured."),
       item("refund-policy", "Refund & cancellation policy", refundConfigured ? "ready" : "not_configured", refundConfigured ? "A configured policy URL is present." : "No final refund/cancellation policy URL is configured."),
       item("support", "Support staffing/contact", supportConfigured ? "needs_verification" : "not_configured", supportConfigured ? "Contact details and hours exist; confirm the stated hours are actually staffed." : "Configure a working support channel and staffed hours."),
       item("monitoring", "Production monitoring", monitoringConfigured ? "needs_verification" : "not_configured", monitoringConfigured ? "A monitoring configuration marker is present; verify alerts in staging." : "No monitoring verification marker or supported error-reporting DSN is present."),

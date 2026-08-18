@@ -56,7 +56,7 @@ export async function POST(request) {
     if (payoutReview && !fullAdmin && !actorRoles.has("finance_admin") && !actorRoles.has("operations_manager")) throw Object.assign(new Error("Your role cannot review Driver payout destinations."), { status: 403 });
     const reason = safeText(body.reason || "", 1000);
     if (["request_information", "reject", "suspend", "compliance_hold", "safety_hold", "reject_document", "reject_payout_account"].includes(body.action) && reason.length < 3) throw Object.assign(new Error("Add a clear reason for this action."), { status: 400 });
-    const { db, messaging } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const appRef = db.collection("driverApplications").doc(body.driverId);
     const driverRef = db.collection("drivers").doc(body.driverId);
     const auditRef = db.collection("auditLogs").doc();
@@ -104,8 +104,26 @@ export async function POST(request) {
     } else if (body.action === "end_session") await db.collection("driverPresence").doc(body.driverId).set({ online: false, availabilityState: "offline", currentJobId: null, currentLocation: null, updatedAt: now }, { merge: true });
 
     await auditRef.set({ actorId: actor.uid, action: `driver.${body.action}`, entityType: "driver", entityId: body.driverId, reason, metadata: { documentId: body.documentId || null, vehicleId: body.vehicleId || null }, source: "admin_driver_operations", createdAt: now });
-    const titles = { approve: "You're approved to drive with Spotly", request_information: "Spotly needs more information", reject: "Driver application update", suspend: "Driver account paused", reinstate: "Driver account restored" };
-    if (titles[body.action]) await notifyUsers(db, messaging, [body.driverId], { title: titles[body.action], body: reason || (body.action === "approve" ? "Open Spotly Driver to finish setup and go online." : "Open your Driver account for details."), href: "/driver", category: "driver_account" });
+    const notices = {
+      approve: ["You're approved to drive with Spotly", "Your Driver application is approved. Open Spotly Driver to finish setup and go online."],
+      request_information: ["Spotly needs more information", reason || "Open your Driver application to see what needs your attention."],
+      reject: ["Driver application update", reason || "Open your Driver application to review the decision."],
+      suspend: ["Driver account paused", reason || "Open Spotly Driver for details."],
+      reinstate: ["Driver account restored", "Your Driver account is available again."],
+      approve_document: ["Driver document approved", "Spotly approved one of your Driver documents."],
+      reject_document: ["Driver document needs attention", reason || "A Driver document needs to be replaced or corrected."],
+      approve_vehicle: ["Vehicle approved", "Your vehicle was approved for Driver operations."],
+      verify_payout_account: ["Payout account verified", "Your Driver payout destination was verified."],
+      reject_payout_account: ["Payout account needs attention", reason || "Review your payout details and submit them again."]
+    };
+    if (notices[body.action]) {
+      const [title, noticeBody] = notices[body.action];
+      const reviewAction = ["approve", "request_information", "reject", "approve_document", "reject_document", "approve_vehicle", "verify_payout_account", "reject_payout_account"].includes(body.action);
+      await notifyUsers(db, messaging, [body.driverId], {
+        title, body: noticeBody, href: "/driver", category: reviewAction ? "driver_review" : "driver_account", workspace: "driver", module: reviewAction ? "reviews" : "account",
+        eventType: `driver.${body.action}`, importance: reviewAction ? "high" : "normal", email: reviewAction, auth, forceOperationalEmail: reviewAction
+      });
+    }
     return Response.json({ ok: true, bundle: await loadDriverBundle(db, body.driverId) });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the Driver action." }, { status: 400 });

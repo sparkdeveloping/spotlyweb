@@ -10,6 +10,7 @@ import {
   subscribeBusinessClaimsForBusiness,
   subscribeBusinessFinanceSettings,
   subscribeBusinessInvitations,
+  getBranchesForBusiness,
   subscribeOrdersForBusiness,
   subscribeSupportConversations
 } from "@/lib/firebase-services";
@@ -59,6 +60,8 @@ export function BusinessDataProvider({ children }) {
   const [business, setBusiness] = useState(null);
   const [loadedBusinessId, setLoadedBusinessId] = useState("");
   const [allBranches, setAllBranches] = useState([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesError, setBranchesError] = useState("");
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [claims, setClaims] = useState([]);
@@ -134,9 +137,38 @@ export function BusinessDataProvider({ children }) {
     }
   }, [selectedBusinessId, user?.uid]);
 
+  const refreshBranches = useCallback(async (businessId = selectedBusinessId, { silent = false } = {}) => {
+    if (!businessId || !user?.uid) return [];
+    if (!silent) setBranchesLoading(true);
+    setBranchesError("");
+    try {
+      const records = await getBranchesForBusiness(businessId);
+      if (businessId === selectedBusinessId) setAllBranches(records);
+      return records;
+    } catch (reason) {
+      if (businessId === selectedBusinessId) setBranchesError(reason?.message || "Locations could not be loaded.");
+      throw reason;
+    } finally {
+      if (!silent && businessId === selectedBusinessId) setBranchesLoading(false);
+    }
+  }, [selectedBusinessId, user?.uid]);
+
   const businessIds = useMemo(() => businessChoices.map((item) => item.id), [businessChoices]);
   const selectedChoice = useMemo(() => businessChoices.find((item) => item.id === selectedBusinessId) || null, [businessChoices, selectedBusinessId]);
-  const membership = memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId) || (selectedChoice?.organizationId && item.organizationId === selectedChoice.organizationId && item.role === "organization_owner")) || null;
+  const storedMembership = memberships.find((item) => item.businessId === selectedBusinessId || item.businessIds?.includes(selectedBusinessId) || (selectedChoice?.organizationId && item.organizationId === selectedChoice.organizationId && item.role === "organization_owner")) || null;
+  // Portfolio is produced by the trusted server and can legitimately expose direct-owner access
+  // for older businesses that predate membership documents. Keep client permissions aligned with
+  // that trusted access instead of making an owner look read-only only on the Locations screen.
+  const membership = storedMembership || (selectedChoice ? {
+    id: `portfolio:${selectedBusinessId}`,
+    userId: user?.uid || "",
+    businessId: selectedBusinessId,
+    organizationId: selectedChoice.organizationId || null,
+    role: selectedChoice.role || "member",
+    status: "active",
+    branchIds: selectedChoice.branchIds || [],
+    permissions: selectedChoice.permissions || []
+  } : null);
 
   useEffect(() => {
     if (portfolioLoading) return;
@@ -181,6 +213,8 @@ export function BusinessDataProvider({ children }) {
       setBusiness(null);
       setLoadedBusinessId("");
       setAllBranches([]);
+      setBranchesLoading(false);
+      setBranchesError("");
       setSelectedBranchId("");
       setProducts([]);
       setOrders([]);
@@ -203,6 +237,9 @@ export function BusinessDataProvider({ children }) {
     setLoading(true);
     setError("");
     setLoadedBusinessId("");
+    setAllBranches([]);
+    setBranchesLoading(true);
+    setBranchesError("");
     writeState("spotly-business-id", user, selectedBusinessId, "local");
     const onError = (reason) => {
       setError(reason?.message || "Some business information could not be loaded.");
@@ -214,7 +251,14 @@ export function BusinessDataProvider({ children }) {
         setLoadedBusinessId(value?.id || "");
         setLoading(false);
       }, onError),
-      subscribeBranches(selectedBusinessId, setAllBranches, onError),
+      subscribeBranches(selectedBusinessId, (records) => {
+        setAllBranches(records);
+        setBranchesLoading(false);
+        setBranchesError("");
+      }, (reason) => {
+        setBranchesLoading(false);
+        setBranchesError(reason?.message || "Locations could not be loaded.");
+      }),
       subscribeBusinessCatalog(selectedBusinessId, setProducts, onError),
       subscribeOrdersForBusiness(selectedBusinessId, setOrders, onError),
       subscribeBusinessClaimsForBusiness(selectedBusinessId, setClaims, onError),
@@ -279,6 +323,7 @@ export function BusinessDataProvider({ children }) {
     portfolioError,
     refreshPortfolio,
     refreshLifecycle,
+    refreshBranches,
     selectedBusinessId,
     setSelectedBusinessId,
     business,
@@ -286,6 +331,8 @@ export function BusinessDataProvider({ children }) {
     contextSwitching,
     allBranches,
     branches,
+    branchesLoading,
+    branchesError,
     selectedBranchId,
     setSelectedBranchId,
     selectedBranch,
@@ -310,7 +357,7 @@ export function BusinessDataProvider({ children }) {
     archetype,
     setupComplete,
     lifecycle
-  }), [user, memberships, membership, businessIds, businessChoices, portfolioLoading, portfolioError, refreshPortfolio, refreshLifecycle, selectedBusinessId, setSelectedBusinessId, business, loadedBusinessId, contextSwitching, allBranches, branches, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, lifecycleLoading, lifecycleError, lifecycleBusinessId, authoritativeLifecycle, error, businessType, archetype, setupComplete, lifecycle]);
+  }), [user, memberships, membership, businessIds, businessChoices, portfolioLoading, portfolioError, refreshPortfolio, refreshLifecycle, refreshBranches, selectedBusinessId, setSelectedBusinessId, business, loadedBusinessId, contextSwitching, allBranches, branches, branchesLoading, branchesError, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, lifecycleLoading, lifecycleError, lifecycleBusinessId, authoritativeLifecycle, error, businessType, archetype, setupComplete, lifecycle]);
 
   return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 }

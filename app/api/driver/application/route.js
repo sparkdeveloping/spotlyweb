@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { applicationReadiness } from "@/lib/driver-delivery-server";
 import { normalizeZimbabwePhone, safeText } from "@/lib/server-helpers";
 import { accountLast4, encryptFinancialValue } from "@/lib/business-money-server";
+import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const appRef = db.collection("driverApplications").doc(user.uid);
     const now = FieldValue.serverTimestamp();
 
@@ -75,6 +76,10 @@ export async function POST(request) {
         identifierEncrypted: encryptFinancialValue(identifier), maskedIdentifier: `•••• ${accountLast4(identifier)}`, verificationState: "pending", updatedAt: now, createdAt: now
       }, { merge: true });
       await appRef.set({ payoutComplete: true, updatedAt: now }, { merge: true });
+      await Promise.allSettled([
+        notifyUser({ db, messaging, auth, userId: user.uid, title: "Payout details sent to Spotly", body: "Your payout destination is saved and waiting for verification.", href: "/driver/profile", category: "driver_review", workspace: "driver", module: "money", eventType: "driver_payout_account.submitted", importance: "high", entityType: "driverPayoutAccount", entityId: user.uid, email: true, forceOperationalEmail: true }),
+        notifyRoleAudience({ db, messaging, auth, title: "Driver payout account needs review", body: `${safeText(body.payout.recipientName, 160)} submitted Driver payout details for verification.`, href: `/admin/drivers?driver=${encodeURIComponent(user.uid)}`, category: "admin_review", workspace: "admin", module: "money", eventType: "driver_payout_account.submitted", importance: "high", entityType: "driverPayoutAccount", entityId: user.uid, email: true, forceOperationalEmail: true }, ["super_admin", "finance_admin", "operations_manager"])
+      ]);
       return Response.json({ ok: true });
     }
 
@@ -93,6 +98,11 @@ export async function POST(request) {
     await db.collection("adminQueueItems").doc(`driver_application_${user.uid}`).set({
       queue: "driver-applications", type: "driver_application", entityId: user.uid, driverId: user.uid, status: "open", priority: "normal", title: safeText(appSnap.data().legalName || user.name || "Driver application", 160), createdAt: now, updatedAt: now
     }, { merge: true });
+    const driverName = safeText(appSnap.data().legalName || user.name || "Driver", 160);
+    await Promise.allSettled([
+      notifyUser({ db, messaging, auth, userId: user.uid, title: "Driver application sent to Spotly", body: "Your application is saved and waiting for review. We will notify you here and by email when anything changes.", href: "/driver", category: "driver_review", workspace: "driver", module: "reviews", eventType: "driver_application.submitted", importance: "high", entityType: "driverApplication", entityId: user.uid, email: true, forceOperationalEmail: true }),
+      notifyRoleAudience({ db, messaging, auth, title: `Driver application ready · ${driverName}`, body: "A Driver completed the application and is ready for document and eligibility review.", href: `/admin/drivers?driver=${encodeURIComponent(user.uid)}`, category: "admin_review", workspace: "admin", module: "reviews", eventType: "driver_application.submitted", importance: "high", entityType: "driverApplication", entityId: user.uid, email: true, forceOperationalEmail: true }, ["super_admin", "driver_operations_coordinator", "operations_manager", "risk_compliance_officer"])
+    ]);
     return Response.json({ ok: true, status: "application_submitted" });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the Driver application details.", details: error.flatten() }, { status: 400 });

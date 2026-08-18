@@ -2,23 +2,24 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BellRing, Check, Globe2, LockKeyhole, LogOut, Mail, Pencil, Phone, ShieldCheck, Store, UserRound } from "lucide-react";
+import { ArrowRight, BellRing, Check, Globe2, LockKeyhole, LogOut, Mail, Pencil, Phone, ShieldCheck, Store, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AuthGate } from "@/components/auth-gate";
-import { useAuth } from "@/components/firebase-provider";
+import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Button, Card, ListRow, Modal, StatusBadge } from "@/components/ui";
 import { saveUserPreferences, saveUserProfileDetails } from "@/lib/firebase-services";
 import { workspaceAccess as resolveWorkspaceAccess } from "@/lib/workspaces";
 import { BUILD_INFO, buildLabel } from "@/lib/build-info";
+import { NotificationBell, NotificationCenter } from "@/components/notification-center";
 
-function accountWorkspaces(profile, memberships) {
-  const access = resolveWorkspaceAccess({ profile, memberships });
+function accountWorkspaces(profile, memberships, staffProfile, driverProfile, driverApplication) {
+  const access = resolveWorkspaceAccess({ profile, memberships, staffProfile, driverProfile: driverProfile || driverApplication });
   const definitions = [
-    { id: "customer", href: "/marketplace", label: "Personal", description: "Orders, saved businesses, pickup and delivery activity", logo: "/brand/spotly.svg" },
+    { id: "customer", href: "/marketplace", label: "Customer", description: "Shop nearby, manage orders, delivery, pickup and saved businesses", logo: "/brand/spotly.svg" },
     { id: "business", href: "/business", label: "Business", description: "Operate assigned businesses and locations", logo: "/brand/spotly-business.svg" },
     { id: "driver", href: "/driver", label: "Driver", description: "Application, live deliveries, earnings and Driver account", logo: "/brand/spotly-driver.svg" },
-    { id: "staff", href: "/staff", label: "Staff", description: "Work, schedule, learning and pay", logo: "/brand/spotly-admin.svg" },
+    { id: "staff", href: "/staff", label: "Staff", description: "Work, schedule, learning and pay", logo: "/brand/spotly-staff.svg" },
     { id: "admin", href: "/admin", label: "Admin", description: "Platform operations and review queues", logo: "/brand/spotly-admin.svg" }
   ];
   return definitions.filter((item) => access.has(item.id));
@@ -26,7 +27,8 @@ function accountWorkspaces(profile, memberships) {
 
 
 export function AccountApp() {
-  const { user, profile, memberships, logout, linkProvider, beginPhoneLink, enablePushNotifications, resetPassword } = useAuth();
+  const { user, profile, memberships, staffProfile, driverProfile, driverApplication, logout, linkProvider, beginPhoneLink, enablePushNotifications, resetPassword } = useAuth();
+  const { settings } = usePlatform();
   const { toast } = useToast();
   const [phone, setPhone] = useState("+263");
   const [code, setCode] = useState("");
@@ -41,7 +43,7 @@ export function AccountApp() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({ displayName: "", phone: "", preferredContact: "email", pickupContactName: "", pickupContactPhone: "" });
   const providers = useMemo(() => new Set(user?.providerData?.map((item) => item.providerId) || []), [user]);
-  const workspaces = useMemo(() => accountWorkspaces(profile, memberships), [profile, memberships]);
+  const workspaces = useMemo(() => accountWorkspaces(profile, memberships, staffProfile, driverProfile, driverApplication), [profile, memberships, staffProfile, driverProfile, driverApplication]);
 
   useEffect(() => {
     const preferences = profile?.preferences || {};
@@ -115,13 +117,21 @@ export function AccountApp() {
 
   const displayName = profile?.displayName || user?.displayName || "Your account";
   const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const legal = settings?.legal || {};
+  const companyRegistered = Boolean(String(legal.legalName || "").trim() && String(legal.companyNumber || "").trim());
+  const customerWorkspace = workspaces.find((workspace) => workspace.id === "customer");
+  const roleWorkspaces = workspaces.filter((workspace) => workspace.id !== "customer");
 
   return (
     <AuthGate>
       <main className="min-h-screen bg-grouped text-ink">
-        <header className="border-b bg-[var(--surface)]"><div className="mx-auto flex h-[72px] max-w-5xl items-center justify-between px-4 sm:px-6"><Link href="/" className="flex items-center gap-3"><Image src="/brand/spotly.svg" alt="" width={40} height={40} /><span className="text-lg font-semibold">Account</span></Link><Button variant="ghost" onClick={async () => { await logout(); window.location.href = "/"; }}><LogOut className="h-4 w-4" />Sign out</Button></div></header>
+        <header className="border-b bg-[var(--surface)]"><div className="mx-auto flex h-[72px] max-w-5xl items-center justify-between px-4 sm:px-6"><Link href="/" className="flex items-center gap-3"><Image src="/brand/spotly.svg" alt="" width={40} height={40} /><span className="text-lg font-semibold">Account</span></Link><div className="flex items-center gap-2"><NotificationBell /><Button variant="ghost" onClick={async () => { await logout(); window.location.href = "/"; }}><LogOut className="h-4 w-4" />Sign out</Button></div></div></header>
         <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
           <section className="flex flex-col gap-5 border-b pb-7 sm:flex-row sm:items-center"><span className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[20px] bg-violet-soft text-xl font-semibold text-violet">{user?.photoURL ? <Image src={user.photoURL} alt="" width={64} height={64} unoptimized className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : initials}</span><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-violet">Your account</p><h1 className="mt-1 truncate text-3xl font-semibold tracking-[-.035em]">{displayName}</h1><p className="mt-1 truncate text-sm text-secondary">{user?.email}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setProfileOpen(true)}><Pencil className="h-4 w-4" />Edit profile</Button><Button asChild variant="outline"><Link href="/support?topic=account">Get account help</Link></Button></div></section>
+
+          <section className="mt-7" aria-labelledby="workspace-heading"><div className="mb-4"><p className="text-sm font-semibold text-violet">Spotly starts with you as a customer</p><h2 id="workspace-heading" className="mt-1 text-2xl font-semibold tracking-[-.025em]">Where do you want to go?</h2><p className="mt-2 text-sm leading-6 text-secondary">Your Customer workspace is always available. Business, Driver, Staff and Admin appear only when this account has access.</p></div>{customerWorkspace && <Link href={customerWorkspace.href} className="group flex flex-col gap-5 rounded-[24px] border bg-[var(--surface)] p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:flex-row sm:items-center"><Image src={customerWorkspace.logo} alt="" width={64} height={64} className="h-16 w-16 rounded-2xl" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-xl font-semibold">Customer</h3><StatusBadge status="Your default" /></div><p className="mt-2 text-sm leading-6 text-secondary">{customerWorkspace.description}</p></div><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-soft text-violet"><ArrowRight className="h-5 w-5 transition group-hover:translate-x-0.5" /></span></Link>}{roleWorkspaces.length > 0 && <div className="mt-4 grid gap-4 sm:grid-cols-2">{roleWorkspaces.map((workspace) => <Link key={workspace.id} href={workspace.href} className="group flex items-center gap-4 rounded-2xl border bg-[var(--surface)] p-5 transition hover:bg-[var(--surface-2)]"><Image src={workspace.logo} alt="" width={50} height={50} className="h-[50px] w-[50px] rounded-xl" /><span className="min-w-0 flex-1"><span className="block font-semibold">{workspace.label}</span><span className="mt-1 block text-xs leading-5 text-secondary">{workspace.description}</span></span><ArrowRight className="h-4 w-4 text-tertiary transition group-hover:translate-x-0.5" /></Link>)}</div>}</section>
+
+          {companyRegistered && <Card className="mt-5 border-success/20 bg-[var(--success-soft)] p-5"><div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface)] text-success"><ShieldCheck className="h-5 w-5" /></span><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">Spotly company details</h2><StatusBadge status="Registered" /></div><p className="mt-2 text-sm leading-6 text-secondary">{legal.tradingName || "Spotly"} is operated by <strong>{legal.legalName}</strong>. Company registration number: <strong>{legal.companyNumber}</strong>{legal.registeredAddress ? ` · ${legal.registeredAddress}` : ""}.</p></div></div></Card>}
 
           <div className="mt-7 grid gap-5 lg:grid-cols-2">
             <Card className="p-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-violet-soft text-violet"><UserRound className="h-5 w-5" /></span><div><h2 className="font-semibold">Profile and contact</h2><p className="mt-1 text-sm text-secondary">Details used for pickup and account support</p></div></div><div className="mt-5 divide-y rounded-xl border"><ListRow icon={Mail} title={user?.email || "No email"} subtitle={user?.emailVerified ? "Email verified" : "Email verification pending"} trailing={<StatusBadge status={user?.emailVerified ? "Verified" : "Pending"} />} /><ListRow icon={Phone} title={profile?.phone || user?.phoneNumber || "No phone number linked"} subtitle={profile?.preferredContact ? `Preferred contact: ${profile.preferredContact}` : user?.phoneNumber ? "Available for account and pickup contact" : "Add a number for account recovery and pickup updates"} /></div>{!user?.phoneNumber && <div className="mt-4"><div id="spotly-recaptcha" />{confirmation ? <div className="flex gap-2"><input value={code} onChange={(event) => setCode(event.target.value)} placeholder="6-digit code" className="field-control min-w-0 flex-1" /><Button onClick={confirmPhone} loading={loading === "code"}>Confirm</Button></div> : <div className="flex gap-2"><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+263…" className="field-control min-w-0 flex-1" /><Button onClick={sendPhone} loading={loading === "phone"}>Send code</Button></div>}<p className="mt-3 text-xs leading-5 text-tertiary">If phone verification is unavailable, contact support and continue using email.</p></div>}</Card>
@@ -133,7 +143,8 @@ export function AccountApp() {
             <Card className="p-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-violet-soft text-violet"><Globe2 className="h-5 w-5" /></span><div><h2 className="font-semibold">Language and accessibility</h2><p className="mt-1 text-sm text-secondary">Preferences saved to your Spotly account</p></div></div><label className="mt-5 block text-sm font-medium">Language<select value={language} onChange={(event) => setLanguage(event.target.value)} className="field-control mt-2 w-full"><option>English</option><option disabled>ChiShona — being prepared</option><option disabled>isiNdebele — being prepared</option></select></label><p className="mt-3 text-xs leading-5 text-secondary">Additional languages will appear after core customer and support journeys have been reviewed by fluent speakers.</p><Button className="mt-4 w-full" variant="outline" onClick={savePreferences} loading={loading === "preferences"}>Save language</Button></Card>
           </div>
 
-          <Card className="mt-5 p-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-violet-soft text-violet"><Store className="h-5 w-5" /></span><div><h2 className="font-semibold">Your workspaces</h2><p className="mt-1 text-sm text-secondary">Only workspaces assigned to this account are shown</p></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{workspaces.map((workspace) => <Link key={workspace.href} href={workspace.href} className="flex items-center gap-3 rounded-xl border p-4 transition hover:border-violet/30 hover:bg-violet-soft/40"><Image src={workspace.logo} alt="" width={42} height={42} className="rounded-lg" /><span className="min-w-0"><span className="block font-semibold">{workspace.label}</span><span className="mt-1 block text-xs leading-5 text-secondary">{workspace.description}</span></span></Link>)}</div></Card>
+
+          <section id="notifications" className="mt-8 scroll-mt-24"><NotificationCenter title="Your notifications" description="Customer activity plus reviews and important updates from every workspace you can access." /></section>
 
           <Card className="mt-5 p-6"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-lg bg-violet-soft text-violet"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="font-semibold">Privacy and data</h2><p className="mt-1 text-sm text-secondary">Get help with account information or a data request</p></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><Button asChild variant="outline"><Link href="/support?topic=privacy">Request my data</Link></Button><Button asChild variant="outline"><Link href="/support?topic=account-delete">Close my account</Link></Button></div></Card>
           <p className="mt-6 text-center text-xs text-tertiary">{buildLabel()} · {BUILD_INFO.environment}</p>

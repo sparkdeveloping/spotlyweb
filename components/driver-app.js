@@ -16,6 +16,7 @@ import { authenticatedFetch } from "@/lib/api-client";
 import { uploadFile } from "@/lib/firebase-services";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { NotificationCenter } from "@/components/notification-center";
 
 const sectionMeta = {
   home: { title: "Driver home", description: "Your shift, live availability and next delivery action." },
@@ -23,6 +24,7 @@ const sectionMeta = {
   active: { title: "Active delivery", description: "Complete one clear step at a time." },
   earnings: { title: "Earnings", description: "Your delivery earnings and payout history." },
   history: { title: "Delivery history", description: "Completed and previous delivery work." },
+  notifications: { title: "Driver notifications", description: "Application reviews, delivery offers, payouts and Driver account activity." },
   support: { title: "Safety and support", description: "Report a problem with the current delivery or your Driver account." },
   profile: { title: "Driver account", description: "Your approval, vehicle, documents and payout setup." }
 };
@@ -217,5 +219,5 @@ export function DriverApp({ section = "home" }) {
   const safe = sectionMeta[section] ? section : "home"; const { data, loading, error, load } = useDriverData(); const { toast } = useToast(); const router = useRouter(); const [offerBusy, setOfferBusy] = useState(false);
   async function offerAction(offer, action) { setOfferBusy(true); try { const result = await authenticatedFetch("/api/driver/offers", { method: "POST", body: JSON.stringify({ offerId: offer.id, action }) }); await load(); if (action === "accept") { toast("Delivery accepted.", { type: "success" }); router.push("/driver/active"); } } catch (err) { toast(err.message, { type: "error" }); await load({ quiet: true }); } finally { setOfferBusy(false); } }
   const offer = { accept: (item) => offerAction(item, "accept"), decline: (item) => offerAction(item, "decline"), busy: offerBusy };
-  return <AuthGate portal="driver" title="Sign in to Spotly Driver"><PortalShell portalId="driver" activeSection={safe}><div className="mx-auto max-w-[1280px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{loading ? <div className="flex min-h-[50vh] items-center justify-center"><LoaderCircle className="h-8 w-8 animate-spin text-driver" /></div> : error ? <EmptyState icon={AlertTriangle} title="Driver could not be loaded" description={error} action={<Button onClick={() => load()}><RefreshCw className="h-4 w-4" />Try again</Button>} /> : !data?.driver || !["approved", "ready", "active"].includes(data.driver.status) ? <DriverApplication data={data || {}} reload={load} /> : <><LiveLocation data={data} />{safe === "home" && <DriverHome data={data} reload={load} onOffer={offer} />}{safe === "jobs" && <Jobs data={data} offer={offer} />}{safe === "active" && <ActiveJob data={data} reload={load} />}{safe === "earnings" && <Earnings data={data} reload={load} />}{safe === "history" && <HistoryView data={data} />}{safe === "support" && <Support data={data} />}{safe === "profile" && <Profile data={data} />}</>}</div></PortalShell></AuthGate>;
+  return <AuthGate portal="driver" title="Sign in to Spotly Driver"><PortalShell portalId="driver" activeSection={safe}><div className="mx-auto max-w-[1280px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{loading ? <div className="flex min-h-[50vh] items-center justify-center"><LoaderCircle className="h-8 w-8 animate-spin text-driver" /></div> : error ? <EmptyState icon={AlertTriangle} title="Driver could not be loaded" description={error} action={<Button onClick={() => load()}><RefreshCw className="h-4 w-4" />Try again</Button>} /> : !data?.driver || !["approved", "ready", "active"].includes(data.driver.status) ? <DriverApplication data={data || {}} reload={load} /> : <><LiveLocation data={data} />{safe === "home" && <DriverHome data={data} reload={load} onOffer={offer} />}{safe === "jobs" && <Jobs data={data} offer={offer} />}{safe === "active" && <ActiveJob data={data} reload={load} />}{safe === "earnings" && <Earnings data={data} reload={load} />}{safe === "history" && <HistoryView data={data} />}{safe === "notifications" && <NotificationCenter workspace="driver" title="Driver notifications" description="Application reviews, delivery offers, payout updates and Driver account activity." />}{safe === "support" && <Support data={data} />}{safe === "profile" && <Profile data={data} />}</>}</div></PortalShell></AuthGate>;
 }

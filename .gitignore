@@ -7,3 +7,10 @@ out
 npm-debug.log*
 .DS_Store
 coverage
+
+# Firebase Admin
+*.json
+!package*.json
+
+.env
+.env.local

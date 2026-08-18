@@ -5,6 +5,7 @@ import { requirePlatformPermission } from "@/lib/access-control-server";
 import { loadBusinessLifecycleData } from "@/lib/business-lifecycle-server";
 import { businessHref } from "@/lib/business-routing";
 import { safeText } from "@/lib/server-helpers";
+import { notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ export async function POST(request) {
       throw Object.assign(new Error("Record what the business needs to change."), { status: 422 });
     }
 
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const reviewRef = db.collection("businessLaunchReviews").doc(body.reviewId);
     const initialReviewSnapshot = await reviewRef.get();
     if (!initialReviewSnapshot.exists) throw Object.assign(new Error("The launch review was not found."), { status: 404 });
@@ -39,10 +40,12 @@ export async function POST(request) {
     // Final approval is always re-evaluated from current server-side business data before
     // the transaction. The transaction below then re-reads the review/business documents
     // and atomically protects the decision against a second reviewer racing this request.
+    let approvalBranches = [];
     if (body.decision === "approve") {
-      const { lifecycle } = await loadBusinessLifecycleData(db, initialReview.businessId, { userId: initialReview.submittedBy || "" });
-      if (lifecycle.launchBlockers.length) {
-        throw Object.assign(new Error(`This business is no longer launch-ready. Resolve ${lifecycle.launchBlockers.map((item) => item.label).join(", ")} before approval.`), { status: 409 });
+      const loaded = await loadBusinessLifecycleData(db, initialReview.businessId, { userId: initialReview.submittedBy || "" });
+      approvalBranches = loaded.input.branches || [];
+      if (loaded.lifecycle.launchBlockers.length) {
+        throw Object.assign(new Error(`This business is no longer launch-ready. Resolve ${loaded.lifecycle.launchBlockers.map((item) => item.label).join(", ")} before approval.`), { status: 409 });
       }
     }
 
@@ -116,6 +119,25 @@ export async function POST(request) {
           updatedAt: FieldValue.serverTimestamp(),
           updatedBy: user.uid
         }, { merge: true });
+        if (reviewType === "initial_launch") {
+          const reviewBranchIds = new Set((currentReview.branchIdsSnapshot?.length ? currentReview.branchIdsSnapshot : approvalBranches.map((branch) => branch.id)).filter(Boolean));
+          for (const branch of approvalBranches) {
+            if (!reviewBranchIds.has(branch.id)) continue;
+            const requestedPublic = branch.requestedPublic ?? branch.public ?? true;
+            const approvedBranchStatus = branch.status === "paused" ? "paused" : "active";
+            transaction.set(db.collection("branches").doc(branch.id), {
+              status: approvedBranchStatus,
+              public: approvedBranchStatus === "active" && requestedPublic !== false,
+              requestedPublic: requestedPublic !== false,
+              reviewStatus: "approved",
+              reviewId: body.reviewId,
+              reviewedBy: user.uid,
+              reviewedAt: FieldValue.serverTimestamp(),
+              reviewReason: "",
+              updatedAt: FieldValue.serverTimestamp()
+            }, { merge: true });
+          }
+        }
       } else if (reviewType === "re_review") {
         // A re-review is about a launch-critical edit to a business that is already live.
         // Requesting further changes must not throw that business back into onboarding.
@@ -166,20 +188,20 @@ export async function POST(request) {
           updatedAt: FieldValue.serverTimestamp(),
           updatedBy: user.uid
         }, { merge: true });
+        const reviewBranchIds = new Set((currentReview.branchIdsSnapshot || []).filter(Boolean));
+        for (const branchId of reviewBranchIds) {
+          transaction.set(db.collection("branches").doc(branchId), {
+            public: false,
+            reviewStatus: body.decision === "request_changes" ? "changes_requested" : "rejected",
+            reviewId: body.reviewId,
+            reviewedBy: user.uid,
+            reviewedAt: FieldValue.serverTimestamp(),
+            reviewReason: safeText(body.reason, 800),
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
       }
 
-      if (currentReview.submittedBy) {
-        const approved = body.decision === "approve";
-        transaction.create(db.collection("notifications").doc(), {
-          userId: currentReview.submittedBy,
-          title: approved ? (reviewType === "re_review" ? "Spotly approved your business changes" : `${business.brandName || business.name || "Your business"} is live`) : body.decision === "request_changes" ? (reviewType === "re_review" ? "Spotly requested changes to your business update" : "Spotly requested launch changes") : "Launch review needs attention",
-          body: approved ? (reviewType === "re_review" ? "Spotly approved the launch-critical changes. Your business remains live." : "Spotly approved the final launch review. Your business is now live.") : safeText(body.reason, 500) || "Open the Launch Checklist to review the requested changes.",
-          href: approved ? businessHref("/business/today", { businessId: currentReview.businessId }) : businessHref("/business/launch", { businessId: currentReview.businessId }),
-          category: "business_launch_review",
-          read: false,
-          createdAt: FieldValue.serverTimestamp()
-        });
-      }
       transaction.create(db.collection("auditLogs").doc(), {
         action: reviewType === "re_review"
           ? (body.decision === "approve" ? "launch_re_review_approved" : body.decision === "request_changes" ? "launch_re_review_changes_requested" : "launch_re_review_rejected")
@@ -192,6 +214,19 @@ export async function POST(request) {
         createdAt: FieldValue.serverTimestamp()
       });
     });
+
+    if (initialReview.submittedBy) {
+      const reviewType = initialReview.reviewType === "re_review" ? "re_review" : "initial_launch";
+      const approved = body.decision === "approve";
+      const businessName = initialReview.businessName || "Your business";
+      await notifyUser({
+        db, messaging, auth, userId: initialReview.submittedBy,
+        title: approved ? (reviewType === "re_review" ? "Spotly approved your business changes" : `${businessName} is live`) : body.decision === "request_changes" ? (reviewType === "re_review" ? "Spotly requested changes to your business update" : "Spotly requested launch changes") : "Launch review needs attention",
+        body: approved ? (reviewType === "re_review" ? "Spotly approved the launch-critical changes. Your business remains live." : "Spotly approved the final launch review. Your business and approved locations are now live.") : safeText(body.reason, 500) || "Open the Launch Checklist to review what Spotly needs next.",
+        href: approved ? businessHref("/business/today", { businessId: decidedBusinessId }) : businessHref("/business/launch", { businessId: decidedBusinessId }),
+        category: "business_launch_review", workspace: "business", module: "reviews", eventType: `launch_review.${decisionStatus}`, importance: "high", businessId: decidedBusinessId, entityType: "businessLaunchReview", entityId: body.reviewId, email: true, forceOperationalEmail: true
+      }).catch(() => {});
+    }
 
     return Response.json({ ok: true, reviewId: body.reviewId, status: decisionStatus, businessId: decidedBusinessId });
   } catch (error) {

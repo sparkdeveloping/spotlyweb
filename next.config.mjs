@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const cspReportOnly = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.gstatic.com https://apis.google.com https://www.google.com https://www.recaptcha.net https://cdn.sheetjs.com`,
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.gstatic.com https://apis.google.com https://www.google.com https://www.recaptcha.net https://www.googletagmanager.com https://cdn.sheetjs.com`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://images.unsplash.com https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://yt3.googleusercontent.com",
   "font-src 'self' data:",
@@ -11,8 +11,7 @@ const cspReportOnly = [
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'self'",
-  "form-action 'self' https://*.paynow.co.zw https://paynow.co.zw",
-  "upgrade-insecure-requests"
+  "form-action 'self' https://*.paynow.co.zw https://paynow.co.zw"
 ].join("; ");
 
 const nextConfig = {

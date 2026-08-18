@@ -23,8 +23,14 @@ import { businessHref } from "@/lib/business-routing";
 
 const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
+function isPrimaryBranch(branch, business, branches = []) {
+  if (!branch?.id) return false;
+  const primaryId = business?.primaryBranchId || business?.primaryLocationId || business?.defaultBranchId || "";
+  return primaryId ? branch.id === primaryId : branches[0]?.id === branch.id;
+}
+
 function BranchModal({ branch, open, onClose }) {
-  const { business, branches, user, selectedBusinessId, archetype, lifecycle } = useBusinessWorkspace();
+  const { business, branches, user, selectedBusinessId, archetype, lifecycle, refreshBranches } = useBusinessWorkspace();
   const pickupEnabled = archetype.capabilities.includes("pickup_orders");
   const locationNoun = archetype.nouns.branch || "location";
   const [form, setForm] = useState({ ...defaultBranch });
@@ -86,7 +92,7 @@ function BranchModal({ branch, open, onClose }) {
 
   async function submit(event) {
     event.preventDefault();
-    const primaryBranch = branch ? (branch.isPrimary === true || branches[0]?.id === branch.id) : branches.length === 0;
+    const primaryBranch = branch ? isPrimaryBranch(branch, business, branches) : branches.length === 0;
     const launchCriticalLocationChanged = primaryBranch && (!branch
       || String(form.name || form.branchName || "").trim() !== String(branch.branchName || branch.name || "").trim()
       || String(form.city || "").trim() !== String(branch.city || "").trim()
@@ -96,6 +102,7 @@ function BranchModal({ branch, open, onClose }) {
     setTask({ open: true, state: "processing", title: branch ? `Updating ${locationNoun}` : `Creating ${locationNoun}`, description: "Spotly is saving the details and updating who can see this location.", active: 1 });
     try {
       await saveBranch(form, selectedBusinessId, business.organizationId, user);
+      await refreshBranches(selectedBusinessId);
       if (launchCriticalLocationChanged) {
         await markLaunchCriticalBusinessChange(selectedBusinessId, {
           id: "primary_location",
@@ -104,7 +111,7 @@ function BranchModal({ branch, open, onClose }) {
           href: businessHref("/business/branches", { businessId: selectedBusinessId })
         });
       }
-      setTask({ open: true, state: "success", title: branch ? `${locationNoun} updated` : `${locationNoun} created`, description: launchCriticalLocationChanged && lifecycle?.stage === "live" ? "The location is saved. The live business remains operational while Spotly re-reviews this launch-critical location change." : "The location, hours, and operating settings are now available across Spotly.", active: 4 });
+      setTask({ open: true, state: "success", title: branch ? `${locationNoun} updated` : `${locationNoun} created`, description: launchCriticalLocationChanged && lifecycle?.stage === "live" ? "The location is saved. The live business remains operational while Spotly re-reviews this launch-critical location change." : lifecycle?.stage === "live" && !branch ? "The location is saved in Business and is waiting for Spotly review before customer publication." : "The location, hours, and operating settings are saved to this business.", active: 4 });
       toast(branch ? "Location changes saved." : "Location added to the business.", { title: "Saved" });
     } catch (error) {
       setTask({ open: true, state: "error", title: "Could not save this location", description: error.message, active: 1 });
@@ -158,7 +165,7 @@ function hoursSummary(branch) {
 }
 
 export function BranchesView() {
-  const { branches, business, user, selectedBusinessId, archetype, membership, lifecycle } = useBusinessWorkspace();
+  const { branches, branchesLoading, branchesError, refreshBranches, business, user, selectedBusinessId, archetype, membership, lifecycle } = useBusinessWorkspace();
   const locationNoun = archetype.nouns.branch || "location";
   const permissions = membership?.permissions || [];
   const canManageAll = ["organization_owner", "business_owner", "business_manager"].includes(membership?.role) || permissions.includes("*") || permissions.includes("branches.*") || permissions.includes("branches.manage");
@@ -175,9 +182,10 @@ export function BranchesView() {
     if (!removeTarget) return;
     setLoading(true);
     try {
-      const primaryBranch = removeTarget.isPrimary === true || branches[0]?.id === removeTarget.id;
+      const primaryBranch = isPrimaryBranch(removeTarget, business, branches);
       if (primaryBranch && ["in_review", "complete"].includes(lifecycle?.launchReview?.state) && !window.confirm("Removing the primary location requires the launch decision to be reviewed again. Continue?")) { setLoading(false); return; }
       await deleteBranch(removeTarget.id, selectedBusinessId, user);
+      await refreshBranches(selectedBusinessId);
       if (primaryBranch) await markLaunchCriticalBusinessChange(selectedBusinessId, { id: "primary_location_removed", label: "Primary location removed", description: "The primary launch location was removed after a launch review decision.", href: businessHref("/business/branches", { businessId: selectedBusinessId }) });
       toast("Location removed.", { title: "Location deleted" }); setRemoveTarget(null);
     }
@@ -187,9 +195,9 @@ export function BranchesView() {
 
   const plural = `${locationNoun[0].toUpperCase()}${locationNoun.slice(1)}s`;
   return <div className="space-y-6">
-    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={plural} description={`Manage the exact ${locationNoun}s customers and staff can select under ${business?.brandName || business?.name}.`} actions={canManageAll ? <Button onClick={() => edit()}><Plus className="h-4 w-4" />Add {locationNoun}</Button> : null} /><BusinessSwitcher /></div>
+    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={plural} description={`Manage the exact ${locationNoun}s customers and staff can select under ${business?.brandName || business?.name}.`} actions={canManageAll && !branchesLoading && !branchesError ? <Button onClick={() => edit()}><Plus className="h-4 w-4" />Add {locationNoun}</Button> : null} /><BusinessSwitcher /></div>
     <Card className="border-business/15 bg-business-soft/50 p-5"><div className="flex items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 text-business" /><div><p className="font-bold">One brand, clearly separated locations</p><p className="mt-1 text-sm leading-6 text-secondary">A location does not become a separate business. You only see locations assigned to your account; owners and authorized managers can add or remove locations.</p></div></div></Card>
-    {branches.length ? <div className="grid gap-5 lg:grid-cols-2">{branches.map((branch) => <Card key={branch.id} className="overflow-hidden"><div className="p-5"><div className="flex items-start justify-between gap-4"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-business-soft text-business"><Store className="h-6 w-6" /></span><div className="flex flex-wrap justify-end gap-2"><StatusBadge status={branch.status || "active"} />{branch.public !== false ? <Badge tone={lifecycle?.canOperate ? "success" : "neutral"}>{lifecycle?.canOperate ? "Customer-visible" : "Ready when live"}</Badge> : <Badge tone="neutral">Hidden</Badge>}</div></div><p className="mt-5 text-xs font-semibold uppercase tracking-[.14em] text-tertiary">{business?.brandName || business?.name}</p><h2 className="mt-1 text-xl font-semibold">{branch.branchName || branch.name}</h2><p className="mt-2 text-sm leading-6 text-secondary">{branch.address || "Address needs confirmation"} · {branch.city || "Zimbabwe"}</p><div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-semibold"><Clock3 className="h-4 w-4 text-business" />{hoursSummary(branch)}</div><p className="mt-2 text-xs text-secondary">{pickupEnabled ? branch.pickup?.enabled === false ? "Pickup disabled" : `${branch.pickup?.slotMinutes || 30}-minute pickup slots` : `${archetype.label} location`}</p></div><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-semibold"><CreditCard className="h-4 w-4 text-business" />{branch.paymentMethods?.length || 0} payment methods</div><p className="mt-2 text-xs text-secondary">{(branch.acceptedCurrencies || ["USD", "ZWG"]).join(" and ")}</p></div></div></div><div className="flex gap-2 border-t p-4">{canEdit ? <Button variant="outline" className="flex-1" onClick={() => edit(branch)}><Edit3 className="h-4 w-4" />Edit {locationNoun}</Button> : <p className="flex-1 px-2 py-2 text-sm text-secondary">You have view-only access to this {locationNoun}.</p>}{canManageAll && <Button size="icon" variant="ghost" onClick={() => setRemoveTarget(branch)} aria-label={`Delete ${branch.branchName || branch.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button>}</div></Card>)}</div> : <SectionCard><EmptyState icon={MapPin} title={`Add the first ${locationNoun}`} description={`This holds the address, contact details, hours, customer action, and staff scope for one ${locationNoun}.`} action={canManageAll ? <Button onClick={() => edit()}><Plus className="h-4 w-4" />Add {locationNoun}</Button> : <Button href={businessHref("/business/support", { businessId: selectedBusinessId })} variant="outline">Ask for access</Button>} /></SectionCard>}
+    {branchesError ? <Card variant="bordered" className="border-danger/30 bg-danger-soft p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">Locations could not be loaded</p><p className="mt-1 text-sm leading-6 text-secondary">{branchesError}</p></div><Button variant="outline" loading={branchesLoading} onClick={() => refreshBranches(selectedBusinessId).catch(() => {})}>Try again</Button></div></Card> : branchesLoading && !branches.length ? <SectionCard><div className="p-8 text-center"><p className="font-semibold">Loading locations…</p><p className="mt-2 text-sm text-secondary">Checking the saved locations for this business.</p></div></SectionCard> : branches.length ? <div className="grid gap-5 lg:grid-cols-2">{branches.map((branch) => <Card key={branch.id} className="overflow-hidden"><div className="p-5"><div className="flex items-start justify-between gap-4"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-business-soft text-business"><Store className="h-6 w-6" /></span><div className="flex flex-wrap justify-end gap-2"><StatusBadge status={branch.status || "active"} />{["pending", "pending_launch_review"].includes(branch.reviewStatus) ? <Badge tone="warning">Waiting on Spotly</Badge> : branch.reviewStatus === "changes_requested" ? <Badge tone="danger">Changes requested</Badge> : branch.reviewStatus === "rejected" ? <Badge tone="danger">Not approved</Badge> : branch.reviewStatus === "approved" ? <Badge tone="success">Reviewed</Badge> : null}{branch.public !== false ? <Badge tone={lifecycle?.canOperate ? "success" : "neutral"}>{lifecycle?.canOperate ? "Customer-visible" : "Ready when live"}</Badge> : <Badge tone="neutral">Not customer-visible</Badge>}</div></div><p className="mt-5 text-xs font-semibold uppercase tracking-[.14em] text-tertiary">{business?.brandName || business?.name}</p><h2 className="mt-1 text-xl font-semibold">{branch.branchName || branch.name}</h2><p className="mt-2 text-sm leading-6 text-secondary">{branch.address || "Address needs confirmation"} · {branch.city || "Zimbabwe"}</p>{branch.reviewStatus === "changes_requested" && branch.reviewReason ? <div className="mt-4 rounded-xl bg-[var(--danger-soft)] p-3 text-sm leading-6 text-danger"><strong>Spotly requested changes:</strong> {branch.reviewReason}</div> : null}<div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-semibold"><Clock3 className="h-4 w-4 text-business" />{hoursSummary(branch)}</div><p className="mt-2 text-xs text-secondary">{pickupEnabled ? branch.pickup?.enabled === false ? "Pickup disabled" : `${branch.pickup?.slotMinutes || 30}-minute pickup slots` : `${archetype.label} location`}</p></div><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-semibold"><CreditCard className="h-4 w-4 text-business" />{branch.paymentMethods?.length || 0} payment methods</div><p className="mt-2 text-xs text-secondary">{(branch.acceptedCurrencies || ["USD", "ZWG"]).join(" and ")}</p></div></div></div><div className="flex gap-2 border-t p-4">{canEdit ? <Button variant="outline" className="flex-1" onClick={() => edit(branch)}><Edit3 className="h-4 w-4" />Edit {locationNoun}</Button> : <p className="flex-1 px-2 py-2 text-sm text-secondary">You have view-only access to this {locationNoun}.</p>}{canManageAll && <Button size="icon" variant="ghost" onClick={() => setRemoveTarget(branch)} aria-label={`Delete ${branch.branchName || branch.name}`}><Trash2 className="h-4 w-4 text-danger" /></Button>}</div></Card>)}</div> : <SectionCard><EmptyState icon={MapPin} title={`Add the first ${locationNoun}`} description={`This holds the address, contact details, hours, customer action, and staff scope for one ${locationNoun}.`} action={canManageAll ? <Button onClick={() => edit()}><Plus className="h-4 w-4" />Add {locationNoun}</Button> : <Button href={businessHref("/business/support", { businessId: selectedBusinessId })} variant="outline">Ask for access</Button>} /></SectionCard>}
     <BranchModal branch={editing} open={open} onClose={() => setOpen(false)} />
     <ConfirmDialog open={Boolean(removeTarget)} onClose={() => setRemoveTarget(null)} title={`Delete this ${locationNoun}?`} description={`${removeTarget?.branchName || removeTarget?.name || "This location"} will no longer be available to customers or staff. A business must keep at least one location.`} confirmLabel="Delete location" danger loading={loading} onConfirm={remove} />
   </div>;

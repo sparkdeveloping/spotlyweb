@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { requirePlatformPermission } from "@/lib/access-control-server";
 import { postSettlementAvailableLedger } from "@/lib/business-money-server";
 import { safeText, toPlainTimestamp } from "@/lib/server-helpers";
+import { notifyUsers } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 const schema = z.discriminatedUnion("action", [
@@ -32,7 +33,7 @@ export async function POST(request) {
     const user = await authenticateRequest(request);
     requirePlatformPermission(user, "finance.settlement", { roles: ["finance_admin"] });
     const body = schema.parse(await request.json());
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     if (body.action === "settlement_decision") {
       const ref = db.collection("businessSettlementAccounts").doc(body.businessId);
       const snapshot = await ref.get();
@@ -41,6 +42,17 @@ export async function POST(request) {
       await ref.set(body.decision === "verify" ? { status: settlementStatus, verifiedAt: FieldValue.serverTimestamp(), verifiedBy: user.uid, rejectionReason: "", updatedAt: FieldValue.serverTimestamp() } : { status: settlementStatus, rejectionReason: safeText(body.reason || "Settlement details require correction.", 500), reviewedBy: user.uid, reviewedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await db.collection("businesses").doc(body.businessId).set({ "moneySetup.settlementStatus": settlementStatus, "moneySetup.updatedAt": FieldValue.serverTimestamp() }, { merge: true });
       await db.collection("auditLogs").add({ action: `settlement_account.${body.decision === "verify" ? "verified" : "rejected"}`, entityType: "businessSettlementAccount", entityId: body.businessId, actorId: user.uid, actorEmail: user.email || "", metadata: { businessId: body.businessId, reason: safeText(body.reason, 500) }, createdAt: FieldValue.serverTimestamp() });
+      const businessSnapshot = await db.collection("businesses").doc(body.businessId).get();
+      const ownerIds = [...new Set([...(businessSnapshot.data()?.ownerIds || []), snapshot.data()?.submittedBy].filter(Boolean))];
+      if (ownerIds.length) {
+        await notifyUsers({
+          db, messaging, auth,
+          title: body.decision === "verify" ? "Settlement account verified" : "Settlement account needs attention",
+          body: body.decision === "verify" ? "Spotly verified your Business payout destination." : safeText(body.reason || "Review and correct the settlement details in Business Money.", 500),
+          href: `/business/money?business=${encodeURIComponent(body.businessId)}`, category: "business_money_review", workspace: "business", module: "money",
+          eventType: `settlement_account.${body.decision === "verify" ? "verified" : "changes_requested"}`, importance: "high", businessId: body.businessId, entityType: "businessSettlementAccount", entityId: body.businessId, email: true, forceOperationalEmail: true
+        }, ownerIds).catch(() => {});
+      }
       return Response.json({ ok: true });
     }
     const orderRef = db.collection("orders").doc(body.orderId);

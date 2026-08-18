@@ -19,7 +19,7 @@ import {
   updateProfile
 } from "firebase/auth";
 import { getToken } from "firebase/messaging";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebaseClient, getFirebaseMessaging } from "@/lib/firebase";
 import { clearUserSessionState } from "@/lib/browser-state";
 import {
@@ -55,6 +55,9 @@ export function FirebaseProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [memberships, setMemberships] = useState([]);
+  const [staffProfile, setStaffProfile] = useState(null);
+  const [driverProfile, setDriverProfile] = useState(null);
+  const [driverApplication, setDriverApplication] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState("");
   const recaptchaRef = useRef(null);
@@ -78,6 +81,9 @@ export function FirebaseProvider({ children }) {
       } else {
         setProfile(null);
         setMemberships([]);
+        setStaffProfile(null);
+        setDriverProfile(null);
+        setDriverApplication(null);
       }
       setAuthReady(true);
     });
@@ -97,6 +103,21 @@ export function FirebaseProvider({ children }) {
       return undefined;
     }
     return subscribeMemberships(user.uid, setMemberships, (error) => setAuthError(error.message));
+  }, [user?.uid, user?.isAnonymous]);
+
+  useEffect(() => {
+    if (!user?.uid || user.isAnonymous) {
+      setStaffProfile(null);
+      setDriverProfile(null);
+      setDriverApplication(null);
+      return undefined;
+    }
+    const client = getFirebaseClient();
+    if (!client) return undefined;
+    const unsubStaff = onSnapshot(doc(client.db, "staffProfiles", user.uid), (snapshot) => setStaffProfile(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null), () => setStaffProfile(null));
+    const unsubDriver = onSnapshot(doc(client.db, "drivers", user.uid), (snapshot) => setDriverProfile(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null), () => setDriverProfile(null));
+    const unsubDriverApplication = onSnapshot(doc(client.db, "driverApplications", user.uid), (snapshot) => setDriverApplication(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null), () => setDriverApplication(null));
+    return () => { unsubStaff(); unsubDriver(); unsubDriverApplication(); };
   }, [user?.uid, user?.isAnonymous]);
 
 
@@ -234,6 +255,9 @@ export function FirebaseProvider({ children }) {
     user,
     profile,
     memberships,
+    staffProfile,
+    driverProfile,
+    driverApplication,
     authReady,
     authError,
     createAccount,
@@ -246,7 +270,7 @@ export function FirebaseProvider({ children }) {
     enablePushNotifications,
     ensureAnonymousSession,
     hasRole
-  }), [user, profile, memberships, authReady, authError, createAccount, signIn, logout, resetPassword, linkProvider, addPassword, beginPhoneLink, enablePushNotifications, ensureAnonymousSession, hasRole]);
+  }), [user, profile, memberships, staffProfile, driverProfile, driverApplication, authReady, authError, createAccount, signIn, logout, resetPassword, linkProvider, addPassword, beginPhoneLink, enablePushNotifications, ensureAnonymousSession, hasRole]);
 
   return <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>;
 }

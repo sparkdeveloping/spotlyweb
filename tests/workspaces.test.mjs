@@ -17,3 +17,11 @@ test("workspace settings use explicit valid destinations", () => {
   assert.equal(settingsRouteForWorkspace("driver"), "/driver/profile");
   assert.equal(settingsRouteForWorkspace("admin"), "/admin/platform");
 });
+
+test("plain customers do not receive an Admin workspace and explicit platform permissions do", () => {
+  const customerOnly = workspaceAccess({ profile: { roles: ["customer"] } });
+  assert.equal(customerOnly.has("admin"), false);
+
+  const permitted = workspaceAccess({ profile: { roles: ["customer"], customPermissions: ["businesses.read"] } });
+  assert.equal(permitted.has("admin"), true);
+});

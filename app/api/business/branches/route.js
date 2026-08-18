@@ -3,8 +3,12 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { requireBusinessPermission } from "@/lib/access-control-server";
 import { defaultBranch } from "@/data/business-config";
+import { loadCanonicalBusinessBranches } from "@/lib/business-branches-server";
+import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const hoursSchema = z.record(z.string(), z.object({
   open: z.string().max(10).optional().default(""),
@@ -21,7 +25,7 @@ const branchSchema = z.object({
   phone: z.string().max(80).optional(),
   email: z.union([z.string().email().max(254), z.literal("")]).optional(),
   public: z.boolean().optional(),
-  status: z.enum(["active", "paused", "closed"]).optional(),
+  status: z.enum(["draft", "provisional", "active", "paused", "closed"]).optional(),
   fulfilment: z.array(z.string().max(80)).max(20).optional(),
   openingHours: hoursSchema,
   pickup: z.object({
@@ -39,6 +43,23 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("upsert"), businessId: z.string().min(3).max(200), branch: branchSchema, makePrimary: z.boolean().optional().default(false) }),
   z.object({ action: z.literal("delete"), businessId: z.string().min(3).max(200), branchId: z.string().min(1).max(220) })
 ]);
+
+
+function branchLabel(branch = {}) {
+  return String(branch.branchName || branch.name || branch.displayName || "").trim();
+}
+
+function sortBranches(records = []) {
+  return [...records].sort((a, b) => branchLabel(a).localeCompare(branchLabel(b), "en", { sensitivity: "base" }));
+}
+
+function plain(value) {
+  if (value == null) return value;
+  if (typeof value?.toDate === "function") return value.toDate().toISOString();
+  if (Array.isArray(value)) return value.map(plain);
+  if (typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)]));
+  return value;
+}
 
 function normalizeSearchTerms(...values) {
   const combined = values.filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9\s-]/g, " ");
@@ -69,11 +90,40 @@ function requireBusinessWide(context) {
   }
 }
 
+
+export async function GET(request) {
+  try {
+    const user = await authenticateRequest(request);
+    const { searchParams } = new URL(request.url);
+    const businessId = String(searchParams.get("businessId") || "").trim();
+    if (!businessId) return Response.json({ ok: false, error: "A business is required." }, { status: 400 });
+
+    const { db } = getAdminServices();
+    const context = await requireBusinessPermission(db, user, businessId, "branches.read", {
+      allowRoles: ["organization_owner", "business_owner", "business_manager", "branch_manager", "catalog_manager", "order_staff", "picker", "finance_manager", "finance_viewer"]
+    });
+
+    // Resolve both sides of the Business ↔ location relationship. This repairs historical
+    // one-sided links that otherwise let Admin see a submitted location while Business sees
+    // an empty Locations screen. No composite index is required.
+    const resolved = await loadCanonicalBusinessBranches(db, businessId, { repair: context.businessWide || context.platformAdmin });
+    let branches = resolved.branches.map((branch) => plain(branch));
+    if (!context.businessWide && !context.platformAdmin) {
+      const allowed = new Set(context.membership?.branchIds || []);
+      branches = branches.filter((branch) => allowed.has(branch.id));
+    }
+    branches = sortBranches(branches);
+    return Response.json({ ok: true, branches, integrity: resolved.diagnostics }, { headers: { "Cache-Control": "private, no-store, max-age=0, must-revalidate" } });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
 
     if (body.action === "upsert") {
       const existingId = body.branch.id || null;
@@ -102,6 +152,11 @@ export async function POST(request) {
       const fulfilment = submitted.fulfilment?.length ? submitted.fulfilment : (existingBranch?.fulfilment?.length ? existingBranch.fulfilment : ["profile"]);
       const city = submitted.city ?? existingBranch?.city ?? "Harare";
       const address = submitted.address ?? existingBranch?.address ?? "";
+      const businessIsLive = ["live", "paused"].includes(String(business.lifecycleStatus || "")) || (business.status === "active" && business.public !== false);
+      const requestedPublic = submitted.public ?? existingBranch?.requestedPublic ?? existingBranch?.public ?? true;
+      const requiresIndependentReview = !existingId && businessIsLive;
+      const prelaunchLocation = !existingId && !businessIsLive;
+      const locationReviewRef = requiresIndependentReview ? db.collection("businessLocationReviews").doc() : null;
       const payload = {
         businessId: body.businessId,
         organizationId: business.organizationId || null,
@@ -112,8 +167,11 @@ export async function POST(request) {
         address,
         phone: submitted.phone ?? existingBranch?.phone ?? "",
         email: submitted.email ?? existingBranch?.email ?? "",
-        public: submitted.public ?? existingBranch?.public ?? true,
-        status: submitted.status || existingBranch?.status || "active",
+        requestedPublic: requestedPublic !== false,
+        public: requiresIndependentReview || prelaunchLocation ? false : (submitted.public ?? existingBranch?.public ?? true),
+        status: requiresIndependentReview || prelaunchLocation ? "draft" : (submitted.status === "provisional" ? "draft" : (submitted.status || existingBranch?.status || "active")),
+        reviewStatus: requiresIndependentReview ? "pending" : prelaunchLocation ? "pending_launch_review" : (existingBranch?.reviewStatus || "approved"),
+        ...(locationReviewRef ? { reviewId: locationReviewRef.id, reviewRequestedAt: FieldValue.serverTimestamp(), reviewRequestedBy: user.uid } : {}),
         fulfilment,
         openingHours: submitted.openingHours || existingBranch?.openingHours || defaultBranch.openingHours,
         pickup: submitted.pickup || existingBranch?.pickup || { ...defaultBranch.pickup, enabled: fulfilment.includes("pickup") },
@@ -148,10 +206,29 @@ export async function POST(request) {
           updatedAt: FieldValue.serverTimestamp(),
           updatedBy: user.uid
         }, { merge: true });
+        if (locationReviewRef) {
+          transaction.create(locationReviewRef, {
+            businessId: body.businessId, organizationId: business.organizationId || null, branchId: branchRef.id, branchName, businessName,
+            status: "submitted", requestedBy: user.uid, requestedByEmail: user.email || "", requestedPublic: requestedPublic !== false,
+            createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+          });
+          transaction.create(db.collection("adminTasks").doc(locationReviewRef.id), {
+            type: "business_location_review", reviewId: locationReviewRef.id, businessId: body.businessId, branchId: branchRef.id, businessName,
+            title: `Location review · ${businessName} · ${branchName}`, description: "A live business added a new location. Review its customer-facing location details before publication.",
+            status: "open", priority: "normal", requestedBy: user.uid, requestedByEmail: user.email || "",
+            createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+          });
+        }
         writeAudit(transaction, db, user, existingId ? "branch.updated" : "branch.created", branchRef.id, body.businessId);
       });
 
-      return Response.json({ ok: true, branchId: branchRef.id });
+      if (locationReviewRef) {
+        await Promise.allSettled([
+          notifyUser({ db, messaging, auth, userId: user.uid, title: "Location sent to Spotly", body: `${branchName} is saved and visible in Business while Spotly reviews it for customer publication.`, href: `/business/branches?business=${encodeURIComponent(body.businessId)}`, category: "business_location_review", workspace: "business", module: "locations", eventType: "location_review.submitted", importance: "high", businessId: body.businessId, entityType: "branch", entityId: branchRef.id, email: true, forceOperationalEmail: true }),
+          notifyRoleAudience({ db, messaging, auth, title: `Location review ready · ${businessName}`, body: `${branchName} was added to a live business and needs publication review.`, href: "/admin/queues/publication-review?status=open", category: "admin_review", workspace: "admin", module: "reviews", eventType: "location_review.submitted", importance: "high", businessId: body.businessId, entityType: "businessLocationReview", entityId: locationReviewRef.id, email: true, forceOperationalEmail: true }, ["super_admin", "business_success_manager", "operations_manager", "regional_operations_manager"])
+        ]);
+      }
+      return Response.json({ ok: true, branchId: branchRef.id, reviewId: locationReviewRef?.id || null, reviewStatus: payload.reviewStatus });
     }
 
     const context = await requireBusinessPermission(db, user, body.businessId, "branches.manage", {

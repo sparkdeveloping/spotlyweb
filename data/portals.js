@@ -1,6 +1,7 @@
 import {
   BadgeDollarSign,
   BarChart3,
+  Bell,
   Bike,
   BookOpenCheck,
   Building2,
@@ -45,6 +46,7 @@ export const portals = {
       { id: "search", label: "Search", icon: Search, href: "/marketplace?view=search" },
       { id: "orders", label: "Orders", icon: CalendarDays, href: "/marketplace?view=orders" },
       { id: "saved", label: "Saved", icon: Heart, href: "/marketplace?view=saved" },
+      { id: "notifications", label: "Notifications", icon: Bell, href: "/account#notifications" },
       { id: "profile", label: "Profile", icon: CircleUserRound, href: "/account" }
     ]
   },
@@ -69,6 +71,7 @@ export const portals = {
       { id: "promotions", label: "Promotions", icon: BadgeDollarSign, href: "/business/promotions" },
       { id: "staff", label: "Staff", icon: UsersRound, href: "/business/staff" },
       { id: "finance", label: "Money", icon: WalletCards, href: "/business/finance" },
+      { id: "notifications", label: "Notifications", icon: Bell, href: "/business/notifications" },
       { id: "support", label: "Support", icon: LifeBuoy, href: "/business/support" },
       { id: "settings", label: "Settings", icon: Settings, href: "/business/settings" }
     ]
@@ -92,6 +95,7 @@ export const portals = {
       { id: "learning", label: "Learning", icon: BookOpenCheck, href: "/staff/learning" },
       { id: "performance", label: "Performance", icon: Sparkles, href: "/staff/performance" },
       { id: "pay", label: "Pay", icon: WalletCards, href: "/staff/pay" },
+      { id: "notifications", label: "Notifications", icon: Bell, href: "/staff/notifications" },
       { id: "profile", label: "Profile", icon: CircleUserRound, href: "/staff/profile" }
     ]
   },
@@ -112,6 +116,7 @@ export const portals = {
       { id: "active", label: "Active job", icon: MapPinned, href: "/driver/active" },
       { id: "earnings", label: "Earnings", icon: BadgeDollarSign, href: "/driver/earnings" },
       { id: "history", label: "History", icon: PackageCheck, href: "/driver/history" },
+      { id: "notifications", label: "Notifications", icon: Bell, href: "/driver/notifications" },
       { id: "support", label: "Safety & support", icon: LifeBuoy, href: "/driver/support" },
       { id: "profile", label: "Profile", icon: CircleUserRound, href: "/driver/profile" }
     ]
@@ -130,6 +135,7 @@ export const portals = {
     nav: [
       { group: "Operations", id: "dashboard", label: "Control centre", icon: LayoutDashboard, href: "/admin" },
       { group: "Operations", id: "operations", label: "Operations", icon: Truck, href: "/admin/operations" },
+      { group: "Operations", id: "notifications", label: "Notifications", icon: Bell, href: "/admin/notifications" },
       { group: "Marketplace", id: "organizations", label: "Organizations", icon: Building2, href: "/admin/organizations" },
       { group: "Marketplace", id: "businesses", label: "Businesses", icon: Store, href: "/admin/businesses" },
       { group: "People", id: "people", label: "People", icon: UsersRound, href: "/admin/people" },

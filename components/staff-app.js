@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bell,
   AlertTriangle,
   ArrowRight,
   BadgeDollarSign,
@@ -44,6 +45,7 @@ import {
 import { AuthGate } from "@/components/auth-gate";
 import { StaffCatalogueCapture } from "@/components/staff-catalogue-capture";
 import { PortalShell } from "@/components/portal-shell";
+import { NotificationCenter } from "@/components/notification-center";
 import { useAuth } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import {
@@ -109,6 +111,7 @@ const sectionMeta = {
   performance: { title: "Performance", description: "Goals, check-ins, probation, development, and coaching." },
   pay: { title: "Pay", description: "Pay records, allowances, reimbursements, payslips, and payroll status." },
   assets: { title: "Assets", description: "Equipment issued to Spotly staff and its return condition." },
+  notifications: { title: "Staff notifications", description: "Approvals, schedule changes, People Operations activity and work updates." },
   help: { title: "Help & support", description: "People support, technical help, confidential concerns, and incidents." },
   profile: { title: "Profile", description: "Employment, role, access, documents, contacts, and account details." },
   catalogue: { title: "Product capture", description: "Build Spotly’s reusable product library from verified field observations." }
@@ -173,6 +176,7 @@ function staffNavigation(data) {
     { id: "performance", label: "Performance", icon: Target, href: "/staff/performance" },
     { id: "pay", label: "Pay", icon: WalletCards, href: "/staff/pay" },
     { id: "assets", label: "Assets", icon: Laptop, href: "/staff/assets" },
+    { id: "notifications", label: "Notifications", icon: Bell, href: "/staff/notifications" },
     { id: "help", label: "Help & support", icon: LifeBuoy, href: "/staff/help" },
     { id: "profile", label: "Profile", icon: UserRound, href: "/staff/profile" }
   );
@@ -576,7 +580,7 @@ function StaffWorkspace({ section }) {
   const allowed = new Set(navigation.map((item) => item.id));
   const safeSection = allowed.has(section) ? section : "today";
   const openModal = (type, item = null) => setModal({ type, item });
-  return <StaffAccess data={data}><PortalShell portalId="staff" activeSection={safeSection} navigation={navigation} footer={false}><div className="mx-auto max-w-[1550px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{safeSection === "today" && <Today data={data} openModal={openModal} />}{safeSection === "work" && <Work data={data} openModal={openModal} />}{safeSection === "catalogue" && <StaffCatalogueCapture data={data} />}{safeSection === "team" && data.manager && <Team data={data} openModal={openModal} />}{safeSection === "hiring" && data.manager && <Hiring data={data} openModal={openModal} />}{safeSection === "schedule" && <Schedule data={data} openModal={openModal} />}{safeSection === "leave" && <Leave data={data} openModal={openModal} />}{safeSection === "learning" && <Learning data={data} />}{safeSection === "performance" && <Performance data={data} />}{safeSection === "pay" && <Pay data={data} />}{safeSection === "assets" && <Assets data={data} openModal={openModal} />}{safeSection === "help" && <Help data={data} openModal={openModal} />}{safeSection === "profile" && <Profile data={data} openModal={openModal} />}</div><StaffModal type={modal.type} item={modal.item} open={Boolean(modal.type)} onClose={() => setModal({ type: "", item: null })} data={data} /></PortalShell></StaffAccess>;
+  return <StaffAccess data={data}><PortalShell portalId="staff" activeSection={safeSection} navigation={navigation} footer={false}><div className="mx-auto max-w-[1550px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">{safeSection === "today" && <Today data={data} openModal={openModal} />}{safeSection === "work" && <Work data={data} openModal={openModal} />}{safeSection === "catalogue" && <StaffCatalogueCapture data={data} />}{safeSection === "team" && data.manager && <Team data={data} openModal={openModal} />}{safeSection === "hiring" && data.manager && <Hiring data={data} openModal={openModal} />}{safeSection === "schedule" && <Schedule data={data} openModal={openModal} />}{safeSection === "leave" && <Leave data={data} openModal={openModal} />}{safeSection === "learning" && <Learning data={data} />}{safeSection === "performance" && <Performance data={data} />}{safeSection === "pay" && <Pay data={data} />}{safeSection === "assets" && <Assets data={data} openModal={openModal} />}{safeSection === "notifications" && <NotificationCenter workspace="staff" title="Staff notifications" description="Approvals, schedule changes, People Operations activity and work updates." />}{safeSection === "help" && <Help data={data} openModal={openModal} />}{safeSection === "profile" && <Profile data={data} openModal={openModal} />}</div><StaffModal type={modal.type} item={modal.item} open={Boolean(modal.type)} onClose={() => setModal({ type: "", item: null })} data={data} /></PortalShell></StaffAccess>;
 }
 
 export function StaffApp({ section = "today" }) {

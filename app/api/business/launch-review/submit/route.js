@@ -3,6 +3,8 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { requireBusinessPermission } from "@/lib/access-control-server";
 import { loadBusinessLifecycleData, publicLifecycleSnapshot } from "@/lib/business-lifecycle-server";
+import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
+import { businessHref } from "@/lib/business-routing";
 
 export const runtime = "nodejs";
 
@@ -12,7 +14,7 @@ export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const context = await requireBusinessPermission(db, user, body.businessId, "business.update", { allowRoles: ["organization_owner", "business_owner", "business_manager"] });
     const { input, lifecycle } = await loadBusinessLifecycleData(db, body.businessId, { membership: context.membership, userId: user.uid });
     const isLiveReReview = ["live", "paused"].includes(lifecycle.businessState) && lifecycle.launchReview.status === "re_review_required";
@@ -55,6 +57,7 @@ export async function POST(request) {
         updatedAt: FieldValue.serverTimestamp(),
         merchantProgress: lifecycle.merchantProgress,
         checklistSnapshot: safeChecks,
+        branchIdsSnapshot: input.branches.map((branch) => branch.id),
         attempt: Number(currentBusiness.launchReview?.attempt || 0) + 1
       });
       transaction.create(taskRef, {
@@ -69,6 +72,7 @@ export async function POST(request) {
         requestedBy: user.uid,
         requestedByEmail: user.email || "",
         merchantProgress: lifecycle.merchantProgress,
+        branchIds: input.branches.map((branch) => branch.id),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
       });
@@ -129,6 +133,23 @@ export async function POST(request) {
         createdAt: FieldValue.serverTimestamp()
       });
     });
+
+    const businessName = business.brandName || business.name || "Your business";
+    const reviewHref = businessHref("/business/launch", { businessId: body.businessId });
+    await Promise.allSettled([
+      notifyUser({
+        db, messaging, auth, userId: user.uid,
+        title: isLiveReReview ? "Business changes sent to Spotly" : "Launch review submitted",
+        body: isLiveReReview ? `${businessName} is now waiting for Spotly to review the launch-critical changes you submitted.` : `${businessName} is now waiting for Spotly's final launch review.`,
+        href: reviewHref, category: "business_launch_review", workspace: "business", module: "reviews", eventType: isLiveReReview ? "launch_re_review.submitted" : "launch_review.submitted", importance: "high", businessId: body.businessId, entityType: "businessLaunchReview", entityId: reviewRef.id, email: true, forceOperationalEmail: true
+      }),
+      notifyRoleAudience({
+        db, messaging, auth,
+        title: isLiveReReview ? `Business changes need review · ${businessName}` : `Launch review ready · ${businessName}`,
+        body: isLiveReReview ? "A live business submitted launch-critical changes for review." : "A business completed launch setup and is ready for final review.",
+        href: "/admin/queues/publication-review", category: "admin_review", workspace: "admin", module: "reviews", eventType: isLiveReReview ? "launch_re_review.submitted" : "launch_review.submitted", importance: "high", businessId: body.businessId, entityType: "businessLaunchReview", entityId: reviewRef.id, email: true, forceOperationalEmail: true
+      }, ["super_admin", "business_success_manager", "operations_manager", "regional_operations_manager"])
+    ]);
 
     // Return a freshly reloaded lifecycle snapshot rather than mutating only the old stage field.
     // This keeps stage number/label, navigation mode, review ownership, blockers and default route

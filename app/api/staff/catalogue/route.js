@@ -91,8 +91,10 @@ export async function GET(request) {
     }
     if (type === "branches") {
       const businessId = safeText(url.searchParams.get("businessId"), 180);
-      const snapshot = await db.collection("branches").where("businessId", "==", businessId).orderBy("name").limit(100).get();
-      return Response.json({ ok: true, branches: snapshot.docs.map((doc) => ({ id: doc.id, name: doc.data().branchName || doc.data().name || "Location", city: doc.data().city || "" })) });
+      const snapshot = await db.collection("branches").where("businessId", "==", businessId).limit(100).get();
+      const branches = snapshot.docs.map((doc) => ({ id: doc.id, name: doc.data().branchName || doc.data().name || "Location", city: doc.data().city || "" }))
+        .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
+      return Response.json({ ok: true, branches });
     }
     if (barcode) {
       const product = await findMasterProductByBarcode(db, barcode);

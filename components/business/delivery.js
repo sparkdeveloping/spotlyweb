@@ -12,7 +12,7 @@ const label = (value = "") => String(value).replaceAll("_", " ");
 const terminal = new Set(["delivered", "failed", "cancelled", "returned"]);
 
 export function DeliveryView() {
-  const { selectedBusinessId, selectedBranch, branches, selectedBranchId, setSelectedBranchId } = useBusinessWorkspace();
+  const { selectedBusinessId, selectedBranch, branches, branchesLoading, branchesError, refreshBranches, selectedBranchId, setSelectedBranchId } = useBusinessWorkspace();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,6 +70,8 @@ export function DeliveryView() {
   const branchJobs = useMemo(() => jobs.filter((job) => !selectedBranchId || job.branchId === selectedBranchId).sort((a,b)=>String(b.updatedAt||b.createdAt||"").localeCompare(String(a.updatedAt||a.createdAt||""))), [jobs, selectedBranchId]);
   const active = branchJobs.filter((job) => !terminal.has(job.state));
 
+  if (branchesError) return <div className="space-y-6"><PageHeader eyebrow="Fulfilment" title="Delivery" description="Delivery is configured per exact business location."/><Card variant="bordered" className="p-8 text-center"><AlertTriangle className="mx-auto h-9 w-9 text-danger"/><h2 className="mt-4 text-xl font-semibold">Locations could not be loaded</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-secondary">{branchesError}</p><Button className="mt-5" variant="outline" loading={branchesLoading} onClick={() => refreshBranches(selectedBusinessId).catch(() => {})}>Try again</Button></Card></div>;
+  if (branchesLoading && !branches.length) return <div className="space-y-6"><PageHeader eyebrow="Fulfilment" title="Delivery" description="Delivery is configured per exact business location."/><Card variant="bordered" className="p-8 text-center"><p className="font-semibold">Loading locations…</p></Card></div>;
   if (!branches.length) return <div className="space-y-6"><PageHeader eyebrow="Fulfilment" title="Delivery" description="Delivery is configured per exact business location."/><Card variant="bordered" className="p-8 text-center"><MapPin className="mx-auto h-9 w-9 text-[var(--accent)]"/><h2 className="mt-4 text-xl font-semibold">Add the pickup location first</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-secondary">Drivers need a real branch with an address before Spotly can configure pickup coordinates, service radius, handoff instructions, or dispatch.</p><Button asChild className="mt-5"><Link href={`/business/branches?business=${encodeURIComponent(selectedBusinessId)}`}>Add location</Link></Button></Card></div>;
 
   return <div className="space-y-6"><PageHeader eyebrow="Fulfilment" title="Delivery" description="Configure this location, prepare delivery orders, and hand them to the assigned Driver without leaving Spotly Business." actions={<Button variant="outline" onClick={load}><RefreshCw className="h-4 w-4"/>Refresh</Button>} />
