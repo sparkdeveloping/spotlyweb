@@ -19,6 +19,7 @@ import {
 import { Badge, Button, Card, Modal, Overlay, ProgressBar, SearchField, StatusBadge } from "@/components/ui";
 import { useBusinessWorkspace } from "@/components/business/business-context";
 import { businessHref } from "@/lib/business-routing";
+import { spotlyPortalUrl } from "@/lib/spotly-domains";
 
 export const fieldClass = "surface h-12 w-full rounded-xl px-4 outline-none transition focus:ring-2 focus:ring-business/20";
 export const textAreaClass = "surface min-h-28 w-full rounded-xl p-4 outline-none transition focus:ring-2 focus:ring-business/20";
@@ -96,7 +97,7 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
           </button>)}
           {!filtered.length && <div className="py-10 text-center text-sm text-secondary">No businesses match this search.</div>}
         </div>
-        <div className="grid gap-2 border-t pt-4 sm:grid-cols-2"><Button asChild variant="outline"><Link href="/business"><Building2 className="h-4 w-4" />View portfolio</Link></Button><Button asChild variant="outline"><Link href="/claim"><Search className="h-4 w-4" />Claim another business</Link></Button></div>
+        <div className="grid gap-2 border-t pt-4 sm:grid-cols-2"><Button asChild variant="outline"><Link href="/"><Building2 className="h-4 w-4" />View portfolio</Link></Button><Button asChild variant="outline"><Link href={spotlyPortalUrl("customer", "/claim")}><Search className="h-4 w-4" />Claim another business</Link></Button></div>
       </div>
     </Overlay>
     <Overlay open={locationOpen} onClose={() => setLocationOpen(false)} mode="sheet" title={`Choose ${archetype?.nouns?.branch || "location"}`} description="Switch the exact location you are operating." label="Location switcher">

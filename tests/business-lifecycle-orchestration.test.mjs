@@ -42,8 +42,8 @@ test("setup resume validates prerequisites but Review aggregates blockers instea
 });
 
 test("businessHref preserves explicit business context and extra deep-link parameters", () => {
-  assert.equal(businessHref("/business/catalog", { businessId: "b 1", product: "p/2" }), "/business/catalog?business=b+1&product=p%2F2");
-  assert.equal(businessHref("/business/setup?foo=bar", { businessId: "abc", step: "location" }), "/business/setup?foo=bar&business=abc&step=location");
+  assert.equal(businessHref("/business/catalog", { businessId: "b 1", product: "p/2" }), "/catalog?business=b+1&product=p%2F2");
+  assert.equal(businessHref("/business/setup?foo=bar", { businessId: "abc", step: "location" }), "/setup?foo=bar&business=abc&step=location");
 });
 
 test("persistent business layout owns auth provider and portal shell", () => {

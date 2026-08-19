@@ -121,7 +121,7 @@ export async function POST(request) {
         ? "Your business claim was approved. Open Spotly Business to continue setup and manage your approved locations."
         : safeText(body.reason || (body.decision === "request" ? "Open your claim to review what Spotly needs next." : "Open Spotly to review the decision."), 700);
       await notifyUser({
-        db, messaging, auth, userId: reviewedClaim.applicantId, title: decisionTitle, body: decisionBody, href: "/business",
+        db, messaging, auth, userId: reviewedClaim.applicantId, title: decisionTitle, body: decisionBody, href: "/",
         category: "business_claim_review", workspace: "business", module: "reviews", eventType: `business_claim.${body.decision === "request" ? "changes_requested" : body.decision === "approve" ? "approved" : "rejected"}`,
         importance: "high", businessId: reviewedClaim.businessId, entityType: "businessClaim", entityId: body.claimId, email: true, forceOperationalEmail: true
       }).catch(() => {});

@@ -23,6 +23,7 @@ import { getToken } from "firebase/messaging";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebaseClient, getFirebaseMessaging } from "@/lib/firebase";
 import { clearUserSessionState } from "@/lib/browser-state";
+import { portalForHostname, spotlyPortalUrl } from "@/lib/spotly-domains";
 import {
   DEFAULT_PLATFORM_SETTINGS,
   ensureUserProfile,
@@ -63,6 +64,13 @@ async function persistSharedBrowserSession(firebaseUser) {
   return response.ok;
 }
 
+
+async function sharedBrowserSessionState() {
+  const response = await fetch("/api/auth/session", { method: "GET", credentials: "same-origin", cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  return { ok: response.ok && payload.ok !== false, status: response.status, ...payload };
+}
+
 async function bootstrapSharedBrowserSession(auth) {
   const response = await fetch("/api/auth/session/bootstrap", { method: "POST", credentials: "same-origin", cache: "no-store" });
   if (!response.ok) return null;
@@ -86,6 +94,7 @@ export function FirebaseProvider({ children }) {
   const [authError, setAuthError] = useState("");
   const recaptchaRef = useRef(null);
   const sharedBootstrapAttemptedRef = useRef(false);
+  const initialAuthResolvedRef = useRef(false);
 
   useEffect(() => {
     const client = getFirebaseClient();
@@ -95,6 +104,25 @@ export function FirebaseProvider({ children }) {
     }
     return onAuthStateChanged(client.auth, async (nextUser) => {
       setAuthError("");
+      const initialEvent = !initialAuthResolvedRef.current;
+      initialAuthResolvedRef.current = true;
+
+      if (initialEvent && nextUser && !nextUser.isAnonymous) {
+        try {
+          const shared = await sharedBrowserSessionState();
+          if (shared.ok && shared.uid && shared.uid !== nextUser.uid) {
+            const restoredUser = await bootstrapSharedBrowserSession(client.auth);
+            if (restoredUser) return;
+          }
+          if (!shared.ok && ["signed_out", "expired"].includes(shared.reason)) {
+            await signOut(client.auth);
+            return;
+          }
+          if (!shared.ok && shared.reason === "missing") await persistSharedBrowserSession(nextUser).catch(() => false);
+        } catch {
+          // Existing Firebase sessions remain usable when the shared-session endpoint is temporarily unavailable.
+        }
+      }
 
       if (!nextUser && !sharedBootstrapAttemptedRef.current) {
         sharedBootstrapAttemptedRef.current = true;
@@ -109,10 +137,7 @@ export function FirebaseProvider({ children }) {
       setUser(nextUser);
       if (nextUser) {
         try {
-          if (!nextUser.isAnonymous) {
-            await ensureUserProfile(nextUser);
-            await persistSharedBrowserSession(nextUser).catch(() => false);
-          }
+          if (!nextUser.isAnonymous) await ensureUserProfile(nextUser);
           track("auth_session_started", { provider_count: nextUser.providerData.length, anonymous: nextUser.isAnonymous });
         } catch (error) {
           setAuthError(error.message);
@@ -127,6 +152,44 @@ export function FirebaseProvider({ children }) {
       setAuthReady(true);
     });
   }, []);
+
+  useEffect(() => {
+    if (!user?.uid || user.isAnonymous) return undefined;
+    let reconciling = false;
+    async function reconcileSharedSession() {
+      if (reconciling || document.visibilityState === "hidden") return;
+      reconciling = true;
+      try {
+        const shared = await sharedBrowserSessionState();
+        const client = getFirebaseClient();
+        if (!client?.auth.currentUser) return;
+        if (shared.ok && shared.uid && shared.uid !== client.auth.currentUser.uid) {
+          sharedBootstrapAttemptedRef.current = false;
+          await signOut(client.auth);
+          return;
+        }
+        if (!shared.ok && ["signed_out", "expired"].includes(shared.reason)) {
+          sharedBootstrapAttemptedRef.current = true;
+          await signOut(client.auth);
+          return;
+        }
+        if (!shared.ok && shared.reason === "missing") await persistSharedBrowserSession(client.auth.currentUser).catch(() => false);
+      } catch {
+        // Do not destroy a valid local session because a session-health request temporarily failed.
+      } finally {
+        reconciling = false;
+      }
+    }
+    const onVisibility = () => { if (document.visibilityState === "visible") reconcileSharedSession(); };
+    const interval = window.setInterval(reconcileSharedSession, 5 * 60 * 1000);
+    window.addEventListener("focus", reconcileSharedSession);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", reconcileSharedSession);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [user?.uid, user?.isAnonymous]);
 
   useEffect(() => {
     if (!user?.uid || user.isAnonymous) {
@@ -184,7 +247,7 @@ export function FirebaseProvider({ children }) {
       if (displayName) await updateProfile(result.user, { displayName });
       await ensureUserProfile(result.user, { displayName });
       await persistSharedBrowserSession(result.user).catch(() => false);
-      await sendEmailVerification(result.user).catch(() => {});
+      await sendEmailVerification(result.user, { url: spotlyPortalUrl("customer", "/account") }).catch(() => {});
       await track("sign_up", { method: "password" });
       return result.user;
     } catch (error) {
@@ -218,7 +281,7 @@ export function FirebaseProvider({ children }) {
     const client = getFirebaseClient();
     if (!client) throw new Error("Firebase is not configured.");
     try {
-      await sendPasswordResetEmail(client.auth, email.trim().toLowerCase());
+      await sendPasswordResetEmail(client.auth, email.trim().toLowerCase(), { url: spotlyPortalUrl("customer", "/login") });
     } catch (error) {
       throw new Error(friendlyAuthError(error));
     }
@@ -279,6 +342,8 @@ export function FirebaseProvider({ children }) {
     await setDoc(doc(client.db, "pushTokens", token), {
       token,
       userId: client.auth.currentUser.uid,
+      workspace: portalForHostname(window.location.hostname),
+      origin: window.location.origin,
       userAgent: navigator.userAgent,
       active: true,
       updatedAt: serverTimestamp(),

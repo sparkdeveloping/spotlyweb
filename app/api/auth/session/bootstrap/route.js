@@ -1,5 +1,6 @@
 import { getAdminServices } from "@/lib/firebase-admin";
 import {
+  SHARED_SIGNOUT_COOKIE,
   readCookie,
   sharedSessionCookieHeader,
   validateSameSiteOrigin
@@ -15,7 +16,7 @@ function response(payload, init = {}) {
 export async function POST(request) {
   if (!validateSameSiteOrigin(request)) return response({ ok: false, error: "Invalid authentication origin." }, { status: 403 });
   const sessionCookie = readCookie(request);
-  if (!sessionCookie) return response({ ok: false, error: "No shared Spotly session." }, { status: 401 });
+  if (!sessionCookie) return response({ ok: false, reason: readCookie(request, SHARED_SIGNOUT_COOKIE) === "1" ? "signed_out" : "missing", error: "No shared Spotly session." }, { status: 401 });
 
   try {
     const { auth, db } = getAdminServices();

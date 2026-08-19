@@ -26,6 +26,7 @@ import { defaultOperationalSettings } from "@/data/business-config";
 import { businessArchetype, inferBusinessType } from "@/data/business-archetypes";
 import { readState, writeState } from "@/lib/browser-state";
 import { businessHref, businessSectionFromPath, isBusinessAccountSection } from "@/lib/business-routing";
+import { isLegacyPortalPath, resolveSpotlyHref } from "@/lib/spotly-domains";
 
 const BusinessContext = createContext(null);
 
@@ -193,7 +194,7 @@ export function BusinessDataProvider({ children }) {
     if (next) writeState("spotly-business-id", user, next, "local");
 
     const section = businessSectionFromPath(pathname);
-    if (!requestedBusinessId && !isBusinessAccountSection(section) && pathname.startsWith("/business/") && next) {
+    if (!requestedBusinessId && !isBusinessAccountSection(section) && next) {
       router.replace(routeWithBusiness(pathname, searchParams, next), { scroll: false });
     }
   }, [businessChoices, pathname, portfolioLoading, requestedBusinessId, router, searchParams, selectedBusinessId, user]);
@@ -203,8 +204,9 @@ export function BusinessDataProvider({ children }) {
     if (!choice) return;
     setSelectedBusinessIdState(nextId);
     writeState("spotly-business-id", user, nextId, "local");
-    router.push(choice.defaultHref || businessHref("/business/launch", { businessId: nextId }));
-  }, [businessChoices, router, user]);
+    const target = choice.defaultHref || businessHref("/business/launch", { businessId: nextId });
+    router.push(resolveSpotlyHref(target, { currentPortal: "business", legacyMode: isLegacyPortalPath("business", pathname) }));
+  }, [businessChoices, pathname, router, user]);
 
   const branches = useMemo(() => {
     if (selectedChoice?.businessWide || canUseEveryBranch(membership) || !(membership?.branchIds || []).length) return allBranches;

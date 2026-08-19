@@ -356,14 +356,14 @@ export async function POST(request) {
         body: autoApproved
           ? "Your business access was approved. Open Spotly Business to continue setup and operations."
           : "Your claim is saved and waiting for Spotly review. We will notify you here and by email when the review changes.",
-        href: "/business", category: "business_claim_review", workspace: "business", module: "reviews",
+        href: "/", category: "business_claim_review", workspace: "business", module: "reviews",
         eventType: autoApproved ? "business_claim.approved" : "business_claim.submitted", importance: "high",
         businessId: input.businessId, entityType: "businessClaim", entityId: claimId, email: true, forceOperationalEmail: true
       }),
       ...(!autoApproved ? [notifyRoleAudience({
         db, messaging, auth, title: `Business claim ready · ${input.provisionalBusiness?.name || input.businessId}`,
         body: `${safeText(input.applicantName || actor.name || actor.email, 160)} submitted a business claim that needs review.`,
-        href: "/admin/queues/business-claims?status=open", category: "admin_review", workspace: "admin", module: "reviews",
+        href: "/queues/business-claims?status=open", category: "admin_review", workspace: "admin", module: "reviews",
         eventType: "business_claim.submitted", importance: "high", businessId: input.businessId, entityType: "businessClaim", entityId: claimId, email: true, forceOperationalEmail: true
       }, ["super_admin", "verification_officer", "operations_manager"])] : [])
     ]);

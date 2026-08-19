@@ -194,7 +194,7 @@ export async function PATCH(request) {
         db, messaging, auth, userId: record.requestedBy,
         title: body.decision === "completed" ? "Review completed" : body.decision === "escalated" ? "Review escalated" : "Review updated",
         body: safeText(body.reason || record.title || "Open Spotly to see the latest review activity.", 700),
-        href: workspace === "staff" ? "/staff/notifications" : "/business/notifications",
+        href: "/notifications",
         category: `${workspace}_review`, workspace, module: "reviews", eventType: `${body.queue}.${body.decision}`, importance: "high",
         businessId: record.businessId || null, entityType: meta.collection, entityId: body.id, email: true, forceOperationalEmail: true
       }).catch(() => {});

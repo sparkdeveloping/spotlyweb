@@ -1,7 +1,7 @@
 import "./globals.css";
 import { AppProviders } from "@/components/providers";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyweb.vercel.app";
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyafrica.com";
 
 export const metadata = {
   metadataBase: new URL(appUrl),

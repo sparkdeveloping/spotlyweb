@@ -12,7 +12,7 @@ test("apex and www are both served without application-level canonical redirect 
 
 test("legacy portal paths from any Spotly host redirect to the correct dedicated subdomain", () => {
   assert.match(source, /function portalDestination/);
-  assert.match(source, /const destination = portalDestination\(pathname\)/);
+  assert.match(source, /portalDestination\(pathname\)/);
   assert.match(source, /destination\.destinationHost/);
 });
 

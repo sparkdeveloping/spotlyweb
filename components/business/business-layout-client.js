@@ -7,7 +7,7 @@ import { PortalShell } from "@/components/portal-shell";
 import { BusinessDataProvider, useBusinessWorkspace } from "@/components/business/business-context";
 import { businessAccountNavigation } from "@/components/business/business-account";
 import { businessNavigation } from "@/data/business-archetypes";
-import { businessSectionFromPath, isBusinessAccountSection } from "@/lib/business-routing";
+import { businessSectionFromPath, isBusinessAccountSection, isBusinessKioskLivePath } from "@/lib/business-routing";
 
 function BusinessPortalFrame({ children }) {
   const pathname = usePathname();
@@ -24,7 +24,7 @@ function BusinessPortalFrame({ children }) {
     if (accountLevel || !workspace.contextSwitching) setStableNavigation(computedNavigation);
   }, [accountLevel, computedNavigation, workspace.contextSwitching]);
 
-  if (pathname.startsWith("/business/kiosk/live")) return children;
+  if (isBusinessKioskLivePath(pathname)) return children;
   return <PortalShell portalId="business" activeSection={section} navigation={stableNavigation} footer={false} notificationBusinessId={accountLevel ? null : workspace.selectedBusinessId}>{children}</PortalShell>;
 }
 
@@ -33,6 +33,6 @@ export function BusinessLayoutClient({ children }) {
   // The live kiosk authenticates with its own revocable device credential. It must not inherit
   // the Business owner's Firebase session or BusinessDataProvider just because its URL lives
   // under /business. This is what makes a shared tablet genuinely safe and independent.
-  if (pathname.startsWith("/business/kiosk/live")) return children;
+  if (isBusinessKioskLivePath(pathname)) return children;
   return <AuthGate portal="business" title="Sign in to manage your businesses"><BusinessDataProvider><BusinessPortalFrame>{children}</BusinessPortalFrame></BusinessDataProvider></AuthGate>;
 }

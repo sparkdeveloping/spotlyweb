@@ -120,7 +120,7 @@ export async function POST(request) {
       const [title, noticeBody] = notices[body.action];
       const reviewAction = ["approve", "request_information", "reject", "approve_document", "reject_document", "approve_vehicle", "verify_payout_account", "reject_payout_account"].includes(body.action);
       await notifyUsers(db, messaging, [body.driverId], {
-        title, body: noticeBody, href: "/driver", category: reviewAction ? "driver_review" : "driver_account", workspace: "driver", module: reviewAction ? "reviews" : "account",
+        title, body: noticeBody, href: "/", category: reviewAction ? "driver_review" : "driver_account", workspace: "driver", module: reviewAction ? "reviews" : "account",
         eventType: `driver.${body.action}`, importance: reviewAction ? "high" : "normal", email: reviewAction, auth, forceOperationalEmail: reviewAction
       });
     }

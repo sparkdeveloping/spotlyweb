@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
+import { canonicalSpotlyUrl } from "@/lib/spotly-domains";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,8 @@ const schema = z.object({
   title: z.string().min(1).max(80),
   body: z.string().min(1).max(240),
   href: z.string().max(500).default("/account"),
-  category: z.string().max(60).default("general")
+  category: z.string().max(60).default("general"),
+  workspace: z.enum(["customer", "business", "driver", "staff", "admin"]).default("customer")
 });
 
 export async function POST(request) {
@@ -47,8 +49,8 @@ export async function POST(request) {
     const result = await messaging.sendEachForMulticast({
       tokens,
       notification: { title: body.title, body: body.body },
-      webpush: { fcmOptions: { link: `${process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin}${body.href}` } },
-      data: { href: body.href, category: body.category }
+      webpush: { fcmOptions: { link: canonicalSpotlyUrl(body.href, body.workspace) } },
+      data: { href: canonicalSpotlyUrl(body.href, body.workspace), category: body.category, workspace: body.workspace }
     });
 
     const staleBatch = db.batch();

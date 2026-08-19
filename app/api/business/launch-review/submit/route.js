@@ -147,7 +147,7 @@ export async function POST(request) {
         db, messaging, auth,
         title: isLiveReReview ? `Business changes need review · ${businessName}` : `Launch review ready · ${businessName}`,
         body: isLiveReReview ? "A live business submitted launch-critical changes for review." : "A business completed launch setup and is ready for final review.",
-        href: "/admin/queues/publication-review", category: "admin_review", workspace: "admin", module: "reviews", eventType: isLiveReReview ? "launch_re_review.submitted" : "launch_review.submitted", importance: "high", businessId: body.businessId, entityType: "businessLaunchReview", entityId: reviewRef.id, email: true, forceOperationalEmail: true
+        href: "/queues/publication-review", category: "admin_review", workspace: "admin", module: "reviews", eventType: isLiveReReview ? "launch_re_review.submitted" : "launch_review.submitted", importance: "high", businessId: body.businessId, entityType: "businessLaunchReview", entityId: reviewRef.id, email: true, forceOperationalEmail: true
       }, ["super_admin", "business_success_manager", "operations_manager", "regional_operations_manager"])
     ]);
 

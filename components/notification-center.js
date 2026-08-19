@@ -21,6 +21,7 @@ import { useAuth } from "@/components/firebase-provider";
 import { Badge, Button, Card, EmptyState, Overlay, PageHeader, Tabs } from "@/components/ui";
 import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
+import { canonicalSpotlyUrl } from "@/lib/spotly-domains";
 
 export function notificationWorkspace(item = {}) {
   if (item.workspace) return item.workspace;
@@ -102,7 +103,7 @@ function NotificationRow({ item, onRead, businessName = "" }) {
     </span>
   </>;
   const classes = "flex items-start gap-3 rounded-xl border bg-[var(--surface)] p-4 text-left transition hover:border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] hover:bg-[var(--surface-2)]";
-  if (item.href) return <Link href={item.href} onClick={() => onRead(item)} className={classes}>{content}</Link>;
+  if (item.href) return <Link href={canonicalSpotlyUrl(item.href, notificationWorkspace(item))} onClick={() => onRead(item)} className={classes}>{content}</Link>;
   return <button type="button" onClick={() => onRead(item)} className={`w-full ${classes}`}>{content}</button>;
 }
 
@@ -207,7 +208,7 @@ export function NotificationBell({ className = "", workspace = "" }) {
     <Overlay open={open} onClose={() => setOpen(false)} title="Notifications" description={workspace ? `Latest activity for your ${workspace} workspace.` : "Latest activity across your Spotly account and workspaces."} mode="sheet">
       <div className="space-y-3 p-4">
         {error ? <Card className="border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</Card> : trayItems.length ? trayItems.map((item) => <NotificationRow key={item.id} item={item} onRead={read} />) : <LottieEmptyState name="notification-bell" title="You're caught up" description="New Spotly activity will appear here." />}
-        <Button asChild variant="outline" className="w-full" onClick={() => setOpen(false)}><Link href={workspace === "business" ? "/business/notifications" : "/account#notifications"}>Open all notifications</Link></Button>
+        <Button asChild variant="outline" className="w-full" onClick={() => setOpen(false)}><Link href={workspace === "business" ? "/notifications" : "/account#notifications"}>Open all notifications</Link></Button>
       </div>
     </Overlay>
   </>;

@@ -155,7 +155,7 @@ test("spreadsheet import supports CSV and Excel, creates review batches, and cam
 test("staff field capture and master-product review are operational routes", () => {
   const staff = read("components/staff-app.js");
   const route = read("app/api/staff/catalogue/route.js");
-  assert.match(staff, /staff\/catalogue/);
+  assert.match(staff, /["'`]\/catalogue/);
   assert.match(route, /master_products\.capture/);
   assert.match(route, /master_products\.review/);
   assert.match(route, /productObservations/);

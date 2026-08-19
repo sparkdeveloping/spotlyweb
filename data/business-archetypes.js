@@ -140,7 +140,7 @@ export function businessNavigation(business = {}, lifecycle = {}, branchCount = 
   const capabilities = new Set(business.capabilities?.length ? business.capabilities : archetype.capabilities);
   const href = (path, params = {}) => businessHref(path, { businessId, ...params });
   const mode = lifecycle?.navigationMode || "basics";
-  const items = [{ id: "portfolio", label: "Business portfolio", icon: LayoutGrid, href: "/business", group: "Account" }];
+  const items = [{ id: "portfolio", label: "Business portfolio", icon: LayoutGrid, href: "/", group: "Account" }];
   if (mode === "access") {
     items.push({ id: "launch", label: "Access status", icon: CheckSquare2, href: href("/business/launch"), emphasis: true, group: "Business" });
     items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: href("/business/support"), group: "Business" });

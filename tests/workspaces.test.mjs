@@ -12,10 +12,10 @@ test("workspace access follows actual access records rather than display-name ma
 
 test("workspace settings use explicit valid destinations", () => {
   assert.equal(settingsRouteForWorkspace("customer"), "/account");
-  assert.equal(settingsRouteForWorkspace("business"), "/business/settings");
-  assert.equal(settingsRouteForWorkspace("staff"), "/staff/profile");
-  assert.equal(settingsRouteForWorkspace("driver"), "/driver/profile");
-  assert.equal(settingsRouteForWorkspace("admin"), "/admin/platform");
+  assert.equal(settingsRouteForWorkspace("business"), "/settings");
+  assert.equal(settingsRouteForWorkspace("staff"), "/profile");
+  assert.equal(settingsRouteForWorkspace("driver"), "/profile");
+  assert.equal(settingsRouteForWorkspace("admin"), "/platform");
 });
 
 test("plain customers do not receive an Admin workspace and explicit platform permissions do", () => {

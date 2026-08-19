@@ -1,18 +1,95 @@
 # Spotly Web Platform
 
-Spotly is one operating network with five role-specific entrances:
+Spotly is one operating network with five role-specific production origins backed by one Next.js/Firebase platform:
 
 ```text
-/          Public launch experience and customer marketplace
-/business  Merchant, branch, delivery and kiosk operations
-/driver    Driver application, live availability, delivery execution and earnings
-/staff     Spotly workforce
-/admin     Platform governance, Driver review, dispatch and operational queues
+https://spotlyafrica.com/              Customer, marketing and Marketplace
+https://business.spotlyafrica.com/     Spotly Business
+https://driver.spotlyafrica.com/       Spotly Driver
+https://staff.spotlyafrica.com/        Spotly Staff
+https://admin.spotlyafrica.com/        Spotly Admin
 ```
 
-This repository is based on **Spotly Web Platform 5.5.3** and includes the Driver + Delivery production activation pass. The existing Business lifecycle, Money, claims, support and platform-security foundations are preserved and extended into one server-authoritative delivery domain.
+Public production URLs use **clean product-local paths**. The old path-prefixed URLs remain compatibility redirects only:
 
-## Current delivery architecture
+```text
+spotlyafrica.com/business/staff   → business.spotlyafrica.com/staff
+business.spotlyafrica.com/business/staff → business.spotlyafrica.com/staff
+spotlyafrica.com/admin/drivers    → admin.spotlyafrica.com/drivers
+spotlyafrica.com/driver/active    → driver.spotlyafrica.com/active
+spotlyafrica.com/staff/schedule   → staff.spotlyafrica.com/schedule
+```
+
+The internal App Router still uses `/business`, `/driver`, `/staff`, and `/admin` route trees. `proxy.js` maps clean product-domain URLs into those internal routes so the application does not need five duplicated codebases.
+
+This repository is based on **Spotly Web Platform 5.5.3** and includes the Driver + Delivery activation, Business production hardening, notification architecture, Marketplace/marketing conversion work, Lottie motion system, and the full subdomain/SSO migration.
+
+## Canonical routes
+
+| Product | Canonical examples |
+|---|---|
+| Spotly | `spotlyafrica.com/`, `/marketplace`, `/account`, `/claim`, `/drive`, `/support` |
+| Business | `business.spotlyafrica.com/`, `/today`, `/activity`, `/catalog`, `/branches`, `/delivery`, `/kiosk`, `/staff`, `/finance`, `/support`, `/settings` |
+| Driver | `driver.spotlyafrica.com/`, `/jobs`, `/active`, `/earnings`, `/history`, `/notifications`, `/support`, `/profile` |
+| Staff | `staff.spotlyafrica.com/`, `/work`, `/schedule`, `/leave`, `/learning`, `/performance`, `/pay`, `/notifications`, `/profile` |
+| Admin | `admin.spotlyafrica.com/`, `/operations`, `/businesses`, `/people`, `/drivers`, `/customers`, `/finance`, `/platform`, `/audit` |
+
+### Business account root
+
+`business.spotlyafrica.com/` is the Business account/portfolio entrance. Opening a specific Business sends the operator to the clean Business-local operating route while preserving `?business=<id>` context where needed. Business `/staff` means **that Business's Team**; it must not redirect to the Spotly Staff product.
+
+## Shared sign-in across subdomains
+
+Firebase browser persistence is origin-scoped, so sibling subdomains cannot simply read each other's Firebase local storage. Spotly uses a server-issued parent-domain session bridge instead:
+
+```text
+Firebase sign-in on any Spotly origin
+        ↓
+/api/auth/session verifies the Firebase ID token
+        ↓
+Secure HttpOnly session cookie on .spotlyafrica.com
+        ↓
+A sibling product opens
+        ↓
+/api/auth/session/bootstrap verifies the shared session
+        ↓
+Firebase Admin issues a custom token
+        ↓
+That origin silently restores its normal Firebase client session
+```
+
+Sign-out sets a long-lived parent-domain sign-out marker so an old Firebase session left in another sibling origin cannot later recreate the shared session. Active product tabs also reconcile the shared session on focus, visibility changes, and periodically while in use.
+
+The user's theme preference is also mirrored to a safe `.spotlyafrica.com` preference cookie so changing light/dark/system mode in one Spotly product follows them to the others.
+
+## Firebase production-domain configuration
+
+Firebase Authentication must authorize every hostname that can render an authentication flow:
+
+```text
+spotlyafrica.com
+www.spotlyafrica.com
+business.spotlyafrica.com
+admin.spotlyafrica.com
+driver.spotlyafrica.com
+staff.spotlyafrica.com
+```
+
+If Firebase App Check with reCAPTCHA Enterprise is enabled, the corresponding reCAPTCHA key/domain configuration must also permit the production hostnames. Phone authentication and OAuth providers must be tested from each product hostname after deployment.
+
+## Vercel domain configuration
+
+All product hostnames should point to the same `spotlyweb` Vercel project. Vercel owns the canonical apex/www redirect direction. Application code intentionally does **not** redirect `www.spotlyafrica.com ↔ spotlyafrica.com`, preventing an application/Vercel redirect loop.
+
+Configure only one canonical direction in Vercel Domains, for example:
+
+```text
+www.spotlyafrica.com → spotlyafrica.com
+```
+
+Do not configure the opposite redirect at the same time.
+
+## Driver + delivery architecture
 
 ```text
 Customer checkout
@@ -38,65 +115,54 @@ Driver payout lifecycle
 
 Admin can review Driver applications and evidence, inspect Driver eligibility and live location, dispatch/reassign deliveries, inspect the unified delivery timeline, apply holds, investigate incidents, verify payout destinations and process Driver payouts.
 
-## Main routes
+## Kiosk
 
-| Route | Purpose |
-|---|---|
-| `/` | Public Spotly launch and marketplace entry |
-| `/marketplace` | Customer discovery, basket, pickup/delivery checkout and order tracking |
-| `/drive` | Public Driver acquisition |
-| `/driver` | Driver application or live Driver home |
-| `/driver/jobs` | Live delivery offers |
-| `/driver/active` | Current delivery workflow |
-| `/driver/earnings` | Earnings, balances and payouts |
-| `/driver/history` | Delivery history |
-| `/driver/support` | Driver incident and safety reporting |
-| `/business` | Business Portfolio and operating workspace |
-| `/business/delivery` | Branch delivery configuration and live handoff operations |
-| `/business/kiosk` | Kiosk device management |
-| `/business/kiosk/live` | Dedicated enrolled kiosk runtime |
-| `/staff` | Staff workspace |
-| `/admin` | Platform operations |
-| `/admin/drivers` | Driver review and delivery/dispatch operations through the Admin Driver section |
-| `/support` | Context-aware support |
-| `/account` | Profile, workspaces, security and build information |
-
-## Driver lifecycle
+Kiosk uses a dedicated branch/mode-scoped device credential. It does **not** require the Business owner's browser session. The live kiosk canonical route is:
 
 ```text
-Application started
-→ Application submitted
-→ Spotly review
-→ Information required / approved
-→ Ready
-→ Online
-→ Delivery offers
-→ Active delivery
-→ Earnings / payout
+https://business.spotlyafrica.com/kiosk/live
 ```
 
-Driver operational state, delivery assignment, verification, earnings and payouts are server-authoritative. The old seeded `data/driver.js` and `driver-training-workflow` session simulator have been retired.
+The device can be enrolled, heartbeated and revoked, reveals only the minimum data required for check-in, resets customer information automatically, and supports Driver pickup mode.
 
-## Delivery and Kiosk
+## Payments and notifications after the domain split
 
-Delivery is opt-in per exact Business branch. A delivery-enabled branch stores its coordinates, radius/service settings, preparation time, pickup instructions, operating state and supported vehicle types. Customer delivery checkout requires a map position and confirmable digital payment before dispatch.
+Customer payment provider callbacks and return URLs are pinned to `https://spotlyafrica.com`, regardless of which sibling domain happens to call shared server code.
 
-Kiosk uses a dedicated branch/mode-scoped device credential. It does **not** require the Business owner's authenticated browser session. Devices can be enrolled, heartbeated and revoked, reveal only the minimum data needed for check-in, reset customer information automatically and support Driver pickup mode.
+Operational notification records, push notification links, and transactional email buttons are canonicalized to the workspace that owns the event, for example:
+
+```text
+Business review → business.spotlyafrica.com/notifications
+Driver offer    → driver.spotlyafrica.com/jobs
+Admin queue     → admin.spotlyafrica.com/queues/...
+Customer order  → spotlyafrica.com/marketplace?view=orders
+```
+
+Legacy stored notification paths remain readable and are normalized when opened.
 
 ## Security model
 
 Sensitive Driver/Delivery resources are mediated by server APIs. Firestore rules explicitly deny direct client writes to high-impact operational collections including Driver approval, presence, delivery jobs/offers/events, Driver Money, incidents and kiosk devices. Driver documents use private Storage paths. Customer handoff PINs and pickup verification codes are never returned in general Driver bootstrap payloads.
 
+The cross-subdomain auth bridge uses:
+
+- Firebase Admin session-cookie verification;
+- `HttpOnly`, `Secure`, `SameSite=Lax` cookies on `.spotlyafrica.com` in production;
+- same-site origin validation for shared-auth endpoints;
+- no-store responses;
+- custom-token bootstrap rather than exposing the shared cookie to JavaScript;
+- a global browser sign-out marker to prevent stale sibling-origin sessions from resurrecting SSO.
+
 ## Technology
 
-- Next.js App Router
+- Next.js App Router / hostname-aware `proxy.js`
 - React 19
-- JavaScript source only
+- JavaScript source
 - Tailwind CSS 4
-- Firebase Authentication, Firestore, Storage, Admin SDK and Cloud Messaging
+- Firebase Authentication, Firestore, Storage, Admin SDK, App Check and Cloud Messaging
 - Paynow payment integration
-- Resend integration point
-- Vercel deployment configuration
+- Resend transactional email integration
+- Vercel deployment and custom domains
 
 ## Local setup
 
@@ -124,18 +190,20 @@ npm run lint
 npm run build
 ```
 
-In the generation environment used for this delivery activation, the JavaScript check, theme-safety check and repository test suite passed. The environment could not restore locked npm dependencies because its internal package mirror returned HTTP 404 for `zod-validation-error-4.0.2.tgz`; therefore ESLint, Next production build and Firebase Emulator execution are not claimed as passed here. Run those commands in staging/CI with normal npm registry access before deployment.
+Always run the actual Next.js production build in CI/Vercel before promoting a release. Source-level checks are additional safeguards, not a substitute for `next build`.
 
-## Production configuration still required outside source code
+## Production configuration outside source code
 
-- Firebase web/Admin credentials and authorized domains
-- Deployment of the supplied Firestore/Storage rules and indexes
-- FCM production credentials and service-worker configuration
+- Vercel domain assignments and one-direction-only apex/www canonical redirect
+- Firebase Authentication authorized domains for all six Spotly hostnames including `www`
+- reCAPTCHA Enterprise/App Check allowed-domain configuration when App Check is enabled
+- OAuth/phone-auth smoke tests from each product hostname
+- deployment of supplied Firestore/Storage rules and indexes
+- FCM credentials and VAPID configuration
 - Paynow/provider credentials and callbacks
-- `SPOTLY_FINANCE_ENCRYPTION_KEY` for encrypted merchant/Driver financial identifiers
-- Actual Driver compliance requirements and reviewed legal agreements
-- Maps/routing provider choices if richer in-app routing is required
-- Operations staffing, incident escalation and payout execution procedures
-- Staging smoke tests on real mobile devices, including location permission and intermittent-network scenarios
+- `SPOTLY_FINANCE_ENCRYPTION_KEY`
+- Resend verified sender/domain
+- reviewed Driver compliance/legal requirements
+- staging smoke tests on real mobile devices and all five web origins
 
-Historical implementation reports under `docs/history/` and version-specific root reports describe earlier releases and should not be treated as the current Driver capability state.
+Historical implementation reports under `docs/history/` and version-specific root reports describe earlier releases and should not be treated as the current canonical routing or capability state.

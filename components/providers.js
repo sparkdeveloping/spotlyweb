@@ -10,14 +10,29 @@ const ToastContext = createContext(null);
 
 const themeListeners = new Set();
 const THEME_KEY = "spotly-theme";
+const THEME_COOKIE = "spotly_theme";
 const VALID_THEMES = new Set(["light", "dark", "system"]);
 
 function normalizeTheme(value) {
   return VALID_THEMES.has(value) ? value : "system";
 }
 
+function readThemeCookie() {
+  const match = document.cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${THEME_COOKIE}=`));
+  return match ? decodeURIComponent(match.slice(THEME_COOKIE.length + 1)) : "";
+}
+
+function writeThemeCookie(value) {
+  const production = window.location.hostname === "spotlyafrica.com" || window.location.hostname === "www.spotlyafrica.com" || window.location.hostname.endsWith(".spotlyafrica.com");
+  const parts = [`${THEME_COOKIE}=${encodeURIComponent(value)}`, "Path=/", "Max-Age=31536000", "SameSite=Lax"];
+  if (production) parts.push("Secure", "Domain=.spotlyafrica.com");
+  document.cookie = parts.join("; ");
+}
+
 function getThemeSnapshot() {
-  return normalizeTheme(window.localStorage.getItem(THEME_KEY));
+  const shared = normalizeTheme(readThemeCookie());
+  const local = normalizeTheme(window.localStorage.getItem(THEME_KEY));
+  return readThemeCookie() ? shared : local;
 }
 
 function getThemeServerSnapshot() {
@@ -39,6 +54,7 @@ function subscribeTheme(listener) {
 function setStoredTheme(nextTheme) {
   const normalized = normalizeTheme(nextTheme);
   window.localStorage.setItem(THEME_KEY, normalized);
+  writeThemeCookie(normalized);
   themeListeners.forEach((listener) => listener());
 }
 
@@ -53,9 +69,28 @@ function ThemeProvider({ children }) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const update = () => setSystemDark(media.matches);
+    const syncSharedTheme = () => {
+      const shared = readThemeCookie();
+      if (!shared) {
+        writeThemeCookie(normalizeTheme(window.localStorage.getItem(THEME_KEY)));
+        return;
+      }
+      const normalized = normalizeTheme(shared);
+      if (window.localStorage.getItem(THEME_KEY) !== normalized) {
+        window.localStorage.setItem(THEME_KEY, normalized);
+        themeListeners.forEach((listener) => listener());
+      }
+    };
     update();
+    syncSharedTheme();
     media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
+    window.addEventListener("focus", syncSharedTheme);
+    document.addEventListener("visibilitychange", syncSharedTheme);
+    return () => {
+      media.removeEventListener("change", update);
+      window.removeEventListener("focus", syncSharedTheme);
+      document.removeEventListener("visibilitychange", syncSharedTheme);
+    };
   }, []);
 
   const resolvedTheme = resolveTheme(theme, systemDark);

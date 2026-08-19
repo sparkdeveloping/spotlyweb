@@ -1,5 +1,5 @@
 export default function robots() {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyweb.vercel.app";
+  const base = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyafrica.com";
   const marketplaceIndexable = process.env.NEXT_PUBLIC_MARKETPLACE_INDEXABLE === "true";
   return {
     rules: {

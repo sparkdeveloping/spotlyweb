@@ -64,8 +64,8 @@ export async function POST(request) {
       const siblingOffers = await db.collection("deliveryOffers").where("deliveryJobId", "==", body.deliveryJobId).limit(100).get(); const offerBatch = db.batch(); let changed = false;
       siblingOffers.docs.forEach((item) => { if (["offered", "viewed"].includes(item.data().state)) { offerBatch.set(item.ref, { state: "withdrawn", withdrawnAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); changed = true; } });
       if (changed) await offerBatch.commit();
-      await notifyUsers(db, messaging, [body.driverId], { title: "Delivery assigned", body: `${job.number || body.deliveryJobId} was assigned to you.`, href: "/driver/active", category: "driver_assignment" });
-      if (job.customerId) await notifyUsers(db, messaging, [job.customerId], { title: "Driver assigned", body: `A Driver has been assigned to ${job.number || body.deliveryJobId}.`, href: "/marketplace?view=orders", category: "delivery" });
+      await notifyUsers(db, messaging, [body.driverId], { title: "Delivery assigned", body: `${job.number || body.deliveryJobId} was assigned to you.`, href: "/active", category: "driver_assignment", workspace: "driver" });
+      if (job.customerId) await notifyUsers(db, messaging, [job.customerId], { title: "Driver assigned", body: `A Driver has been assigned to ${job.number || body.deliveryJobId}.`, href: "/marketplace?view=orders", category: "delivery", workspace: "customer" });
       return Response.json({ ok: true });
     } else if (body.action === "cancel") {
       if (["delivered", "cancelled", "returned"].includes(job.state)) throw Object.assign(new Error("This delivery can no longer be cancelled."), { status: 409 });
@@ -76,8 +76,8 @@ export async function POST(request) {
       batch.set(db.collection("deliveryEvents").doc(), { deliveryJobId: body.deliveryJobId, orderId: job.orderId || null, type: "delivery.cancelled", actorType: "admin", actorId: actor.uid, previousState: job.state, state: "cancelled", note: reason, metadata: {}, createdAt: now });
       batch.set(db.collection("auditLogs").doc(), { actorId: actor.uid, action: "delivery.cancel", entityType: "deliveryJob", entityId: body.deliveryJobId, reason, metadata: { driverId: job.assignedDriverId || null }, source: "admin_dispatch", createdAt: now });
       await batch.commit();
-      if (job.assignedDriverId) await notifyUsers(db, messaging, [job.assignedDriverId], { title: "Delivery cancelled", body: `${job.number || body.deliveryJobId} was cancelled by Spotly Operations.`, href: "/driver", category: "delivery" });
-      if (job.customerId) await notifyUsers(db, messaging, [job.customerId], { title: "Delivery cancelled", body: `${job.number || body.deliveryJobId} was cancelled by Spotly Operations.`, href: "/marketplace?view=orders", category: "delivery" });
+      if (job.assignedDriverId) await notifyUsers(db, messaging, [job.assignedDriverId], { title: "Delivery cancelled", body: `${job.number || body.deliveryJobId} was cancelled by Spotly Operations.`, href: "/", category: "delivery", workspace: "driver" });
+      if (job.customerId) await notifyUsers(db, messaging, [job.customerId], { title: "Delivery cancelled", body: `${job.number || body.deliveryJobId} was cancelled by Spotly Operations.`, href: "/marketplace?view=orders", category: "delivery", workspace: "customer" });
       return Response.json({ ok: true });
     } else if (body.action === "clear_exception") {
       await jobRef.set({ exceptionCode: null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });

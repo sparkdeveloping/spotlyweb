@@ -7,7 +7,10 @@ const schema = z.object({ code: z.string().min(3).max(80) });
 export async function POST(request) {
   try {
     const device = await authenticateKiosk(request);
-    if (device.mode !== "pickup_checkin") throw Object.assign(new Error("This kiosk device is not enrolled for that action."), { status: 403 }); const body = schema.parse(await request.json()); const { db } = getAdminServices(); const code = body.code.trim().toUpperCase();
+    if (device.mode !== "pickup_checkin") throw Object.assign(new Error("This kiosk device is not enrolled for that action."), { status: 403 });
+    const parsed = schema.safeParse(await request.json());
+    if (!parsed.success) throw Object.assign(new Error("Enter at least 3 characters from the order or pickup code."), { status: 400 });
+    const { db } = getAdminServices(); const code = parsed.data.code.trim().toUpperCase();
     let orderQuery = await db.collection("orders").where("number", "==", code).where("branchId", "==", device.branchId).limit(1).get();
     if (orderQuery.empty) orderQuery = await db.collection("orders").where("pickupCode", "==", code).where("branchId", "==", device.branchId).limit(1).get();
     if (orderQuery.empty) throw Object.assign(new Error("We could not find an order for this code at this location."), { status: 404 });

@@ -70,7 +70,11 @@ export async function POST(request) {
     }
     const delayedUntil = new Date(Date.now() + body.minutes * 60000);
     await jobRef.set({ businessDelayMinutes: body.minutes, businessDelayReason: safeText(body.reason, 500), dispatchAfterAt: delayedUntil, exceptionCode: "business_delay", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    await notifyUsers(db, messaging, [jobSnap.data().assignedDriverId, jobSnap.data().customerId], { title: jobSnap.data().number || "Delivery update", body: `The business needs about ${body.minutes} more minutes.`, href: jobSnap.data().assignedDriverId ? "/driver/active" : "/marketplace?view=orders", category: "delivery" });
+    const job = jobSnap.data();
+    await Promise.all([
+      job.assignedDriverId ? notifyUsers(db, messaging, [job.assignedDriverId], { title: job.number || "Delivery update", body: `The business needs about ${body.minutes} more minutes.`, href: "/active", category: "delivery", workspace: "driver" }) : Promise.resolve(),
+      job.customerId ? notifyUsers(db, messaging, [job.customerId], { title: job.number || "Delivery update", body: `The business needs about ${body.minutes} more minutes.`, href: "/marketplace?view=orders", category: "delivery", workspace: "customer" }) : Promise.resolve()
+    ]);
     return Response.json({ ok: true });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the delivery details." }, { status: 400 });

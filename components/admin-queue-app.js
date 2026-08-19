@@ -172,12 +172,12 @@ function QueueBody({ queue }) {
           await authenticatedFetch("/api/admin/location-reviews/decision", { method: "POST", body: JSON.stringify({ reviewId, decision, reason }) });
         } else {
         const targets = {
-          customer_profile: { label: "Customer-facing profile", href: `/business/settings?business=${encodeURIComponent(businessId)}&tab=profile` },
-          location: { label: "Location details", href: `/business/branches?business=${encodeURIComponent(businessId)}` },
-          catalog: { label: "Products or catalogue", href: `/business/catalog?business=${encodeURIComponent(businessId)}` },
-          operations: { label: "Pickup or operating setup", href: `/business/settings?business=${encodeURIComponent(businessId)}&tab=operations` },
-          money: { label: "Money or settlement", href: `/business/finance?business=${encodeURIComponent(businessId)}&tab=setup` },
-          business_details: { label: "Business basics", href: `/business/setup?business=${encodeURIComponent(businessId)}&step=identity` }
+          customer_profile: { label: "Customer-facing profile", href: `/settings?business=${encodeURIComponent(businessId)}&tab=profile` },
+          location: { label: "Location details", href: `/branches?business=${encodeURIComponent(businessId)}` },
+          catalog: { label: "Products or catalogue", href: `/catalog?business=${encodeURIComponent(businessId)}` },
+          operations: { label: "Pickup or operating setup", href: `/settings?business=${encodeURIComponent(businessId)}&tab=operations` },
+          money: { label: "Money or settlement", href: `/finance?business=${encodeURIComponent(businessId)}&tab=setup` },
+          business_details: { label: "Business basics", href: `/setup?business=${encodeURIComponent(businessId)}&step=identity` }
         };
         const target = targets[changeTarget] || targets.customer_profile;
         const requestedChanges = decision === "request_changes" ? [{ id: changeTarget, label: target.label, description: reason.trim(), href: target.href }] : [];
@@ -215,7 +215,7 @@ function QueueBody({ queue }) {
         : [["assigned", "Assign"], ["in_progress", "Start work"], ["completed", "Complete"], ["escalated", "Escalate"]];
 
   return <div className="space-y-6">
-    <Button asChild variant="ghost" size="sm"><Link href="/admin"><ArrowLeft className="h-4 w-4" />Control centre</Link></Button>
+    <Button asChild variant="ghost" size="sm"><Link href="/"><ArrowLeft className="h-4 w-4" />Control centre</Link></Button>
     <PageHeader title={meta.title} description={meta.description} actions={<><Button variant="outline" onClick={saveView}><Save className="h-4 w-4" />Save view</Button><Button variant="outline" onClick={() => exportCsv(queue, visible)}><Download className="h-4 w-4" />Export</Button></>} />
     <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto_auto]"><SearchField label="Search queue" value={query} onChange={(value) => { setQuery(value); setCursor(null); setCursorHistory([]); updateUrl({ q: value }); }} placeholder="Search this queue" /><Tabs idPrefix={`admin-queue-${queue}`} value={status} onChange={(value) => { setStatus(value); setCursor(null); setCursorHistory([]); updateUrl({ status: value }); }} tabs={[{ value: "open", label: "Open" }, { value: "assigned", label: "Assigned" }, { value: "completed", label: "Completed" }, { value: "all", label: "All" }]} /><select aria-label="Owner filter" value={owner} onChange={(event) => { setOwner(event.target.value); setCursor(null); setCursorHistory([]); updateUrl({ owner: event.target.value }); }} className="field-control h-11"><option value="all">All owners</option><option value="mine">Assigned to me</option><option value="unassigned">Unassigned</option></select><select aria-label="Priority filter" value={priority} onChange={(event) => { setPriority(event.target.value); setCursor(null); setCursorHistory([]); updateUrl({ priority: event.target.value }); }} className="field-control h-11"><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option></select></div>
     {savedViews.length > 0 && <div className="flex flex-wrap gap-2" aria-label="Saved queue views">{savedViews.map((view) => <Button key={view.name} size="sm" variant="ghost" onClick={() => applyView(view)}>{view.name}</Button>)}</div>}
@@ -227,6 +227,13 @@ function QueueBody({ queue }) {
   </div>;
 }
 
+function adminSectionForQueue(queue) {
+  if (queue === "payment-exceptions") return "finance";
+  if (queue === "staff-approvals") return "people";
+  if (["business-claims", "publication-review"].includes(queue)) return "businesses";
+  return "operations";
+}
+
 export function AdminQueueApp({ queue }) {
-  return <AuthGate portal="admin" title="Sign in to Spotly Admin"><PortalShell portalId="admin" activeSection="dashboard"><main className="mx-auto max-w-[1500px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9"><QueueBody queue={queue} /></main></PortalShell></AuthGate>;
+  return <AuthGate portal="admin" title="Sign in to Spotly Admin"><PortalShell portalId="admin" activeSection={adminSectionForQueue(queue)}><main className="mx-auto max-w-[1500px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9"><QueueBody queue={queue} /></main></PortalShell></AuthGate>;
 }

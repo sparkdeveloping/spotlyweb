@@ -33,7 +33,7 @@ test("catalogue and order modules distinguish read failures from legitimate empt
 
 test("live kiosk bypasses Business owner authentication and uses its device credential", async () => {
   const [layout, kiosk] = await Promise.all([read("components/business/business-layout-client.js"), read("components/business/kiosk.js")]);
-  assert.match(layout, /pathname\.startsWith\("\/business\/kiosk\/live"\)\) return children/);
+  assert.match(layout, /isBusinessKioskLivePath\(pathname\)\) return children/);
   assert.match(kiosk, /x-spotly-kiosk-device/);
   assert.match(kiosk, /Create kiosk setup/);
   assert.match(kiosk, /Activate kiosk/);
