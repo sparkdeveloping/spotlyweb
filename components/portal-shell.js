@@ -39,6 +39,7 @@ import { Badge, Overlay } from "@/components/ui";
 import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
 import { adminSectionsForProfile } from "@/lib/admin-access";
 import { workspaceAccess, WORKSPACE_SETTINGS_ROUTES } from "@/lib/workspaces";
+import { isLegacyPortalPath, resolvePortalNavigation, resolveSpotlyHref, spotlyPortalUrl } from "@/lib/spotly-domains";
 import { isReviewNotification, notificationWorkspace } from "@/components/notification-center";
 
 
@@ -91,7 +92,7 @@ function PortalSwitcher({ portal, compact = false }) {
               <Link
                 role="menuitem"
                 key={item.id}
-                href={item.href}
+                href={spotlyPortalUrl(item.id)}
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-3 rounded-lg p-2.5 transition hover:bg-[var(--surface-2)]"
               >
@@ -173,6 +174,7 @@ function notificationIcon(item = {}) {
 
 function NotificationPanel({ items, open, onClose, onRead, onReadAll, workspace, error = "" }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [clock, setClock] = useState(0);
   const [filter, setFilter] = useState("all");
   const scoped = filter === "workspace" ? items.filter((item) => notificationWorkspace(item) === workspace) : filter === "reviews" ? items.filter(isReviewNotification) : items;
@@ -188,7 +190,11 @@ function NotificationPanel({ items, open, onClose, onRead, onReadAll, workspace,
   async function openItem(item) {
     if (!item.read) await onRead(item.id);
     onClose();
-    if (item.href) router.push(item.href);
+    if (item.href) {
+      const href = resolveSpotlyHref(item.href, { currentPortal: workspace, legacyMode: isLegacyPortalPath(workspace, pathname) });
+      if (/^https?:/i.test(href)) window.location.assign(href);
+      else router.push(href);
+    }
   }
 
   return (
@@ -243,6 +249,7 @@ function CommandPalette({ portal, open, onClose }) {
 }
 
 function UserMenu({ portal }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const { user, profile, logout } = useAuth();
@@ -251,7 +258,7 @@ function UserMenu({ portal }) {
   useOutsideClick(ref, () => setOpen(false));
   async function signOutNow() {
     await logout();
-    window.location.href = "/";
+    window.location.href = spotlyPortalUrl("customer");
   }
   return (
     <div className="relative" ref={ref}>
@@ -267,8 +274,8 @@ function UserMenu({ portal }) {
               <p className="mt-1 truncate text-xs text-secondary">{user?.email || role}</p>
               <p className="mt-1 text-[11px] font-semibold capitalize text-tertiary">{role.replaceAll("_", " ")}</p>
             </div>
-            <Link href="/account" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
-            {WORKSPACE_SETTINGS_ROUTES[portal.id] && <Link href={WORKSPACE_SETTINGS_ROUTES[portal.id]} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>}
+            <Link href={spotlyPortalUrl("customer", "/account")} className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
+            {WORKSPACE_SETTINGS_ROUTES[portal.id] && <Link href={resolveSpotlyHref(WORKSPACE_SETTINGS_ROUTES[portal.id], { currentPortal: portal.id, legacyMode: isLegacyPortalPath(portal.id, pathname) })} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>}
             <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-[var(--danger-soft)]"><LogOut className="h-4 w-4" /> Sign out</button>
           </motion.div>
         )}
@@ -310,7 +317,7 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = tr
         </nav>
         <div className="border-t p-3">
           <button type="button" onClick={onToggleCollapse} className="hidden w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)] lg:flex" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="mx-auto h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /><span>Collapse sidebar</span></>}</button>
-          {footer && <Link href="/support" onClick={onMobileClose} className={cn("mt-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)]", collapsed && "lg:justify-center lg:px-0")} title={collapsed ? "Help and support" : undefined}><Activity className="h-4 w-4" /><span className={cn(collapsed && "lg:hidden")}>Help and support</span></Link>}
+          {footer && <Link href={spotlyPortalUrl("customer", "/support")} onClick={onMobileClose} className={cn("mt-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)]", collapsed && "lg:justify-center lg:px-0")} title={collapsed ? "Help and support" : undefined}><Activity className="h-4 w-4" /><span className={cn(collapsed && "lg:hidden")}>Help and support</span></Link>}
         </div>
       </aside>
     </>
@@ -342,11 +349,13 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
   const pathname = usePathname();
   const { user, profile } = useAuth();
   const portal = useMemo(() => {
-    if (navigation) return { ...basePortal, nav: navigation };
-    if (portalId !== "admin") return basePortal;
-    const sections = adminSectionsForProfile(profile);
-    return { ...basePortal, nav: basePortal.nav.filter((item) => sections.has(item.id)) };
-  }, [basePortal, portalId, profile, navigation]);
+    let rawNavigation = navigation || basePortal.nav;
+    if (!navigation && portalId === "admin") {
+      const sections = adminSectionsForProfile(profile);
+      rawNavigation = basePortal.nav.filter((item) => sections.has(item.id));
+    }
+    return { ...basePortal, href: spotlyPortalUrl(portalId), nav: resolvePortalNavigation(portalId, rawNavigation, pathname) };
+  }, [basePortal, portalId, profile, navigation, pathname]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -419,7 +428,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
             <UserMenu portal={portal} />
           </div>
         </header>
-        {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = attentionNotification.href; }} className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">View update</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
+        {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = resolveSpotlyHref(attentionNotification.href, { currentPortal: portalId, legacyMode: isLegacyPortalPath(portalId, pathname) }); }} className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">View update</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
         <main key={pathname} className={cn("portal-gradient min-h-[calc(100vh-5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
             {children}

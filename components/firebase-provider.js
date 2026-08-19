@@ -15,6 +15,7 @@ import {
   sendPasswordResetEmail,
   signInAnonymously,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
   updateProfile
 } from "firebase/auth";
@@ -51,6 +52,29 @@ function friendlyAuthError(error) {
   return messages[code] || error?.message || "Authentication could not be completed.";
 }
 
+async function persistSharedBrowserSession(firebaseUser) {
+  if (!firebaseUser || firebaseUser.isAnonymous) return false;
+  const idToken = await firebaseUser.getIdToken();
+  const response = await fetch("/api/auth/session", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Authorization: `Bearer ${idToken}` }
+  });
+  return response.ok;
+}
+
+async function bootstrapSharedBrowserSession(auth) {
+  const response = await fetch("/api/auth/session/bootstrap", { method: "POST", credentials: "same-origin", cache: "no-store" });
+  if (!response.ok) return null;
+  const payload = await response.json().catch(() => ({}));
+  if (!payload.customToken) return null;
+  return (await signInWithCustomToken(auth, payload.customToken)).user;
+}
+
+async function clearSharedBrowserSession() {
+  await fetch("/api/auth/session", { method: "DELETE", credentials: "same-origin" }).catch(() => null);
+}
+
 export function FirebaseProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -61,6 +85,7 @@ export function FirebaseProvider({ children }) {
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState("");
   const recaptchaRef = useRef(null);
+  const sharedBootstrapAttemptedRef = useRef(false);
 
   useEffect(() => {
     const client = getFirebaseClient();
@@ -69,11 +94,25 @@ export function FirebaseProvider({ children }) {
       return undefined;
     }
     return onAuthStateChanged(client.auth, async (nextUser) => {
-      setUser(nextUser);
       setAuthError("");
+
+      if (!nextUser && !sharedBootstrapAttemptedRef.current) {
+        sharedBootstrapAttemptedRef.current = true;
+        try {
+          const restoredUser = await bootstrapSharedBrowserSession(client.auth);
+          if (restoredUser) return; // signInWithCustomToken triggers this observer again with the restored user.
+        } catch {
+          // Shared SSO is a convenience layer. If it is unavailable, normal Firebase sign-in still works.
+        }
+      }
+
+      setUser(nextUser);
       if (nextUser) {
         try {
-          if (!nextUser.isAnonymous) await ensureUserProfile(nextUser);
+          if (!nextUser.isAnonymous) {
+            await ensureUserProfile(nextUser);
+            await persistSharedBrowserSession(nextUser).catch(() => false);
+          }
           track("auth_session_started", { provider_count: nextUser.providerData.length, anonymous: nextUser.isAnonymous });
         } catch (error) {
           setAuthError(error.message);
@@ -144,6 +183,7 @@ export function FirebaseProvider({ children }) {
         : await createUserWithEmailAndPassword(client.auth, normalizedEmail, password);
       if (displayName) await updateProfile(result.user, { displayName });
       await ensureUserProfile(result.user, { displayName });
+      await persistSharedBrowserSession(result.user).catch(() => false);
       await sendEmailVerification(result.user).catch(() => {});
       await track("sign_up", { method: "password" });
       return result.user;
@@ -158,6 +198,7 @@ export function FirebaseProvider({ children }) {
     try {
       const result = await signInWithEmailAndPassword(client.auth, email.trim().toLowerCase(), password);
       await ensureUserProfile(result.user);
+      await persistSharedBrowserSession(result.user).catch(() => false);
       await track("login", { method: "password" });
       return result.user;
     } catch (error) {
@@ -169,6 +210,7 @@ export function FirebaseProvider({ children }) {
     const client = getFirebaseClient();
     const activeUser = client?.auth?.currentUser || user;
     clearUserSessionState(activeUser);
+    await clearSharedBrowserSession();
     if (client) await signOut(client.auth);
   }, [user]);
 
