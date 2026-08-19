@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/components/firebase-provider";
 import { Badge, Button, Card, EmptyState, Overlay, PageHeader, Tabs } from "@/components/ui";
+import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
 
 export function notificationWorkspace(item = {}) {
@@ -181,7 +182,7 @@ export function NotificationCenter({
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><Tabs value={filter} onChange={setFilter} tabs={tabs} /><p className="text-xs leading-5 text-tertiary"><MailCheck className="mr-1 inline h-4 w-4" />Review decisions can also use the configured operational email.</p></div>
       </div>
     </Card>
-    {error ? <Card className="border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</Card> : visible.length ? <div className="space-y-3">{visible.map((item) => <NotificationRow key={item.id} item={item} businessName={item.businessName || businessMap.get(item.businessId) || ""} onRead={read} />)}</div> : <EmptyState icon={filter === "reviews" ? MailCheck : Inbox} title={filter === "reviews" ? "No review updates here" : "You're caught up"} description={businessFilter === "all" ? "New activity for this workspace will appear here." : "No notifications match this business and filter."} />}
+    {error ? <Card className="border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</Card> : visible.length ? <div className="space-y-3">{visible.map((item) => <NotificationRow key={item.id} item={item} businessName={item.businessName || businessMap.get(item.businessId) || ""} onRead={read} />)}</div> : <LottieEmptyState name={filter === "reviews" ? "verified-business" : "notification-bell"} title={filter === "reviews" ? "No review updates here" : "You're caught up"} description={businessFilter === "all" ? "New activity for this workspace will appear here." : "No notifications match this business and filter."} />}
   </div>;
 }
 
@@ -202,10 +203,10 @@ export function NotificationBell({ className = "", workspace = "" }) {
     setOpen(false);
   }
   return <>
-    <button type="button" onClick={() => setOpen(true)} aria-label={`${unread} notifications`} className={`relative flex h-11 w-11 items-center justify-center rounded-xl border bg-[var(--surface)] hover:bg-[var(--surface-2)] ${className}`}><Bell className="h-5 w-5" />{unread ? <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger ring-2 ring-[var(--surface)]" /> : null}</button>
+    <button type="button" onClick={() => setOpen(true)} aria-label={`${unread} notifications`} className={`relative flex h-11 w-11 items-center justify-center overflow-visible rounded-xl border bg-[var(--surface)] hover:bg-[var(--surface-2)] ${className}`}>{unread ? <SpotlyLottie name="notification-bell" mode="state" playKey={unread} className="h-9 w-9" fallback={<Bell className="h-5 w-5" />} /> : <Bell className="h-5 w-5" />}{unread ? <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger ring-2 ring-[var(--surface)]" /> : null}</button>
     <Overlay open={open} onClose={() => setOpen(false)} title="Notifications" description={workspace ? `Latest activity for your ${workspace} workspace.` : "Latest activity across your Spotly account and workspaces."} mode="sheet">
       <div className="space-y-3 p-4">
-        {error ? <Card className="border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</Card> : trayItems.length ? trayItems.map((item) => <NotificationRow key={item.id} item={item} onRead={read} />) : <EmptyState icon={Inbox} title="You're caught up" description="New Spotly activity will appear here." />}
+        {error ? <Card className="border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</Card> : trayItems.length ? trayItems.map((item) => <NotificationRow key={item.id} item={item} onRead={read} />) : <LottieEmptyState name="notification-bell" title="You're caught up" description="New Spotly activity will appear here." />}
         <Button asChild variant="outline" className="w-full" onClick={() => setOpen(false)}><Link href={workspace === "business" ? "/business/notifications" : "/account#notifications"}>Open all notifications</Link></Button>
       </div>
     </Overlay>

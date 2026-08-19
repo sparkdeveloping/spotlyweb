@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronRight, LoaderCircle, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { SpotlyLottie } from "@/components/spotly-lottie";
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -398,10 +399,57 @@ export function Modal({ open, onClose, title, description, children, size = "md"
   return <Overlay open={open} onClose={onClose} title={title} description={description} size={size} closeOnBackdrop={closeOnBackdrop}>{children}</Overlay>;
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className }) {
+const EMPTY_STATE_LOTTIES = {
+  Search: "search-nearby",
+  PackageSearch: "search-nearby",
+  ShoppingBasket: "empty-basket",
+  ShoppingBag: "empty-basket",
+  Store: "storefront-open",
+  Building2: "storefront-open",
+  BriefcaseBusiness: "storefront-open",
+  MapPin: "location-pin",
+  Bell: "notification-bell",
+  BellRing: "notification-bell",
+  Inbox: "notification-bell",
+  Mail: "notification-bell",
+  Truck: "route-delivery",
+  Bike: "driver-online",
+  PackageCheck: "route-delivery",
+  CheckCircle2: "success-burst",
+  BadgeCheck: "verified-business",
+  ShieldCheck: "verified-business",
+  LockKeyhole: "verified-business",
+  UserRoundCheck: "verified-business",
+  FileCheck2: "review-pending",
+  ClipboardList: "review-pending",
+  FileText: "review-pending",
+  BookOpen: "review-pending",
+  WalletCards: "money-flow",
+  Landmark: "money-flow",
+  Banknote: "money-flow",
+  ReceiptText: "money-flow",
+  UsersRound: "team-collaboration",
+  UserPlus: "team-collaboration",
+  Handshake: "team-collaboration",
+  MessageCircle: "support-chat",
+  Headphones: "support-chat",
+  LifeBuoy: "support-chat",
+  HelpCircle: "support-chat",
+  BarChart3: "analytics-rise",
+  Target: "analytics-rise",
+  BadgePercent: "analytics-rise",
+  Sparkles: "analytics-rise",
+  CalendarDays: "calendar-schedule",
+  Clock3: "calendar-schedule",
+  MonitorSmartphone: "kiosk-scan"
+};
+
+export function EmptyState({ icon: Icon, lottie, title, description, action, className }) {
+  const iconName = Icon?.displayName || Icon?.name || "";
+  const animation = lottie || EMPTY_STATE_LOTTIES[iconName];
   return (
     <div className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
-      {Icon && <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></motion.div>}
+      {animation ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-20 w-20 items-center justify-center rounded-[22px] bg-[var(--accent-soft)]"><SpotlyLottie name={animation} mode="loop" className="h-[72px] w-[72px]" fallback={Icon ? <Icon className="h-6 w-6 text-[var(--accent)]" /> : null} /></motion.div> : Icon ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></motion.div> : null}
       <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, delay: 0.04 }}><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-secondary">{description}</p>{action && <div className="mt-5">{action}</div>}</motion.div>
     </div>
   );
