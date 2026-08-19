@@ -197,7 +197,7 @@ export function businessNavigation(business = {}, lifecycle = {}, branchCount = 
     items.push({ id: "delivery", label: "Delivery", icon: Truck, href: href("/business/delivery"), group: "Operations" });
   }
   if (["kiosk_pickup", "kiosk_ordering", "kiosk_checkin"].some((id) => capabilities.has(id))) {
-    items.push({ id: "kiosk", label: "Kiosk", icon: ScanLine, href: href("/business/kiosk"), group: "Operations" });
+    items.push({ id: "kiosk", label: "Check-in kiosk", icon: ScanLine, href: href("/business/kiosk"), group: "Operations" });
   }
   items.push({ id: "insights", label: "Insights", icon: BarChart3, href: href("/business/insights"), group: "Grow" });
   if (capabilities.has("promotions")) items.push({ id: "promotions", label: "Promotions", icon: BadgeDollarSign, href: href("/business/promotions"), group: "Grow" });

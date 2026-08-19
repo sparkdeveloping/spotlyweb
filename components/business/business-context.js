@@ -63,7 +63,11 @@ export function BusinessDataProvider({ children }) {
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [branchesError, setBranchesError] = useState("");
   const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState("");
   const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
   const [claims, setClaims] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [members, setMembers] = useState([]);
@@ -217,7 +221,11 @@ export function BusinessDataProvider({ children }) {
       setBranchesError("");
       setSelectedBranchId("");
       setProducts([]);
+      setProductsLoading(false);
+      setProductsError("");
       setOrders([]);
+      setOrdersLoading(false);
+      setOrdersError("");
       setClaims([]);
       setInvitations([]);
       setMembers([]);
@@ -240,6 +248,12 @@ export function BusinessDataProvider({ children }) {
     setAllBranches([]);
     setBranchesLoading(true);
     setBranchesError("");
+    setProducts([]);
+    setProductsLoading(true);
+    setProductsError("");
+    setOrders([]);
+    setOrdersLoading(true);
+    setOrdersError("");
     writeState("spotly-business-id", user, selectedBusinessId, "local");
     const onError = (reason) => {
       setError(reason?.message || "Some business information could not be loaded.");
@@ -259,8 +273,22 @@ export function BusinessDataProvider({ children }) {
         setBranchesLoading(false);
         setBranchesError(reason?.message || "Locations could not be loaded.");
       }),
-      subscribeBusinessCatalog(selectedBusinessId, setProducts, onError),
-      subscribeOrdersForBusiness(selectedBusinessId, setOrders, onError),
+      subscribeBusinessCatalog(selectedBusinessId, (records) => {
+        setProducts(records);
+        setProductsLoading(false);
+        setProductsError("");
+      }, (reason) => {
+        setProductsLoading(false);
+        setProductsError(reason?.message || "Products could not be loaded.");
+      }),
+      subscribeOrdersForBusiness(selectedBusinessId, (records) => {
+        setOrders(records);
+        setOrdersLoading(false);
+        setOrdersError("");
+      }, (reason) => {
+        setOrdersLoading(false);
+        setOrdersError(reason?.message || "Orders could not be loaded.");
+      }),
       subscribeBusinessClaimsForBusiness(selectedBusinessId, setClaims, onError),
       subscribeBusinessInvitations(selectedBusinessId, setInvitations, onError),
       subscribeBusinessMembers(selectedBusinessId, setMembers, onError),
@@ -337,7 +365,11 @@ export function BusinessDataProvider({ children }) {
     setSelectedBranchId,
     selectedBranch,
     products,
+    productsLoading,
+    productsError,
     orders,
+    ordersLoading,
+    ordersError,
     claims,
     invitations,
     members,
@@ -357,7 +389,7 @@ export function BusinessDataProvider({ children }) {
     archetype,
     setupComplete,
     lifecycle
-  }), [user, memberships, membership, businessIds, businessChoices, portfolioLoading, portfolioError, refreshPortfolio, refreshLifecycle, refreshBranches, selectedBusinessId, setSelectedBusinessId, business, loadedBusinessId, contextSwitching, allBranches, branches, branchesLoading, branchesError, selectedBranchId, selectedBranch, products, orders, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, lifecycleLoading, lifecycleError, lifecycleBusinessId, authoritativeLifecycle, error, businessType, archetype, setupComplete, lifecycle]);
+  }), [user, memberships, membership, businessIds, businessChoices, portfolioLoading, portfolioError, refreshPortfolio, refreshLifecycle, refreshBranches, selectedBusinessId, setSelectedBusinessId, business, loadedBusinessId, contextSwitching, allBranches, branches, branchesLoading, branchesError, selectedBranchId, selectedBranch, products, productsLoading, productsError, orders, ordersLoading, ordersError, claims, invitations, members, finance, operations, promotions, payouts, support, templates, loading, lifecycleLoading, lifecycleError, lifecycleBusinessId, authoritativeLifecycle, error, businessType, archetype, setupComplete, lifecycle]);
 
   return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 }

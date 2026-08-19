@@ -77,7 +77,7 @@ test("Business delivery is visible in live commerce navigation and branchless ki
   const [archetypes, kiosk, delivery] = await Promise.all([read("data/business-archetypes.js"), read("components/business/kiosk.js"), read("components/business/delivery.js")]);
   assert.match(archetypes, /id: "delivery"/);
   assert.match(archetypes, /href\("\/business\/delivery"\)/);
-  assert.match(kiosk, /Add a location before enrolling a kiosk/);
-  assert.match(kiosk, /will not invent a “Main location.”/);
+  assert.match(kiosk, /Add a location before setting up a kiosk/);
+  assert.match(kiosk, /A kiosk belongs to an exact pickup or Driver handoff location/);
   assert.match(delivery, /Add the pickup location first/);
 });

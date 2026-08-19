@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Circle,
   HelpCircle,
+  MapPin,
   Sparkles,
   Store
 } from "lucide-react";
@@ -53,7 +54,47 @@ function OperationStep({ draft, setDraft }) {
 
 function LocationStep({ branchDraft, setBranchDraft, operatingModel }) {
   const noPublicLocation = ["online_only", "mobile_service"].includes(operatingModel);
-  return <div className="space-y-6"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-business">Step 3</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">{noPublicLocation ? "Set the operating base" : "Confirm the first customer location"}</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-secondary">This is a location belonging to the business—not a separate business. You can add more later when the business genuinely has more branches or venues.</p></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Location name" required hint="Use a short location name such as Hillside, Borrowdale, or Main office."><input className={fieldClass} value={branchDraft.branchName || branchDraft.name || ""} onChange={(event) => setBranchDraft({ ...branchDraft, name: event.target.value, branchName: event.target.value })} placeholder="Main location" /></FieldLabel><FieldLabel label="City or town" required><select className={selectClass} value={branchDraft.city || "Harare"} onChange={(event) => setBranchDraft({ ...branchDraft, city: event.target.value })}>{zimbabweCities.map((item) => <option key={item}>{item}</option>)}</select></FieldLabel><FieldLabel label={noPublicLocation ? "Operating address" : "Customer address"} className="sm:col-span-2"><input className={fieldClass} value={branchDraft.address || ""} onChange={(event) => setBranchDraft({ ...branchDraft, address: event.target.value })} placeholder="Street, building, shopping centre, suburb" /></FieldLabel><FieldLabel label="Location phone"><input className={fieldClass} value={branchDraft.phone || ""} onChange={(event) => setBranchDraft({ ...branchDraft, phone: event.target.value })} placeholder="+263" /></FieldLabel><FieldLabel label="Location email"><input type="email" className={fieldClass} value={branchDraft.email || ""} onChange={(event) => setBranchDraft({ ...branchDraft, email: event.target.value })} /></FieldLabel></div><label className="flex items-start gap-3 rounded-2xl border p-4"><input type="checkbox" className="mt-1" checked={branchDraft.public !== false && !noPublicLocation} disabled={noPublicLocation} onChange={(event) => setBranchDraft({ ...branchDraft, public: event.target.checked })} /><span><span className="block text-sm font-bold">Show this location to customers</span><span className="mt-1 block text-xs leading-5 text-secondary">{noPublicLocation ? "Online and mobile businesses do not need a public address." : "Customers will see it after the business is approved for publication."}</span></span></label></div>;
+  const [locating, setLocating] = useState(false);
+  const hasMapPin = branchDraft.location?.lat != null && branchDraft.location?.lng != null;
+
+  function captureMapPin() {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setBranchDraft({
+          ...branchDraft,
+          location: {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
+        });
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+    );
+  }
+
+  return <div className="space-y-6">
+    <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-business">Step 3</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">{noPublicLocation ? "Set the operating base" : "Confirm the first customer location"}</h2><p className="mt-3 max-w-2xl text-sm leading-7 text-secondary">This is a location belonging to the business—not a separate business. You can add more later when the business genuinely has more branches or venues.</p></div>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <FieldLabel label="Location name" required hint="Use a short location name such as Hillside, Borrowdale, or Main office."><input className={fieldClass} value={branchDraft.branchName || branchDraft.name || ""} onChange={(event) => setBranchDraft({ ...branchDraft, name: event.target.value, branchName: event.target.value })} placeholder="Main location" /></FieldLabel>
+      <FieldLabel label="City or town" required><select className={selectClass} value={branchDraft.city || "Harare"} onChange={(event) => setBranchDraft({ ...branchDraft, city: event.target.value })}>{zimbabweCities.map((item) => <option key={item}>{item}</option>)}</select></FieldLabel>
+      <FieldLabel label={noPublicLocation ? "Operating address" : "Customer address"} className="sm:col-span-2"><input className={fieldClass} value={branchDraft.address || ""} onChange={(event) => setBranchDraft({ ...branchDraft, address: event.target.value })} placeholder="Street, building, shopping centre, suburb" /></FieldLabel>
+      <FieldLabel label="Location phone"><input className={fieldClass} value={branchDraft.phone || ""} onChange={(event) => setBranchDraft({ ...branchDraft, phone: event.target.value })} placeholder="+263" /></FieldLabel>
+      <FieldLabel label="Location email"><input type="email" className={fieldClass} value={branchDraft.email || ""} onChange={(event) => setBranchDraft({ ...branchDraft, email: event.target.value })} /></FieldLabel>
+    </div>
+    {!noPublicLocation && <Card variant="bordered" className="p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${hasMapPin ? "bg-[var(--success-soft)] text-success" : "bg-business-soft text-business"}`}><MapPin className="h-5 w-5" /></span><div><h3 className="font-bold">Add the map pin</h3><p className="mt-1 max-w-xl text-sm leading-6 text-secondary">Optional during setup, but required before this location can offer delivery. Capture it while you are physically at the location.</p></div></div>
+        <Button type="button" variant="outline" loading={locating} onClick={captureMapPin} disabled={typeof navigator === "undefined" || !navigator.geolocation}><MapPin className="h-4 w-4" />{hasMapPin ? "Update map pin" : "Use this device here"}</Button>
+      </div>
+      {hasMapPin ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--success-soft)] px-4 py-3"><div><p className="text-sm font-semibold text-success">Map pin saved</p><p className="mt-1 text-xs text-secondary">{Number(branchDraft.location.lat).toFixed(5)}, {Number(branchDraft.location.lng).toFixed(5)}{branchDraft.location.accuracy ? ` · about ${Math.round(branchDraft.location.accuracy)} m accuracy` : ""}</p></div><Button type="button" size="sm" variant="ghost" onClick={() => setBranchDraft({ ...branchDraft, location: null })}>Remove pin</Button></div> : null}
+    </Card>}
+    <label className="flex items-start gap-3 rounded-2xl border p-4"><input type="checkbox" className="mt-1" checked={branchDraft.public !== false && !noPublicLocation} disabled={noPublicLocation} onChange={(event) => setBranchDraft({ ...branchDraft, public: event.target.checked })} /><span><span className="block text-sm font-bold">Show this location to customers</span><span className="mt-1 block text-xs leading-5 text-secondary">{noPublicLocation ? "Online and mobile businesses do not need a public address." : "Customers will see it after the business is approved for publication."}</span></span></label>
+  </div>;
 }
 
 function OfferingStep({ draft, setDraft }) {

@@ -149,6 +149,7 @@ export const defaultBranch = {
   address: "",
   phone: "",
   email: "",
+  location: null,
   public: true,
   status: "active",
   fulfilment: ["pickup"],

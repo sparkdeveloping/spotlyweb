@@ -36,13 +36,20 @@ export async function POST(request) {
       const branchRef = db.collection("branches").doc(body.branchId); const snap = await branchRef.get();
       if (!snap.exists || snap.data().businessId !== body.businessId) throw Object.assign(new Error("The location was not found."), { status: 404 });
       const delivery = body.delivery;
+      const branch = snap.data();
+      const submittedLocation = Number.isFinite(delivery.latitude) && Number.isFinite(delivery.longitude) ? { lat: delivery.latitude, lng: delivery.longitude } : null;
+      const canonicalLocation = branch.location || branch.delivery?.location || submittedLocation || null;
+      if (delivery.enabled && !canonicalLocation) {
+        throw Object.assign(new Error("Add a map pin to this location before turning on delivery."), { status: 409 });
+      }
       await branchRef.set({
+        ...(canonicalLocation && !branch.location ? { location: canonicalLocation } : {}),
         delivery: {
           enabled: delivery.enabled, paused: Boolean(delivery.paused), radiusKm: Number(delivery.radiusKm || 8), preparationMinutes: Number(delivery.preparationMinutes || 20),
           pickupInstructions: safeText(delivery.pickupInstructions, 1200), pickupPoint: safeText(delivery.pickupPoint, 500), contactPhone: safeText(delivery.contactPhone, 80), hours: delivery.hours || {}, vehicleTypes: delivery.vehicleTypes?.length ? delivery.vehicleTypes : ["motorcycle", "car"],
-          location: Number.isFinite(delivery.latitude) && Number.isFinite(delivery.longitude) ? { lat: delivery.latitude, lng: delivery.longitude } : snap.data().delivery?.location || null
+          location: canonicalLocation
         },
-        fulfilment: delivery.enabled ? [...new Set([...(snap.data().fulfilment || ["pickup"]), "delivery"])] : (snap.data().fulfilment || []).filter((item) => item !== "delivery"),
+        fulfilment: delivery.enabled ? [...new Set([...(branch.fulfilment || ["pickup"]), "delivery"])] : (branch.fulfilment || []).filter((item) => item !== "delivery"),
         updatedAt: FieldValue.serverTimestamp(), updatedBy: user.uid
       }, { merge: true });
       return Response.json({ ok: true });

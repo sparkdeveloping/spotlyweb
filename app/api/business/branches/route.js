@@ -24,6 +24,11 @@ const branchSchema = z.object({
   address: z.string().max(500).optional(),
   phone: z.string().max(80).optional(),
   email: z.union([z.string().email().max(254), z.literal("")]).optional(),
+  location: z.object({
+    lat: z.coerce.number().min(-90).max(90),
+    lng: z.coerce.number().min(-180).max(180),
+    accuracy: z.coerce.number().min(0).max(100000).optional()
+  }).nullable().optional(),
   public: z.boolean().optional(),
   status: z.enum(["draft", "provisional", "active", "paused", "closed"]).optional(),
   fulfilment: z.array(z.string().max(80)).max(20).optional(),
@@ -167,6 +172,7 @@ export async function POST(request) {
         address,
         phone: submitted.phone ?? existingBranch?.phone ?? "",
         email: submitted.email ?? existingBranch?.email ?? "",
+        location: submitted.location === null ? null : (submitted.location || existingBranch?.location || null),
         requestedPublic: requestedPublic !== false,
         public: requiresIndependentReview || prelaunchLocation ? false : (submitted.public ?? existingBranch?.public ?? true),
         status: requiresIndependentReview || prelaunchLocation ? "draft" : (submitted.status === "provisional" ? "draft" : (submitted.status || existingBranch?.status || "active")),

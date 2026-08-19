@@ -54,7 +54,18 @@ export async function POST(request) {
     await deviceRef.set({ status: "revoked", credentialHash: null, revokedAt: FieldValue.serverTimestamp(), revokedBy: user.uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return Response.json({ ok: true });
   } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the kiosk device details." }, { status: 400 });
+    if (error instanceof z.ZodError) {
+      const issue = error.issues?.[0];
+      const field = issue?.path?.at(-1);
+      const message = field === "exitPin"
+        ? "Use a 4–8 digit staff exit PIN."
+        : field === "name"
+          ? "Give the tablet a short name your staff will recognize."
+          : field === "enrollmentCode"
+            ? "Enter the full kiosk setup code."
+            : "Review the kiosk setup details and try again.";
+      return Response.json({ ok: false, error: message, details: error.flatten() }, { status: 400 });
+    }
     return apiError(error);
   }
 }

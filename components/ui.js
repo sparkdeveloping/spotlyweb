@@ -215,15 +215,20 @@ export function Tabs({ tabs, value, onChange, className, label = "Sections", idP
   );
 }
 
-export function TabPanel({ idPrefix, value, active, children, className, keepMounted = false }) {
-  if (!active && !keepMounted) return null;
+export function TabPanel({ idPrefix, value, tabValue, active, children, className, keepMounted = false }) {
+  // Support both explicit `active` panels and the older `value` + `tabValue` call pattern.
+  // Several production workspaces used the latter while TabPanel previously ignored tabValue,
+  // which made a selected tab render a completely blank page even though its counts updated.
+  const panelValue = tabValue ?? value;
+  const isActive = typeof active === "boolean" ? active : tabValue !== undefined ? value === tabValue : Boolean(active);
+  if (!isActive && !keepMounted) return null;
   const prefix = safeId(idPrefix);
   return (
     <section
-      id={`${prefix}-panel-${safeId(value)}`}
+      id={`${prefix}-panel-${safeId(panelValue)}`}
       role="tabpanel"
-      aria-labelledby={`${prefix}-tab-${safeId(value)}`}
-      hidden={!active}
+      aria-labelledby={`${prefix}-tab-${safeId(panelValue)}`}
+      hidden={!isActive}
       tabIndex={0}
       className={className}
     >

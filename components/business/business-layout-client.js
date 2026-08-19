@@ -29,5 +29,10 @@ function BusinessPortalFrame({ children }) {
 }
 
 export function BusinessLayoutClient({ children }) {
+  const pathname = usePathname();
+  // The live kiosk authenticates with its own revocable device credential. It must not inherit
+  // the Business owner's Firebase session or BusinessDataProvider just because its URL lives
+  // under /business. This is what makes a shared tablet genuinely safe and independent.
+  if (pathname.startsWith("/business/kiosk/live")) return children;
   return <AuthGate portal="business" title="Sign in to manage your businesses"><BusinessDataProvider><BusinessPortalFrame>{children}</BusinessPortalFrame></BusinessDataProvider></AuthGate>;
 }
