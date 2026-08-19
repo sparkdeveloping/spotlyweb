@@ -2,32 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const proxy = fs.readFileSync("proxy.js", "utf8");
-const domains = fs.readFileSync("lib/spotly-domains.js", "utf8");
+const source = fs.readFileSync(new URL("../proxy.js", import.meta.url), "utf8");
 
-test("production portal hostnames are explicitly mapped", () => {
-  for (const [host, path] of [
-    ["business.spotlyafrica.com", "/business"],
-    ["admin.spotlyafrica.com", "/admin"],
-    ["driver.spotlyafrica.com", "/driver"],
-    ["staff.spotlyafrica.com", "/staff"]
-  ]) {
-    assert.match(proxy, new RegExp(host.replaceAll(".", "\\.")));
-    assert.match(proxy, new RegExp(`"${path}"`));
-  }
+test("apex and www are both served without application-level canonical redirect loops", () => {
+  assert.match(source, /host === "spotlyafrica\.com" \|\| host === "www\.spotlyafrica\.com"/);
+  assert.doesNotMatch(source, /host === "www\.spotlyafrica\.com"[\s\S]{0,140}NextResponse\.redirect\(productionUrl\(request, "spotlyafrica\.com"/);
 });
 
-test("legacy apex portal paths redirect to dedicated hosts", () => {
-  assert.match(proxy, /PATH_TO_HOST/);
-  assert.match(proxy, /NextResponse\.redirect/);
-  assert.match(proxy, /308/);
+test("legacy apex portal paths redirect to dedicated subdomains with prefix removed", () => {
+  assert.match(source, /PATH_TO_HOST/);
+  assert.match(source, /cleanPath/);
+  assert.match(source, /destinationHost/);
 });
 
-test("www canonicalizes to the apex customer domain", () => {
-  assert.match(proxy, /www\.spotlyafrica\.com/);
-  assert.match(proxy, /productionUrl\(request, "spotlyafrica\.com"\)/);
+test("dedicated portal hosts expose clean root and section URLs", () => {
+  assert.match(source, /pathname === portalPrefix \|\| pathname\.startsWith/);
+  assert.match(source, /url\.pathname = pathname === "\/" \? portalPrefix : `\$\{portalPrefix\}\$\{pathname\}`/);
 });
 
-test("shared domain helper exposes all product surfaces", () => {
-  for (const key of ["customer", "business", "admin", "driver", "staff"]) assert.match(domains, new RegExp(`${key}:`));
+test("shared API and account routes stay unprefixed on portal origins", () => {
+  assert.match(source, /SHARED_PREFIXES/);
+  assert.match(source, /if \(isSharedPath\(pathname\)\) return NextResponse\.next\(\)/);
 });

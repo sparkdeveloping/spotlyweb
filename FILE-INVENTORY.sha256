@@ -1,11 +1,12 @@
-5530b40097908d8b88a5320e66fb7bf0105339ab286757ac6de3e71b5b3b779f  ./.env.example
 383e9abeb2d451a7e7c897dfe40ce700c87db77e4d71e9066395d671c8d8a72a  ./.gitignore
 bad3edcfaa69872eb7096b9671fbd1ae2eef6954c0ca49475a513ba42feb5287  ./README.md
 e9c312b33412d91c25dbc9c17309f63f7d8cce660e0bd52b7e75e529d9e2c7a8  ./SPOTLY-BUSINESS-FULL-FUNCTIONAL-VISUAL-AUDIT-2026-08-18.md
+cb0e97d6fa32dc26baa5a69c78344fb20141560431485c817270353f7b525f09  ./SPOTLY-DOMAIN-ROUTING-HOTFIX-2026-08-19.md
 764685ee850c5d98b7bd8ebb3fe7e295c4e5d691a76d3857e93007f32b9e4883  ./SPOTLY-FULL-PLATFORM-UX-MARKETPLACE-AUDIT-2026-08-18.md
 1cfc24639bbabbc4140f82ee46c62c44e54a2af2bad8561857ee6e33d736d5fd  ./SPOTLY-LOTTIE-MOTION-CONVERSION-SYSTEM-2026-08-18.md
 625afb48028b3d3b84488df161686bb8f5abc1e7dd8d4d535c16be6a8826cbab  ./SPOTLY-MARKETING-LAUNCH-CONVERSION-AUDIT-2026-08-18.md
 e62bfc9d0b8cf68a34a3a462bc8b45215a01c0f03182d0ae678e0a3a3432ec64  ./SPOTLY-PRODUCTION-INTEGRITY-NOTIFICATIONS-AUDIT-2026-08-18.md
+e686da9d28f11bb169604b32769352c6df39eb84433cb0e583b7658cee154851  ./SPOTLY-SUBDOMAIN-DEPLOYMENT-2026-08-18.md
 58e140eecf0a09ea631aa2ad26785a83e9f822ca5e5e71a88dafb5d56d10a0c9  ./app/account/page.js
 bcf51a68a70f8cce8de20afc847aa4600d2ba6d9bdc3e8241aa6b52a71e6d6cf  ./app/admin/[section]/page.js
 309e8aec14f518b8ad2c5d04c4b0d24c97a6c65bfcaaef961d1f273f46c0b096  ./app/admin/page.js
@@ -217,12 +218,14 @@ b22fd52962d990d7e91b35aa8ddf6ee79e96832cd50a559042ea0f0d42677b58  ./lib/platform
 66e592b58cbeeede40d80c9a9caafe15468a7e28890865e9243b7b3adead9584  ./lib/rate-limit-server.js
 aa74b45ab2db76104207d8bb1a921b6d9769fd850942eb62362382af6b12c932  ./lib/reservation-math.js
 20ae2c53257310848ac9ab72ab8176946bdf46e0c6268dfd6e695baf47e1e447  ./lib/server-helpers.js
+06a5b7ad5255883be429f6b78348e85f8e9aea65b949db7e6804cc25c4fb6cd7  ./lib/spotly-domains.js
 f7d40fda82e10bcadc5e7ee5b85bbede6732b78bf205d6132eeaf1134f70a06d  ./lib/staff-services.js
 1aa2df21df7568067968aed04d50813ca992d6eb266b562c6fb4c9244fb5ff3f  ./lib/workspaces.js
 cb2fdb104aa9e959c272a78d817fc410baa2476a882e4f5fcc424a319d349cf2  ./next.config.mjs
 b8ae904828972def2f9f8c5ef0b8d9808489aee096f1cae378f8dfb08d309e6a  ./package-lock.json
 3bdf7f525f55df99eb0b3bf88f9c0a6c4db1141fd4ca703e5f841d376fd41a37  ./package.json
 37dcf5f6f2f7d2cc94f102a1f741d84869231e44c5cd787129f03b85db2b19aa  ./postcss.config.mjs
+961546557885fbd90949037a40f7cb16d6504fa66722bd3a2078e552b02bda89  ./proxy.js
 d4d0ab71d62403d973c72349507c65b5b9d07f1eb12b5ae5c21f68b1f30c590e  ./public/apple-touch-icon.png
 0624b0de75cecd560f2292d560a5ebb2c9fce9ffee6b810965629ebbe1d0478b  ./public/brand/spotly-admin.svg
 5077df08edc8dc66d30c4a6708db5b224753254476c8d3bee28024945e2db6b4  ./public/brand/spotly-business.svg
@@ -275,6 +278,7 @@ e454523bf31bc1ba9eea75c361e3c372af8f34120618752bb30b13dcad0578aa  ./tests/market
 48a85981f15e16292671c9415a41601b46af7e58e5ce340e28801933cb6f8c3c  ./tests/react-hook-import-integrity.test.mjs
 a15decc0ee6e63e9320d6277b6e1f11329a134699381c94750eb49bd8f47a36f  ./tests/reservation-release.test.mjs
 d2338e014c7fedf49c372fbcbb77cd63961677af1b846073d75507a7f56389f2  ./tests/security-commerce-integrity.test.mjs
+f78baec69bbc787ad894a26cc91f152a553bd4853a18151da725fada76a89af9  ./tests/subdomain-routing-integrity.test.mjs
 280c20491aff081c7c7f57c01da5f11c43e0a404066e7cfca38a40ee8d98d345  ./tests/theme-integrity.test.mjs
 10d4d664ffe493e57acc567f840e78daaaf047f6b3986075a3edc3e480150cdd  ./tests/workspaces.test.mjs
 7c7d7a90fac6753273dbdba0049c897d61eeae6bbff0beb6f0ad62538dba891e  ./vercel.json
