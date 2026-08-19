@@ -148,7 +148,7 @@ export function DeliveryView() {
     {saved && <div role="status" className="rounded-xl bg-[var(--success-soft)] p-4 text-sm font-semibold text-success"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{saved}</div>}
 
     <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
-      <SectionCard title="Delivery setup" description={`These settings apply only to ${selectedBranch?.branchName || selectedBranch?.name || "this location"}.`}>
+      <SectionCard padded title="Delivery setup" description={`These settings apply only to ${selectedBranch?.branchName || selectedBranch?.name || "this location"}.`}>
         <div className="space-y-5">
           <label className="flex items-start gap-3 rounded-xl bg-[var(--surface-2)] p-4">
             <input className="mt-1" type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })}/>
@@ -184,7 +184,7 @@ export function DeliveryView() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Ready for delivery?" description="Spotly checks the pieces needed for a clear Driver handoff.">
+      <SectionCard padded title="Ready for delivery?" description="Spotly checks the pieces needed for a clear Driver handoff.">
         <div className="space-y-3">{[
           [form.enabled, "Delivery is turned on"],
           [Boolean(mapLocation), "Location has a map pin"],
@@ -197,7 +197,7 @@ export function DeliveryView() {
       </SectionCard>
     </div>
 
-    <SectionCard title={`Active deliveries (${active.length})`} description="Mark an order ready only after payment and packing are complete.">{loading ? <div className="py-12 text-center text-sm text-secondary">Loading deliveries…</div> : branchJobs.length ? <div className="divide-y">{branchJobs.map((job) => <DeliveryRow key={job.id} job={job} busy={busyJob === job.id} onAction={jobAction}/>)}</div> : <EmptyState icon={Truck} title="No delivery orders yet" description="Customer delivery orders from this location will appear here."/>}</SectionCard>
+    <SectionCard padded title={`Active deliveries (${active.length})`} description="Mark an order ready only after payment and packing are complete.">{loading ? <div className="py-12 text-center text-sm text-secondary">Loading deliveries…</div> : branchJobs.length ? <div className="divide-y">{branchJobs.map((job) => <DeliveryRow key={job.id} job={job} busy={busyJob === job.id} onAction={jobAction}/>)}</div> : <EmptyState icon={Truck} title="No delivery orders yet" description="Customer delivery orders from this location will appear here."/>}</SectionCard>
   </div>;
 }
 

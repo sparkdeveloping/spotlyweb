@@ -7,7 +7,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
   Bell,
+  Bike,
   Check,
+  ClipboardCheck,
   ChevronDown,
   Command,
   Laptop,
@@ -17,10 +19,14 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  PackageCheck,
   Search,
   Settings,
+  ShieldCheck,
+  Store,
   Sun,
   UserRound,
+  UsersRound,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -154,7 +160,18 @@ function notificationTime(value, nowMs = 0) {
   return days === 1 ? "Yesterday" : `${days} days ago`;
 }
 
-function NotificationPanel({ items, open, onClose, onRead, onReadAll, workspace }) {
+function notificationIcon(item = {}) {
+  if (isReviewNotification(item)) return ClipboardCheck;
+  const target = notificationWorkspace(item);
+  if (target === "business") return Store;
+  if (target === "driver") return Bike;
+  if (target === "staff") return UsersRound;
+  if (target === "admin") return ShieldCheck;
+  if (target === "customer") return PackageCheck;
+  return Activity;
+}
+
+function NotificationPanel({ items, open, onClose, onRead, onReadAll, workspace, error = "" }) {
   const router = useRouter();
   const [clock, setClock] = useState(0);
   const [filter, setFilter] = useState("all");
@@ -181,16 +198,16 @@ function NotificationPanel({ items, open, onClose, onRead, onReadAll, workspace 
         <div className="mt-3 flex gap-2 overflow-x-auto">{[["all", "All"], ["workspace", "This workspace"], ["reviews", "Reviews"]].map(([value, label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={cn("rounded-full border px-3 py-1.5 text-xs font-semibold", filter === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary")}>{label}</button>)}</div>
       </div>
       <div className="p-3">
-        {scoped.length ? scoped.map((item) => (
-          <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-xl p-3 text-left hover:bg-[var(--surface-2)]">
-            <span className={cn("mt-2 h-2 w-2 shrink-0 rounded-full", !item.read ? "bg-[var(--accent)]" : "bg-transparent")} />
+        {error ? <div className="rounded-xl border border-danger/25 bg-[var(--danger-soft)] p-4"><p className="text-sm font-semibold text-danger">Notifications could not be refreshed</p><p className="mt-1 text-xs leading-5 text-secondary">{error}</p></div> : scoped.length ? scoped.map((item) => { const ItemIcon = notificationIcon(item); return (
+          <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-xl p-3 text-left transition hover:bg-[var(--surface-2)]">
+            <span className={cn("relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", !item.read ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface-2)] text-secondary")}><ItemIcon className="h-5 w-5" />{!item.read && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface)]" />}</span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{item.title || "Spotly update"}</span>
               <span className="mt-1 block text-sm leading-5 text-secondary">{item.body || item.message || "Open this update for more information."}</span>
               <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt, clock)} · {notificationWorkspace(item)}{isReviewNotification(item) ? " · Review" : ""}</span>
             </span>
           </button>
-        )) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
+        ); }) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
       </div>
     </Overlay>
   );
@@ -320,7 +337,7 @@ function MobileBottomNav({ portal, activeSection, onOpenCommand }) {
   );
 }
 
-export function PortalShell({ portalId, activeSection, children, hideSidebar = false, navigation = null, footer = true }) {
+export function PortalShell({ portalId, activeSection, children, hideSidebar = false, navigation = null, footer = true, notificationBusinessId = null }) {
   const basePortal = portals[portalId];
   const pathname = usePathname();
   const { user, profile } = useAuth();
@@ -335,8 +352,12 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [notificationsError, setNotificationsError] = useState("");
   const unreadCount = notifications.filter((item) => !item.read).length;
-  const attentionNotification = notifications.find((item) => !item.read && notificationWorkspace(item) === portalId && (["high", "critical"].includes(item.importance) || isReviewNotification(item)));
+  const attentionNotification = notifications.find((item) => !item.read
+    && notificationWorkspace(item) === portalId
+    && (!notificationBusinessId || item.businessId === notificationBusinessId)
+    && (["high", "critical"].includes(item.importance) || isReviewNotification(item)));
 
   useEffect(() => {
     setSidebarCollapsed(window.localStorage.getItem("spotly-sidebar-collapsed") === "1");
@@ -348,9 +369,10 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
   useEffect(() => {
     if (!user?.uid) {
       setNotifications([]);
+      setNotificationsError("");
       return undefined;
     }
-    return subscribeNotifications(user.uid, setNotifications, () => setNotifications([]));
+    return subscribeNotifications(user.uid, (items) => { setNotifications(items); setNotificationsError(""); }, (reason) => setNotificationsError(reason?.message || "Spotly could not refresh notifications."));
   }, [user?.uid]);
 
   async function readNotification(id) {
@@ -397,7 +419,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
             <UserMenu portal={portal} />
           </div>
         </header>
-        {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 truncate text-xs text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = attentionNotification.href; }} className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">Open</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
+        {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = attentionNotification.href; }} className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">View update</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
         <main key={pathname} className={cn("portal-gradient min-h-[calc(100vh-5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
             {children}
@@ -405,7 +427,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
         </main>
       </div>
       {!hideSidebar && <MobileBottomNav portal={portal} activeSection={activeSection} onOpenCommand={() => setCommandOpen(true)} />}
-      <NotificationPanel items={notifications} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRead={readNotification} onReadAll={readAllNotifications} workspace={portalId} />
+      <NotificationPanel items={notifications} open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRead={readNotification} onReadAll={readAllNotifications} workspace={portalId} error={notificationsError} />
       <CommandPalette portal={portal} open={commandOpen} onClose={() => setCommandOpen(false)} />
     </div>
   );

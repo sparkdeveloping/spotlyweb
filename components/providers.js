@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
 import { FirebaseProvider, PlatformProvider } from "@/components/firebase-provider";
 
@@ -132,13 +132,15 @@ function ToastProvider({ children }) {
 
 export function AppProviders({ children }) {
   return (
-    <ThemeProvider>
-      <FirebaseProvider>
-        <PlatformProvider>
-          <ToastProvider>{children}</ToastProvider>
-        </PlatformProvider>
-      </FirebaseProvider>
-    </ThemeProvider>
+    <MotionConfig reducedMotion="user">
+      <ThemeProvider>
+        <FirebaseProvider>
+          <PlatformProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </PlatformProvider>
+        </FirebaseProvider>
+      </ThemeProvider>
+    </MotionConfig>
   );
 }
 

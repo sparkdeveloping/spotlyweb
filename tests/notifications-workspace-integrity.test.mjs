@@ -35,8 +35,15 @@ test("global notification tray and module notification center are both available
   assert.match(portalShell, /filter === "workspace"/);
   assert.match(portalShell, /filter === "reviews"/);
   assert.match(portalShell, /attentionNotification/);
-  assert.match(notificationCenter, /All \(\$\{scoped\.length\}\)/);
-  assert.match(notificationCenter, /Reviews \(\$\{scoped\.filter\(isReviewNotification\)\.length\}\)/);
+  assert.match(notificationCenter, /function notificationModule/);
+  assert.match(notificationCenter, /showModuleFilters/);
+  assert.match(notificationCenter, /businessOptions/);
+  assert.match(notificationCenter, /if \(businessId && item\.businessId !== businessId\) return false;/);
+  assert.match(notificationCenter, /label: "Reviews"/);
+  assert.match(notificationCenter, /label: "Orders & delivery"/);
+  assert.match(notificationCenter, /label: "Locations"/);
+  assert.match(notificationCenter, /label: "Money"/);
+  assert.match(notificationCenter, /label: "Support"/);
 });
 
 test("account gateway is customer-first and super admins receive every workspace", () => {
@@ -53,4 +60,11 @@ test("account gateway is customer-first and super admins receive every workspace
 test("workspace switcher iterates the Set returned by workspaceAccess", () => {
   assert.match(portalShell, /return \[\.\.\.access\]\.map/);
   assert.doesNotMatch(portalShell, /Object\.entries\(access\)/);
+});
+
+test("selected Business attention banners do not leak another business's review activity", () => {
+  const businessLayout = fs.readFileSync("components/business/business-layout-client.js", "utf8");
+  assert.match(portalShell, /notificationBusinessId/);
+  assert.match(portalShell, /item\.businessId === notificationBusinessId/);
+  assert.match(businessLayout, /notificationBusinessId=\{accountLevel \? null : workspace\.selectedBusinessId\}/);
 });

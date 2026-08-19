@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Check,
   Clock3,
@@ -209,9 +210,24 @@ export function BranchesView() {
   const [open, setOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const handledDeepLink = useRef("");
   const { toast } = useToast();
 
   function edit(branch = null) { setEditing(branch); setOpen(true); }
+
+  useEffect(() => {
+    if (branchesLoading || branchesError) return;
+    const key = searchParams.get("action") === "add" ? "add" : searchParams.get("edit") ? `edit:${searchParams.get("edit")}` : "";
+    if (!key || handledDeepLink.current === key) return;
+    handledDeepLink.current = key;
+    if (key === "add" && canManageAll) { edit(); return; }
+    const requested = searchParams.get("edit");
+    if (requested && canEdit) {
+      const target = branches.find((item) => item.id === requested);
+      if (target) edit(target);
+    }
+  }, [branches, branchesError, branchesLoading, canEdit, canManageAll, searchParams]);
   async function remove() {
     if (!removeTarget) return;
     setLoading(true);

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
+  Bell,
   Building2,
   Check,
   ChevronRight,
@@ -23,9 +24,11 @@ import {
 import { Badge, Button, Card, EmptyState, PageHeader, ProgressBar, SearchField, StatusBadge } from "@/components/ui";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useToast } from "@/components/providers";
+import { NotificationCenter } from "@/components/notification-center";
 
 export const businessAccountNavigation = [
   { id: "portfolio", label: "Portfolio", icon: Building2, href: "/business" },
+  { id: "notifications", label: "Notifications", icon: Bell, href: "/business/notifications" },
   { id: "claims", label: "Claims & applications", icon: FileCheck2, href: "/business/claims" },
   { id: "invitations", label: "Invitations", icon: MailCheck, href: "/business/invitations" },
   { id: "access", label: "Your access", icon: KeyRound, href: "/business/access" }
@@ -107,6 +110,18 @@ function PortfolioView({ data, search, setSearch }) {
   </div>;
 }
 
+
+function BusinessNotificationsView({ data }) {
+  const businessOptions = (data.businesses || []).map((item) => ({ id: item.id, name: item.name }));
+  return <NotificationCenter
+    workspace="business"
+    title="Business notifications"
+    description="Reviews, location decisions, orders, Money and support activity across every business this account can access."
+    businessOptions={businessOptions}
+    showModuleFilters
+  />;
+}
+
 function ClaimsView({ data }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -154,7 +169,7 @@ function BusinessAccountContent({ section }) {
   useEffect(() => { refresh(); }, [refresh]);
   if (loading) return <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><div className="surface min-h-72 animate-pulse rounded-2xl" /></div>;
   if (error) return <div className="mx-auto max-w-4xl p-4 sm:p-6 lg:p-8"><Card variant="bordered" className="flex min-h-72 flex-col items-center justify-center p-8 text-center"><CircleAlert className="h-8 w-8 text-danger" /><h1 className="mt-4 text-xl font-semibold">Your business account could not load</h1><p className="mt-2 max-w-lg text-sm leading-6 text-secondary">{error}</p><Button className="mt-5" onClick={refresh}>Try again</Button></Card></div>;
-  const View = section === "claims" ? ClaimsView : section === "invitations" ? InvitationsView : section === "access" ? AccessView : PortfolioView;
+  const View = section === "notifications" ? BusinessNotificationsView : section === "claims" ? ClaimsView : section === "invitations" ? InvitationsView : section === "access" ? AccessView : PortfolioView;
   return <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><View data={data} refresh={refresh} search={search} setSearch={setSearch} /></div>;
 }
 

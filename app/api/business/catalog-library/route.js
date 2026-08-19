@@ -70,23 +70,33 @@ export async function GET(request) {
       allowedIds = new Set(collectionSnapshot.data().masterProductIds || []);
     }
 
-    let query = db.collection("masterProducts").where("verificationStatus", "==", "verified").orderBy("canonicalName").limit(pageSize + 1);
     const normalized = normalizeProductText(search);
-    if (normalized) {
-      const compact = normalized.replace(/\s+/g, "");
-      if (/^\d{6,18}$/.test(compact)) query = db.collection("masterProducts").where("gtin", "==", compact).where("verificationStatus", "==", "verified").limit(pageSize + 1);
-      else query = db.collection("masterProducts").where("searchTerms", "array-contains", normalized.split(/\s+/)[0]).where("verificationStatus", "==", "verified").orderBy("canonicalName").limit(pageSize + 1);
+    const compact = normalized.replace(/\s+/g, "");
+    let snapshot;
+    if (normalized && /^\d{6,18}$/.test(compact)) {
+      snapshot = await db.collection("masterProducts").where("gtin", "==", compact).limit(100).get();
+    } else if (normalized) {
+      // Search by one token only and enforce verified/publication eligibility in memory. This
+      // avoids searchTerms+verificationStatus+canonicalName composite-index fragility.
+      const token = normalized.split(/\s+/).find((value) => value.length >= 2);
+      snapshot = token
+        ? await db.collection("masterProducts").where("searchTerms", "array-contains", token).limit(500).get()
+        : await db.collection("masterProducts").where("verificationStatus", "==", "verified").limit(1000).get();
+    } else {
+      snapshot = await db.collection("masterProducts").where("verificationStatus", "==", "verified").limit(1000).get();
     }
-    if (cursor) {
-      const cursorSnapshot = await db.collection("masterProducts").doc(cursor).get();
-      if (cursorSnapshot.exists) query = query.startAfter(cursorSnapshot);
-    }
-    const snapshot = await query.get();
-    let records = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter(canPublishMasterImage);
+
+    let records = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((item) => item.verificationStatus === "verified" && canPublishMasterImage(item));
     if (allowedIds) records = records.filter((item) => allowedIds.has(item.id));
-    if (normalized) records = records.filter((item) => `${item.canonicalName || ""} ${item.brand || ""} ${item.variant || ""} ${item.packSize || ""} ${item.gtin || ""} ${(item.searchAliases || []).join(" ")}`.toLowerCase().includes(normalized) || (item.searchTerms || []).some((term) => term.includes(normalized)));
-    const hasMore = records.length > pageSize;
-    const items = records.slice(0, pageSize);
+    if (normalized) records = records.filter((item) => `${item.canonicalName || ""} ${item.brand || ""} ${item.variant || ""} ${item.packSize || ""} ${item.gtin || ""} ${(item.searchAliases || []).join(" ")}`.toLowerCase().includes(normalized) || (item.searchTerms || []).some((term) => String(term).includes(normalized)));
+    records.sort((a, b) => String(a.canonicalName || "").localeCompare(String(b.canonicalName || ""), "en", { sensitivity: "base" }) || String(a.id).localeCompare(String(b.id)));
+    const cursorIndex = cursor ? records.findIndex((item) => item.id === cursor) : -1;
+    const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    const page = records.slice(startIndex, startIndex + pageSize + 1);
+    const hasMore = page.length > pageSize;
+    const items = page.slice(0, pageSize);
     return Response.json({ ok: true, items, collections: await getCollections(db), nextCursor: hasMore ? items.at(-1)?.id || null : null });
   } catch (error) {
     return apiError(error);
@@ -108,14 +118,14 @@ export async function POST(request) {
           const barcode = normalizeProductText(candidate.gtin || candidate.barcode || "").replace(/\s+/g, "");
           let snapshots = [];
           if (barcode) {
-            const exact = await db.collection("masterProducts").where("gtin", "==", barcode).where("verificationStatus", "==", "verified").limit(5).get();
-            snapshots = exact.docs;
+            const exact = await db.collection("masterProducts").where("gtin", "==", barcode).limit(12).get();
+            snapshots = exact.docs.filter((snapshot) => snapshot.data()?.verificationStatus === "verified");
           }
           if (!snapshots.length) {
             const token = normalizeProductText(`${candidate.brand || ""} ${candidate.name || ""}`).split(/\s+/).find((value) => value.length >= 2);
             if (token) {
-              const nearby = await db.collection("masterProducts").where("searchTerms", "array-contains", token).where("verificationStatus", "==", "verified").limit(12).get();
-              snapshots = nearby.docs;
+              const nearby = await db.collection("masterProducts").where("searchTerms", "array-contains", token).limit(40).get();
+              snapshots = nearby.docs.filter((snapshot) => snapshot.data()?.verificationStatus === "verified");
             }
           }
           const ranked = snapshots.map((snapshot) => {
@@ -155,12 +165,9 @@ export async function POST(request) {
       if (branches.some((snapshot) => !snapshot.exists || snapshot.data().businessId !== body.businessId)) throw Object.assign(new Error("One or more selected locations do not belong to this business."), { status: 422 });
     }
 
-    const existingMasterIds = new Set();
-    for (let index = 0; index < requestedIds.length; index += 30) {
-      const group = requestedIds.slice(index, index + 30);
-      const existing = await db.collection("products").where("businessId", "==", body.businessId).where("masterProductId", "in", group).get();
-      existing.docs.forEach((doc) => existingMasterIds.add(doc.data().masterProductId));
-    }
+    const existingProducts = await db.collection("products").where("businessId", "==", body.businessId).limit(1500).get();
+    const requestedSet = new Set(requestedIds);
+    const existingMasterIds = new Set(existingProducts.docs.map((doc) => doc.data()?.masterProductId).filter((id) => requestedSet.has(id)));
     const created = [];
     for (let start = 0; start < body.items.length; start += 350) {
       const batch = db.batch();

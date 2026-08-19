@@ -1,7 +1,6 @@
 import {
   BadgeDollarSign,
   BarChart3,
-  Bell,
   CalendarDays,
   CheckSquare2,
   ClipboardList,
@@ -142,14 +141,9 @@ export function businessNavigation(business = {}, lifecycle = {}, branchCount = 
   const href = (path, params = {}) => businessHref(path, { businessId, ...params });
   const mode = lifecycle?.navigationMode || "basics";
   const items = [{ id: "portfolio", label: "Business portfolio", icon: LayoutGrid, href: "/business", group: "Account" }];
-  const includeNotifications = () => {
-    if (!items.some((item) => item.id === "notifications")) items.push({ id: "notifications", label: "Notifications", icon: Bell, href: href("/business/notifications"), group: "Business" });
-  };
-
   if (mode === "access") {
     items.push({ id: "launch", label: "Access status", icon: CheckSquare2, href: href("/business/launch"), emphasis: true, group: "Business" });
     items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: href("/business/support"), group: "Business" });
-    includeNotifications();
     return items;
   }
 
@@ -157,7 +151,6 @@ export function businessNavigation(business = {}, lifecycle = {}, branchCount = 
     items.push({ id: "launch", label: "Business status", icon: CheckSquare2, href: href("/business/launch"), emphasis: true, group: "Business" });
     items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: href("/business/support"), group: "Business" });
     items.push({ id: "settings", label: "Business settings", icon: Settings, href: href("/business/settings"), group: "Business" });
-    includeNotifications();
     return items;
   }
 
@@ -165,7 +158,6 @@ export function businessNavigation(business = {}, lifecycle = {}, branchCount = 
     items.push({ id: "launch", label: "Launch checklist", icon: CheckSquare2, href: href("/business/launch"), group: "Business" });
     items.push({ id: "setup", label: "Business details", icon: Store, href: href("/business/setup", lifecycle?.setup?.firstIncompleteId ? { step: lifecycle.setup.firstIncompleteId } : {}), emphasis: true, group: "Business" });
     items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: href("/business/support"), group: "Business" });
-    includeNotifications();
     return items;
   }
 
@@ -181,7 +173,6 @@ export function businessNavigation(business = {}, lifecycle = {}, branchCount = 
       items.push({ id: "finance", label: "Money", icon: WalletCards, href: href("/business/finance"), group: "Prepare" });
     }
     items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: href("/business/support"), group: "Business" });
-    includeNotifications();
     return items;
   }
 
@@ -207,6 +198,5 @@ export function businessNavigation(business = {}, lifecycle = {}, branchCount = 
   }
   items.push({ id: "support", label: "Help & support", icon: LifeBuoy, href: href("/business/support"), group: "Business" });
   items.push({ id: "settings", label: "Business settings", icon: Settings, href: href("/business/settings"), group: "Business" });
-  includeNotifications();
   return items;
 }

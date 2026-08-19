@@ -66,23 +66,23 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
 
   return <>
     <div className={`surface grid gap-1 rounded-2xl p-2 shadow-card ${showBranch && branches.length ? "w-full sm:grid-cols-2 xl:w-[500px]" : compact ? "w-full sm:w-[300px]" : "w-full sm:w-[330px]"}`}>
-      <button type="button" onClick={() => businessChoices.length > 1 ? setBusinessOpen(true) : null} className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-grouped">
+      <button type="button" onClick={() => setBusinessOpen(true)} className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-grouped" aria-label="Choose or manage business">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-business-soft text-business">{business?.logo ? <Image unoptimized src={business.logo} alt="" width={40} height={40} className="h-full w-full object-cover" /> : <Building2 className="h-5 w-5" />}</span>
         <span className="min-w-0 flex-1">
           <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">Business</span>
           <span className="mt-0.5 block break-words text-sm font-bold leading-5">{businessName}</span>
           <span className="mt-0.5 block break-words text-[11px] leading-4 text-secondary">{businessSubtitle}</span>
         </span>
-        {businessChoices.length > 1 && <ChevronDown className="h-4 w-4 shrink-0 text-tertiary" />}
+        <ChevronDown className="h-4 w-4 shrink-0 text-tertiary" />
       </button>
-      {showBranch && branches.length > 0 && <button type="button" onClick={() => branches.length > 1 ? setLocationOpen(true) : null} className="flex min-w-0 items-center gap-3 rounded-xl border-t px-3 py-2.5 text-left transition hover:bg-grouped sm:border-l sm:border-t-0">
+      {showBranch && branches.length > 0 && <button type="button" onClick={() => setLocationOpen(true)} className="flex min-w-0 items-center gap-3 rounded-xl border-t px-3 py-2.5 text-left transition hover:bg-grouped sm:border-l sm:border-t-0" aria-label="Choose or manage location">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><MapPin className="h-5 w-5" /></span>
         <span className="min-w-0 flex-1">
           <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">{archetype?.nouns?.branch || "Location"}</span>
           <span className="mt-0.5 block break-words text-sm font-bold leading-5">{locationName}</span>
           <span className="mt-0.5 block break-words text-[11px] leading-4 text-secondary">{selectedBranch?.city || "Zimbabwe"}{branches.length > 1 ? ` · ${branches.length} available` : ""}</span>
         </span>
-        {branches.length > 1 && <ChevronDown className="h-4 w-4 shrink-0 text-tertiary" />}
+        <ChevronDown className="h-4 w-4 shrink-0 text-tertiary" />
       </button>}
     </div>
     <Overlay open={businessOpen} onClose={() => { setBusinessOpen(false); setQuery(""); }} mode="sheet" title="Switch business" description="Choose another business in your Spotly Business account." label="Business switcher">
@@ -100,12 +100,18 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
       </div>
     </Overlay>
     <Overlay open={locationOpen} onClose={() => setLocationOpen(false)} mode="sheet" title={`Choose ${archetype?.nouns?.branch || "location"}`} description="Switch the exact location you are operating." label="Location switcher">
-      <div className="space-y-2 p-4">
-        {branches.map((item) => <button key={item.id} type="button" onClick={() => selectLocation(item.id)} className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left hover:bg-[var(--surface-2)] ${item.id === selectedBranchId ? "border-business bg-business-soft" : ""}`}>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><MapPin className="h-5 w-5" /></span>
-          <span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold leading-5">{item.branchName || item.name || item.displayName || "Location"}</span><span className="mt-1 block break-words text-xs leading-5 text-secondary">{[item.city, item.address].filter(Boolean).join(" · ") || "Zimbabwe"}</span></span>
-          {item.id === selectedBranchId && <Check className="h-4 w-4 text-business" />}
-        </button>)}
+      <div className="space-y-4 p-4">
+        <div className="space-y-2">
+          {branches.map((item) => <button key={item.id} type="button" onClick={() => selectLocation(item.id)} className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition hover:bg-[var(--surface-2)] ${item.id === selectedBranchId ? "border-business bg-business-soft" : ""}`}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><MapPin className="h-5 w-5" /></span>
+            <span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold leading-5">{item.branchName || item.name || item.displayName || "Location"}</span><span className="mt-1 block break-words text-xs leading-5 text-secondary">{[item.city, item.address].filter(Boolean).join(" · ") || "Zimbabwe"}</span></span>
+            {item.id === selectedBranchId && <Check className="h-4 w-4 text-business" />}
+          </button>)}
+        </div>
+        <div className="grid gap-2 border-t pt-4 sm:grid-cols-2">
+          <Button asChild variant="outline"><Link href={businessHref("/business/branches", { businessId: selectedBusinessId, edit: selectedBranchId || "" })}><MapPin className="h-4 w-4" />Edit selected location</Link></Button>
+          <Button asChild variant="outline"><Link href={businessHref("/business/branches", { businessId: selectedBusinessId, action: "add" })}><Building2 className="h-4 w-4" />Add location</Link></Button>
+        </div>
       </div>
     </Overlay>
   </>;
@@ -135,7 +141,7 @@ export function CompletionBanner() {
   return <div className="flex flex-col gap-4 rounded-2xl border border-business/20 bg-business-soft p-5 sm:flex-row sm:items-center"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface)] text-business shadow-sm"><Sparkles className="h-6 w-6" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-[.14em] text-business">Recommended next action</p><h3 className="mt-1 font-bold text-[var(--on-business-soft)]">{lifecycle.nextAction.actionLabel}</h3><p className="mt-1 text-sm leading-6 text-secondary">{lifecycle.nextAction.label}</p></div><Button asChild size="sm"><Link href={lifecycle.nextAction.href}>{lifecycle.nextAction.actionLabel}<ArrowRight className="h-4 w-4" /></Link></Button></div>;
 }
 
-export function FullScreenTask({ open, state = "processing", title, description, steps = [], activeStep = 0, onDone, doneLabel = "Continue" }) {
+export function FullScreenTask({ open, state = "processing", title, description, steps = [], activeStep = 0, onDone, doneLabel = "Done" }) {
   return <Overlay open={open} onClose={state === "processing" ? undefined : onDone} mode="full" hideHeader closeOnBackdrop={false} label={title} className="bg-[#071b13] text-white shadow-none"><div className="flex min-h-full items-center justify-center p-5"><motion.div initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="w-full max-w-xl text-center">
     <motion.div animate={state === "processing" ? { rotate: 360 } : { scale: [0.8, 1.12, 1] }} transition={state === "processing" ? { repeat: Infinity, duration: 1.4, ease: "linear" } : { duration: .55 }} className={`mx-auto flex h-24 w-24 items-center justify-center rounded-[20px] ${state === "success" ? "bg-emerald-400 text-emerald-950" : state === "error" ? "bg-red-400 text-red-950" : "bg-[var(--surface)]/10"}`}>
       {state === "success" ? <CheckCircle2 className="h-12 w-12" /> : state === "error" ? <AlertTriangle className="h-12 w-12" /> : <LoaderCircle className="h-11 w-11" />}

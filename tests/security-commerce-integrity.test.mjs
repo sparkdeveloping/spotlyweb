@@ -61,11 +61,25 @@ test("storage business access requires active, non-expired scoped membership", (
   assert.match(body, /businessIds/);
 });
 
-test("public marketplace queries include visibility predicates", () => {
+test("public marketplace visibility is enforced by rate-limited server routes without composite-index dependencies", () => {
   const services = read("lib/firebase-services.js");
-  assert.match(services, /where\("public",\s*"==",\s*true\)[\s\S]{0,300}where\("searchTerms",\s*"array-contains"/);
-  assert.match(services, /getPublicBranchesForBusiness[\s\S]{0,800}where\("public",\s*"==",\s*true\)/);
-  assert.match(services, /subscribePublicBusinessCatalog[\s\S]{0,900}where\("published",\s*"==",\s*true\)[\s\S]{0,250}where\("active",\s*"==",\s*true\)/);
+  const marketplaceRoute = read("app/api/public/marketplace/route.js");
+  const businessRoute = read("app/api/public/marketplace/business/route.js");
+  const marketplaceApp = read("components/marketplace-app.js");
+
+  assert.match(services, /api\/public\/marketplace/);
+  assert.match(services, /loadPublicMarketplaceBusiness/);
+  assert.match(marketplaceRoute, /enforceRateLimit/);
+  assert.match(marketplaceRoute, /where\("public",\s*"==",\s*true\)/);
+  assert.match(marketplaceRoute, /isLive/);
+  assert.doesNotMatch(marketplaceRoute, /orderBy\(/);
+  assert.match(businessRoute, /enforceRateLimit/);
+  assert.match(businessRoute, /where\("businessId",\s*"==",\s*businessId\)/);
+  assert.match(businessRoute, /doc\.data\(\)\?\.public === true/);
+  assert.match(businessRoute, /doc\.data\(\)\?\.published === true/);
+  assert.match(businessRoute, /doc\.data\(\)\?\.active !== false/);
+  assert.doesNotMatch(businessRoute, /orderBy\(/);
+  assert.match(marketplaceApp, /loadPublicMarketplaceBusiness/);
 });
 
 test("public waitlist and partnership writes are server controlled and rate limited", () => {
@@ -187,4 +201,11 @@ test("admin launch-readiness checks distinguish configuration from verification"
   assert.match(route, /SPOTLY_RULES_VERIFIED_AT/);
   assert.match(route, /SPOTLY_BACKUP_VERIFIED_AT/);
   assert.match(route, /SPOTLY_ENFORCE_APP_CHECK/);
+});
+
+test("Admin launch readiness actively checks the production-safe marketplace directory", () => {
+  const route = read("app/api/admin/launch-readiness/route.js");
+  assert.match(route, /marketplace-directory/);
+  assert.match(route, /where\("public", "==", true\)/);
+  assert.match(route, /liveMarketplaceBusiness/);
 });

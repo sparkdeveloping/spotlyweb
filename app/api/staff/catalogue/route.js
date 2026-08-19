@@ -68,13 +68,15 @@ export async function GET(request) {
     const barcode = safeText(url.searchParams.get("barcode"), 80).replace(/\s+/g, "");
     if (type === "sources") {
       await requireSpotlyStaffPermission(db, user, "master_products.review", { roles: ["content_manager", "operations_manager", "regional_operations_manager"] });
-      const snapshot = await db.collection("catalogueSources").orderBy("sourceName").limit(100).get();
-      return Response.json({ ok: true, items: snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) });
+      const snapshot = await db.collection("catalogueSources").limit(150).get();
+      const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })).sort((a, b) => String(a.sourceName || "").localeCompare(String(b.sourceName || ""), "en", { sensitivity: "base" })).slice(0, 100);
+      return Response.json({ ok: true, items });
     }
     if (type === "collections") {
       await requireSpotlyStaffPermission(db, user, "master_products.review", { roles: ["content_manager", "operations_manager", "regional_operations_manager"] });
-      const snapshot = await db.collection("catalogCollections").orderBy("name").limit(100).get();
-      return Response.json({ ok: true, items: snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) });
+      const snapshot = await db.collection("catalogCollections").limit(150).get();
+      const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "en", { sensitivity: "base" })).slice(0, 100);
+      return Response.json({ ok: true, items });
     }
     if (type === "review") {
       await requireSpotlyStaffPermission(db, user, "master_products.review", { roles: ["content_manager", "operations_manager", "regional_operations_manager"] });
@@ -83,10 +85,12 @@ export async function GET(request) {
     }
     if (type === "businesses") {
       const normalized = normalizeProductText(search);
-      let query = db.collection("businesses").orderBy("name").limit(30);
-      if (normalized) query = db.collection("businesses").where("searchTerms", "array-contains", normalized.split(/\s+/)[0]).limit(30);
+      const query = normalized
+        ? db.collection("businesses").where("searchTerms", "array-contains", normalized.split(/\s+/)[0]).limit(100)
+        : db.collection("businesses").limit(150);
       const snapshot = await query.get();
-      const businesses = snapshot.docs.map((doc) => ({ id: doc.id, name: doc.data().brandName || doc.data().name || "Business", city: doc.data().city || "", category: doc.data().category || "" }));
+      const businesses = snapshot.docs.map((doc) => ({ id: doc.id, name: doc.data().brandName || doc.data().name || "Business", city: doc.data().city || "", category: doc.data().category || "" }))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name), "en", { sensitivity: "base" })).slice(0, 30);
       return Response.json({ ok: true, businesses });
     }
     if (type === "branches") {
@@ -101,10 +105,12 @@ export async function GET(request) {
       return Response.json({ ok: true, items: product ? [product] : [] });
     }
     const normalized = normalizeProductText(search);
-    let query = db.collection("masterProducts").orderBy("canonicalName").limit(30);
-    if (normalized) query = db.collection("masterProducts").where("searchTerms", "array-contains", normalized.split(/\s+/)[0]).limit(30);
+    const query = normalized
+      ? db.collection("masterProducts").where("searchTerms", "array-contains", normalized.split(/\s+/)[0]).limit(100)
+      : db.collection("masterProducts").limit(150);
     const snapshot = await query.get();
-    return Response.json({ ok: true, items: snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) });
+    const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })).sort((a, b) => String(a.canonicalName || "").localeCompare(String(b.canonicalName || ""), "en", { sensitivity: "base" })).slice(0, 30);
+    return Response.json({ ok: true, items });
   } catch (error) { return apiError(error); }
 }
 

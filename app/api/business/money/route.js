@@ -15,6 +15,21 @@ const settlementSchema = z.object({ action: z.literal("submit_settlement"), busi
 const payoutSchema = z.object({ action: z.literal("request_payout"), businessId: z.string().min(3).max(180), currency: z.enum(["USD", "ZWG"]), amount: z.number().positive().max(10000000) });
 const proofSchema = z.object({ action: z.literal("upload_settlement_proof"), businessId: z.string().min(3).max(180), fileName: z.string().min(1).max(180), mimeType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"]), dataBase64: z.string().min(20).max(10_000_000) });
 
+
+function timeMillis(value) {
+  if (value?.toMillis) return value.toMillis();
+  if (value?.toDate) return value.toDate().getTime();
+  const parsed = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function newestDocs(snapshot, max) {
+  return snapshot.docs
+    .map((doc) => ({ id: doc.id, ...doc.data() }))
+    .sort((a, b) => timeMillis(b.createdAt || b.updatedAt) - timeMillis(a.createdAt || a.updatedAt))
+    .slice(0, max);
+}
+
 function paymentPolicy(settings = {}) {
   const cadence = settings.commerce?.payoutCadence || "manual";
   const labels = { daily: "Daily when eligible", twice_weekly: "Twice weekly when eligible", weekly: "Weekly when eligible", biweekly: "Every two weeks when eligible", monthly: "Monthly when eligible", manual: "Processed manually during the controlled pilot" };
@@ -37,10 +52,12 @@ export async function GET(request) {
     const [finance, settlement, settings, usdBalance, zwgBalance, payouts, ledger] = await Promise.all([
       db.collection("businessFinance").doc(businessId).get(), db.collection("businessSettlementAccounts").doc(businessId).get(), db.collection("platformSettings").doc("global").get(),
       db.collection("businessBalanceAccounts").doc(moneyAccountId(businessId, "USD")).get(), db.collection("businessBalanceAccounts").doc(moneyAccountId(businessId, "ZWG")).get(),
-      db.collection("payouts").where("businessId", "==", businessId).orderBy("createdAt", "desc").limit(50).get(),
-      db.collection("businessLedgerEntries").where("businessId", "==", businessId).orderBy("createdAt", "desc").limit(150).get()
+      db.collection("payouts").where("businessId", "==", businessId).limit(250).get(),
+      db.collection("businessLedgerEntries").where("businessId", "==", businessId).limit(500).get()
     ]);
-    return Response.json({ ok: true, finance: finance.exists ? finance.data() : {}, settlement: cleanSettlement(settlement), balances: { USD: sanitizeBalance(usdBalance.exists ? usdBalance.data() : {}), ZWG: sanitizeBalance(zwgBalance.exists ? zwgBalance.data() : {}) }, policy: paymentPolicy(settings.exists ? settings.data() : {}), payouts: payouts.docs.map((doc) => ({ id: doc.id, ...doc.data(), createdAt: toPlainTimestamp(doc.data().createdAt), updatedAt: toPlainTimestamp(doc.data().updatedAt), paidAt: toPlainTimestamp(doc.data().paidAt) })), ledger: ledger.docs.map((doc) => ({ id: doc.id, ...doc.data(), createdAt: toPlainTimestamp(doc.data().createdAt), availableAt: toPlainTimestamp(doc.data().availableAt) })) });
+    const payoutRows = newestDocs(payouts, 50).map((item) => ({ ...item, createdAt: toPlainTimestamp(item.createdAt), updatedAt: toPlainTimestamp(item.updatedAt), paidAt: toPlainTimestamp(item.paidAt) }));
+    const ledgerRows = newestDocs(ledger, 150).map((item) => ({ ...item, createdAt: toPlainTimestamp(item.createdAt), availableAt: toPlainTimestamp(item.availableAt) }));
+    return Response.json({ ok: true, finance: finance.exists ? finance.data() : {}, settlement: cleanSettlement(settlement), balances: { USD: sanitizeBalance(usdBalance.exists ? usdBalance.data() : {}), ZWG: sanitizeBalance(zwgBalance.exists ? zwgBalance.data() : {}) }, policy: paymentPolicy(settings.exists ? settings.data() : {}), payouts: payoutRows, ledger: ledgerRows });
   } catch (error) { return apiError(error); }
 }
 

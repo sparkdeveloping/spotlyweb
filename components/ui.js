@@ -27,7 +27,7 @@ export function Button({ children, variant = "primary", size = "md", className, 
     icon: "h-11 w-11 rounded-lg"
   };
   const isDisabled = Boolean(disabled || loading);
-  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--control-bg-disabled)] disabled:text-[var(--control-text-disabled)] disabled:opacity-100", variants[variant] || variants.primary, sizes[size], className);
+  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition-transform duration-150 motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 motion-safe:active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--control-bg-disabled)] disabled:text-[var(--control-text-disabled)] disabled:opacity-100", variants[variant] || variants.primary, sizes[size], className);
 
   if (asChild && isValidElement(children)) {
     const childProps = {
@@ -67,19 +67,19 @@ export function Card({ children, className, elevated = false, variant = elevated
   return <div className={cn("rounded-xl", cardVariants[variant] || cardVariants.bordered, className)} {...props}>{children}</div>;
 }
 
-export function SectionCard({ title, description, action, children, className, variant = "bordered" }) {
+export function SectionCard({ title, description, action, children, className, variant = "bordered", padded = false, contentClassName }) {
   return (
     <Card className={className} variant={variant}>
       {(title || action) && (
         <div className="flex items-start justify-between gap-4 border-b px-4 py-4 sm:px-5">
           <div>
             {title && <h2 className="text-[17px] font-semibold">{title}</h2>}
-            {description && <p className="mt-1 text-sm text-secondary">{description}</p>}
+            {description && <p className="mt-1 text-sm leading-6 text-secondary">{description}</p>}
           </div>
           {action}
         </div>
       )}
-      {children}
+      {padded ? <div className={cn("p-4 sm:p-5", contentClassName)}>{children}</div> : children}
     </Card>
   );
 }
@@ -192,6 +192,7 @@ export function Tabs({ tabs, value, onChange, className, label = "Sections", idP
       {tabs.map((tab, index) => {
         const tabId = `${prefix}-tab-${safeId(tab.value)}`;
         const panelId = `${prefix}-panel-${safeId(tab.value)}`;
+        const Icon = tab.icon;
         return (
           <button
             ref={(node) => { tabRefs.current[index] = node; }}
@@ -207,7 +208,7 @@ export function Tabs({ tabs, value, onChange, className, label = "Sections", idP
             className={cn("relative h-10 whitespace-nowrap rounded-lg px-4 text-sm font-semibold text-secondary transition", value === tab.value && "text-[var(--accent-strong)] dark:text-[var(--accent)]")}
           >
             {value === tab.value && <motion.span layoutId={`${prefix}-active-tab`} className="absolute inset-0 rounded-lg bg-[var(--surface)] shadow-sm" transition={{ type: "spring", bounce: 0.12, duration: 0.4 }} />}
-            <span className="relative">{tab.label}</span>
+            <span className="relative inline-flex items-center gap-2">{Icon && <Icon className="h-4 w-4" aria-hidden="true" />}{tab.label}</span>
           </button>
         );
       })}
@@ -400,10 +401,8 @@ export function Modal({ open, onClose, title, description, children, size = "md"
 export function EmptyState({ icon: Icon, title, description, action, className }) {
   return (
     <div className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
-      {Icon && <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></div>}
-      <h3 className="text-lg font-semibold">{title}</h3>
-      <p className="mt-2 max-w-sm text-sm leading-6 text-secondary">{description}</p>
-      {action && <div className="mt-5">{action}</div>}
+      {Icon && <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></motion.div>}
+      <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, delay: 0.04 }}><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-secondary">{description}</p>{action && <div className="mt-5">{action}</div>}</motion.div>
     </div>
   );
 }

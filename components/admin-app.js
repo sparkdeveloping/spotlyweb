@@ -96,7 +96,7 @@ const sectionMeta = {
   drivers: { title: "Driver program", description: "Driver and fleet onboarding, compliance, availability, incidents, and payouts." },
   customers: { title: "Customers and accounts", description: "Customer identities, access, private beta, support context, and account status." },
   finance: { title: "Commerce & finance", description: "Platform-wide currencies, payment methods, recipients, commission, and payouts." },
-  content: { title: "Content & growth", description: "Coming-soon content, waitlist, partnerships, announcements, and help resources." },
+  content: { title: "Content & growth", description: "Public content, launch messaging, waitlist, partnerships, announcements, and help resources." },
   "platform-map": { title: "Platform map", description: "Entity, workforce, workflow, configuration, and diagnostic relationships." },
   platform: { title: "Platform configuration", description: "Launch controls, data imports, verification, and environment readiness." },
   audit: { title: "Audit log", description: "Recorded changes and decisions across the platform." },

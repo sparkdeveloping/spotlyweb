@@ -25,7 +25,7 @@ function BusinessPortalFrame({ children }) {
   }, [accountLevel, computedNavigation, workspace.contextSwitching]);
 
   if (pathname.startsWith("/business/kiosk/live")) return children;
-  return <PortalShell portalId="business" activeSection={section} navigation={stableNavigation} footer={false}>{children}</PortalShell>;
+  return <PortalShell portalId="business" activeSection={section} navigation={stableNavigation} footer={false} notificationBusinessId={accountLevel ? null : workspace.selectedBusinessId}>{children}</PortalShell>;
 }
 
 export function BusinessLayoutClient({ children }) {

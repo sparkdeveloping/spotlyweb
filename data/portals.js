@@ -71,7 +71,6 @@ export const portals = {
       { id: "promotions", label: "Promotions", icon: BadgeDollarSign, href: "/business/promotions" },
       { id: "staff", label: "Staff", icon: UsersRound, href: "/business/staff" },
       { id: "finance", label: "Money", icon: WalletCards, href: "/business/finance" },
-      { id: "notifications", label: "Notifications", icon: Bell, href: "/business/notifications" },
       { id: "support", label: "Support", icon: LifeBuoy, href: "/business/support" },
       { id: "settings", label: "Settings", icon: Settings, href: "/business/settings" }
     ]
@@ -139,10 +138,10 @@ export const portals = {
       { group: "Marketplace", id: "organizations", label: "Organizations", icon: Building2, href: "/admin/organizations" },
       { group: "Marketplace", id: "businesses", label: "Businesses", icon: Store, href: "/admin/businesses" },
       { group: "People", id: "people", label: "People", icon: UsersRound, href: "/admin/people" },
-      { group: "Marketplace", id: "drivers", label: "Drivers", icon: Bike, href: "/admin/drivers" },
+      { group: "Operations", id: "drivers", label: "Drivers & delivery", icon: Bike, href: "/admin/drivers" },
       { group: "Marketplace", id: "customers", label: "Customers", icon: CircleUserRound, href: "/admin/customers" },
       { group: "Money", id: "finance", label: "Money", icon: CreditCard, href: "/admin/finance" },
-      { group: "Marketplace", id: "content", label: "Content", icon: Compass, href: "/admin/content" },
+      { group: "Growth", id: "content", label: "Content & growth", icon: Compass, href: "/admin/content" },
       { group: "Platform", id: "platform-map", label: "Platform map", icon: GitBranch, href: "/admin/platform-map" },
       { group: "Platform", id: "platform", label: "Configuration", icon: ShieldCheck, href: "/admin/platform" },
       { group: "Platform", id: "audit", label: "Audit log", icon: ClipboardList, href: "/admin/audit" },

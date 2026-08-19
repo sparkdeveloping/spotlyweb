@@ -21,7 +21,6 @@ import { KioskView } from "@/components/business/kiosk";
 import { DeliveryView } from "@/components/business/delivery";
 import { BusinessLaunchView, BusinessLifecycleBanner, LockedBusinessFeature } from "@/components/business/launch";
 import { BUSINESS_ACCOUNT_SECTIONS } from "@/lib/business-routing";
-import { NotificationCenter } from "@/components/notification-center";
 
 const views = {
   launch: BusinessLaunchView,
@@ -38,15 +37,13 @@ const views = {
   staff: StaffView,
   finance: FinanceView,
   support: SupportView,
-  settings: SettingsView,
-  notifications: function BusinessNotifications() { const workspace = useBusinessWorkspace(); return <NotificationCenter workspace="business" businessId={workspace.selectedBusinessId} title="Business notifications" description="Reviews, location decisions, orders and important activity for this business." />; }
+  settings: SettingsView
 };
 
 function sectionAllowed(section, lifecycle) {
   // The lifecycle snapshot is loaded independently from the business document. During
   // initial hydration, business switching, or a failed lifecycle request it can be null.
   // Never let navigation policy turn that recoverable state into a render crash.
-  if (section === "notifications") return true;
   if (!lifecycle) return ["launch", "setup", "support"].includes(section);
   if (lifecycle.navigationMode === "suspended") return ["launch", "support", "settings"].includes(section);
   if (lifecycle.navigationMode === "live") return true;
