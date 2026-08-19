@@ -9,7 +9,7 @@ export const metadata = {
     default: "Spotly",
     template: "%s · Spotly"
   },
-  description: "Find nearby Zimbabwean businesses, order ahead, and collect when it is ready.",
+  description: "Find verified Zimbabwean businesses nearby, order ahead, and choose pickup or delivery where available.",
   applicationName: "Spotly",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -18,7 +18,7 @@ export const metadata = {
   },
   openGraph: {
     title: "Spotly",
-    description: "Find nearby businesses, order ahead, and collect when it is ready.",
+    description: "Find verified Zimbabwean businesses nearby, order ahead, and choose pickup or delivery where available.",
     url: appUrl,
     siteName: "Spotly",
     images: ["/icons/spotly-512.png"],
@@ -27,7 +27,7 @@ export const metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Spotly",
-    description: "Find nearby businesses, order ahead, and collect when it is ready.",
+    description: "Find verified Zimbabwean businesses nearby, order ahead, and choose pickup or delivery where available.",
     images: ["/icons/spotly-512.png"]
   }
 };
