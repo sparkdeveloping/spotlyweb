@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { cloneElement, forwardRef, isValidElement, useEffect, useId, useRef, useState } from "react";
+import { cloneElement, forwardRef, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronRight, LoaderCircle, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LoaderCircle, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { SpotlyLottie } from "@/components/spotly-lottie";
 
@@ -287,6 +287,116 @@ export function Select({ value, onChange, options, className, ariaLabel = "Selec
       <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-tertiary" aria-hidden="true" />
     </label>
   );
+}
+
+function normalizeEntityOption(option) {
+  if (typeof option === "string") return { value: option, label: option, description: "", keywords: "" };
+  return {
+    ...option,
+    value: String(option?.value ?? option?.id ?? ""),
+    label: String(option?.label ?? option?.name ?? option?.title ?? option?.value ?? option?.id ?? ""),
+    description: String(option?.description ?? option?.subtitle ?? ""),
+    keywords: Array.isArray(option?.keywords) ? option.keywords.join(" ") : String(option?.keywords ?? "")
+  };
+}
+
+export function EntityPicker({
+  value = "",
+  onChange,
+  options = [],
+  placeholder = "Choose an option",
+  searchPlaceholder = "Search by name, email, reference, or detail",
+  title = "Choose an option",
+  description,
+  emptyTitle = "No matching options",
+  emptyDescription = "Try another search.",
+  allowClear = true,
+  disabled = false,
+  className,
+  ariaLabel = title
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const normalized = useMemo(() => options.map(normalizeEntityOption).filter((option) => option.value), [options]);
+  const selected = normalized.find((option) => option.value === String(value || ""));
+  const filtered = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    if (!term) return normalized;
+    return normalized.filter((option) => `${option.label} ${option.description} ${option.keywords} ${option.value}`.toLocaleLowerCase().includes(term));
+  }, [normalized, query]);
+  function choose(option) {
+    onChange?.(option?.value || "", option || null);
+    setOpen(false);
+    setQuery("");
+  }
+  return <>
+    <button type="button" aria-label={ariaLabel} aria-haspopup="dialog" disabled={disabled} onClick={() => setOpen(true)} className={cn("field-control flex min-h-12 w-full items-center justify-between gap-3 px-3 text-left disabled:cursor-not-allowed disabled:opacity-70", className)}>
+      <span className="min-w-0 flex-1">
+        {selected ? <><span className="block truncate text-sm font-semibold text-[var(--control-text)]">{selected.label}</span>{selected.description && <span className="mt-0.5 block truncate text-xs text-secondary">{selected.description}</span>}</> : <span className="text-sm text-[var(--control-placeholder)]">{placeholder}</span>}
+      </span>
+      <ChevronsUpDown className="h-4 w-4 shrink-0 text-tertiary" aria-hidden="true" />
+    </button>
+    <Modal open={open} onClose={() => { setOpen(false); setQuery(""); }} title={title} description={description} size="md">
+      <div className="space-y-4 p-5">
+        <SearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} label={`Search ${title.toLocaleLowerCase()}`} />
+        {allowClear && value ? <button type="button" onClick={() => choose(null)} className="w-full rounded-xl border border-dashed p-3 text-left text-sm font-semibold text-secondary transition hover:bg-[var(--surface-hover)]">Clear selection</button> : null}
+        <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+          {filtered.map((option) => {
+            const active = option.value === String(value || "");
+            return <button key={option.value} type="button" onClick={() => choose(option)} className={cn("flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:bg-[var(--surface-hover)]", active && "border-[var(--accent)] bg-[var(--accent-soft)]")}>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-sm font-bold text-[var(--accent-strong)]">{option.avatar || option.label.slice(0, 2).toUpperCase()}</span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{option.label}</span>{option.description && <span className="mt-0.5 block truncate text-xs text-secondary">{option.description}</span>}</span>
+              {active && <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />}
+            </button>;
+          })}
+          {!filtered.length && <EmptyState title={emptyTitle} description={emptyDescription} />}
+        </div>
+      </div>
+    </Modal>
+  </>;
+}
+
+export function EntityMultiPicker({
+  value = [],
+  onChange,
+  options = [],
+  placeholder = "Choose options",
+  searchPlaceholder = "Search options",
+  title = "Choose options",
+  description,
+  className,
+  max = 500
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const normalized = useMemo(() => options.map(normalizeEntityOption).filter((option) => option.value), [options]);
+  const selectedValues = useMemo(() => new Set((value || []).map(String)), [value]);
+  const selected = normalized.filter((option) => selectedValues.has(option.value));
+  const filtered = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    if (!term) return normalized;
+    return normalized.filter((option) => `${option.label} ${option.description} ${option.keywords} ${option.value}`.toLocaleLowerCase().includes(term));
+  }, [normalized, query]);
+  function toggle(option) {
+    const next = new Set(selectedValues);
+    if (next.has(option.value)) next.delete(option.value);
+    else if (next.size < max) next.add(option.value);
+    onChange?.([...next]);
+  }
+  return <>
+    <button type="button" onClick={() => setOpen(true)} className={cn("field-control flex min-h-12 w-full items-center justify-between gap-3 px-3 text-left", className)}>
+      <span className="min-w-0 flex-1 text-sm">{selected.length ? <span className="font-semibold">{selected.length} selected</span> : <span className="text-[var(--control-placeholder)]">{placeholder}</span>}</span>
+      <ChevronsUpDown className="h-4 w-4 shrink-0 text-tertiary" aria-hidden="true" />
+    </button>
+    {selected.length ? <div className="mt-2 flex flex-wrap gap-2">{selected.slice(0, 8).map((option) => <span key={option.value} className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--on-accent-soft)]">{option.label}<button type="button" aria-label={`Remove ${option.label}`} onClick={() => toggle(option)}><X className="h-3.5 w-3.5" /></button></span>)}{selected.length > 8 && <span className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-secondary">+{selected.length - 8} more</span>}</div> : null}
+    <Modal open={open} onClose={() => { setOpen(false); setQuery(""); }} title={title} description={description} size="md">
+      <div className="space-y-4 p-5">
+        <SearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} label={`Search ${title.toLocaleLowerCase()}`} />
+        <div className="flex items-center justify-between text-xs font-semibold text-secondary"><span>{selectedValues.size} selected</span><Button size="sm" onClick={() => setOpen(false)}>Done</Button></div>
+        <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">{filtered.map((option) => { const active = selectedValues.has(option.value); return <button key={option.value} type="button" onClick={() => toggle(option)} className={cn("flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:bg-[var(--surface-hover)]", active && "border-[var(--accent)] bg-[var(--accent-soft)]")}><span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-md border", active && "border-[var(--accent)] bg-[var(--accent)] text-[var(--on-accent)]")}>{active && <Check className="h-4 w-4" />}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{option.label}</span>{option.description && <span className="mt-0.5 block truncate text-xs text-secondary">{option.description}</span>}</span></button>; })}{!filtered.length && <EmptyState title="No matching options" description="Try another search." />}</div>
+      </div>
+    </Modal>
+  </>;
 }
 
 function useOverlayPortal(open, onClose) {

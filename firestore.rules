@@ -278,9 +278,15 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    match /businessFinanceSettings/{businessId} {
+    match /businessFinance/{businessId} {
       allow read: if canReadFinance(businessId);
-      allow write: if canConfigureFinance(businessId);
+      allow write: if false; // Finance configuration is validated by the server API.
+    }
+
+    match /businessFinanceSettings/{businessId} {
+      // Legacy read-only collection retained during migration. New writes use /businessFinance via the server API.
+      allow read: if canReadFinance(businessId);
+      allow write: if false;
     }
 
     match /paymentIntents/{intentId} { allow read, write: if false; }

@@ -11,7 +11,7 @@ export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const orderRef = db.collection("orders").doc(body.orderId);
     const orderSnapshot = await orderRef.get();
     if (!orderSnapshot.exists) throw Object.assign(new Error("The order was not found."), { status: 404 });
@@ -29,7 +29,7 @@ export async function POST(request) {
     const providerStatus = await paynow.pollTransaction(intent.pollUrl);
     const normalized = normalizePaynowStatus(providerStatus);
     normalized.reference = normalized.reference || order.paymentIntentReference;
-    const applied = await applyProviderPaymentUpdate(db, order.paymentIntentReference, normalized, { source: "paynow_status_poll" });
+    const applied = await applyProviderPaymentUpdate(db, order.paymentIntentReference, normalized, { source: "paynow_status_poll", messaging, auth });
     return Response.json({ ok: true, orderId: body.orderId, ...normalized, state: applied.state, transitionApplied: applied.transitionApplied, amountMismatch: applied.amountMismatch, deduplicated: applied.deduplicated });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "The order identifier is invalid." }, { status: 400 });

@@ -122,6 +122,11 @@
   --admin-soft: #eaf0f7;
   --on-admin: #ffffff;
   --on-admin-soft: #1b3152;
+  --staff: #d97706;
+  --staff-strong: #a84b05;
+  --staff-soft: #fff3d6;
+  --on-staff: #ffffff;
+  --on-staff-soft: #6f3100;
 }
 
 html.dark {
@@ -422,5 +427,15 @@ input:-webkit-autofill:focus {
   --accent-soft: var(--admin-soft);
   --on-accent: var(--on-admin);
   --on-accent-soft: var(--on-admin-soft);
+}
+
+[data-workspace="staff"] {
+  --accent: var(--staff);
+  --accent-hover: var(--staff-strong);
+  --accent-active: var(--staff-strong);
+  --accent-strong: var(--staff-strong);
+  --accent-soft: var(--staff-soft);
+  --on-accent: var(--on-staff);
+  --on-accent-soft: var(--on-staff-soft);
 }
 

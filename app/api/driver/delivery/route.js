@@ -1,9 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { appendAudit, appendDeliveryEvent, driverMayTransition, makeCode, notifyUsers } from "@/lib/driver-delivery-server";
+import { appendAudit, appendDeliveryEvent, driverMayTransition, notifyUsers } from "@/lib/driver-delivery-server";
 import { creditDeliveryEarnings } from "@/lib/driver-money-server";
-import { safeText } from "@/lib/server-helpers";
 
 export const runtime = "nodejs";
 const schema = z.object({
@@ -37,6 +36,12 @@ export async function POST(request) {
       const job = jobSnap.data();
       if (job.assignedDriverId !== user.uid) throw Object.assign(new Error("This delivery is not assigned to your Driver account."), { status: 403 });
       const nextState = ACTION_TO_STATE[body.action];
+      if (job.fulfilmentMode === "driver_shops" && ["begin_pickup_verification", "verify_pickup"].includes(body.action)) {
+        throw Object.assign(new Error("This is a shop-for-me order. Use the in-store shopping checklist instead of a business pickup code."), { status: 409 });
+      }
+      if (job.fulfilmentMode !== "driver_shops" && ["shopping", "shopping_review"].includes(job.state)) {
+        throw Object.assign(new Error("This delivery does not use the in-store shopping workflow."), { status: 409 });
+      }
       if (!driverMayTransition(job.state, nextState)) throw Object.assign(new Error("That delivery step is not available right now. Refresh and follow the current next action."), { status: 409 });
       if (body.action === "verify_pickup") {
         const supplied = String(body.code || "").trim();
@@ -61,10 +66,12 @@ export async function POST(request) {
         await appendAudit(transaction, db, { actorId: user.uid, action: "delivery.completed", entityType: "deliveryJob", entityId: body.deliveryJobId, metadata: { orderId: job.orderId || null } });
       }
       resultState = nextState;
-      notify = { customerId: job.customerId, businessId: job.businessId, number: job.number, action: body.action };
+      notify = { customerId: job.customerId, businessId: job.businessId, number: job.number, action: body.action, fulfilmentMode: job.fulfilmentMode || "merchant_prepared" };
     });
     const messageMap = {
-      start_to_pickup: "Your Driver is going to the business.", arrive_pickup: "Your Driver arrived at the business.", verify_pickup: "Your Driver collected the order.",
+      start_to_pickup: notify?.fulfilmentMode === "driver_shops" ? "Your Driver is going to the store." : "Your Driver is going to the business.",
+      arrive_pickup: notify?.fulfilmentMode === "driver_shops" ? "Your Driver arrived at the store and will start shopping." : "Your Driver arrived at the business.",
+      verify_pickup: "Your Driver collected the order.",
       start_delivery: "Your order is on the way.", arrive_customer: "Your Driver has arrived.", complete: "Your delivery is complete."
     };
     if (notify && messageMap[notify.action]) await notifyUsers(db, messaging, [notify.customerId], { title: notify.number || "Delivery update", body: messageMap[notify.action], href: "/marketplace?view=orders", category: "delivery" });

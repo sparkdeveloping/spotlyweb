@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { pickupAvailability } from "@/lib/pickup-availability";
 import { safeText } from "@/lib/server-helpers";
 import { haversineKm, makeCode, makeDeliveryNumber } from "@/lib/driver-delivery-server";
+import { buildOrderTotals, shoppingReserveAmount } from "@/lib/order-money";
 
 export const runtime = "nodejs";
 
@@ -96,11 +97,12 @@ export async function POST(request) {
       return Response.json({ ok: true, orderId: existing.orderId, number: existing.number, total: existing.total, currency: existing.currency, paymentRequired: existing.paymentRequired, idempotent: true });
     }
 
-    const [authUser, businessSnapshot, branchSnapshot, settingsSnapshot, financeSnapshot] = await Promise.all([
+    const [authUser, businessSnapshot, branchSnapshot, settingsSnapshot, financeSnapshot, legacyFinanceSnapshot] = await Promise.all([
       auth.getUser(user.uid),
       db.collection("businesses").doc(body.businessId).get(),
       db.collection("branches").doc(body.branchId).get(),
       db.collection("platformSettings").doc("global").get(),
+      db.collection("businessFinance").doc(body.businessId).get(),
       db.collection("businessFinanceSettings").doc(body.businessId).get()
     ]);
     if (!authUser.providerData.some((provider) => provider.providerId === "password")) throw Object.assign(new Error("Create or link an email-and-password credential before ordering."), { status: 409 });
@@ -126,7 +128,7 @@ export async function POST(request) {
     if (branch.public === false || !(branch.fulfilment || ["pickup"]).includes(body.fulfilment)) throw Object.assign(new Error(`${body.fulfilment === "delivery" ? "Delivery" : "Pickup"} is not enabled for this location.`), { status: 409 });
     if (body.fulfilment === "delivery" && (!branch.delivery?.enabled || branch.delivery?.paused)) throw Object.assign(new Error("Delivery is not accepting orders from this location right now."), { status: 409 });
 
-    const finance = financeSnapshot.data() || {};
+    const finance = { ...(legacyFinanceSnapshot.data() || {}), ...(financeSnapshot.data() || {}) };
     const platformMethods = settings.commerce?.paymentMethods || ["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"];
     const businessMethods = finance.paymentMethods || platformMethods;
     const branchMethods = branch.paymentMethods || businessMethods;
@@ -178,7 +180,12 @@ export async function POST(request) {
       const lines = currentProducts.map((item) => item.line);
       const subtotal = Number(lines.reduce((sum, line) => sum + line.lineTotal, 0).toFixed(2));
       const deliveryFee = body.fulfilment === "delivery" ? Number(Math.max(0, Number(branchData.delivery?.fee ?? settings.commerce?.deliveryFee ?? 3.5)).toFixed(2)) : 0;
-      const total = Number((subtotal + serviceFee + deliveryFee).toFixed(2));
+      const driverShopping = body.fulfilment === "delivery" && branchData.delivery?.fulfilmentMode === "driver_shops";
+      const reservePercent = driverShopping ? Number(branchData.delivery?.shoppingReservePercent ?? settings.commerce?.driverShoppingReservePercent ?? 12) : 0;
+      const shoppingReserve = driverShopping ? shoppingReserveAmount(subtotal, reservePercent) : 0;
+      const commissionPercent = Number(finance.commissionPercent ?? settings.commerce?.commissionPercent ?? 0);
+      const totals = buildOrderTotals({ subtotal, serviceFee, deliveryFee, shoppingReserve, commissionPercent });
+      const total = totals.total;
       if (total <= 0) throw Object.assign(new Error("The order total must be greater than zero."), { status: 422 });
 
       const slotKey = slot?.id || null;
@@ -196,7 +203,9 @@ export async function POST(request) {
         branchId: body.branchId,
         branchName: branchData.branchName || branchData.name,
         items: lines,
-        totals: { subtotal, serviceFee, deliveryFee, tax: 0, total },
+        totals,
+        commerceSnapshot: { commissionPercent: totals.commissionPercent, settlementModel: "platform", deliveryFulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared" },
+        shopping: driverShopping ? { mode: "driver_shops", state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), actualSubtotal: null, finalTotal: null, unusedReserve: null, topUpRequired: 0, substitutionPreference: normalizedSubstitution, receiptStoragePath: "", changes: [], updatedAt: new Date().toISOString() } : null,
         currency: body.currency,
         fulfilment: body.fulfilment,
         pickup: body.fulfilment === "pickup" ? { ...body.pickup, substitutionPreference: normalizedSubstitution, notes: safeText(body.pickup.notes, 500), reservedSlotId: slot.id } : null,
@@ -214,7 +223,7 @@ export async function POST(request) {
       if (body.fulfilment === "delivery") {
         const deliveryRef = db.collection("deliveryJobs").doc();
         const deliveryNumber = makeDeliveryNumber();
-        const pickupCode = makeCode(4);
+        const pickupCode = driverShopping ? null : makeCode(4);
         const customerPin = makeCode(4);
         const pickupLocation = branchData.delivery?.location || branchData.location || { lat: Number(branchData.lat), lng: Number(branchData.lng) };
         if (!Number.isFinite(Number(pickupLocation?.lat)) || !Number.isFinite(Number(pickupLocation?.lng))) throw Object.assign(new Error("This location needs a valid map pin before it can accept delivery orders."), { status: 409 });
@@ -225,20 +234,22 @@ export async function POST(request) {
           number: deliveryNumber, orderId: orderRef.id, businessId: body.businessId, branchId: body.branchId, customerId: user.uid, state: "awaiting_dispatch",
           pickup: { lat: Number(pickupLocation?.lat), lng: Number(pickupLocation?.lng), formattedAddress: branchData.address || "", area: branchData.area || branchData.city || "Harare", instructions: safeText(branchData.delivery?.pickupInstructions || branchData.instructions || "", 1000) },
           dropoff: { lat: body.delivery.lat, lng: body.delivery.lng, formattedAddress: safeText(body.delivery.address, 500), suburb: safeText(body.delivery.suburb, 120), landmark: safeText(body.delivery.landmark, 240), instructions: safeText(body.delivery.instructions, 500) },
-          businessPreparationMinutes: Number(branchData.delivery?.preparationMinutes || 20), requiredVehicleTypes: branchData.delivery?.vehicleTypes || ["motorcycle", "car"],
+          fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared",
+          businessPreparationMinutes: driverShopping ? 0 : Number(branchData.delivery?.preparationMinutes || 20), shoppingMinutes: driverShopping ? Number(branchData.delivery?.preparationMinutes || 30) : 0, requiredVehicleTypes: branchData.delivery?.vehicleTypes || ["motorcycle", "car"],
+          shopping: driverShopping ? { state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), substitutionPreference: normalizedSubstitution, items: lines.map((line) => ({ productId: line.productId, name: line.name, requestedQuantity: line.quantity, estimatedUnitPrice: line.unitPrice, status: "pending", actualQuantity: 0, actualUnitPrice: 0, replacementName: "" })) } : null,
           quotedDriverPay: Number(Math.max(1, Number(branchData.delivery?.driverPay ?? settings.commerce?.defaultDriverPay ?? Math.max(2.5, deliveryFee * 0.7))).toFixed(2)), currency: body.currency,
           pickupCode, customerPin, bagCount: 1, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
         });
-        transaction.set(orderRef, { deliveryJobId: deliveryRef.id, deliveryNumber, deliveryStatus: "business_preparing" }, { merge: true });
+        transaction.set(orderRef, { deliveryJobId: deliveryRef.id, deliveryNumber, deliveryStatus: driverShopping ? (paymentRequired ? "awaiting_payment" : "awaiting_dispatch") : "business_preparing" }, { merge: true });
       }
-      transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", previousStatus: null, status: order.status, actorType: "customer", actorId: user.uid, source: "checkout", metadata: { number, paymentMethod: body.paymentMethod, fulfilment: body.fulfilment, slotId: slot?.id || null }, createdAt: FieldValue.serverTimestamp() });
+      transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", previousStatus: null, status: order.status, actorType: "customer", actorId: user.uid, source: "checkout", metadata: { number, paymentMethod: body.paymentMethod, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", slotId: slot?.id || null }, createdAt: FieldValue.serverTimestamp() });
       transaction.create(notificationRef, { userId: user.uid, title: "Order created", body: `${number} was sent to ${businessSnapshot.data().name}.`, href: `/marketplace?order=${orderRef.id}`, category: "order", read: false, createdAt: FieldValue.serverTimestamp() });
       if (bookedSlots) transaction.update(branchRef, { "pickup.bookedSlots": bookedSlots, updatedAt: FieldValue.serverTimestamp() });
       currentProducts.forEach(({ product, line }, index) => {
         const stock = Number(product.stockQuantity);
         if (Number.isFinite(stock) && stock >= 0) transaction.update(productRefs[index], { reservedQuantity: FieldValue.increment(line.quantity), updatedAt: FieldValue.serverTimestamp() });
       });
-      const response = { orderId: orderRef.id, number, total, currency: body.currency, paymentRequired, fulfilment: body.fulfilment };
+      const response = { orderId: orderRef.id, number, total, currency: body.currency, paymentRequired, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", shoppingReserve };
       transaction.create(requestRef, { ...response, customerId: user.uid, checkoutId: body.checkoutId, createdAt: FieldValue.serverTimestamp() });
       return response;
     });
