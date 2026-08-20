@@ -59,7 +59,13 @@ function publicRecord(snapshot) {
     public: item.public === true,
     coordinates: item.coordinates || item.location || null,
     latitude: item.latitude ?? null,
-    longitude: item.longitude ?? null
+    longitude: item.longitude ?? null,
+    rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
+    reviewCount: Number.isFinite(Number(item.reviewCount)) ? Number(item.reviewCount) : 0,
+    priceLevel: Number.isFinite(Number(item.priceLevel)) ? Math.max(1, Math.min(4, Number(item.priceLevel))) : null,
+    tags: Array.isArray(item.tags) ? item.tags.slice(0, 24) : [],
+    isFeatured: item.isFeatured === true || item.featured === true,
+    openingHours: item.openingHours || null
   };
 }
 

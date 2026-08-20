@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 const schema = z.object({
   orderId: z.string().min(3).max(180),
   channel: z.enum(["web", "ecocash", "onemoney"]).default("web"),
-  phone: z.string().max(40).optional()
+  phone: z.string().max(40).optional(),
+  client: z.enum(["web", "ios"]).default("web")
 });
 
 function livePending(state) { return ["initiated", "pending"].includes(state); }
@@ -73,6 +74,7 @@ export async function POST(request) {
         amount: total,
         breakdown: order.totals || { total },
         channel: body.channel,
+        client: body.client,
         phone: body.phone ? normalizeZimbabwePhone(body.phone) : "",
         status: "initiated",
         createdAt: FieldValue.serverTimestamp(),
@@ -91,7 +93,7 @@ export async function POST(request) {
     const paynow = await createPaynow(prepared.currency);
     const baseUrl = appUrl(request);
     paynow.resultUrl = `${baseUrl}/api/payments/paynow/result?currency=${prepared.currency}`;
-    paynow.returnUrl = `${baseUrl}/payment/return?orderId=${encodeURIComponent(body.orderId)}`;
+    paynow.returnUrl = `${baseUrl}/payment/return?orderId=${encodeURIComponent(body.orderId)}&client=${encodeURIComponent(body.client)}`;
     const payment = paynow.createPayment(prepared.reference, user.email || prepared.order.customerEmail || "customer@spotly.co.zw");
     for (const line of paynowChargeLines(prepared.order)) payment.add(line.name, line.amount);
 
@@ -126,7 +128,7 @@ export async function POST(request) {
         actorType: "customer",
         actorId: user.uid,
         source: "paynow_initiate",
-        metadata: { provider: "paynow", reference: prepared.reference, channel: body.channel, amount: prepared.total, currency: prepared.currency },
+        metadata: { provider: "paynow", reference: prepared.reference, channel: body.channel, client: body.client, amount: prepared.total, currency: prepared.currency },
         createdAt: FieldValue.serverTimestamp()
       });
     });

@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "NDX8XU8XCV.com.denzeltinashe.spotly",
+        "paths": ["/payment/return", "/payment/return/*", "/marketplace", "/marketplace/*"]
+      }
+    ]
+  }
+}

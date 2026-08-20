@@ -105,7 +105,8 @@ export async function POST(request) {
       db.collection("businessFinance").doc(body.businessId).get(),
       db.collection("businessFinanceSettings").doc(body.businessId).get()
     ]);
-    if (!authUser.providerData.some((provider) => provider.providerId === "password")) throw Object.assign(new Error("Create or link an email-and-password credential before ordering."), { status: 409 });
+    const supportedIdentityProviders = new Set(["password", "google.com", "apple.com"]);
+    if (!authUser.providerData.some((provider) => supportedIdentityProviders.has(provider.providerId))) throw Object.assign(new Error("Sign in with email, Google or Apple before ordering."), { status: 409 });
     const businessData = businessSnapshot.exists ? businessSnapshot.data() : null;
     const businessLive = Boolean(businessData?.public) && (businessData?.status === "active" || businessData?.lifecycleStatus === "live");
     if (!businessLive) throw Object.assign(new Error("This business is not accepting customer orders yet."), { status: 404 });

@@ -13,6 +13,41 @@ function liveBusiness(record = {}) {
   return record.public === true && status !== "archived" && !record.canonicalBusinessId && (["active", "paused"].includes(status) || ["live", "paused"].includes(lifecycle));
 }
 
+
+function publicBusiness(snapshot) {
+  const item = snapshot.data() || {};
+  return {
+    id: snapshot.id,
+    name: item.name || item.brandName || "Business",
+    brandName: item.brandName || "",
+    category: item.category || item.categories?.[0] || "Business",
+    categories: Array.isArray(item.categories) ? item.categories : [],
+    description: item.description || "",
+    city: item.city || "",
+    area: item.area || item.suburb || "",
+    suburb: item.suburb || "",
+    address: item.address || "",
+    logoUrl: item.logoUrl || item.logo || "",
+    logo: item.logo || item.logoUrl || "",
+    image: item.image || "",
+    coverImage: item.coverImage || "",
+    verificationStatus: item.verificationStatus || "",
+    businessType: item.businessType || "",
+    capabilities: Array.isArray(item.capabilities) ? item.capabilities : [],
+    status: item.status || "",
+    lifecycleStatus: item.lifecycleStatus || "",
+    public: item.public === true,
+    coordinates: item.coordinates || item.location || null,
+    latitude: item.latitude ?? null,
+    longitude: item.longitude ?? null,
+    rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
+    reviewCount: Number.isFinite(Number(item.reviewCount)) ? Number(item.reviewCount) : 0,
+    priceLevel: Number.isFinite(Number(item.priceLevel)) ? Math.max(1, Math.min(4, Number(item.priceLevel))) : null,
+    tags: Array.isArray(item.tags) ? item.tags.slice(0, 24) : [],
+    isFeatured: item.isFeatured === true || item.featured === true
+  };
+}
+
 function publicBranch(doc) {
   const item = doc.data() || {};
   return {
@@ -111,7 +146,7 @@ export async function GET(request) {
       .map(publicProduct)
       .sort((a, b) => String(a.name).localeCompare(String(b.name), "en", { sensitivity: "base" }));
 
-    return Response.json({ ok: true, businessId, branches, products }, {
+    return Response.json({ ok: true, businessId, business: publicBusiness(businessSnapshot), branches, products }, {
       headers: {
         "Cache-Control": "public, max-age=10, stale-while-revalidate=30",
         "X-RateLimit-Remaining": String(rate.remaining)
