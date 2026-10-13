@@ -15,7 +15,7 @@ export async function GET(request) {
     const query = [q, city, "Zimbabwe"].filter(Boolean).join(", ");
     const endpoint = process.env.SPOTLY_GEOCODING_URL || "https://nominatim.openstreetmap.org/search";
     const target = `${endpoint}?format=jsonv2&addressdetails=1&limit=6&countrycodes=zw&q=${encodeURIComponent(query)}`;
-    const response = await fetch(target, { headers: { "User-Agent": process.env.SPOTLY_GEOCODING_USER_AGENT || "Spotly/6.1 (support@spotlyafrica.com)", "Accept-Language": "en" }, next: { revalidate: 300 } });
+    const response = await fetch(target, { headers: { "User-Agent": process.env.SPOTLY_GEOCODING_USER_AGENT || "Spotly/6.2 (support@spotlyafrica.com)", "Accept-Language": "en" }, next: { revalidate: 300 } });
     if (!response.ok) throw Object.assign(new Error("Location search is temporarily unavailable."), { status: 503 });
     const raw = await response.json();
     const results = (Array.isArray(raw) ? raw : []).map((item) => ({

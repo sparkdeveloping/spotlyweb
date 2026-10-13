@@ -87,6 +87,10 @@ service firebase.storage {
       allow read: if signedIn() && (request.auth.uid == uid || platformAdmin() || hasPermission("drivers.documents.read") || hasPermission("drivers.*") || hasPermission("finance.read") || hasPermission("finance.*"));
       allow write: if signedIn() && request.auth.uid == uid && safeImage();
     }
+    match /driver-send-proof/{uid}/{parcelJobId}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == uid || platformAdmin() || hasPermission("drivers.read") || hasPermission("drivers.*") || hasPermission("support.read") || hasPermission("support.*"));
+      allow write: if signedIn() && request.auth.uid == uid && safeImage();
+    }
     match /{allPaths=**} { allow read, write: if false; }
   }
 }

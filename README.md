@@ -22,7 +22,7 @@ spotlyafrica.com/staff/schedule   → staff.spotlyafrica.com/schedule
 
 The internal App Router still uses `/business`, `/driver`, `/staff`, and `/admin` route trees. `proxy.js` maps clean product-domain URLs into those internal routes so the application does not need five duplicated codebases.
 
-This repository is **Spotly Web Platform 6.1.0**. It includes the production customer marketplace and conversion system, dedicated Eat/Shop/Book/Events experiences, Customer Utility layer, production hardening and growth systems, the first production Spotly Ride network across Customer + Driver + Admin, Driver + Delivery operations, Business hardening, notifications, and the full subdomain/SSO architecture.
+This repository is **Spotly Web Platform 6.2.0**. It includes the production customer marketplace and conversion system, dedicated Eat/Shop/Book/Events experiences, Customer Utility layer, production hardening and growth systems, Spotly Ride, the production Spotly Send/Parcel network across Customer + Driver + Admin, Driver + Delivery operations, Business hardening, notifications, and the full subdomain/SSO architecture.
 
 ## Canonical routes
 
@@ -143,6 +143,39 @@ The ride lifecycle is mediated by server APIs. Direct browser access to `rideTri
 Cash ride completion does not create a second Driver payout: the Driver keeps the collected cash and Spotly's platform fee is posted to the Driver Money ledger. Non-cash ride completion credits Driver earnings normally.
 
 Ride offer redispatch is driven by `/api/internal/ride-dispatch`, protected by `CRON_SECRET`, with a Vercel cron configured in `vercel.json`.
+
+
+## Spotly Send 6.2
+
+Spotly Send is now an operational parcel network that reuses the same Driver availability, dispatch, Driver Money, Activity, support and Admin Operations infrastructure as Ride:
+
+```text
+Customer quote + Send request
+        ↓
+Immediate or scheduled parcelJob + Activity order
+        ↓
+Nearby eligible Driver offers
+        ↓
+Driver accepts atomically
+        ↓
+Pickup → pickup PIN → collected → delivery → drop-off PIN
+        ↓
+Optional proof-of-delivery photo
+        ↓
+Driver Money + Customer Activity + support
+        ↓
+Admin Send Operations, reassignment, exceptions and proof review
+```
+
+Send is **off by default**. Admin Send Operations controls enabled cities/areas, pricing, Driver share, cash availability, scheduled pickup, parcel-size limits and whether proof-of-delivery photography is required.
+
+The lifecycle is server-authoritative. Direct browser access to `parcelJobs`, `parcelOffers`, and `parcelEvents` is denied by Firestore rules. Customer ownership, Driver assignment and Admin privileges are rechecked by the relevant APIs.
+
+Pickup and handoff use separate four-digit verification PINs. Drivers never receive those PINs in the generic bootstrap payload. A required proof photo is uploaded only to the Driver's scoped `driver-send-proof` Storage path and can be reviewed by authorized operations/support roles.
+
+Immediate cash requests can enter dispatch as soon as they are created. Paid immediate Paynow requests enter dispatch after confirmed payment. Scheduled jobs stay reserved until the protected `/api/internal/parcel-dispatch` scheduler promotes them shortly before pickup, avoiding premature Driver assignment.
+
+Cash Send completion follows the same accounting principle as cash Ride: the Driver keeps the collected customer cash and Spotly's platform fee is posted against the Driver Money ledger. Digital Send credits Driver earnings normally.
 
 ## Kiosk
 

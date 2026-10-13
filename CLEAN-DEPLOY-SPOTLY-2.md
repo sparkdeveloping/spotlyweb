@@ -1,4 +1,4 @@
-# Clean deployment instructions — Spotly Web 6.1.0
+# Clean deployment instructions — Spotly Web 6.2.0
 
 This archive is a full-source replacement for the current Spotly Web project.
 
@@ -37,7 +37,7 @@ npm run build
 - `/book` — opens Book mode
 - `/events` — opens Events mode
 - `/ride` — production Spotly Ride quote/request/tracking flow; requests are accepted only when Ride Operations enables the customer network for the pickup city/area
-- `/send` — opens Send mode; peer delivery remains unavailable until the operations feature flag is enabled
+- `/send` — production Spotly Send quote/request/tracking flow; requests are accepted only when Send Operations enables the pickup city/area
 - `/search` or `/?view=search` — customer search
 - `/activity` or `/?view=activity` — orders, deliveries, appointments, bookings and tickets
 - `/saved` or `/?view=saved` — saved businesses
@@ -55,14 +55,20 @@ mobility.ridesEnabled
 launch.ridesEnabled
 ```
 
-Peer-to-peer Send can be exposed when one of these is true:
+Spotly Send is primarily controlled by:
+
+```text
+mobility.send.enabled
+```
+
+The older compatibility flags are still recognized while settings are migrated:
 
 ```text
 commerce.peerDeliveryEnabled
 launch.sendEnabled
 ```
 
-Until Ride Operations enables the relevant city/area, the customer interface communicates that the service is not yet available there. It does not simulate a ride transaction.
+Until Ride or Send Operations enables the relevant city/area, the customer interface communicates that the service is not available there. It does not simulate an operational request.
 
 ## 5.8.0 customer utility deployment
 
@@ -120,3 +126,36 @@ Before enabling a city, smoke-test with controlled Customer + Driver + Admin acc
 10. Stop the first offer cycle and confirm the protected dispatch watchdog expires old offers and searches again.
 
 Do not enable Ride broadly until Driver supply, customer support coverage, operational escalation, pricing and payment reconciliation have been tested in the launch area.
+
+
+## 6.2.0 Spotly Send deployment
+
+This release adds the production Send/Parcel network across Customer, Driver and Admin. Deploy the application, `firestore.rules`, `firestore.indexes.json`, and `storage.rules` together.
+
+Required deployment configuration:
+
+1. Keep `mobility.send.enabled` **false** during deployment.
+2. Reuse the production `CRON_SECRET` for `/api/internal/parcel-dispatch`; the endpoint rejects requests without the matching bearer secret.
+3. Confirm the configured Vercel cron can invoke the protected parcel dispatcher every two minutes.
+4. In Admin → Driver program → Send, configure enabled cities, optional city service areas, base/per-km pricing, Driver share, cash availability, scheduled pickup and proof-photo policy.
+5. Confirm Paynow is operational if Paynow should be offered for Send.
+6. Deploy the supplied Firestore composite indexes for `parcelJobs` and `parcelOffers`.
+7. Deploy the supplied Storage rules before enabling proof-of-delivery photography.
+8. Confirm approved Drivers have current approved vehicles/documents, fresh Driver Presence/GPS and suitable vehicle types for the parcel sizes you plan to offer.
+
+Before enabling a city/area, smoke-test with controlled Customer + Driver + Admin accounts:
+
+1. Customer requests an immediate Send and receives a server-authoritative quote.
+2. Customer schedules a Send at least 20 minutes ahead and confirms that no Driver is reserved prematurely.
+3. Test a package over the selected parcel-size weight limit and confirm the server rejects it.
+4. Confirm the prohibited/restricted-item acknowledgement is mandatory.
+5. Confirm only an eligible nearby Driver receives the offer and that acceptance reserves the Driver atomically.
+6. Complete pickup with the customer pickup PIN; an incorrect PIN must fail.
+7. Complete handoff with the recipient drop-off PIN; an incorrect PIN must fail.
+8. If proof photography is enabled, confirm completion is blocked until proof is uploaded and that Admin can review it.
+9. Test cash completion and verify the Driver keeps the collected cash while Spotly's fee is posted to Driver Money.
+10. Test Paynow completion and verify Driver earnings are credited only after the authoritative flow completes.
+11. Cancel before collection and confirm offers/Driver reservation are released.
+12. Confirm Customer Activity, notifications, Send-specific support and Admin timeline/exception views all reference the same parcel job.
+
+Do not enable Send broadly until Driver supply, support escalation, parcel restrictions, pricing, payment reconciliation, proof handling and scheduled-dispatch cadence are operationally verified.

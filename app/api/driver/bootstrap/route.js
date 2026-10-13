@@ -2,6 +2,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { applicationReadiness, docData, docsData, operationalEligibility, publicOffer } from "@/lib/driver-delivery-server";
 import { driverBalanceAccountId, sanitizeDriverBalance } from "@/lib/driver-money-server";
 import { plainRide, publicRideOffer } from "@/lib/ride-server";
+import { plainParcel, publicParcelOffer } from "@/lib/parcel-server";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ export async function GET(request) {
   try {
     const user = await authenticateRequest(request);
     const { db } = getAdminServices();
-    const [applicationSnap, driverSnap, vehicleQuery, documentsQuery, presenceSnap, offersQuery, jobsQuery, rideOffersQuery, ridesQuery, earningsQuery, payoutsQuery, incidentsQuery, payoutAccountSnap, usdBalanceSnap, zwgBalanceSnap, settingsSnap] = await Promise.all([
+    const [applicationSnap, driverSnap, vehicleQuery, documentsQuery, presenceSnap, offersQuery, jobsQuery, rideOffersQuery, ridesQuery, parcelOffersQuery, parcelsQuery, earningsQuery, payoutsQuery, incidentsQuery, payoutAccountSnap, usdBalanceSnap, zwgBalanceSnap, settingsSnap] = await Promise.all([
       db.collection("driverApplications").doc(user.uid).get(),
       db.collection("drivers").doc(user.uid).get(),
       db.collection("driverVehicles").where("driverId", "==", user.uid).limit(10).get(),
@@ -19,6 +20,8 @@ export async function GET(request) {
       db.collection("deliveryJobs").where("assignedDriverId", "==", user.uid).limit(100).get(),
       db.collection("rideOffers").where("driverId", "==", user.uid).where("state", "in", ["offered", "viewed"]).limit(20).get(),
       db.collection("rideTrips").where("assignedDriverId", "==", user.uid).limit(100).get(),
+      db.collection("parcelOffers").where("driverId", "==", user.uid).where("state", "in", ["offered", "viewed"]).limit(20).get(),
+      db.collection("parcelJobs").where("assignedDriverId", "==", user.uid).limit(100).get(),
       db.collection("driverEarningsLedger").where("driverId", "==", user.uid).limit(250).get(),
       db.collection("driverPayouts").where("driverId", "==", user.uid).limit(50).get(),
       db.collection("driverIncidents").where("driverId", "==", user.uid).limit(50).get(),
@@ -53,6 +56,18 @@ export async function GET(request) {
       rideOffers.push(publicRideOffer({ id: rideSnap.id, ...rideSnap.data() }, offer));
     }
 
+    const rawParcels = parcelsQuery.docs.map((item) => ({ id: item.id, ...plainParcel(item.data()) })).sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    const parcels = rawParcels.map((item) => ({ ...item, pickupPin: undefined, dropoffPin: undefined }));
+    const activeParcel = parcels.find((item) => !["delivered", "failed", "cancelled", "returned"].includes(item.state)) || null;
+    const parcelOffers = [];
+    for (const offerDoc of parcelOffersQuery.docs) {
+      const offer = { id: offerDoc.id, ...offerDoc.data() };
+      if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now()) continue;
+      const parcelSnap = await db.collection("parcelJobs").doc(offer.parcelJobId).get();
+      if (!parcelSnap.exists) continue;
+      parcelOffers.push(publicParcelOffer({ id: parcelSnap.id, ...parcelSnap.data() }, offer));
+    }
+
     const offers = [];
     for (const offerDoc of offersQuery.docs) {
       const offer = { id: offerDoc.id, ...offerDoc.data() };
@@ -78,10 +93,13 @@ export async function GET(request) {
       eligibility,
       offers,
       rideOffers,
+      parcelOffers,
       activeJob,
       activeRide,
+      activeParcel,
       jobs,
       rides,
+      parcels,
       earnings: docsData(earningsQuery).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
       balances: { USD: usdBalanceSnap.exists ? sanitizeDriverBalance(usdBalanceSnap.data()) : null, ZWG: zwgBalanceSnap.exists ? sanitizeDriverBalance(zwgBalanceSnap.data()) : null },
       payoutAccount: payoutAccountSnap.exists ? { ...docData(payoutAccountSnap), identifierEncrypted: undefined } : null,

@@ -146,7 +146,7 @@ function activityKind(order = {}) {
 }
 
 function activityScheduleDate(order = {}) {
-  const raw = order.appointment?.date || order.booking?.startDate || order.event?.startsAt || order.event?.date || order.pickup?.date || null;
+  const raw = order.scheduledPickupAt || order.appointment?.date || order.booking?.startDate || order.event?.startsAt || order.event?.date || order.pickup?.date || null;
   if (!raw) return null;
   const parsed = new Date(String(raw).length === 10 ? `${raw}T12:00:00` : raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -160,7 +160,7 @@ function activityBucket(order = {}) {
   if (["failed", "payment_failed", "disputed"].includes(status) || ["failed", "chargeback"].includes(payment) || ["failed", "returned"].includes(delivery) || ride === "failed") return "problem";
   if (["completed", "delivered", "cancelled", "canceled", "refunded", "rejected", "expired"].includes(status) || delivery === "delivered" || ["completed", "cancelled", "failed"].includes(ride) || ["refunded"].includes(payment)) return "past";
   const schedule = activityScheduleDate(order);
-  if (schedule && schedule.getTime() > Date.now() + 30 * 60 * 1000 && ["appointment", "booking", "ticket"].includes(activityKind(order))) return "upcoming";
+  if (schedule && schedule.getTime() > Date.now() + 30 * 60 * 1000 && ["appointment", "booking", "ticket", "send"].includes(activityKind(order))) return "upcoming";
   if (["submitted", "new", "requested", "confirmed", "accepted", "preparing", "ready", "awaiting_payment", "processing", "in_progress"].includes(status) || ["awaiting_dispatch", "searching_driver", "driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification", "collected", "en_route", "driver_arrived_customer", "handoff_verification"].includes(delivery) || ["requested", "searching_driver", "driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification", "in_trip", "driver_arrived_dropoff"].includes(ride)) return "active";
   return schedule && schedule.getTime() > Date.now() ? "upcoming" : "active";
 }
@@ -217,12 +217,12 @@ function ActivityDetailModal({ order, open, onClose, onPay, onCancel, onReview, 
   const currentDeliveryState = delivery?.state || order.deliveryStatus;
 
   return <Modal open={open} onClose={onClose} title={order.businessName || "Spotly Activity"} description={order.number || order.orderNumber || order.id} size="lg"><div className="p-5 sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm text-[var(--text-3)]">{created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }) : "Recently created"}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{transactionKind === "ride" ? "Ride activity" : transactionKind === "ticket" ? "Ticket activity" : transactionKind === "appointment" ? "Appointment" : transactionKind === "booking" ? "Booking" : order.fulfilment === "delivery" ? "Delivery order" : "Pickup order"}</h2></div><div className="flex flex-wrap gap-2"><StatusBadge status={order.status || "submitted"} />{order.paymentStatus ? <Badge tone={order.paymentStatus === "paid" ? "success" : ["failed", "refunded"].includes(order.paymentStatus) ? "danger" : "warning"}>{String(order.paymentStatus).replaceAll("_", " ")}</Badge> : null}</div></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm text-[var(--text-3)]">{created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }) : "Recently created"}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{transactionKind === "ride" ? "Ride activity" : transactionKind === "send" ? "Send activity" : transactionKind === "ticket" ? "Ticket activity" : transactionKind === "appointment" ? "Appointment" : transactionKind === "booking" ? "Booking" : order.fulfilment === "delivery" ? "Delivery order" : "Pickup order"}</h2></div><div className="flex flex-wrap gap-2"><StatusBadge status={order.status || "submitted"} />{order.paymentStatus ? <Badge tone={order.paymentStatus === "paid" ? "success" : ["failed", "refunded"].includes(order.paymentStatus) ? "danger" : "warning"}>{String(order.paymentStatus).replaceAll("_", " ")}</Badge> : null}</div></div>
     {transactionKind ? <TransactionSummary order={order} /> : order.fulfilment === "delivery" ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="font-semibold">{deliveryStateLabel(currentDeliveryState)}</p><p className="mt-1 text-sm text-[var(--text-2)]">{order.delivery?.address || order.delivery?.suburb || "Delivery address"}</p>{delivery?.customerPin && !["delivered","cancelled","failed","returned"].includes(delivery.state) ? <div className="mt-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] p-3"><p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">Delivery PIN</p><p className="mt-1 font-mono text-2xl font-semibold tracking-[.16em]">{delivery.customerPin}</p><p className="mt-1 text-xs text-[var(--text-3)]">Only share this when the Driver is with you and ready to hand over the order.</p></div> : null}</div> : <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="font-semibold">Pickup</p><p className="mt-1 text-sm text-[var(--text-2)]">{order.pickup?.date || "Date pending"} · {order.pickup?.slot || "Time pending"}</p><p className="mt-1 text-sm text-[var(--text-3)]">{order.branchName || order.locationName || "Selected location"}</p></div>}
-    <div className="mt-6"><h3 className="text-sm font-semibold">{transactionKind === "ride" ? "Fare" : transactionKind === "ticket" ? "Tickets" : transactionKind ? "Offering" : "Items"}</h3><div className="mt-3 divide-y divide-[var(--divider)] rounded-[16px] border border-[var(--border-subtle)] px-4">{(order.items || []).map((item, index) => <div key={`${item.productId || item.name}-${index}`} className="flex gap-3 py-3 text-sm"><span className="font-semibold">{Number(item.quantity || 1)}×</span><div className="min-w-0 flex-1"><p className="font-medium">{item.name || "Item"}</p>{item.variant ? <p className="mt-1 text-xs text-[var(--text-3)]">{item.variant}</p> : null}</div>{Number(item.lineTotal ?? item.unitPrice ?? 0) > 0 ? <span className="font-semibold">{formatCurrency(item.lineTotal ?? Number(item.unitPrice || 0) * Number(item.quantity || 1), order.currency || "USD")}</span> : null}</div>)}</div></div>
+    <div className="mt-6"><h3 className="text-sm font-semibold">{transactionKind === "ride" ? "Fare" : transactionKind === "send" ? "Parcel" : transactionKind === "ticket" ? "Tickets" : transactionKind ? "Offering" : "Items"}</h3><div className="mt-3 divide-y divide-[var(--divider)] rounded-[16px] border border-[var(--border-subtle)] px-4">{(order.items || []).map((item, index) => <div key={`${item.productId || item.name}-${index}`} className="flex gap-3 py-3 text-sm"><span className="font-semibold">{Number(item.quantity || 1)}×</span><div className="min-w-0 flex-1"><p className="font-medium">{item.name || "Item"}</p>{item.variant ? <p className="mt-1 text-xs text-[var(--text-3)]">{item.variant}</p> : null}</div>{Number(item.lineTotal ?? item.unitPrice ?? 0) > 0 ? <span className="font-semibold">{formatCurrency(item.lineTotal ?? Number(item.unitPrice || 0) * Number(item.quantity || 1), order.currency || "USD")}</span> : null}</div>)}</div></div>
     {total > 0 ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4 text-sm"><div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{formatCurrency(subtotal || Math.max(0, total - serviceFee - deliveryFee), order.currency || "USD")}</span></div>{discount > 0 ? <div className="mt-2 flex justify-between text-[var(--success)]"><span>{order.promotion?.name || "Promotion"}</span><span className="font-semibold">−{formatCurrency(discount, order.currency || "USD")}</span></div> : null}{serviceFee > 0 ? <div className="mt-2 flex justify-between"><span>Service fee</span><span>{formatCurrency(serviceFee, order.currency || "USD")}</span></div> : null}{deliveryFee > 0 ? <div className="mt-2 flex justify-between"><span>Delivery</span><span>{formatCurrency(deliveryFee, order.currency || "USD")}</span></div> : null}<div className="mt-3 flex justify-between border-t border-[var(--divider)] pt-3 text-base font-semibold"><span>Total</span><span>{formatCurrency(total, order.currency || "USD")}</span></div></div> : null}
     {customerActivityRecoverable(order) ? <div className="mt-5 rounded-[16px] border border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm"><p className="font-semibold text-[var(--on-warning-soft)]">This payment did not complete</p><p className="mt-1 leading-6 text-[var(--text-2)]">Spotly releases inventory or held availability after a failed or expired payment. Start again to recheck current stock, price and availability before paying.</p></div> : null}
-    <div className="mt-6 flex flex-col gap-2 sm:flex-row">{transactionKind === "ride" ? <Button asChild className="flex-1"><Link href="/ride">Manage ride</Link></Button> : null}<Button asChild variant="outline" className="flex-1"><Link href={transactionKind === "ride" ? `/support?topic=ride&ride=${encodeURIComponent(order.rideTripId || order.id)}` : `/support?order=${encodeURIComponent(order.id)}`}>Get help</Link></Button>{customerActivityRecoverable(order) ? <Button className="flex-1" onClick={() => onRetry?.(order)}><RefreshCw className="h-4 w-4" />Start again</Button> : null}{customerReviewEligible(order) ? <Button variant="outline" className="flex-1" onClick={() => onReview?.(order)}><Star className={cn("h-4 w-4", order.customerRating && "fill-current")} />{order.customerRating ? "Update review" : "Rate experience"}</Button> : null}{paymentNeeded ? <Button className="flex-1" onClick={() => onPay(order)}><CreditCard className="h-4 w-4" />Continue payment</Button> : null}{cancellable ? <Button variant="outline" className="flex-1" onClick={() => onCancel(order)}>Cancel</Button> : null}</div>
+    <div className="mt-6 flex flex-col gap-2 sm:flex-row">{transactionKind === "ride" ? <Button asChild className="flex-1"><Link href="/ride">Manage ride</Link></Button> : transactionKind === "send" ? <Button asChild className="flex-1"><Link href="/send">Manage Send</Link></Button> : null}<Button asChild variant="outline" className="flex-1"><Link href={transactionKind === "ride" ? `/support?topic=ride&ride=${encodeURIComponent(order.rideTripId || order.id)}` : transactionKind === "send" ? `/support?topic=send&parcel=${encodeURIComponent(order.parcelJobId || order.id)}` : `/support?order=${encodeURIComponent(order.id)}`}>Get help</Link></Button>{customerActivityRecoverable(order) ? <Button className="flex-1" onClick={() => onRetry?.(order)}><RefreshCw className="h-4 w-4" />Start again</Button> : null}{customerReviewEligible(order) ? <Button variant="outline" className="flex-1" onClick={() => onReview?.(order)}><Star className={cn("h-4 w-4", order.customerRating && "fill-current")} />{order.customerRating ? "Update review" : "Rate experience"}</Button> : null}{paymentNeeded ? <Button className="flex-1" onClick={() => onPay(order)}><CreditCard className="h-4 w-4" />Continue payment</Button> : null}{cancellable ? <Button variant="outline" className="flex-1" onClick={() => onCancel(order)}>Cancel</Button> : null}</div>
   </div></Modal>;
 }
 
@@ -540,7 +540,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
   const maintenance = settings.launch?.publicMode === "maintenance";
   const ridesEnabled = typeof settings.mobility?.ridesEnabled === "boolean" ? settings.mobility.ridesEnabled : settings.launch?.ridesEnabled === true;
-  const sendEnabled = settings.commerce?.peerDeliveryEnabled === true || settings.launch?.sendEnabled === true;
+  const sendEnabled = settings.mobility?.send?.enabled === true || settings.commerce?.peerDeliveryEnabled === true || settings.launch?.sendEnabled === true;
 
   function routeFor(params) {
     const queryString = params.toString();
@@ -579,7 +579,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setSelectedOffer(null);
     setTransactionOffer(null);
     setQuery("");
-    if (MARKETPLACE_SERVICE_KEYS.has(nextService)) {
+    if (MARKETPLACE_SERVICE_KEYS.has(nextService) || nextService === "ride" || nextService === "send") {
       router.push(`/${nextService}`);
       return;
     }
@@ -973,7 +973,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     track("activity_retry_started", { transaction_type: activityKind(order), payment_state: String(order.paymentStatus || "unknown") });
     setActivityDetail(null);
     const productId = order.items?.[0]?.productId;
-    if (productId && ["appointment", "booking", "ticket"].includes(activityKind(order))) {
+    if (productId && ["appointment", "booking", "ticket", "send"].includes(activityKind(order))) {
       router.push(`/item/${encodeURIComponent(productId)}`);
       return;
     }
@@ -992,7 +992,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     }
     setCancelling(true);
     try {
-      await authenticatedFetch("/api/orders/cancel", { method: "POST", body: JSON.stringify({ orderId: cancelTarget.id, reason: cancelReason.trim() }) });
+      if (cancelTarget.transactionType === "send" && cancelTarget.parcelJobId) {
+        await authenticatedFetch("/api/customer/parcels", { method: "POST", body: JSON.stringify({ action: "cancel", parcelJobId: cancelTarget.parcelJobId, reason: cancelReason.trim() }) });
+      } else {
+        await authenticatedFetch("/api/orders/cancel", { method: "POST", body: JSON.stringify({ orderId: cancelTarget.id, reason: cancelReason.trim() }) });
+      }
       track("activity_cancelled", { order_id: cancelTarget.id, transaction_type: cancelTarget.transactionType || cancelTarget.fulfilment || "order" });
       toast("This activity was cancelled.", { type: "success", title: "Cancelled" });
       setCancelTarget(null);

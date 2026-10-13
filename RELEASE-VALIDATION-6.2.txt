@@ -1,0 +1,46 @@
+Spotly Web Platform 6.2.0 — Send / Parcel Network release validation
+Date: 2026-10-13
+
+Executed on the clean source tree:
+
+1. npm run check:js
+   PASS — JavaScript-only and React-hook import checks passed.
+
+2. npm run check:theme
+   PASS — Theme safety passed for 213 source files and 41 classified route patterns.
+
+3. node --test
+   PASS — 234 / 234 tests passed, 0 failed.
+   Includes 14 dedicated Spotly Send production regression tests covering:
+   - server-authoritative customer request + Activity continuity + handoff PINs
+   - rollout, parcel-size and pricing controls
+   - Driver eligibility, fresh location, pickup radius and vehicle compatibility
+   - atomic Driver offer acceptance and capacity reservation
+   - pickup PIN, drop-off PIN and configurable proof-of-delivery
+   - cash vs digital Driver Money accounting
+   - Paynow transition into immediate or scheduled dispatch
+   - Driver offers, active workflow, history and incident attachment
+   - Admin Send Operations and network controls
+   - CRON_SECRET-protected scheduled/redispatch watchdog
+   - Firestore/Storage protections and composite indexes
+   - Customer Home/Activity routing into the live Send product
+   - scheduled Send deferral until the pickup window
+   - server-enforced weight limits and prohibited-item acknowledgement
+
+4. JSON configuration parse
+   PASS — package.json, package-lock.json, firestore.indexes.json and vercel.json parse successfully.
+
+5. Package metadata
+   PASS — package.json and package-lock.json identify release 6.2.0.
+
+Framework compiler status:
+- node_modules and .next are intentionally excluded from the release archive.
+- A fresh local npm dependency installation was not repeated because dependency installation in this execution environment previously stalled before the Next.js toolchain became available.
+- Therefore `next build` and ESLint are not claimed as locally executed gates for this archive.
+- Vercel's clean dependency install + Next.js production build remains the required final compiler gate before production promotion.
+
+Operational deployment gates:
+- Deploy firestore.rules, firestore.indexes.json and storage.rules with the application.
+- Configure a strong CRON_SECRET.
+- Verify both ride-dispatch and parcel-dispatch cron invocations in production.
+- Keep mobility.send.enabled false until the launch city/areas, Driver supply, parcel restrictions, payment methods, proof-of-delivery policy, support procedures and scheduled dispatch cadence are smoke-tested.

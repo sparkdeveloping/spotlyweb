@@ -1,9 +1,10 @@
 1aa20b7a5abf4cbf8849667d169d79132cf087fde39633ff89b1d723806cadf4  ./.env.example
 383e9abeb2d451a7e7c897dfe40ce700c87db77e4d71e9066395d671c8d8a72a  ./.gitignore
-def03c0270721110c9d1033b38bc1519a92e6f2be1297160d9f61f33534c1329  ./CLEAN-DEPLOY-SPOTLY-2.md
-6a648167b5987b16d4901f93fdb1b1b52600ae12a84e60313d13e95f27f999af  ./README.md
+206b11aba6e982991415fcaabb9926efc7198e84a90ac66b62944c49df302d05  ./CLEAN-DEPLOY-SPOTLY-2.md
+9137e94204034e16c9af2c34fe0cc42d52a3ee7313f92d1a6b43033e4210692b  ./README.md
 eb73a06f143f0e4db4b6d78d2e7560ca8bf561acf9e79d20b26ce41f224d82ed  ./RELEASE-VALIDATION-6.0.txt
 533cc2de61a69a9dc516ee022977a54e580a4b682da067816758c9a0ed50cf83  ./RELEASE-VALIDATION-6.1.txt
+5c90a79597bad5670f1a4396aba20105eaa0468cd2c2937db8b3fb6c5637463f  ./RELEASE-VALIDATION-6.2.txt
 e9c312b33412d91c25dbc9c17309f63f7d8cce660e0bd52b7e75e529d9e2c7a8  ./SPOTLY-BUSINESS-FULL-FUNCTIONAL-VISUAL-AUDIT-2026-08-18.md
 2f41cc81a0a77538b8db2bec80a81d3fe275ae2525457825e15f3104a0809788  ./SPOTLY-CROSS-SUBDOMAIN-SSO-ROUTING-2026-08-19.md
 e811f9aca438c6e0ef33df05ca75b3a661fec5ffe9f2e095478d31e3e9b9ab4f  ./SPOTLY-CUSTOMER-CONVERSION-2.0-2026-10-13.md
@@ -19,6 +20,7 @@ e62bfc9d0b8cf68a34a3a462bc8b45215a01c0f03182d0ae678e0a3a3432ec64  ./SPOTLY-PRODU
 e686da9d28f11bb169604b32769352c6df39eb84433cb0e583b7658cee154851  ./SPOTLY-SUBDOMAIN-DEPLOYMENT-2026-08-18.md
 9834b00118293277b746778f0aabed80db05d1c348f0fca67e9bdda96684fb78  ./SPOTLY-WEB-6.0-PRODUCTION-HARDENING-GROWTH-2026-10-13.md
 bade5c8f940f6978f0a87e142c1ffd3c5d307df27bfb865161c5a57f978284d2  ./SPOTLY-WEB-6.1-RIDES-PRODUCTION-2026-10-13.md
+716645890a073afd0907adf3e82a07f849b9133932b0d7a941af8187a3a3446a  ./SPOTLY-WEB-6.2-SEND-PRODUCTION-2026-10-13.md
 58e140eecf0a09ea631aa2ad26785a83e9f822ca5e5e71a88dafb5d56d10a0c9  ./app/account/page.js
 56524d0cc4cf836e6a7321c87dccab21774635ee76064180ab4ba1b77a82fd54  ./app/activity/[id]/page.js
 39291cf1735808867210ba9c00e584eaf2e787394b64f8b8a5b115b3f77d9a7b  ./app/activity/page.js
@@ -41,6 +43,7 @@ b4ef923545202976b7a4ede22e6f8c71bfa39e5be34eca7ec74181bad801befd  ./app/api/admi
 ca39c593a5411656736528360760682318fd0d89c9b85531ba26a07deaf8d859  ./app/api/admin/launch-readiness/route.js
 24483121acc0be2e3aaa836e70e9f4ea5e4296545c234c677de913d3050a2345  ./app/api/admin/location-reviews/decision/route.js
 032311e31c841288296dc9307f843e2b3b66400406f83705cd83070f41c0dbe7  ./app/api/admin/orders/void/route.js
+41b30d96ddca9026951304c73ca07fce95d3ddb0cbea1d0cdf9dd963e3d66272  ./app/api/admin/parcels/route.js
 2f3eff3b52a1c92296ceb98f0ca79f2695f8aad571485fd432a7f9fe459ad9e1  ./app/api/admin/queues/route.js
 86ac172d5eb9093bea84925e113406a78f9403b214f75c808a1eff018bac0777  ./app/api/admin/refunds/route.js
 5676dc0e4a6cca1758dd5b301fafbdde452a2553e163c285548329674cd20027  ./app/api/admin/rides/route.js
@@ -65,6 +68,8 @@ a8bee8ea393cd83a69b2d8c7f12e94ce05e14ae4e7e3683ed128f4f9fffc6aed  ./app/api/busi
 53ac356bec625b3f2c79755741a559c1292accd25bdb4ce5809032742e2e9eb0  ./app/api/business/money/route.js
 b901fa343f08e41fdf555970aa0fe5e5f89318132f5e061b160373e6903fd0da  ./app/api/business/portfolio/route.js
 cbe87be10265bf1fbfb57a78b2bbd75cf6d1c0d59a657658464f342117320c4c  ./app/api/customer/orders/status/route.js
+1e95c1254becb3909b1a659cf24c69a2c40ee6e71eacf8b0c333b81ec7e04263  ./app/api/customer/parcels/quote/route.js
+0246d576f2e94a10a4ce3a361d513eeb6088711d5f24f2fd7ba7814d0ed8830a  ./app/api/customer/parcels/route.js
 a9a801cc7691ec20a81f4b23b2c07bca8096749d66ccf087064ced729a8980c0  ./app/api/customer/promotions/quote/route.js
 f855e5a5531ac7b38830fa6ddcf8f3e32ed839f2ad240590496aa714fc5ffac3  ./app/api/customer/referrals/route.js
 9a74058e127f30dcd877fb568b89f8b3333d92320e759cc008412b9c713f19ac  ./app/api/customer/reviews/route.js
@@ -73,11 +78,13 @@ b51aaeaa1b02f44b2f8992cb2207854a5abcc2ee99ef51e7c6d763d74b60b1c4  ./app/api/cust
 9cbd2e510d91c71cb2b4bc894424167df3dacdb73922f90421a91571e7f0208a  ./app/api/customer/rides/route.js
 68c723870ddb9a64bb3009f7a6f395b3df8d2c960b27b78893ecd0862662833d  ./app/api/customer/transactions/create/route.js
 a5e4de7c07924cdf9a954646646cb3d18416ad8b3180d06013256e00de8b705c  ./app/api/driver/application/route.js
-1c3ede0402353370101e58bc87f2aa11ac07686b10d2ba9c3fea44c7656b3f9e  ./app/api/driver/bootstrap/route.js
+025afdb6bd90289360031740b1a01580f049b912709c43a6993113329a4b9d7e  ./app/api/driver/bootstrap/route.js
 4c4d9e21288df63bd5b4dc6be08337812f595da62927a564a8382b0e41ed90e8  ./app/api/driver/delivery/route.js
-0a2bcdf39976c1070876dfc70051abc5910a99059dad1aa72ec11bae898f4de6  ./app/api/driver/incidents/route.js
+fbd58cf993f5fab8017628c42877e31e22a77e54a19076456df5378eef0c4597  ./app/api/driver/incidents/route.js
 e52a11229d149cc07c77684234ec9a4a7c962fb739236b37addeba9bb2f23c11  ./app/api/driver/location/route.js
 a80f403758bcdda0cb6c97527e92e9a3b8e3d396befa209422571e08bee809e7  ./app/api/driver/offers/route.js
+e9449a0a4863df882952f95161c21efc58eca1a40f20c177900a7fcfa0e23c33  ./app/api/driver/parcel-offers/route.js
+bbb43750dbfa3861d9c7e595f20c0639bce07a578cf3899b4c12cb3a71096e64  ./app/api/driver/parcels/route.js
 743e8b6a77ddb8d9009570cbb794f23e517f6e12825362f040f7bdc0fdfb0bef  ./app/api/driver/payout/route.js
 3ee266adc102799e04387e3be73a7785e69e53d6b986158e33ec60140a13dce6  ./app/api/driver/presence/route.js
 3588eb758a0f4d3de2dcea383b47656f2e77eb4accd1e1e65a17e4156663cfab  ./app/api/driver/ride-offers/route.js
@@ -85,6 +92,7 @@ e4f176f6f63fecdd2a3dc4081dcccb7cafa4d29e0ed47fb588dfb36f589bb462  ./app/api/driv
 6b35fdbc70d8be76cedcd9bbd71a7f6b89d292a2accc5849d7974a8b55e411d9  ./app/api/driver/shopping/route.js
 a3a2d86d9d42be435fe1d11db5546655e39615e4bd5aecf37383759d6d0aab41  ./app/api/email/send/route.js
 ed6fee13b322144c5782ec528d7f6f457a8ac44e4e41a80fe977684883f4c4a3  ./app/api/health/route.js
+97aad6dd7cb5f8ec9d00284cf5228324538a353d3d4a25530b00745bdb40003a  ./app/api/internal/parcel-dispatch/route.js
 d9ba643200ee7d742578addaa72646f38a169047e7b4b966c04ceb4b78676747  ./app/api/internal/ride-dispatch/route.js
 1be03a536232a70e71651e54f9a7d356199d46e70f5d9fe2a710361ec6eaa063  ./app/api/kiosk/check-in/route.js
 f88350b00a0f09a837bcbb86e00e312fc0a08bf0a270f4c0279e21f152da421a  ./app/api/kiosk/driver-pickup/route.js
@@ -104,7 +112,7 @@ a7a1b21a91237c3660808bc586f64078ebf17f9d302fcc196f46caffea7ffb68  ./app/api/paym
 6ffbd815473d5604a03b40af88db976d204113ee4b7eaf11dd4d750a38af0678  ./app/api/payouts/route.js
 962ef670ca6b05a46300c49d6e2b9888bdd8b742a83dc7710860a4734aeceb25  ./app/api/public/directory/business/route.js
 cf82a92a7bd8f9ab671dbdd013c09051bd68122203b4fe8bab327af2307b2659  ./app/api/public/directory/route.js
-8fa741169b8934f13aa014e20e2aae3ac3f33ab1cfadc96ad4cf9eb347365bd6  ./app/api/public/geocode/route.js
+2263dc7422fd6a7301ace1bf7da93a98603b4abd40f8fbb97d2d92037062a48c  ./app/api/public/geocode/route.js
 dd8cc62954fa91f3c310f60bcb90d0b3a1ae95aca7c56ef173b9f73b84c96541  ./app/api/public/marketplace/business/route.js
 bb83ecc9e7d33d454ae0b82d5aead759dfe9225b26aa347b0f131f060326c6cc  ./app/api/public/marketplace/events/route.js
 9f5fa73f9048087aea1e6bd6880af3ba80f47bca8605543abb1e442765703fad  ./app/api/public/marketplace/pickup-availability/route.js
@@ -153,7 +161,7 @@ ea7303d053ddfa17f817ec889b5d2b18705b00c58c72392b0cbedd5b324e2528  ./app/ride/pag
 28cf43f5dde053fb43d854ab9ac73d50d891091363db18ca0277957f78e1e4fa  ./app/robots.js
 01096a7a23f7a4a76da40884d6d51b886706bac3b8eb2bd979378bbb018760ea  ./app/saved/page.js
 23775527f2250fdc15894598e28cd049a2b4e055299a8321f0b6bab8275920fa  ./app/search/page.js
-f43bd2c6102d85c707c3b03ce6631481078a93c077d02a0e2fa830a3166cc360  ./app/send/page.js
+6e90597a3ee26c132a2379e0bb32e8a3f2c60020ddfa945ea4d18a35834df9e2  ./app/send/page.js
 692e26b395c9e2af36b1b5e6a620ab35a7e294829ed3519fc31cb7d7a217025f  ./app/shop/page.js
 e199f853b1542584898eb67a3f8afdfd0b2358d1a6a717e7e1b2bd1f55a9ee35  ./app/sitemap.js
 1ee5ccab1fbc646844a70bb9e2909366a3fa8ef6a438bfd6224b5f9d926f6a08  ./app/staff/[section]/page.js
@@ -167,7 +175,7 @@ e3e1793e88cd359633ff40ac2e74592faa65953056b11b1d23b669a42e13bdbc  ./components/a
 11e8ab97759abf868410e413583e695998f4f8f83ddcd67ce3192ad2540fdbff  ./components/admin-business-money.js
 e457aa660d72c451aa840b1c21857387ee3b865c8843ced5aaf3b27d962b7d06  ./components/admin-catalogue-governance.js
 c32aa41e835b47b690523d72efcbbf7b14fe2ac20ac323133aa9527ebd1fe8ad  ./components/admin-directory-manager.js
-f4e5d9289ffe04319874492e0dcaac2fe0844487fdc67bd41d288961d8bef57f  ./components/admin-driver-operations.js
+d8f332e373e5827e119e81c9c87989618f48fc6492d2ddf1a88b0afa9686050f  ./components/admin-driver-operations.js
 a98012330803462fae4d60360b5f1a47e710ecfe5637365193784c704ad8f675  ./components/admin-growth-campaigns.js
 8be0278cb77c7c182c3a00cfd7805738c48e461f9bff2d949ef124937de9d444  ./components/admin-launch-readiness.js
 2deaf9c4e964c764d79e25205509c425dc2bf14caad9c5df68481deae9cef270  ./components/admin-organization-governance.js
@@ -204,10 +212,10 @@ e66039929060500bb89bbc8615890a4ab0429f185c5d1d8882ded8586b6b8c3c  ./components/c
 644684865a97e9f5f1e7d9072843dd871f5049a28126a49bdbd1c76c50d141cb  ./components/coming-soon-app.js
 e2fcb07edc60a5b7fc5cc44d473f6a10e4f0841cf4975ef219375ef3931e11d9  ./components/customer-conversion.js
 cd2e646bd5b8cd9f8db8588e3b8e30b07c86426b2c35d5852df52e64d62f45ba  ./components/customer-utility.js
-c0814b6cc2b862b155eca9caa3ba547be86d2101415ce4e5709c8940f657c23a  ./components/driver-app.js
+40315176f79afa29997527eb6b11f4996305ba1bbec5e4e404ea7bfc2f782090  ./components/driver-app.js
 36aeacf26bc0f603e0f138a1183423cb2f6d7f010ade009b9bcc6472616f8ff1  ./components/firebase-provider.js
 10f9ed591b3bd58dd8845c375230873481c4a9d229079b1f2a2dddfccd9c8091  ./components/login-app.js
-abcb707ef74bd2c2de4a4781810294c430c9fe5cb1bd6e3918084f898936caea  ./components/marketplace-app.js
+3e54206987c0d898ec8a19337e092691e94324fe6adca881a0d90736a0b446cf  ./components/marketplace-app.js
 9a38b7e74f3ad104e266b273e203c72294be455e957adfc41d05ea538c5be8a5  ./components/marketplace-home.js
 31de5ff40432fab1f8925ea92440858c229b15a025151d9f0334335012bb76fe  ./components/notification-center.js
 7d3fb938fba3cf3356b53ee9cb9e7bdb1b30bbce8ce8cb98b2be56af17f185fc  ./components/payment-return-app.js
@@ -217,6 +225,7 @@ e201246276690bfa383529f13416f3dd5be797e54c0c0160fe1aa6be3a96d38c  ./components/p
 0d5d3f2de77b11f36d6b532cd2d7269b46de9bdef668a7a83b26b3eda1823ef4  ./components/public-home-router.js
 88b6f0abbc41b4bfc363c8f5f8e7bb6da6bb61db476628601df30c47cb1d14a2  ./components/referral-app.js
 18c543d155d81f080ccee81a1ba6c287ba1933b0214cbecba5a70be6174ccd5e  ./components/ride-app.js
+7b48fc29114dda0de369a3a4b4661d2157589e6b10c088f0aa1787546ca36719  ./components/send-app.js
 4172d717f6a0493a33e070a78a98c167d70ab9b82f6ad652c89d2096cfadf813  ./components/service-experience.js
 5dab2a84612edd11fe1b038799c0208238964304055f20ad3ee8b5ed75d9e2df  ./components/spotly-lottie.js
 223359de62798224880669f81a85be72a711bba5bf656723a839fc67e3eb3fbb  ./components/staff-app.js
@@ -244,8 +253,8 @@ edeeb11cade222a65adeb353236e951cba3d21808eeec0ac5b80c19f186e4d57  ./docs/history
 3ba50a51f4b6bc1312e8f50cb1e77d88077d690bc6a6b73a79f9138b72db45ef  ./docs/history/SPOTLY-V5-IMPLEMENTATION-REPORT.md
 9a0a8710dc6ab0dd08f39a61e5dc911ee24370e02a118e1f14d6d3bd7c77bae7  ./eslint.config.mjs
 9d93352460f5c5adff47d07e4a6cf6b4dd8782dd3a5485e201ed1d7813dcb9fb  ./firebase.json
-3206b6f096b5bdbf71b24133221dff2130ab08f396d847dd64b015f5de16621c  ./firestore.indexes.json
-2d61586de8da21d84f8f3165dad5127d5e4a8f0161b7a8997cf1bd8b24ce384a  ./firestore.rules
+7a878e6ddde6a91c9d105ffa610c890bc56f3ce9f2cb2286a959414f75cb551a  ./firestore.indexes.json
+e429f16b1ae8595b7f2a0893e5564e7bfe3320eba0d8b49accb973d317739f73  ./firestore.rules
 351790ffe6f5f1fbc52747e43733b610d4302cdf571036c97871c9a72946abd6  ./firestore.test.rules
 2ad3c180941172c40c50b8d240dca9ab172c8ac82b384ccf7d1543c769744f43  ./jsconfig.json
 ad18890c69ce51cd2fd41f931a2239733bab2e3bf53bbf82470a3b18ecaf6bac  ./lib/access-control-server.js
@@ -253,7 +262,7 @@ ad18890c69ce51cd2fd41f931a2239733bab2e3bf53bbf82470a3b18ecaf6bac  ./lib/access-c
 f60b4571855be94414e6e415632c67022b55085f5bbd5ba787b91e48aed42daf  ./lib/api-client.js
 f5c994fbf9d79d51f4fa862b4a48427e1eca90d5d3c344c8efc8664efc1e16a9  ./lib/availability-reservations.js
 89c43c9e8c5aaab2d301567cc11e1e7b5b53bdb87a89027743152eae194b4352  ./lib/browser-state.js
-bc677b27f1bf3ec47be64e9280d39064656d77605a182d15e14131a8a3e406fb  ./lib/build-info.js
+e8efec5ae4902307914f3cdda8e913e0144afa952046ce68ebf4caaf1c90de35  ./lib/build-info.js
 a38a51dd4814679c085a4e98867148ff18463993f70a1b69cc87eb67f2ed1392  ./lib/business-branches-server.js
 b4e9e022892df76a10e239c369f47e67a84a6aa68663cea62eb29111604f38f6  ./lib/business-lifecycle-server.js
 f28cbb31077cee827a179f2f1555eb4ed9ff6b9c8a4e8d1075de468ed936fa58  ./lib/business-lifecycle.js
@@ -267,7 +276,7 @@ ae40c049b1a94a1a3bf1ec213973acef467bd5c56693493fe622fd135e4de838  ./lib/catalog-
 2f40cecdd5a3507ef6b8918029e3cddace5a7a8ce762ab13a3a7edec4b91a430  ./lib/cn.js
 71f78a5a600b5e2f72181e0aa3390dbc094196d8dc3e6de6510d86cdd1b5b128  ./lib/customer-growth.js
 0de3fd13e7bc0cfa0ab4b90569ed3e3a84a7e35a8c3450d39c845f979e99eb28  ./lib/driver-delivery-server.js
-abff28f66a50b3e98f41e4763c41e55b96e89c5240d8df2cdcdcc4357c75fb99  ./lib/driver-money-server.js
+7087f7a816834503e04e1f29628e0b9c7a98670ce347b50d5df923f04078297e  ./lib/driver-money-server.js
 55622e798e5270d4922a7452b8f49b4c3d6290d08b3a3fb72a5b54e47960d837  ./lib/firebase-admin.js
 f8d0a9e5c6cd3a0a930bcb41dd82954421a0445e90569ae15a47e5b82de7654e  ./lib/firebase-services.js
 7a439762f601d634a1ad854ce451a6c60ff6d1f0ddc112b2127c460e5894c998  ./lib/firebase.js
@@ -277,11 +286,12 @@ dc92ebed3ef7d776b8cf2d58a71ab70212117d36a0ef3b6e083a6ad34a0f3bf1  ./lib/kiosk-se
 b221ccb371fdafde322336ff5a535f1f878a4b6f8fc621b383f02cd9e87d427b  ./lib/notification-server.js
 5f239e750f06ecb35dabe99ac64b204532a253bf94d88376b5fff884d0e19bf4  ./lib/order-money.js
 6c5da6f42891d0ad7121891c0a3388155a63932a498f87faf83e8e251e31a489  ./lib/order-reservations-server.js
-36a30f835fa8ec4bdaef696437c90efb3c328b892306a5248f898c95a4917c69  ./lib/payment-processor-server.js
+0d09360ad68806f61955f4f29987f85f6bfe0bb9a29ce81bc825291cf0fdc1db  ./lib/parcel-server.js
+bdbf92c7cd949204ace1a0c486a09560a44f85c21e4fddeefbdfb8ac11d27d98  ./lib/payment-processor-server.js
 2572d56f9202bf03fc9dbfc1504738090d03241d870ddae1b988b6e75282fdb5  ./lib/payment-state.js
 65a949946eca955cc3aeb7739ca10a8885c480c74417324b79d0582fc6c210f5  ./lib/paynow-server.js
 ea424eee5b3d442448710639033c306ee2534399766ecd746930c9492b881a12  ./lib/pickup-availability.js
-feb5aac861e03a9739f98ebe0e253e38b27a518714b11b9a6f6873c6ac204b88  ./lib/platform-defaults.js
+685f38ac281a570c35fe250e4de583864ae9297a2ea64187091f54b2045aafa6  ./lib/platform-defaults.js
 47d2cad8d549c64893f83738b003ec295991d2512ed9c08f4ec85658150f1f2d  ./lib/product-offers.js
 fb29736ba79d1c4afc2f56eb488561e5d3177bb8d7ff2a735f3dd76aeb726f63  ./lib/promotion-server.js
 0704098f96a9a040f9e1552ba5bd9508a8e0e403c3fbd47c2f708e6696dc9f09  ./lib/public-seo-server.js
@@ -295,8 +305,8 @@ bb966fa55b85eda913074f3de09d07548713a51403bc66ed5f8828cb743b191b  ./lib/shared-a
 f7d40fda82e10bcadc5e7ee5b85bbede6732b78bf205d6132eeaf1134f70a06d  ./lib/staff-services.js
 9f2cdb0280292cad23fe8e623c706f1de99e67dd348cd8b563dfe25ccf32f6d2  ./lib/workspaces.js
 cb2fdb104aa9e959c272a78d817fc410baa2476a882e4f5fcc424a319d349cf2  ./next.config.mjs
-c18b4781345f41215b603847fc3c85564711d31013aad220ebafa04ed597e20e  ./package-lock.json
-fa3aa38c6937d9d1e89fadc5b9f912d32e3f5e6e0d4f83c325b2833ea8038ad3  ./package.json
+1eeb29633d9f2bde3ccadb300cb818097436591ca3ab4a8f241b3c7db8152f62  ./package-lock.json
+f7847001516471eda3d5eaf688d1a437e7315072c57ddf7a84cf703559ce198a  ./package.json
 37dcf5f6f2f7d2cc94f102a1f741d84869231e44c5cd787129f03b85db2b19aa  ./postcss.config.mjs
 cbad28f1253d20650418237f376a10717e17949206e5b7025c5aba60d0e5782c  ./proxy.js
 2b2bdaaf3df5ec11d8732953da6e5741722ec138838b87e62bfb2d56c5c791ae  ./public/.well-known/apple-app-site-association
@@ -334,7 +344,7 @@ d9952e5ad6dfce7eb1b9134346b5d69a549f5df5c20fa49fac9942373ee5ed98  ./public/lotti
 2d063b695f216412263c8501e43fa351bd7d6e0260d93e57552e5002c842890e  ./scripts/check-javascript.mjs
 9e2352dfd62fae02c9a8b30f757ddc3672f80ec9f0cda13063ff277f5fc25c74  ./scripts/seed-firestore.mjs
 409be611b97c6d1ef7d1809a0360539ad4b3c2aa7eafc17ed9bbce6ddd789c39  ./scripts/theme-safety.mjs
-b33ab1cc07319c345c6d6823fd27c9ccd4218d298710ac91545377a3aef2ae60  ./storage.rules
+ee82eb7e937d39acc31c8ccc986ae8e88abd20c63e767b9ef5c2fe7fae621e26  ./storage.rules
 25c85cdf1e6e3ffcf1ed538cc267c1937273964b355580b023d081dce966d1f2  ./storage.test.rules
 8488b34eaeaa773d90c1a065b6a3bb0def12c57d9823df95fbbbf47129de87e7  ./tests/browser-state.test.mjs
 115058f073472f8b88f3a1bf5ff4bd3f35971c276deb35d66d023ede9c0d99d3  ./tests/business-lifecycle-orchestration.test.mjs
@@ -361,7 +371,8 @@ f634fd0faf88cde6844a6de45393ae65a12bdb532b8093ed07fdc87cd3271b9a  ./tests/lottie
 a15decc0ee6e63e9320d6277b6e1f11329a134699381c94750eb49bd8f47a36f  ./tests/reservation-release.test.mjs
 9e7f48f9b18784ec618f042b69d3015a80ac04965dbdb284c6736a898197e644  ./tests/rides-production.test.mjs
 d2338e014c7fedf49c372fbcbb77cd63961677af1b846073d75507a7f56389f2  ./tests/security-commerce-integrity.test.mjs
+e5d1bac9ba18207254cecd965e4fb6a9958538207223a5f1a6955d6ceaee259e  ./tests/send-production.test.mjs
 47480dea6b510d4bb2d50da8feef0d268f2ee779940c365851dc55510635bc3a  ./tests/subdomain-routing-integrity.test.mjs
 280c20491aff081c7c7f57c01da5f11c43e0a404066e7cfca38a40ee8d98d345  ./tests/theme-integrity.test.mjs
 025c491c33039a33a2a49f0739638c568384701ae8fb6aac3ec1b22b26e8cb06  ./tests/workspaces.test.mjs
-f0bafccb43d0281f0a06e2eb405b694ea3290319bae0ce70c91e7de3d8fff4d5  ./vercel.json
+5db7d879b90c63bceb2ced1f51b16991ecf1a2f983b40546dcdc00365ff4b958  ./vercel.json

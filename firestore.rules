@@ -530,6 +530,9 @@ service cloud.firestore {
     match /rideTrips/{rideId} { allow read, write: if false; }
     match /rideOffers/{offerId} { allow read, write: if false; }
     match /rideEvents/{eventId} { allow read, write: if false; }
+    match /parcelJobs/{jobId} { allow read, write: if false; }
+    match /parcelOffers/{offerId} { allow read, write: if false; }
+    match /parcelEvents/{eventId} { allow read, write: if false; }
     match /driverEarningsLedger/{entryId} { allow read, write: if false; }
     match /driverBalanceAccounts/{accountId} { allow read, write: if false; }
     match /driverPayouts/{payoutId} { allow read, write: if false; }
