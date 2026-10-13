@@ -1,0 +1,65 @@
+import { FieldValue } from "firebase-admin/firestore";
+import { z } from "zod";
+import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
+import { notifyUsers, operationalEligibility } from "@/lib/driver-delivery-server";
+import { appendRideEvent, dispatchRide, rideTransitionAllowed } from "@/lib/ride-server";
+
+export const runtime = "nodejs";
+const schema = z.object({ offerId: z.string().min(3).max(180), action: z.enum(["view", "accept", "decline"]) });
+
+export async function POST(request) {
+  try {
+    const user = await authenticateRequest(request);
+    const body = schema.parse(await request.json());
+    const { db, messaging } = getAdminServices();
+    const offerRef = db.collection("rideOffers").doc(body.offerId);
+    let rideId = ""; let notification = null;
+    await db.runTransaction(async (transaction) => {
+      const offerSnap = await transaction.get(offerRef);
+      if (!offerSnap.exists) throw Object.assign(new Error("This ride offer is no longer available."), { status: 404 });
+      const offer = offerSnap.data();
+      if (offer.driverId !== user.uid) throw Object.assign(new Error("This ride offer is not assigned to your Driver account."), { status: 403 });
+      if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now()) {
+        transaction.set(offerRef, { state: "expired", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        throw Object.assign(new Error("This ride offer expired."), { status: 409 });
+      }
+      rideId = offer.rideId;
+      const rideRef = db.collection("rideTrips").doc(rideId); const rideSnap = await transaction.get(rideRef);
+      if (!rideSnap.exists) throw Object.assign(new Error("The ride is no longer available."), { status: 404 });
+      const ride = rideSnap.data();
+      if (body.action === "view") { if (offer.state === "offered") transaction.set(offerRef, { state: "viewed", viewedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return; }
+      if (!["offered", "viewed"].includes(offer.state)) throw Object.assign(new Error("This ride offer is no longer available."), { status: 409 });
+      if (body.action === "decline") { transaction.set(offerRef, { state: "declined", declinedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); await appendRideEvent(transaction, db, { rideId, type: "offer.declined", actorType: "driver", actorId: user.uid, state: ride.state }); return; }
+      if (!rideTransitionAllowed(ride.state, "driver_assigned") || ride.assignedDriverId) throw Object.assign(new Error("Another Driver already accepted this ride."), { status: 409 });
+      const [presenceSnap, driverSnap, vehicleQuery, docsQuery] = await Promise.all([
+        transaction.get(db.collection("driverPresence").doc(user.uid)),
+        transaction.get(db.collection("drivers").doc(user.uid)),
+        db.collection("driverVehicles").where("driverId", "==", user.uid).limit(10).get(),
+        db.collection("driverDocuments").where("driverId", "==", user.uid).limit(30).get()
+      ]);
+      const presence = presenceSnap.exists ? presenceSnap.data() : null; const driver = driverSnap.exists ? driverSnap.data() : null;
+      const vehicle = vehicleQuery.docs.map((item) => ({ id: item.id, ...item.data() })).find((item) => item.status === "approved") || null;
+      const documents = docsQuery.docs.map((item) => item.data()); const eligibility = operationalEligibility({ driver, vehicle, documents, presence });
+      if (!presence?.online || presence.currentJobId || !eligibility.eligible) throw Object.assign(new Error("You must be online, free and operationally eligible to accept this ride."), { status: 409 });
+      if (ride.requiredVehicleTypes?.length && !ride.requiredVehicleTypes.includes(vehicle?.type)) throw Object.assign(new Error("Your approved vehicle is not suitable for this ride."), { status: 409 });
+      const now = FieldValue.serverTimestamp();
+      transaction.set(offerRef, { state: "accepted", acceptedAt: now, updatedAt: now }, { merge: true });
+      transaction.set(rideRef, { state: "driver_assigned", assignedDriverId: user.uid, assignedVehicleId: vehicle?.id || null, acceptedDriverPay: Number(offer.pay ?? ride.quote?.driverPay ?? 0), assignedAt: now, updatedAt: now }, { merge: true });
+      if (ride.orderId) transaction.set(db.collection("orders").doc(ride.orderId), { rideStatus: "driver_assigned", status: "accepted", assignedDriverId: user.uid, updatedAt: now }, { merge: true });
+      transaction.set(db.collection("driverPresence").doc(user.uid), { currentJobId: rideId, currentWorkType: "ride", availabilityState: "on_ride", updatedAt: now }, { merge: true });
+      await appendRideEvent(transaction, db, { rideId, type: "offer.accepted", actorType: "driver", actorId: user.uid, previousState: ride.state, state: "driver_assigned", metadata: { offerId: body.offerId, pay: Number(offer.pay ?? ride.quote?.driverPay ?? 0) } });
+      transaction.create(db.collection("auditLogs").doc(), { actorId: user.uid, action: "ride.offer.accepted", entityType: "rideTrip", entityId: rideId, metadata: { offerId: body.offerId }, source: "ride_network", createdAt: now });
+      notification = { customerId: ride.customerId, number: ride.number };
+    });
+    if (body.action === "accept" && notification) {
+      const siblings = await db.collection("rideOffers").where("rideId", "==", rideId).limit(100).get(); const batch = db.batch(); let changed = false;
+      siblings.docs.forEach((item) => { if (item.id !== body.offerId && ["offered", "viewed"].includes(item.data().state)) { batch.set(item.ref, { state: "withdrawn", withdrawnAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); changed = true; } }); if (changed) await batch.commit();
+      await notifyUsers(db, messaging, [notification.customerId], { title: "Driver found", body: `Your Driver is confirmed for ${notification.number || "your ride"}.`, href: "/ride", category: "ride", workspace: "customer", module: "rides" });
+    }
+    if (body.action === "decline" && rideId) await dispatchRide({ db, messaging, rideId, actorId: user.uid });
+    return Response.json({ ok: true, action: body.action, rideId: rideId || null });
+  } catch (error) {
+    if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the ride offer action." }, { status: 400 });
+    return apiError(error);
+  }
+}

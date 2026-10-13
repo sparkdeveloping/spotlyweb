@@ -4,9 +4,26 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "functions": {
-    "app/api/payments/**/*.js": { "maxDuration": 30 },
-    "app/api/admin/**/*.js": { "maxDuration": 60 },
-    "app/api/notifications/**/*.js": { "maxDuration": 30 },
-    "app/api/email/**/*.js": { "maxDuration": 30 }
-  }
+    "app/api/payments/**/*.js": {
+      "maxDuration": 30
+    },
+    "app/api/admin/**/*.js": {
+      "maxDuration": 60
+    },
+    "app/api/notifications/**/*.js": {
+      "maxDuration": 30
+    },
+    "app/api/email/**/*.js": {
+      "maxDuration": 30
+    },
+    "app/api/internal/ride-dispatch/route.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/internal/ride-dispatch",
+      "schedule": "*/2 * * * *"
+    }
+  ]
 }

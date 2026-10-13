@@ -1,21 +1,9 @@
-import { Suspense } from "react";
-import { MarketplaceApp } from "@/components/marketplace-app";
-
-const copy = {
-  eat: ["Eat", "Order food from live restaurants and food businesses on Spotly."],
-  shop: ["Shop", "Browse products and stores available through Spotly."],
-  book: ["Book", "Discover services, stays and activities and manage requests through Spotly."],
-  events: ["Events", "Discover upcoming events and ticket options on Spotly."],
-  ride: ["Ride", "Open Spotly Ride and see availability in your area."],
-  send: ["Send", "Open Spotly Send and see availability in your area."]
-};
+import { RideApp } from "@/components/ride-app";
 
 export const metadata = {
-  title: copy["ride"][0],
-  description: copy["ride"][1],
+  title: "Ride with Spotly",
+  description: "Request a Spotly Ride, see your fare estimate, match with an approved Driver and track the trip.",
   alternates: { canonical: "/ride" }
 };
 
-export default function ServicePage() {
-  return <Suspense fallback={<main className="min-h-screen bg-[var(--background)]" />}><MarketplaceApp basePath="/ride" initialService="ride" /></Suspense>;
-}
+export default function RidePage() { return <RideApp />; }

@@ -527,6 +527,9 @@ service cloud.firestore {
     match /deliveryJobs/{jobId} { allow read, write: if false; }
     match /deliveryOffers/{offerId} { allow read, write: if false; }
     match /deliveryEvents/{eventId} { allow read, write: if false; }
+    match /rideTrips/{rideId} { allow read, write: if false; }
+    match /rideOffers/{offerId} { allow read, write: if false; }
+    match /rideEvents/{eventId} { allow read, write: if false; }
     match /driverEarningsLedger/{entryId} { allow read, write: if false; }
     match /driverBalanceAccounts/{accountId} { allow read, write: if false; }
     match /driverPayouts/{payoutId} { allow read, write: if false; }

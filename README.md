@@ -22,7 +22,7 @@ spotlyafrica.com/staff/schedule   → staff.spotlyafrica.com/schedule
 
 The internal App Router still uses `/business`, `/driver`, `/staff`, and `/admin` route trees. `proxy.js` maps clean product-domain URLs into those internal routes so the application does not need five duplicated codebases.
 
-This repository is **Spotly Web Platform 6.0.0**. It includes the production customer marketplace and conversion system, dedicated Eat/Shop/Book/Events experiences, Customer Utility layer, production hardening and growth systems, Driver + Delivery operations, Business hardening, notifications, and the full subdomain/SSO architecture.
+This repository is **Spotly Web Platform 6.1.0**. It includes the production customer marketplace and conversion system, dedicated Eat/Shop/Book/Events experiences, Customer Utility layer, production hardening and growth systems, the first production Spotly Ride network across Customer + Driver + Admin, Driver + Delivery operations, Business hardening, notifications, and the full subdomain/SSO architecture.
 
 ## Canonical routes
 
@@ -114,6 +114,35 @@ Driver payout lifecycle
 ```
 
 Admin can review Driver applications and evidence, inspect Driver eligibility and live location, dispatch/reassign deliveries, inspect the unified delivery timeline, apply holds, investigate incidents, verify payout destinations and process Driver payouts.
+
+
+## Spotly Ride 6.1
+
+Spotly Ride is implemented as an operational network rather than a customer-only screen:
+
+```text
+Customer quote + request
+        ↓
+Server-authoritative rideTrip + Activity order
+        ↓
+Dispatch watchdog + nearby eligible Driver offers
+        ↓
+Driver accepts atomically
+        ↓
+To pickup → arrived → pickup PIN → in trip → drop-off → complete
+        ↓
+Driver Money + Customer Activity + rating/support
+        ↓
+Admin live ride operations, reassignment and exceptions
+```
+
+The global ride switch remains **off by default**. Admin Ride Operations controls enabled cities, optional city service areas, pricing, Driver share, and cash availability. The customer API independently rechecks those settings before quoting or creating a ride.
+
+The ride lifecycle is mediated by server APIs. Direct browser access to `rideTrips`, `rideOffers`, and `rideEvents` is denied by Firestore rules. Pickup verification uses a customer-visible four-digit PIN before a Driver can start the trip.
+
+Cash ride completion does not create a second Driver payout: the Driver keeps the collected cash and Spotly's platform fee is posted to the Driver Money ledger. Non-cash ride completion credits Driver earnings normally.
+
+Ride offer redispatch is driven by `/api/internal/ride-dispatch`, protected by `CRON_SECRET`, with a Vercel cron configured in `vercel.json`.
 
 ## Kiosk
 

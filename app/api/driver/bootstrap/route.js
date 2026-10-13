@@ -1,6 +1,7 @@
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { applicationReadiness, docData, docsData, operationalEligibility, publicOffer } from "@/lib/driver-delivery-server";
 import { driverBalanceAccountId, sanitizeDriverBalance } from "@/lib/driver-money-server";
+import { plainRide, publicRideOffer } from "@/lib/ride-server";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,7 @@ export async function GET(request) {
   try {
     const user = await authenticateRequest(request);
     const { db } = getAdminServices();
-    const [applicationSnap, driverSnap, vehicleQuery, documentsQuery, presenceSnap, offersQuery, jobsQuery, earningsQuery, payoutsQuery, incidentsQuery, payoutAccountSnap, usdBalanceSnap, zwgBalanceSnap, settingsSnap] = await Promise.all([
+    const [applicationSnap, driverSnap, vehicleQuery, documentsQuery, presenceSnap, offersQuery, jobsQuery, rideOffersQuery, ridesQuery, earningsQuery, payoutsQuery, incidentsQuery, payoutAccountSnap, usdBalanceSnap, zwgBalanceSnap, settingsSnap] = await Promise.all([
       db.collection("driverApplications").doc(user.uid).get(),
       db.collection("drivers").doc(user.uid).get(),
       db.collection("driverVehicles").where("driverId", "==", user.uid).limit(10).get(),
@@ -16,6 +17,8 @@ export async function GET(request) {
       db.collection("driverPresence").doc(user.uid).get(),
       db.collection("deliveryOffers").where("driverId", "==", user.uid).where("state", "in", ["offered", "viewed"]).limit(20).get(),
       db.collection("deliveryJobs").where("assignedDriverId", "==", user.uid).limit(100).get(),
+      db.collection("rideOffers").where("driverId", "==", user.uid).where("state", "in", ["offered", "viewed"]).limit(20).get(),
+      db.collection("rideTrips").where("assignedDriverId", "==", user.uid).limit(100).get(),
       db.collection("driverEarningsLedger").where("driverId", "==", user.uid).limit(250).get(),
       db.collection("driverPayouts").where("driverId", "==", user.uid).limit(50).get(),
       db.collection("driverIncidents").where("driverId", "==", user.uid).limit(50).get(),
@@ -37,6 +40,19 @@ export async function GET(request) {
     const sanitizeJob = (item) => item ? { ...item, pickupCode: undefined, customerPin: undefined } : null;
     const activeJob = sanitizeJob(activeRaw);
     const jobs = rawJobs.map(sanitizeJob);
+    const rawRides = ridesQuery.docs.map((item) => ({ id: item.id, ...plainRide(item.data()) })).sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    const sanitizeRide = (item) => item ? { ...item, pickupPin: undefined } : null;
+    const rides = rawRides.map(sanitizeRide);
+    const activeRide = rides.find((item) => !["completed", "failed", "cancelled"].includes(item.state)) || null;
+    const rideOffers = [];
+    for (const offerDoc of rideOffersQuery.docs) {
+      const offer = { id: offerDoc.id, ...offerDoc.data() };
+      if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now()) continue;
+      const rideSnap = await db.collection("rideTrips").doc(offer.rideId).get();
+      if (!rideSnap.exists) continue;
+      rideOffers.push(publicRideOffer({ id: rideSnap.id, ...rideSnap.data() }, offer));
+    }
+
     const offers = [];
     for (const offerDoc of offersQuery.docs) {
       const offer = { id: offerDoc.id, ...offerDoc.data() };
@@ -61,8 +77,11 @@ export async function GET(request) {
       readiness,
       eligibility,
       offers,
+      rideOffers,
       activeJob,
+      activeRide,
       jobs,
+      rides,
       earnings: docsData(earningsQuery).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
       balances: { USD: usdBalanceSnap.exists ? sanitizeDriverBalance(usdBalanceSnap.data()) : null, ZWG: zwgBalanceSnap.exists ? sanitizeDriverBalance(zwgBalanceSnap.data()) : null },
       payoutAccount: payoutAccountSnap.exists ? { ...docData(payoutAccountSnap), identifierEncrypted: undefined } : null,

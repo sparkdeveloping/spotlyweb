@@ -15,7 +15,7 @@ export async function POST(request) {
     const ref = db.collection("driverPresence").doc(user.uid);
     const snap = await ref.get();
     if (!snap.exists || snap.data().online !== true) throw Object.assign(new Error("Go online before sharing operational location."), { status: 409 });
-    await ref.set({ currentLocation: location, availabilityState: snap.data().currentJobId ? "on_delivery" : "online_current", locationUpdatedAt: FieldValue.serverTimestamp(), lastHeartbeatAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await ref.set({ currentLocation: location, availabilityState: snap.data().currentJobId ? (snap.data().currentWorkType === "ride" ? "on_ride" : "on_delivery") : "online_current", locationUpdatedAt: FieldValue.serverTimestamp(), lastHeartbeatAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return Response.json({ ok: true });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "The location coordinates are invalid." }, { status: 400 });

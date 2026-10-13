@@ -1,0 +1,41 @@
+Spotly Web Platform 6.1.0 — Ride Network release validation
+Date: 2026-10-13
+
+Executed on the clean source tree:
+
+1. npm run check:js
+   PASS — JavaScript-only and React-hook import checks passed.
+
+2. npm run check:theme
+   PASS — Theme safety passed for 206 source files and 41 classified route patterns.
+
+3. npm test
+   PASS — 220 / 220 tests passed, 0 failed.
+   Includes 10 dedicated Spotly Ride production regression tests covering:
+   - server-authoritative customer request + Activity continuity
+   - city/area rollout and pricing settings
+   - Driver eligibility, pickup radius and expiring dispatch offers
+   - atomic Driver offer acceptance / reservation
+   - trip state machine and pickup PIN verification
+   - cash vs non-cash Driver Money accounting
+   - completed-ride customer rating
+   - Admin Ride Operations and network controls
+   - CRON_SECRET-protected dispatch watchdog
+   - Firestore ride rules and composite indexes
+
+4. JSON configuration parse
+   PASS — package-lock.json, firestore.indexes.json and vercel.json parse successfully.
+
+5. Package metadata
+   PASS — package.json and package-lock.json identify release 6.1.0.
+
+Framework compiler status:
+- node_modules is intentionally excluded from the release archive.
+- A fresh local npm dependency installation was not repeated because the prior dependency-install attempt in this execution environment was the source of the stalled run.
+- Therefore `next build` and ESLint are not claimed as locally executed gates for this archive.
+- Vercel's clean dependency install + Next.js production build remains the required final compiler gate before production promotion.
+
+Operational deployment gates:
+- Deploy firestore.rules and firestore.indexes.json with the application.
+- Configure CRON_SECRET.
+- Keep rides disabled until the launch city/areas, Driver supply, payments, support and dispatch cadence are smoke-tested.
