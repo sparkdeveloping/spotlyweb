@@ -1,14 +1,34 @@
-# Spotly Web Update Notes
+# Spotly Web 2.0 — Build-Fix v3
 
-## Build-fix revision
+This package is the cleaned production source for the updated Spotly 2.0 web direction.
 
-This revision removes `@/...` path-alias imports from the source files and uses explicit relative imports instead. This prevents deployment environments from failing to resolve `@/components/SpotlyWebShowcase` when TypeScript configuration is regenerated or the project is deployed from a different root.
+## Build fixes in v3
 
-For Vercel, set the project root to the folder containing `package.json` (the `web` folder if deploying this archive as part of a larger repository).
+- Replaced path-alias imports with relative imports for the new production files.
+- Removed obsolete legacy React components that were no longer imported by the rebuilt landing page but were still included in TypeScript project checking.
+- Removed obsolete `data/site.ts`, which only supported the retired landing-page components.
+- The live source surface is now intentionally small:
+  - `app/page.tsx`
+  - `app/layout.tsx`
+  - `components/SpotlyWebShowcase.tsx`
+  - route support files and public assets
+- Kept `tsconfig.json` in the package.
 
-## Spotly 2.0 changes
+## Updated experience
 
-- Rebuilt landing page around the Spotly 2.0 product story.
-- Added an interactive service showcase for Ride, Eat, Shop, Book, Events, and Send.
-- Added customer prototype preview imagery in `/public`.
-- Updated metadata to use `spotlyafrica.com` and Spotly violet.
+- Spotly 2.0 landing page
+- Product story for Ride, Eat, Shop, Book, Events, Send
+- Interactive service-mode showcase
+- Customer app preview artwork
+- Updated metadata for `spotlyafrica.com`
+
+## Deployment
+
+Set the Vercel root directory to the `web` folder (the folder containing `package.json`).
+
+Run:
+
+```bash
+npm ci
+npm run build
+```
