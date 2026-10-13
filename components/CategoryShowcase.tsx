@@ -1,5 +1,5 @@
 import { CalendarDays, HeartPulse, MoreHorizontal, Scissors, ShoppingBasket, Sparkles, Stethoscope, Store, Ticket, Utensils } from "lucide-react";
-import { topCategories, categories } from "@/data/site";
+import { topCategories, categories } from "../data/site";
 import { AnimatedSection } from "./AnimatedSection";
 
 const iconMap = {

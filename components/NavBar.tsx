@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { navigation } from "@/data/site";
+import { navigation } from "../data/site";
 import { SpotlyLogo } from "./SpotlyLogo";
 
 export function NavBar() {

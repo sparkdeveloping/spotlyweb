@@ -1,4 +1,4 @@
-import { launchSteps } from "@/data/site";
+import { launchSteps } from "../data/site";
 import { AnimatedSection } from "./AnimatedSection";
 import { ArrowRight, Check } from "lucide-react";
 

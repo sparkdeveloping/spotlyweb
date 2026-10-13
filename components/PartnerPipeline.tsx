@@ -1,4 +1,4 @@
-import { partnerGroups } from "@/data/site";
+import { partnerGroups } from "../data/site";
 import { AnimatedSection } from "./AnimatedSection";
 import { Building2, CheckCircle2 } from "lucide-react";
 

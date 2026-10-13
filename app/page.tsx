@@ -15,7 +15,7 @@ import {
   Store,
   UtensilsCrossed
 } from "lucide-react";
-import { SpotlyWebShowcase } from "@/components/SpotlyWebShowcase";
+import { SpotlyWebShowcase } from "../components/SpotlyWebShowcase";
 
 const services = [
   {

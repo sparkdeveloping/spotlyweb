@@ -1,4 +1,4 @@
-import { appFeatures, screenCards } from "@/data/site";
+import { appFeatures, screenCards } from "../data/site";
 import { AnimatedSection } from "./AnimatedSection";
 import { ArrowUpRight, CheckCircle2, Layers3, Smartphone } from "lucide-react";
 
