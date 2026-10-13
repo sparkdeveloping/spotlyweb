@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { MarketplaceApp } from "@/components/marketplace-app";
 import { getPublicBusinessForSeo } from "@/lib/public-seo-server";
+import { CustomerPageSkeleton } from "@/components/customer-loading";
 
 export const revalidate = 60;
 
@@ -21,5 +22,5 @@ export default async function PlacePage({ params }) {
   const business = await getPublicBusinessForSeo(id);
   if (!business) notFound();
   const jsonLd = { "@context": "https://schema.org", "@type": "LocalBusiness", name: business.name, description: business.description || undefined, image: business.image || undefined, telephone: business.phone || undefined, address: { "@type": "PostalAddress", streetAddress: business.address || undefined, addressLocality: business.city || undefined, addressCountry: "ZW" }, url: `${base}/place/${id}`, ...(business.rating && business.reviewCount ? { aggregateRating: { "@type": "AggregateRating", ratingValue: business.rating, reviewCount: business.reviewCount } } : {}) };
-  return <><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replaceAll("<", "\\u003c") }} /><Suspense fallback={<main className="min-h-screen bg-[var(--background)]" />}><MarketplaceApp basePath="/" initialBusinessId={id} /></Suspense></>;
+  return <><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replaceAll("<", "\\u003c") }} /><Suspense fallback={<CustomerPageSkeleton />}><MarketplaceApp basePath="/" initialBusinessId={id} /></Suspense></>;
 }

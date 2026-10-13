@@ -1,6 +1,6 @@
 {
   "name": "spotly-web-platform",
-  "version": "6.2.0",
+  "version": "7.0.0",
   "private": true,
   "engines": {
     "node": "22.x",
@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "check:js": "node scripts/check-javascript.mjs",
-    "check": "npm run check:js && npm run check:theme && npm test && npm run lint && npm run build",
+    "check": "npm run check:js && npm run check:theme && npm run audit:launch && npm test && npm run lint && npm run build",
     "seed": "node scripts/seed-firestore.mjs",
     "firebase:emulators": "npx firebase-tools emulators:start",
     "firebase:deploy:indexes": "npx firebase-tools deploy --only firestore:indexes",
@@ -23,7 +23,9 @@
     "check:theme": "node scripts/theme-safety.mjs",
     "test:rules": "npx --yes firebase-tools emulators:exec --project demo-spotly-rules --only auth,firestore,storage \"node --test tests/emulator/rules-emulator.mjs\"",
     "test:security": "node --test tests/security-commerce-integrity.test.mjs",
-    "audit:locations": "node scripts/audit-business-locations.mjs"
+    "audit:locations": "node scripts/audit-business-locations.mjs",
+    "audit:launch": "node scripts/launch-readiness-audit.mjs",
+    "audit:v7-ui": "node scripts/audit-v7-ui.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

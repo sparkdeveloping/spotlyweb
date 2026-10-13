@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { MarketplaceApp } from "@/components/marketplace-app";
+import { CustomerPageSkeleton } from "@/components/customer-loading";
 
 export const metadata = {
   title: process.env.NEXT_PUBLIC_MARKETPLACE_INDEXABLE === "true" ? "Marketplace" : "Private marketplace",
@@ -7,5 +8,5 @@ export const metadata = {
 };
 
 export default function MarketplacePage() {
-  return <Suspense fallback={<main className="min-h-screen bg-[var(--background)]" />}><MarketplaceApp /></Suspense>;
+  return <Suspense fallback={<CustomerPageSkeleton />}><MarketplaceApp /></Suspense>;
 }

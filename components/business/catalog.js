@@ -11,7 +11,6 @@ import {
   Edit3,
   FileSpreadsheet,
   ImagePlus,
-  LoaderCircle,
   MapPin,
   PackageCheck,
   Plus,
@@ -541,7 +540,7 @@ export function CatalogView() {
     <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><PageHeader title={archetype.nouns.catalog} description={`Manage every ${archetype.nouns.item} for the selected ${archetype.nouns.branch}. New items appear here immediately, even before they are published to customers.`} actions={<div className="flex flex-wrap gap-2"><Button onClick={() => openOffering()}><Plus className="h-4 w-4" />Add {archetype.nouns.item}</Button><Button variant="outline" onClick={() => setQuickOpen(true)}><FileSpreadsheet className="h-4 w-4" />Quick add</Button><Button variant="outline" onClick={() => setCsvOpen(true)}><UploadCloud className="h-4 w-4" />Import</Button><Button variant="outline" onClick={() => setLibraryOpen(true)}><BookOpenCheck className="h-4 w-4" />Spotly Library</Button></div>} /><BusinessSwitcher /></div>
     {lifecycle?.businessState !== "live" && <Card variant="bordered" className="p-4"><p className="font-semibold">Prepare your {archetype.nouns.catalog.toLowerCase()}</p><p className="mt-1 text-sm leading-6 text-secondary">These {archetype.nouns.items} remain private to customers until this business completes the final Spotly launch review and becomes live.</p></Card>}
     {productsError && <Card variant="bordered" className="border-danger/30 bg-[var(--danger-soft)] p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><AlertTriangle className="h-6 w-6 shrink-0 text-danger" /><div className="min-w-0 flex-1"><h2 className="font-semibold text-[var(--on-danger-soft)]">Your products could not be loaded</h2><p className="mt-1 text-sm leading-6 text-[var(--on-danger-soft)]">{productsError} Spotly will not show an empty catalogue when the read itself failed.</p></div><Button variant="outline" onClick={() => window.location.reload()}>Reload products</Button></div></Card>}
-    {productsLoading && !products.length && !productsError && <Card variant="bordered" className="flex min-h-40 items-center justify-center p-8"><div className="text-center"><LoaderCircle className="mx-auto h-6 w-6 animate-spin text-business" /><p className="mt-3 text-sm font-semibold">Loading the latest {archetype.nouns.catalog.toLowerCase()}…</p></div></Card>}
+    {productsLoading && !products.length && !productsError && <div className="grid gap-3 md:grid-cols-2" aria-busy="true">{[0,1,2,3].map((item) => <div key={item} className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-4"><div className="v7-skeleton h-5 w-1/2 rounded-[10px]"/><div className="v7-skeleton mt-3 h-4 w-3/4 rounded-[10px]"/><div className="v7-skeleton mt-5 h-10 w-32 rounded-[12px]"/></div>)}</div>}
 
     {!productsError && !(productsLoading && !products.length) && <Tabs idPrefix="catalog-mode" value={catalogMode} onChange={setCatalogMode} tabs={catalogModes} />}
 

@@ -28,6 +28,8 @@ export async function GET(request) {
     const integrations = settings.integrations || {};
     const legal = settings.legal || {};
     const support = settings.support || {};
+    const mobility = settings.mobility || {};
+    const send = mobility.send || {};
 
     const paynowCredentials = (present(process.env.PAYNOW_INTEGRATION_ID) && present(process.env.PAYNOW_INTEGRATION_KEY))
       || (present(process.env.PAYNOW_INTEGRATION_ID_USD) && present(process.env.PAYNOW_INTEGRATION_KEY_USD));
@@ -41,6 +43,21 @@ export async function GET(request) {
     const rulesVerified = present(process.env.SPOTLY_RULES_VERIFIED_AT) && present(process.env.SPOTLY_STORAGE_RULES_VERIFIED_AT);
     const monitoringConfigured = present(process.env.SENTRY_DSN) || present(process.env.NEXT_PUBLIC_SENTRY_DSN) || present(process.env.SPOTLY_MONITORING_VERIFIED_AT);
     const backupVerified = present(process.env.SPOTLY_BACKUP_VERIFIED_AT);
+    const firebaseAdminConfigured = (present(process.env.FIREBASE_ADMIN_PROJECT_ID) && present(process.env.FIREBASE_ADMIN_CLIENT_EMAIL) && present(process.env.FIREBASE_ADMIN_PRIVATE_KEY)) || present(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    const storageConfigured = present(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    const productionOrigin = String(process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/$/, "");
+    const productionOriginReady = productionOrigin === "https://spotlyafrica.com";
+    const marketplaceIndexable = process.env.NEXT_PUBLIC_MARKETPLACE_INDEXABLE === "true";
+    const financeEncryptionConfigured = present(process.env.SPOTLY_FINANCE_ENCRYPTION_KEY);
+    const cronSecretConfigured = present(process.env.CRON_SECRET) && String(process.env.CRON_SECRET).trim().length >= 24;
+    const bootstrapAllowlistPresent = present(process.env.BOOTSTRAP_ADMIN_EMAILS);
+    const ridesEnabled = mobility.ridesEnabled === true || settings.launch?.ridesEnabled === true;
+    const rideCities = Array.isArray(mobility.enabledCities) ? mobility.enabledCities.filter(Boolean) : [];
+    const sendEnabled = send.enabled === true || settings.launch?.sendEnabled === true;
+    const sendCities = Array.isArray(send.enabledCities) ? send.enabledCities.filter(Boolean) : [];
+    const mobilityNeedsCron = ridesEnabled || sendEnabled;
+    const rideRolloutReady = !ridesEnabled || (rideCities.length > 0 && cronSecretConfigured);
+    const sendRolloutReady = !sendEnabled || (sendCities.length > 0 && cronSecretConfigured);
 
     let marketplaceCheck;
     try {
@@ -59,6 +76,15 @@ export async function GET(request) {
     }
 
     const checks = [
+      item("firebase-admin", "Firebase Admin runtime", firebaseAdminConfigured ? "ready" : "blocked", firebaseAdminConfigured ? "Server-side Firebase credentials are configured." : "Firebase Admin credentials are missing; authenticated server operations cannot run."),
+      item("storage", "Firebase Storage", storageConfigured ? "ready" : "blocked", storageConfigured ? "The production Storage bucket is configured." : "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is missing."),
+      item("production-origin", "Production origin", productionOriginReady ? "ready" : "blocked", productionOriginReady ? "Canonical customer origin is https://spotlyafrica.com." : `NEXT_PUBLIC_APP_URL must be https://spotlyafrica.com for production; current value is ${productionOrigin || "not configured"}.`),
+      item("marketplace-indexing", "Marketplace indexing", marketplaceIndexable ? "ready" : "needs_verification", marketplaceIndexable ? "Public marketplace indexing is enabled." : "NEXT_PUBLIC_MARKETPLACE_INDEXABLE is not true. Keep this off for staging, but enable it for the public launch candidate."),
+      item("finance-encryption", "Finance encryption key", financeEncryptionConfigured ? "ready" : "blocked", financeEncryptionConfigured ? "Server-side finance encryption is configured." : "SPOTLY_FINANCE_ENCRYPTION_KEY is missing; protected payout/finance fields must not launch without it."),
+      item("dispatch-cron", "Ride & Send dispatch scheduler", !mobilityNeedsCron ? "not_configured" : cronSecretConfigured ? "ready" : "blocked", !mobilityNeedsCron ? "Ride and Send are not enabled, so the dispatcher is not currently launch-critical." : cronSecretConfigured ? "A sufficiently long CRON_SECRET is configured for dispatch maintenance." : "Ride or Send is enabled but CRON_SECRET is missing or too short."),
+      item("ride-rollout", "Ride launch geography", rideRolloutReady ? (ridesEnabled ? "ready" : "not_configured") : "blocked", !ridesEnabled ? "Ride is disabled." : rideCities.length ? `${rideCities.length} Ride launch cit${rideCities.length === 1 ? "y is" : "ies are"} configured and dispatch authentication is ready.` : "Ride is enabled without an explicit launch city."),
+      item("send-rollout", "Send launch geography", sendRolloutReady ? (sendEnabled ? "ready" : "not_configured") : "blocked", !sendEnabled ? "Send is disabled." : sendCities.length ? `${sendCities.length} Send launch cit${sendCities.length === 1 ? "y is" : "ies are"} configured and dispatch authentication is ready.` : "Send is enabled without an explicit launch city."),
+      item("bootstrap-admin", "Administrator bootstrap lock-down", bootstrapAllowlistPresent ? "needs_verification" : "ready", bootstrapAllowlistPresent ? "BOOTSTRAP_ADMIN_EMAILS is still configured. Remove the bootstrap allowlist after the initial super administrator is established." : "No administrator bootstrap allowlist is present in the production environment."),
       item("firestore-rules", "Firestore & Storage security tests", rulesVerified ? "ready" : "needs_verification", rulesVerified ? "Verification markers are configured for this environment." : "Run the Firebase Emulator rules matrix, then set the verification timestamps for the deployed environment."),
       item("paynow", "Paynow", integrations.paynowEnabled && paynowCredentials ? "ready" : integrations.paynowEnabled ? "blocked" : "not_configured", integrations.paynowEnabled ? (paynowCredentials ? "Enabled with server credentials present." : "Enabled, but server credentials are incomplete.") : "Provider is disabled in platform settings."),
       item("email", "Transactional email", integrations.emailEnabled && emailCredentials ? "ready" : integrations.emailEnabled ? "blocked" : "not_configured", integrations.emailEnabled ? (emailCredentials ? "Enabled with Resend credentials present." : "Enabled, but Resend credentials are incomplete.") : "Email delivery is disabled."),

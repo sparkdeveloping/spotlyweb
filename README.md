@@ -22,7 +22,30 @@ spotlyafrica.com/staff/schedule   → staff.spotlyafrica.com/schedule
 
 The internal App Router still uses `/business`, `/driver`, `/staff`, and `/admin` route trees. `proxy.js` maps clean product-domain URLs into those internal routes so the application does not need five duplicated codebases.
 
-This repository is **Spotly Web Platform 6.2.0**. It includes the production customer marketplace and conversion system, dedicated Eat/Shop/Book/Events experiences, Customer Utility layer, production hardening and growth systems, Spotly Ride, the production Spotly Send/Parcel network across Customer + Driver + Admin, Driver + Delivery operations, Business hardening, notifications, and the full subdomain/SSO architecture.
+This repository is **Spotly Web Platform 7.0.0**. V7 keeps the production marketplace, payments, Ride, Send, Business, Driver, Staff and Admin operating systems from the 6.x releases, while rebuilding the presentation layer as a coherent experience system: one Customer Shell, progressive onboarding, honest personalization, designed empty/loading/error states, bespoke service identity, restrained motion, normalized geometry and stronger role-aware workspaces.
+
+
+## Spotly V7 experience system
+
+V7 is an experience-system refactor rather than a cosmetic theme pass. Production transaction and operational logic is retained while customer and role surfaces are normalized around user state, intent, next action, feedback and continuity.
+
+Customer-facing changes include:
+
+- one persistent Customer Shell across Home, Search, Activity, Saved, Profile, Notifications, Help and Referrals;
+- desktop navigation split into identity/discovery, primary destinations and context/account utilities;
+- five-destination mobile navigation: Home, Search, Activity, Saved, Profile;
+- Currency removed from global navigation and moved into Profile → Preferences;
+- progressive, skippable first-run onboarding for city, interests and optional useful places;
+- honest Home personalization: `Again` only follows completed history and `Near you` only follows precise location;
+- a live `Now` accessory for active orders, deliveries, rides, bookings, tickets and Send activity;
+- bespoke Spotly service artwork for Ride, Eat, Shop, Book, Events and Send with reduced-motion support;
+- intentional empty, loading, error, offline, signed-out and unavailable states;
+- semantic Activity identity for orders, deliveries, bookings, tickets, rides and Send;
+- flat, categorized Saved and intelligence-first Search experiences;
+- one coherent Profile/settings architecture without raw currency or language dropdowns in premium navigation;
+- restrained motion tokens, canonical radii and a 1320px discovery canvas.
+
+The internal portals retain their role identities: Business stays approachable and setup-oriented, Driver is action/glance-first, Admin remains dense and operational, and Staff is task-first. Shared primitives and geometry keep them visibly related without forcing identical layouts.
 
 ## Canonical routes
 
@@ -300,3 +323,11 @@ Spotly-funded campaigns are operated from **Admin → Content & growth → Campa
 The 6.0 growth accounting collections (`promotionRedemptions`, `referralProfiles`, `referralCodes`, `referralClaims`, `referralRewards`, `businessReviews`, `availabilityReservations`) are server-authoritative. Deploy the matching Firestore rules with this release.
 
 See `SPOTLY-WEB-6.0-PRODUCTION-HARDENING-GROWTH-2026-10-13.md` for the release implementation record.
+
+6.3 additions
+- Launch readiness static audit
+- Customer-safe global error recovery
+- Offline connectivity banner
+- Public lead abuse protection
+- Public geocode App Check participation
+- Expanded Admin launch gates for credentials, storage, origin, finance encryption, Ride/Send cron + geography, indexing, and bootstrap lock-down

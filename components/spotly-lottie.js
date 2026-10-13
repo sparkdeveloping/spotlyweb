@@ -136,7 +136,7 @@ export function LottieEmptyState({ name, title, description, action, className, 
   const toneClass = tone === "business" ? "bg-business-soft" : tone === "driver" ? "bg-driver-soft" : tone === "admin" ? "bg-admin-soft" : "bg-[var(--accent-soft)]";
   return (
     <div className={cn("flex min-h-[280px] flex-col items-center justify-center px-5 py-10 text-center", className)}>
-      <span className={cn("flex h-24 w-24 items-center justify-center rounded-[26px]", toneClass)}>
+      <span className={cn("flex h-24 w-24 items-center justify-center rounded-[24px]", toneClass)}>
         <SpotlyLottie name={name} mode="loop" className="h-20 w-20" />
       </span>
       <h3 className="mt-5 text-lg font-semibold tracking-[-0.02em]">{title}</h3>

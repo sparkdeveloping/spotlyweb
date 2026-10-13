@@ -1,0 +1,10 @@
+Spotly Web 6.3 release validation
+
+Static launch audit: REQUIRED
+JavaScript / hook integrity: REQUIRED
+Theme safety: REQUIRED
+Node regression suite: REQUIRED
+Vercel next build: FINAL DEPLOYMENT GATE
+Firebase emulator rules matrix: PRODUCTION DEPLOYMENT GATE
+Live Paynow transaction: PRODUCTION DEPLOYMENT GATE
+Ride/Send live pilot: SERVICE ENABLEMENT GATE

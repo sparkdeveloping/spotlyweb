@@ -70,11 +70,11 @@ function PortalSwitcher({ portal, compact = false }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={cn("flex min-w-0 items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[var(--surface-2)]", compact && "lg:justify-center")}
+        className={cn("flex min-w-0 items-center gap-3 rounded-[12px] p-2 text-left transition hover:bg-[var(--surface-2)]", compact && "lg:justify-center")}
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <Image src={portal.logo} alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-xl object-cover" priority />
+        <Image src={portal.logo} alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-[12px] object-cover" priority />
         <span className={cn("min-w-0 flex-1", compact && "lg:hidden")}><span className="block truncate text-sm font-semibold">{portal.name}</span><span className="block truncate text-xs text-secondary">{portal.label} workspace</span></span><ChevronDown className={cn("h-4 w-4 shrink-0 text-tertiary transition", open && "rotate-180", compact && "lg:hidden")} />
       </button>
 
@@ -85,7 +85,7 @@ function PortalSwitcher({ portal, compact = false }) {
             initial={{ opacity: 0, y: -8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            className="surface absolute left-0 top-[calc(100%+8px)] z-50 w-[310px] overflow-hidden rounded-xl p-2 shadow-elevated"
+            className="surface absolute left-0 top-[calc(100%+8px)] z-50 w-[310px] overflow-hidden rounded-[12px] p-2 shadow-elevated"
           >
             <p className="px-3 pb-2 pt-1 text-[11px] font-semibold tracking-[0.08em] text-tertiary">Switch workspace</p>
             {available.map((item) => (
@@ -94,9 +94,9 @@ function PortalSwitcher({ portal, compact = false }) {
                 key={item.id}
                 href={spotlyPortalUrl(item.id)}
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded-lg p-2.5 transition hover:bg-[var(--surface-2)]"
+                className="flex items-center gap-3 rounded-[10px] p-2.5 transition hover:bg-[var(--surface-2)]"
               >
-                <Image src={item.logo} alt="" width={40} height={40} className="h-10 w-10 rounded-lg object-cover" />
+                <Image src={item.logo} alt="" width={40} height={40} className="h-10 w-10 rounded-[10px] object-cover" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{item.name}</span>
                   <span className="block truncate text-xs text-secondary">{item.description}</span>
@@ -126,14 +126,14 @@ function ThemeMenu() {
 
   return (
     <div ref={ref} className="relative">
-      <button aria-label="Appearance" onClick={() => setOpen((value) => !value)} className="surface flex h-11 w-11 items-center justify-center rounded-xl hover:bg-[var(--surface-2)]"><Icon className="h-5 w-5" /></button>
+      <button aria-label="Appearance" onClick={() => setOpen((value) => !value)} className="surface flex h-11 w-11 items-center justify-center rounded-[12px] hover:bg-[var(--surface-2)]"><Icon className="h-5 w-5" /></button>
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-44 rounded-2xl p-2 shadow-elevated">
+          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-44 rounded-[16px] p-2 shadow-elevated">
             {options.map((option) => {
               const OptionIcon = option.icon;
               return (
-                <button key={option.value} onClick={() => { setTheme(option.value); setOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-[var(--surface-2)]">
+                <button key={option.value} onClick={() => { setTheme(option.value); setOpen(false); }} className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm hover:bg-[var(--surface-2)]">
                   <OptionIcon className="h-4 w-4" />
                   <span className="flex-1 text-left font-medium">{option.label}</span>
                   {theme === option.value && <Check className="h-4 w-4 text-[var(--accent)]" />}
@@ -204,16 +204,16 @@ function NotificationPanel({ items, open, onClose, onRead, onReadAll, workspace,
         <div className="mt-3 flex gap-2 overflow-x-auto">{[["all", "All"], ["workspace", "This workspace"], ["reviews", "Reviews"]].map(([value, label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={cn("rounded-full border px-3 py-1.5 text-xs font-semibold", filter === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary")}>{label}</button>)}</div>
       </div>
       <div className="p-3">
-        {error ? <div className="rounded-xl border border-danger/25 bg-[var(--danger-soft)] p-4"><p className="text-sm font-semibold text-danger">Notifications could not be refreshed</p><p className="mt-1 text-xs leading-5 text-secondary">{error}</p></div> : scoped.length ? scoped.map((item) => { const ItemIcon = notificationIcon(item); return (
-          <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-xl p-3 text-left transition hover:bg-[var(--surface-2)]">
-            <span className={cn("relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", !item.read ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface-2)] text-secondary")}><ItemIcon className="h-5 w-5" />{!item.read && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface)]" />}</span>
+        {error ? <div className="rounded-[12px] border border-danger/25 bg-[var(--danger-soft)] p-4"><p className="text-sm font-semibold text-danger">Notifications could not be refreshed</p><p className="mt-1 text-xs leading-5 text-secondary">{error}</p></div> : scoped.length ? scoped.map((item) => { const ItemIcon = notificationIcon(item); return (
+          <button key={item.id} type="button" onClick={() => openItem(item)} className="flex w-full gap-3 rounded-[12px] p-3 text-left transition hover:bg-[var(--surface-2)]">
+            <span className={cn("relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px]", !item.read ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface-2)] text-secondary")}><ItemIcon className="h-5 w-5" />{!item.read && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)] ring-2 ring-[var(--surface)]" />}</span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{item.title || "Spotly update"}</span>
               <span className="mt-1 block text-sm leading-5 text-secondary">{item.body || item.message || "Open this update for more information."}</span>
               <span className="mt-2 block text-xs text-tertiary">{notificationTime(item.createdAt, clock)} · {notificationWorkspace(item)}{isReviewNotification(item) ? " · Review" : ""}</span>
             </span>
           </button>
-        ); }) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
+        ); }) : <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-[12px] bg-[var(--accent-soft)] text-[var(--accent)]"><Bell className="h-6 w-6" /></span><p className="mt-4 font-semibold">No notifications yet</p><p className="mt-2 max-w-xs text-sm leading-6 text-secondary">Order updates, verification decisions, support replies, and account changes will appear here.</p></div>}
       </div>
     </Overlay>
   );
@@ -236,8 +236,8 @@ function CommandPalette({ portal, open, onClose }) {
       </div>
       <div className="max-h-[58vh] overflow-y-auto p-2">
         {filtered.map((item) => { const Icon = item.icon; return (
-          <button key={`${item.label}-${item.href}`} onClick={() => navigate(item.href)} className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-[var(--surface-2)]">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-5 w-5" /></span>
+          <button key={`${item.label}-${item.href}`} onClick={() => navigate(item.href)} className="flex w-full items-center gap-3 rounded-[12px] p-3 text-left hover:bg-[var(--surface-2)]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-5 w-5" /></span>
             <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="block truncate text-xs text-secondary">{item.detail}</span></span>
             <Command className="h-4 w-4 text-tertiary" />
           </button>
@@ -262,21 +262,21 @@ function UserMenu({ portal }) {
   }
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen((value) => !value)} className="flex h-11 items-center gap-2 rounded-xl p-1 pr-2 hover:bg-[var(--surface-2)]">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent)] text-xs font-bold text-[var(--on-accent)]">{initials(displayName)}</span>
+      <button onClick={() => setOpen((value) => !value)} className="flex h-11 items-center gap-2 rounded-[12px] p-1 pr-2 hover:bg-[var(--surface-2)]">
+        <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[var(--accent)] text-xs font-bold text-[var(--on-accent)]">{initials(displayName)}</span>
         <ChevronDown className="hidden h-4 w-4 text-tertiary sm:block" />
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-2xl p-2 shadow-elevated">
+          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-[16px] p-2 shadow-elevated">
             <div className="border-b px-3 py-3">
               <p className="truncate font-semibold">{displayName}</p>
               <p className="mt-1 truncate text-xs text-secondary">{user?.email || role}</p>
               <p className="mt-1 text-[11px] font-semibold capitalize text-tertiary">{role.replaceAll("_", " ")}</p>
             </div>
-            <Link href={spotlyPortalUrl("customer", "/account")} className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
-            {WORKSPACE_SETTINGS_ROUTES[portal.id] && <Link href={resolveSpotlyHref(WORKSPACE_SETTINGS_ROUTES[portal.id], { currentPortal: portal.id, legacyMode: isLegacyPortalPath(portal.id, pathname) })} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>}
-            <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-danger hover:bg-[var(--danger-soft)]"><LogOut className="h-4 w-4" /> Sign out</button>
+            <Link href={spotlyPortalUrl("customer", "/account")} className="mt-2 flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><UserRound className="h-4 w-4" /> Account</Link>
+            {WORKSPACE_SETTINGS_ROUTES[portal.id] && <Link href={resolveSpotlyHref(WORKSPACE_SETTINGS_ROUTES[portal.id], { currentPortal: portal.id, legacyMode: isLegacyPortalPath(portal.id, pathname) })} className="flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)]"><Settings className="h-4 w-4" /> Workspace settings</Link>}
+            <button type="button" onClick={signOutNow} className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium text-danger hover:bg-[var(--danger-soft)]"><LogOut className="h-4 w-4" /> Sign out</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -298,26 +298,26 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = tr
   return (
     <>
       <AnimatePresence>{mobileOpen && <motion.button aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/35 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onMobileClose} />}</AnimatePresence>
-      <aside className={cn("surface fixed inset-y-0 left-0 z-50 flex w-[278px] flex-col border-y-0 border-l-0 transition-[width,transform] duration-300 lg:translate-x-0", collapsed && "lg:w-[88px]", mobileOpen ? "translate-x-0" : "-translate-x-full")}>
-        <div className="flex h-20 items-center px-3">
+      <aside className={cn("surface fixed inset-y-0 left-0 z-50 flex w-[278px] flex-col border-y-0 border-l-0 transition-[width,transform] duration-200 lg:translate-x-0", collapsed && "lg:w-[88px]", mobileOpen ? "translate-x-0" : "-translate-x-full")}>
+        <div className="flex h-[72px] items-center px-3">
           <PortalSwitcher portal={portal} compact={collapsed} />
-          <button className="ml-auto flex h-10 w-10 items-center justify-center rounded-xl hover:bg-[var(--surface-2)] lg:hidden" onClick={onMobileClose} aria-label="Close navigation"><X className="h-5 w-5" /></button>
+          <button className="ml-auto flex h-10 w-10 items-center justify-center rounded-[12px] hover:bg-[var(--surface-2)] lg:hidden" onClick={onMobileClose} aria-label="Close navigation"><X className="h-5 w-5" /></button>
         </div>
         <nav aria-label={`${portal.name} navigation`} className="no-scrollbar flex-1 overflow-y-auto px-3 py-2">
           {groups.map((group) => <div key={group.label} className="mb-5 last:mb-0">
             <p className={cn("px-3 pb-2 pt-1 text-[11px] font-semibold tracking-[0.08em] text-tertiary", collapsed && "lg:sr-only")}>{group.label}</p>
             <div className="space-y-1">{group.items.map((item) => {
               const Icon = item.icon; const active = activeSection === item.id;
-              return <Link key={item.id} href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined} className={cn("relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition", collapsed && "lg:justify-center lg:px-0", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : item.emphasis ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}>
-                {active && <motion.span layoutId={`sidebar-${portal.id}`} className="absolute inset-0 rounded-xl bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.15, duration: 0.45 }} />}
+              return <Link key={item.id} href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined} className={cn("relative flex min-h-11 items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition", collapsed && "lg:justify-center lg:px-0", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : item.emphasis ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}>
+                {active && <motion.span layoutId={`sidebar-${portal.id}`} className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.08, duration: 0.34 }} />}
                 <Icon className="relative h-5 w-5 shrink-0" /><span className={cn("relative flex-1", collapsed && "lg:hidden")}>{item.label}</span>{item.badge ? <Badge className={cn("relative min-w-6 justify-center px-1.5", collapsed && "lg:absolute lg:right-0 lg:top-0 lg:min-w-4 lg:px-1 lg:text-[9px]")} tone={active ? "accent" : "neutral"}>{item.badge}</Badge> : null}
               </Link>;
             })}</div>
           </div>)}
         </nav>
         <div className="border-t p-3">
-          <button type="button" onClick={onToggleCollapse} className="hidden w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)] lg:flex" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="mx-auto h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /><span>Collapse sidebar</span></>}</button>
-          {footer && <Link href={spotlyPortalUrl("customer", "/support")} onClick={onMobileClose} className={cn("mt-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)]", collapsed && "lg:justify-center lg:px-0")} title={collapsed ? "Help and support" : undefined}><Activity className="h-4 w-4" /><span className={cn(collapsed && "lg:hidden")}>Help and support</span></Link>}
+          <button type="button" onClick={onToggleCollapse} className="hidden w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)] lg:flex" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="mx-auto h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /><span>Collapse sidebar</span></>}</button>
+          {footer && <Link href={spotlyPortalUrl("customer", "/support")} onClick={onMobileClose} className={cn("mt-1 flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[var(--surface-2)]", collapsed && "lg:justify-center lg:px-0")} title={collapsed ? "Help and support" : undefined}><Activity className="h-4 w-4" /><span className={cn(collapsed && "lg:hidden")}>Help and support</span></Link>}
         </div>
       </aside>
     </>
@@ -330,14 +330,14 @@ function MobileBottomNav({ portal, activeSection, onOpenCommand }) {
   const remaining = portal.nav.slice(4);
   return (
     <>
-      <nav className="surface safe-bottom fixed inset-x-0 bottom-0 z-30 flex min-h-[70px] items-start justify-around border-x-0 border-b-0 px-2 pt-2 lg:hidden" aria-label="Mobile navigation">
-        {primary.map((item) => { const Icon = item.icon; const active = item.id === activeSection; return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-[var(--on-danger)]">{item.badge}</span> : null}</Link>; })}
-        <button type="button" onClick={() => setMoreOpen(true)} className={cn("flex min-w-14 flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium", remaining.some((item) => item.id === activeSection) ? "text-[var(--accent)]" : "text-tertiary")}><MoreHorizontal className="h-5 w-5" /><span>More</span></button>
+      <nav className="surface safe-bottom fixed inset-x-2 bottom-2 z-30 flex min-h-[68px] items-start justify-around rounded-[24px] border border-[var(--border)] px-2 pt-2 shadow-elevated backdrop-blur-2xl lg:hidden" aria-label="Mobile navigation">
+        {primary.map((item) => { const Icon = item.icon; const active = item.id === activeSection; return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-[10px] px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-[var(--on-danger)]">{item.badge}</span> : null}</Link>; })}
+        <button type="button" onClick={() => setMoreOpen(true)} className={cn("flex min-w-14 flex-col items-center gap-1 rounded-[10px] px-2 py-1.5 text-[11px] font-medium", remaining.some((item) => item.id === activeSection) ? "text-[var(--accent)]" : "text-tertiary")}><MoreHorizontal className="h-5 w-5" /><span>More</span></button>
       </nav>
       <Overlay open={moreOpen} onClose={() => setMoreOpen(false)} title="More" description={`More destinations in ${portal.name}.`} mode="sheet" label="More navigation">
         <div className="grid grid-cols-2 gap-2 p-4">
-          <button type="button" onClick={() => { setMoreOpen(false); onOpenCommand(); }} className="flex items-center gap-3 rounded-lg border p-3 text-sm font-medium"><Search className="h-5 w-5" />Go to a page</button>
-          {remaining.map((item) => { const Icon=item.icon; return <Link key={item.id} href={item.href} onClick={() => setMoreOpen(false)} className={cn("flex items-center gap-3 rounded-lg border p-3 text-sm font-medium", item.id === activeSection && "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]")}><Icon className="h-5 w-5" />{item.label}</Link>; })}
+          <button type="button" onClick={() => { setMoreOpen(false); onOpenCommand(); }} className="flex items-center gap-3 rounded-[10px] border p-3 text-sm font-medium"><Search className="h-5 w-5" />Go to a page</button>
+          {remaining.map((item) => { const Icon=item.icon; return <Link key={item.id} href={item.href} onClick={() => setMoreOpen(false)} className={cn("flex items-center gap-3 rounded-[10px] border p-3 text-sm font-medium", item.id === activeSection && "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]")}><Icon className="h-5 w-5" />{item.label}</Link>; })}
         </div>
       </Overlay>
     </>
@@ -411,27 +411,27 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
   return (
     <div data-workspace={portal.id} className="min-h-screen bg-[var(--grouped)]">
       {!hideSidebar && <Sidebar portal={portal} activeSection={resolvedActiveSection} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} footer={footer} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />}
-      <div className={cn(!hideSidebar && (sidebarCollapsed ? "lg:pl-[88px]" : "lg:pl-[278px]"), "transition-[padding] duration-300")}>
-        <header className={cn("surface sticky top-0 z-30 flex h-20 items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6", hideSidebar && "justify-between")}>
-          {!hideSidebar && <button aria-label="Open navigation" className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-[var(--surface-2)] lg:hidden" onClick={() => setMobileOpen(true)}><Menu className="h-5 w-5" /></button>}
+      <div className={cn(!hideSidebar && (sidebarCollapsed ? "lg:pl-[88px]" : "lg:pl-[278px]"), "transition-[padding] duration-200")}>
+        <header className={cn("surface sticky top-0 z-30 flex h-[72px] items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6", hideSidebar && "justify-between")}>
+          {!hideSidebar && <button aria-label="Open navigation" className="flex h-11 w-11 items-center justify-center rounded-[12px] hover:bg-[var(--surface-2)] lg:hidden" onClick={() => setMobileOpen(true)}><Menu className="h-5 w-5" /></button>}
           {hideSidebar && <PortalSwitcher portal={portal} />}
-          <button onClick={() => setCommandOpen(true)} className="surface hidden h-11 min-w-0 max-w-xl flex-1 items-center gap-3 rounded-xl px-3 text-left text-sm text-secondary hover:bg-[var(--surface-2)] sm:flex">
+          <button onClick={() => setCommandOpen(true)} className="surface hidden h-11 min-w-0 max-w-xl flex-1 items-center gap-3 rounded-[12px] px-3 text-left text-sm text-secondary hover:bg-[var(--surface-2)] sm:flex">
             <Search className="h-4 w-4" />
             <span className="truncate">Go to a page or action</span>
-            <kbd className="ml-auto rounded-lg border bg-[var(--surface-2)] px-2 py-1 text-[11px] text-tertiary">⌘ K</kbd>
+            <kbd className="ml-auto rounded-[10px] border bg-[var(--surface-2)] px-2 py-1 text-[11px] text-tertiary">⌘ K</kbd>
           </button>
           <div className="ml-auto flex items-center gap-2">
             <ThemeMenu />
-            <button aria-label={`${unreadCount} notifications`} onClick={() => setNotificationsOpen(true)} className="surface relative flex h-11 w-11 items-center justify-center rounded-xl hover:bg-[var(--surface-2)]">
+            <button aria-label={`${unreadCount} notifications`} onClick={() => setNotificationsOpen(true)} className="surface relative flex h-11 w-11 items-center justify-center rounded-[12px] hover:bg-[var(--surface-2)]">
               <Bell className="h-5 w-5" />
               {unreadCount ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger ring-2 ring-[var(--surface)]" /> : null}
             </button>
             <UserMenu portal={portal} />
           </div>
         </header>
-        {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = canonicalSpotlyUrl(attentionNotification.href, notificationWorkspace(attentionNotification)); }} className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">View update</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
-        <main key={pathname} className={cn("portal-gradient min-h-[calc(100vh-5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
+        {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = canonicalSpotlyUrl(attentionNotification.href, notificationWorkspace(attentionNotification)); }} className="rounded-[10px] bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">View update</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-[10px] border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
+        <main key={pathname} className={cn("portal-gradient min-h-[calc(100vh-4.5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}>
             {children}
           </motion.div>
         </main>

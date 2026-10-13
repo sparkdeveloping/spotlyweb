@@ -18,10 +18,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/components/firebase-provider";
-import { Badge, Button, Card, EmptyState, Overlay, PageHeader, Tabs } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, EntityPicker, Overlay, PageHeader, Tabs } from "@/components/ui";
 import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
 import { canonicalSpotlyUrl } from "@/lib/spotly-domains";
+import { cn } from "@/lib/cn";
 
 export function notificationWorkspace(item = {}) {
   if (item.workspace) return item.workspace;
@@ -106,7 +107,7 @@ function NotificationRow({ item, onRead, businessName = "" }) {
       </span>
     </span>
   </>;
-  const classes = "flex items-start gap-3 rounded-xl border bg-[var(--surface)] p-4 text-left transition hover:border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] hover:bg-[var(--surface-2)]";
+  const classes = "flex items-start gap-3 rounded-[var(--radius-control)] p-4 text-left transition hover:bg-[var(--surface-2)]";
   if (item.href) return <Link href={canonicalSpotlyUrl(item.href, notificationWorkspace(item))} onClick={() => onRead(item)} className={classes}>{content}</Link>;
   return <button type="button" onClick={() => onRead(item)} className={`w-full ${classes}`}>{content}</button>;
 }
@@ -187,11 +188,20 @@ export function NotificationCenter({
     ] : [{ value: "reviews", label: `Reviews (${counts.reviews})`, icon: ClipboardCheck }])
   ];
 
+  if (customerMode) return <div className="v7-page-enter">
+    <div className="flex flex-col gap-4 border-b border-[var(--border-subtle)] pb-6 sm:flex-row sm:items-end sm:justify-between">
+      <div><p className="text-sm font-semibold text-[var(--accent)]">Notifications</p><h1 className="mt-1 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Stay in the loop.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Orders, bookings, rides, support and important account changes appear here when they matter.</p></div>
+      {counts.unread ? <Button variant="outline" onClick={readAll}><CheckCheck className="h-4 w-4" />Mark all read</Button> : null}
+    </div>
+    <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">{tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.value} type="button" onClick={() => setFilter(tab.value)} className={cn("inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition", filter === tab.value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--border-subtle)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}><Icon className="h-3.5 w-3.5" />{tab.label}</button>; })}</div>
+    {error ? <div className="mt-5 rounded-[var(--radius-card)] border border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</div> : visible.length ? <div className="mt-6 divide-y divide-[var(--border-subtle)]">{visible.map((item) => <NotificationRow key={item.id} item={item} businessName={item.businessName || businessMap.get(item.businessId) || ""} onRead={read} />)}</div> : <div className="mt-8"><LottieEmptyState name="notification-bell" title={filter === "unread" ? "Nothing needs your attention" : "You're all caught up"} description={filter === "all" ? "Spotly will keep order, booking, ride, support and account updates here as they happen." : "There are no updates in this view right now. You can switch filters or keep exploring Spotly."} /></div>}
+  </div>;
+
   return <div className="space-y-6">
     <PageHeader title={title} description={description} actions={counts.unread ? <Button variant="outline" onClick={readAll}><CheckCheck className="h-4 w-4" />Mark all read</Button> : null} />
     <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-4">
-        {businessOptions.length > 1 && <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2 text-sm font-semibold"><Store className="h-4 w-4 text-[var(--accent)]" />Business</div><select className="field-control h-11 w-full sm:max-w-xs" value={businessFilter} onChange={(event) => setBusinessFilter(event.target.value)}><option value="all">All businesses</option>{businessOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>}
+        {businessOptions.length > 1 && <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2 text-sm font-semibold"><Store className="h-4 w-4 text-[var(--accent)]" />Business</div><EntityPicker className="w-full sm:max-w-xs" value={businessFilter} onChange={setBusinessFilter} title="Choose a business" searchPlaceholder="Search businesses" allowClear={false} options={[{ value: "all", label: "All businesses", description: "Updates across your workspace" }, ...businessOptions.map((item) => ({ value: item.id, label: item.name, description: "Business notifications" }))]} /></div>}
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><Tabs value={filter} onChange={setFilter} tabs={tabs} /><p className="text-xs leading-5 text-tertiary"><MailCheck className="mr-1 inline h-4 w-4" />Review decisions can also use the configured operational email.</p></div>
       </div>
     </Card>

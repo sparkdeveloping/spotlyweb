@@ -1,22 +1,26 @@
 "use client";
 
 import Image from "next/image";
+import { motion, useReducedMotion } from "framer-motion";
 import {
-  ArrowUpRight,
   CalendarDays,
   CarFront,
   ChevronRight,
   Clock3,
+  Heart,
   MapPin,
   Package,
   Search,
   ShoppingBag,
   Sparkles,
   Store,
+  Ticket,
+  TimerReset,
   UtensilsCrossed
 } from "lucide-react";
 import { businessArchetype } from "@/data/business-archetypes";
 import { cn } from "@/lib/cn";
+import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
 
 export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
@@ -39,67 +43,79 @@ export function serviceMatchesBusiness(service, business) {
   return true;
 }
 
-function MarketplaceImage({ business, sizes = "(max-width: 768px) 70vw, 280px" }) {
+function interestMatchesBusiness(interests = [], business = {}) {
+  if (!Array.isArray(interests) || !interests.length) return false;
+  const archetype = businessArchetype(business);
+  return interests.some((interest) => {
+    if (interest === "eat") return archetype.id === "restaurant_food";
+    if (["shop", "groceries"].includes(interest)) return archetype.id === "grocery_retail";
+    if (interest === "wellness") return archetype.id === "appointments_services";
+    if (interest === "activities") return ["accommodation_activities", "ticketing_events"].includes(archetype.id);
+    if (interest === "events") return archetype.id === "ticketing_events";
+    return false;
+  });
+}
+
+function MarketplaceImage({ business, sizes = "(max-width: 768px) 72vw, 292px" }) {
   const image = business.coverImage || business.image || business.logoUrl || business.logo;
-  if (image) return <Image src={image} alt="" fill  sizes={sizes} className="object-cover transition duration-300 group-hover:scale-[1.02]" />;
+  if (image) return <Image src={image} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />;
   return <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2))] text-[var(--accent)]"><Store className="h-9 w-9" /></div>;
 }
 
 function MarketplaceRailCard({ item, onOpen }) {
   const { business, distance } = item;
   const archetype = businessArchetype(business);
-  return (
-    <button type="button" onClick={() => onOpen(business)} className="group w-[238px] shrink-0 text-left sm:w-[270px]">
-      <div className="relative aspect-[1.35/1] overflow-hidden rounded-[18px] bg-[var(--surface-2)]">
-        <MarketplaceImage business={business} />
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" />
-        {business.isFeatured ? <span className="absolute left-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text)] shadow-sm">Featured</span> : null}
-      </div>
-      <div className="mt-3 flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3>
-          <p className="mt-1 truncate text-xs text-[var(--text-3)]">{archetype.shortLabel}{distance !== null ? ` · ${distance.toFixed(1)} km` : business.area ? ` · ${business.area}` : business.city ? ` · ${business.city}` : ""}</p>
-        </div>
-        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-3)]" />
-      </div>
-    </button>
-  );
+  return <button type="button" onClick={() => onOpen(business)} className="group w-[244px] shrink-0 text-left sm:w-[286px]">
+    <div className="relative aspect-[1.36/1] overflow-hidden rounded-[16px] bg-[var(--surface-2)]">
+      <MarketplaceImage business={business} />
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent" />
+      {business.isFeatured ? <span className="absolute left-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text)] shadow-sm backdrop-blur">Featured</span> : null}
+    </div>
+    <div className="mt-3 flex items-start gap-3">
+      <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3><p className="mt-1 truncate text-xs text-[var(--text-3)]">{archetype.shortLabel}{distance !== null ? ` · ${distance.toFixed(1)} km` : business.area ? ` · ${business.area}` : business.city ? ` · ${business.city}` : ""}</p></div>
+      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-3)] transition group-hover:translate-x-0.5" />
+    </div>
+  </button>;
 }
 
-function SectionHeader({ title, action, onAction }) {
-  return <div className="mb-4 flex items-end justify-between gap-4"><h2 className="text-[22px] font-semibold tracking-[-.035em] sm:text-2xl">{title}</h2>{action ? <button type="button" onClick={onAction} className="text-sm font-semibold text-[var(--accent)] hover:underline">{action}</button> : null}</div>;
+function SectionHeader({ title, description, action, onAction }) {
+  return <div className="mb-4 flex items-end justify-between gap-4"><div><h2 className="text-[22px] font-semibold tracking-[-.035em] sm:text-2xl">{title}</h2>{description ? <p className="mt-1 text-sm text-[var(--text-3)]">{description}</p> : null}</div>{action ? <button type="button" onClick={onAction} className="shrink-0 rounded-[10px] px-2 py-1.5 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)]">{action}</button> : null}</div>;
 }
 
-function ServiceTile({ service, size = "small", enabled = true, onSelect }) {
-  const Icon = service.icon;
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(service.key)}
-      className={cn(
-        "spotly-service-tile group relative overflow-hidden text-left text-white transition duration-200 hover:-translate-y-0.5 focus-visible:-translate-y-0.5",
-        `spotly-service-${service.tone}`,
-        size === "hero" ? "min-h-[180px] rounded-[28px] p-6 sm:min-h-[205px] sm:p-7" : size === "medium" ? "min-h-[142px] rounded-[24px] p-5" : "min-h-[112px] rounded-[22px] p-4"
-      )}
-    >
-      <span className="spotly-service-orbit spotly-service-orbit-a" aria-hidden="true" />
-      <span className="spotly-service-orbit spotly-service-orbit-b" aria-hidden="true" />
-      <span className="relative z-10 flex h-full flex-col justify-between gap-8">
-        <span className="flex items-start justify-between gap-4">
-          <span className={cn("flex items-center justify-center bg-[rgba(255,255,255,.16)] backdrop-blur-sm", size === "hero" ? "h-12 w-12 rounded-2xl" : "h-10 w-10 rounded-[14px]")}><Icon className={size === "hero" ? "h-6 w-6" : "h-5 w-5"} /></span>
-          <span className="flex items-center gap-1 text-xs font-semibold text-white/80">{enabled ? "Open" : "Soon"}<ArrowUpRight className="h-4 w-4" /></span>
-        </span>
-        <span>
-          <strong className={cn("block tracking-[-.04em]", size === "hero" ? "text-[30px] sm:text-[34px]" : size === "medium" ? "text-[23px]" : "text-[18px]")}>{service.label}</strong>
-          <span className={cn("mt-1 block text-white/76", size === "hero" ? "text-sm" : "text-xs")}>{enabled ? service.subtitle : `${service.label} is being prepared`}</span>
-        </span>
-      </span>
-    </button>
-  );
+function ServiceTile({ service, size = "small", onSelect }) {
+  const reduce = useReducedMotion();
+  return <motion.button type="button" onClick={() => onSelect(service.key)} whileHover={reduce ? undefined : { y: -3 }} whileTap={reduce ? undefined : { scale: .988 }} className={cn("spotly-service-tile spotly-v7-service group relative w-full min-w-0 overflow-hidden rounded-[24px] text-left text-[var(--service-foreground)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-soft)]", `spotly-service-${service.tone}`, size === "hero" ? "min-h-[244px] p-6 sm:min-h-[292px] sm:p-7" : size === "medium" ? "min-h-[142px] p-5 sm:min-h-[154px]" : "min-h-[120px] p-4")}>
+    <span className="spotly-path-line" aria-hidden="true" />
+    <ServiceArtwork service={service.key} compact={size === "small"} className={cn("absolute opacity-[.94] transition-transform duration-300 motion-safe:group-hover:scale-[1.035]", size === "hero" ? "-right-1 top-1 sm:right-4 sm:top-4" : size === "medium" ? "-right-5 -top-3 scale-[.82]" : "-right-5 -top-4 scale-[.72]")} />
+    <span className="relative z-10 flex h-full min-h-[inherit] flex-col justify-between">
+      <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[color-mix(in_srgb,var(--service-foreground)_14%,transparent)] backdrop-blur"><ServiceGlyph service={service.key} className="h-5 w-5" /></span>
+      <span className={cn("block", size === "hero" ? "max-w-[55%]" : "max-w-[72%]")}><strong className={cn("block tracking-[-.045em]", size === "hero" ? "text-[31px] sm:text-[38px]" : size === "medium" ? "text-[23px]" : "text-[18px]")}>{service.label}</strong><span className={cn("mt-1 block text-[color-mix(in_srgb,var(--service-foreground)_76%,transparent)]", size === "hero" ? "text-sm" : "text-xs")}>{service.subtitle}</span></span>
+    </span>
+  </motion.button>;
+}
+
+function activityMeta(order = {}) {
+  const kind = order.transactionType || order.fulfilment || "order";
+  if (kind === "ride") return { icon: CarFront, label: "Ride", title: order.status === "driver_arriving" ? "Driver is on the way" : "Your ride is active" };
+  if (kind === "send") return { icon: Package, label: "Send", title: "Your parcel is moving" };
+  if (kind === "ticket") return { icon: Ticket, label: "Event", title: "You have an upcoming event" };
+  if (["appointment", "booking"].includes(kind)) return { icon: CalendarDays, label: "Booking", title: "You have something coming up" };
+  return { icon: ShoppingBag, label: "Order", title: "Your order is in progress" };
+}
+
+const activeStatuses = new Set(["submitted", "pending", "confirmed", "accepted", "preparing", "ready", "assigned", "driver_arriving", "arrived", "in_progress", "picked_up", "out_for_delivery", "scheduled", "upcoming"]);
+const completedStatuses = new Set(["completed", "delivered", "collected", "fulfilled"]);
+
+function ActiveAccessory({ order, onActivity }) {
+  if (!order) return null;
+  const meta = activityMeta(order); const Icon = meta.icon;
+  return <motion.button initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} type="button" onClick={onActivity} className="mb-5 flex w-full items-center gap-3 rounded-[16px] border border-[color-mix(in_srgb,var(--accent)_22%,var(--border-subtle))] bg-[var(--accent-soft)] px-4 py-3 text-left transition hover:border-[color-mix(in_srgb,var(--accent)_42%,var(--border))]">
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--surface)] text-[var(--accent)]"><Icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block text-[11px] font-bold uppercase tracking-[.08em] text-[var(--accent)]">Now · {meta.label}</span><strong className="mt-0.5 block truncate text-sm">{meta.title}</strong></span><span className="flex items-center gap-1 text-xs font-semibold text-[var(--accent)]">View<ChevronRight className="h-4 w-4" /></span>
+  </motion.button>;
 }
 
 function RepeatAction({ icon: Icon, title, subtitle, onClick }) {
-  return <button type="button" onClick={onClick} className="flex min-h-16 w-full items-center gap-3 border-b border-[var(--border-subtle)] py-3 text-left last:border-0"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-[var(--surface-2)] text-[var(--text-2)]"><Icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm font-semibold">{title}</strong><span className="mt-0.5 block truncate text-xs text-[var(--text-3)]">{subtitle}</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[var(--text-3)]" /></button>;
+  return <button type="button" onClick={onClick} className="flex min-h-16 w-full items-center gap-3 border-b border-[var(--border-subtle)] py-3 text-left last:border-0"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--surface-2)] text-[var(--text-2)]"><Icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm font-semibold">{title}</strong><span className="mt-0.5 block truncate text-xs text-[var(--text-3)]">{subtitle}</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[var(--text-3)]" /></button>;
 }
 
 export function MarketplaceHome({
@@ -107,89 +123,77 @@ export function MarketplaceHome({
   orders = [],
   recentBusinessIds = [],
   location,
+  profile,
+  onboardingComplete = false,
+  interests = [],
   ridesEnabled = false,
   sendEnabled = false,
   onSelectService,
   onOpenBusiness,
   onSearch,
   onActivity,
-  onLocation
+  onSetup
 }) {
   const nearby = businessResults.slice(0, 8);
   const food = businessResults.filter(({ business }) => serviceMatchesBusiness("eat", business)).slice(0, 8);
   const bookable = businessResults.filter(({ business }) => serviceMatchesBusiness("book", business)).slice(0, 8);
   const events = businessResults.filter(({ business }) => serviceMatchesBusiness("events", business)).slice(0, 8);
   const recent = recentBusinessIds.map((id) => businessResults.find(({ business }) => business.id === id)).filter(Boolean).slice(0, 6);
-  const latestOrder = orders?.[0];
-  const latestOrderBusiness = latestOrder ? businessResults.find(({ business }) => business.id === latestOrder.businessId)?.business : null;
+  const interestMatches = businessResults.filter(({ business }) => interestMatchesBusiness(interests, business)).slice(0, 8);
+  const activeOrder = orders.find((order) => activeStatuses.has(String(order.status || "").toLowerCase()));
+  const completed = orders.filter((order) => completedStatuses.has(String(order.status || "").toLowerCase()));
+  const latestRepeat = completed.find((order) => order.businessId && businessResults.some(({ business }) => business.id === order.businessId));
+  const latestRepeatBusiness = latestRepeat ? businessResults.find(({ business }) => business.id === latestRepeat.businessId)?.business : null;
+  const firstName = profile?.displayName?.trim()?.split(/\s+/)[0];
+  const trulyNew = !orders.length && !recentBusinessIds.length;
+  const heroService = ridesEnabled ? MARKETPLACE_SERVICES.find((item) => item.key === "ride") : MARKETPLACE_SERVICES.find((item) => item.key === "eat");
+  const secondary = MARKETPLACE_SERVICES.filter((item) => {
+    if (item.key === heroService.key) return false;
+    if (item.key === "ride") return ridesEnabled;
+    if (item.key === "send") return sendEnabled;
+    return true;
+  });
 
-  return (
-    <div className="pb-8">
-      <section className="rounded-[30px] bg-[var(--surface)] px-4 pb-5 pt-3 sm:px-6 sm:pb-7 sm:pt-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <button type="button" onClick={onLocation} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--text-2)] hover:text-[var(--text)]"><MapPin className="h-4 w-4" />{location.area ? `${location.area}, ${location.city}` : location.city}<ChevronRight className="h-3.5 w-3.5 rotate-90" /></button>
-            <h1 className="mt-3 max-w-xl text-[34px] font-semibold leading-[1.02] tracking-[-.052em] sm:text-[42px]">What do you need?</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-2)] sm:text-[15px]">Use Spotly to find what is around you, order from local businesses, book plans, and keep moving through your city.</p>
-          </div>
-          <button type="button" onClick={onSearch} className="hidden h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold shadow-[var(--shadow-card)] sm:inline-flex"><Search className="h-4 w-4" />Search</button>
+  return <div className="pb-6">
+    <ActiveAccessory order={activeOrder} onActivity={onActivity} />
+
+    <section className="pb-2 pt-2 sm:pt-3">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-2xl">
+          <p className="text-sm font-semibold text-[var(--accent)]">{trulyNew ? "Welcome to Spotly" : firstName ? `Good to see you, ${firstName}` : "Your city, in one place"}</p>
+          <h1 className="mt-2 text-[36px] font-semibold leading-[1.02] tracking-[-.055em] sm:text-[48px]">{trulyNew ? "Everything around you, easier." : "What do you need today?"}</h1>
+          <p className="mt-3 max-w-xl text-[15px] leading-7 text-[var(--text-2)]">{trulyNew ? `Eat, shop, book and discover what is live in ${location.city}. Spotly keeps everything together as you go.` : `Pick a service or keep going from where you left off in ${location.city}.`}</p>
         </div>
+        {!onboardingComplete ? <button type="button" onClick={onSetup} className="inline-flex w-fit items-center gap-2 rounded-[12px] bg-[var(--accent-soft)] px-4 py-3 text-sm font-semibold text-[var(--accent-strong)] transition hover:bg-[color-mix(in_srgb,var(--accent-soft)_82%,var(--accent)_18%)]"><Sparkles className="h-4 w-4" />Set up my Spotly<ChevronRight className="h-4 w-4" /></button> : null}
+      </div>
 
-        {ridesEnabled ? <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <ServiceTile service={MARKETPLACE_SERVICES[0]} size="hero" enabled onSelect={onSelectService} />
-            <div className="grid grid-cols-2 gap-3">
-              <ServiceTile service={MARKETPLACE_SERVICES[1]} size="medium" onSelect={onSelectService} />
-              <ServiceTile service={MARKETPLACE_SERVICES[2]} size="medium" onSelect={onSelectService} />
-              <ServiceTile service={MARKETPLACE_SERVICES[3]} onSelect={onSelectService} />
-              <ServiceTile service={MARKETPLACE_SERVICES[4]} onSelect={onSelectService} />
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <ServiceTile service={MARKETPLACE_SERVICES[5]} enabled={sendEnabled} onSelect={onSelectService} />
-            <button type="button" onClick={onSearch} className="group min-h-[112px] rounded-[22px] border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition hover:bg-[var(--surface-hover)] sm:col-span-2"><span className="flex h-full items-center gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] bg-[var(--surface)] text-[var(--accent)]"><Search className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block text-base font-semibold tracking-[-.025em]">Search all of Spotly</strong><span className="mt-1 block text-xs leading-5 text-[var(--text-3)]">Find businesses, categories, and places currently available in {location.city}.</span></span><ChevronRight className="h-5 w-5 text-[var(--text-3)]" /></span></button>
-          </div>
-        </> : <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <ServiceTile service={MARKETPLACE_SERVICES[1]} size="hero" onSelect={onSelectService} />
-            <div className="grid grid-cols-2 gap-3">
-              <ServiceTile service={MARKETPLACE_SERVICES[2]} size="medium" onSelect={onSelectService} />
-              <ServiceTile service={MARKETPLACE_SERVICES[3]} size="medium" onSelect={onSelectService} />
-              <ServiceTile service={MARKETPLACE_SERVICES[4]} onSelect={onSelectService} />
-              <ServiceTile service={MARKETPLACE_SERVICES[0]} enabled={false} onSelect={onSelectService} />
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <ServiceTile service={MARKETPLACE_SERVICES[5]} enabled={sendEnabled} onSelect={onSelectService} />
-            <button type="button" onClick={onSearch} className="group min-h-[112px] rounded-[22px] border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition hover:bg-[var(--surface-hover)] sm:col-span-2"><span className="flex h-full items-center gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] bg-[var(--surface)] text-[var(--accent)]"><Search className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block text-base font-semibold tracking-[-.025em]">Search all of Spotly</strong><span className="mt-1 block text-xs leading-5 text-[var(--text-3)]">Find businesses, categories, and places currently available in {location.city}.</span></span><ChevronRight className="h-5 w-5 text-[var(--text-3)]" /></span></button>
-          </div>
-        </>}
-      </section>
-
-      {(latestOrder || nearby.length) ? <section className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="rounded-[24px] bg-[var(--surface)] p-5 sm:p-6">
-          <SectionHeader title="Again" action={orders.length ? "Activity" : undefined} onAction={onActivity} />
-          {latestOrderBusiness ? <RepeatAction icon={ShoppingBag} title={`Order again from ${latestOrderBusiness.name}`} subtitle={latestOrder.fulfilment === "delivery" ? "Previous delivery" : "Previous pickup order"} onClick={() => onOpenBusiness(latestOrderBusiness)} /> : null}
-          <RepeatAction icon={Search} title="Search nearby" subtitle={`Explore verified businesses in ${location.city}`} onClick={onSearch} />
-          {ridesEnabled ? <RepeatAction icon={CarFront} title="Ride somewhere" subtitle="Start with a destination" onClick={() => onSelectService("ride")} /> : null}
+      <div className="mt-6 grid gap-3 lg:grid-cols-[1.15fr_.85fr]">
+        <ServiceTile service={heroService} size="hero" onSelect={onSelectService} />
+        <div className="grid grid-cols-2 gap-3">
+          {secondary.map((service, index) => <div key={service.key} className={secondary.length % 2 === 1 && index === secondary.length - 1 ? "col-span-2" : ""}><ServiceTile service={service} size={index < 2 ? "medium" : "small"} onSelect={onSelectService} /></div>)}
         </div>
+      </div>
 
-        <div className="min-w-0 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6">
-          <SectionHeader title="Near you" action="See all" onAction={() => onSelectService("shop")} />
-          {nearby.length ? <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div> : <p className="text-sm leading-6 text-[var(--text-3)]">Businesses will appear here as verified locations in {location.city} go live.</p>}
-        </div>
-      </section> : null}
+      {(!ridesEnabled || !sendEnabled) ? <div className="mt-3 flex flex-wrap gap-2">{!ridesEnabled ? <button type="button" onClick={() => onSelectService("ride")} className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-2)] transition hover:bg-[var(--surface-hover)]"><CarFront className="h-4 w-4 text-[var(--accent)]" />Ride · coming to {location.city}</button> : null}{!sendEnabled ? <button type="button" onClick={() => onSelectService("send")} className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text-2)] transition hover:bg-[var(--surface-hover)]"><Package className="h-4 w-4 text-[var(--accent)]" />Send · coming to {location.city}</button> : null}</div> : null}
+    </section>
 
-      {recent.length ? <section className="mt-8 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><SectionHeader title="Recently viewed" /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{recent.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+    {latestRepeatBusiness ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Again" description="Based on something you actually completed before" /><div className="max-w-xl"><RepeatAction icon={TimerReset} title={latestRepeatBusiness.name} subtitle="Open this business again" onClick={() => onOpenBusiness(latestRepeatBusiness)} /></div></section> : null}
 
-      {food.length ? <section className="mt-8 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><SectionHeader title="Eat nearby" action="Explore Eat" onAction={() => onSelectService("eat")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{food.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+    {recent.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Recently viewed" description="Pick up where you left off" /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{recent.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
-      {(events.length || bookable.length) ? <section className="mt-8 grid gap-5 lg:grid-cols-2">
-        {bookable.length ? <div className="min-w-0 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><SectionHeader title="Book something" action="Explore" onAction={() => onSelectService("book")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{bookable.slice(0,4).map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></div> : null}
-        {events.length ? <div className="min-w-0 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><SectionHeader title="What’s happening" action="Events" onAction={() => onSelectService("events")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{events.slice(0,4).map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></div> : null}
-      </section> : null}
-    </div>
-  );
+    {interestMatches.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Based on your interests" description="Using the interests you chose during Spotly setup" action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{interestMatches.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+
+    {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Near you" : `Popular in ${location.city}`} description={location.coordinates ? "Using the location you shared" : "Based on what is live in your selected city"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+
+    {food.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={trulyNew ? "Start with food" : "Eat nearby"} action="Explore Eat" onAction={() => onSelectService("eat")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{food.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />}</div></section> : null}
+
+    {(events.length || bookable.length) ? <section className="mt-10 grid gap-9 border-t border-[var(--border-subtle)] pt-7 lg:grid-cols-2">
+      {bookable.length ? <div className="min-w-0"><SectionHeader title="Book something" action="Explore" onAction={() => onSelectService("book")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{bookable.slice(0,4).map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></div> : null}
+      {events.length ? <div className="min-w-0"><SectionHeader title="This week" action="Events" onAction={() => onSelectService("events")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{events.slice(0,4).map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></div> : null}
+    </section> : null}
+
+    {!businessResults.length ? <section className="mt-10 rounded-[24px] bg-[var(--surface-2)] p-6 sm:p-8"><div className="max-w-xl"><MapPin className="h-6 w-6 text-[var(--accent)]" /><h2 className="mt-4 text-2xl font-semibold tracking-[-.04em]">Spotly is still filling out {location.city}</h2><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">There is nothing useful to show yet. Try Search, change your city, or check back as verified businesses go live.</p><button type="button" onClick={onSearch} className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]">Search Spotly<ChevronRight className="h-4 w-4" /></button></div></section> : null}
+  </div>;
 }
 
 export function ServiceModeHeader({ service, location, ridesEnabled, sendEnabled, onSelectService, onExit, onSearch }) {
@@ -197,32 +201,16 @@ export function ServiceModeHeader({ service, location, ridesEnabled, sendEnabled
   const enabled = service === "ride" ? ridesEnabled : service === "send" ? sendEnabled : true;
   const taskCopy = {
     ride: ["Where to?", "Search a destination or saved place"],
-    eat: ["What are you craving?", "Search restaurants and food businesses"],
-    shop: ["What are you looking for?", "Search stores and products by business"],
+    eat: ["What are you craving?", "Search restaurants, dishes and food"],
+    shop: ["What are you looking for?", "Search stores, products and categories"],
     book: ["What would you like to book?", "Find services, wellness, activities and stays"],
-    events: ["What’s happening?", "Find events and ticketing businesses"],
-    send: ["Where should it go?", "Spotly Send is being prepared"]
+    events: ["What are you doing this week?", "Find events, venues and tickets"],
+    send: ["Where should it go?", "Choose pickup and drop-off details"]
   }[service] || ["Search Spotly", "Find nearby businesses"];
 
-  return (
-    <div className="rounded-[26px] bg-[var(--surface)] p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <button type="button" onClick={onExit} className="text-xs font-semibold text-[var(--accent)]">← Home</button>
-          <h1 className="mt-2 text-[30px] font-semibold tracking-[-.05em] sm:text-[36px]">{current.label}</h1>
-        </div>
-        <div className="hidden text-right sm:block"><p className="text-xs font-semibold text-[var(--text-3)]">{location.area || location.city}</p><p className="mt-1 text-xs text-[var(--text-3)]">{enabled ? "Available marketplace" : "Being prepared"}</p></div>
-      </div>
-
-      <div className="no-scrollbar mt-4 flex gap-5 overflow-x-auto border-b border-[var(--border-subtle)]">
-        {MARKETPLACE_SERVICES.map((item) => <button key={item.key} type="button" onClick={() => onSelectService(item.key)} className={cn("relative shrink-0 pb-3 text-sm font-semibold", item.key === service ? "text-[var(--text)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[var(--accent)]" : "text-[var(--text-3)] hover:text-[var(--text)]")}>{item.label}</button>)}
-      </div>
-
-      <button type="button" onClick={enabled ? onSearch : undefined} className={cn("mt-4 flex min-h-16 w-full items-center gap-3 rounded-[18px] px-4 text-left", enabled ? "bg-[var(--surface-2)] hover:bg-[var(--surface-hover)]" : "cursor-default border border-[var(--border)] bg-[var(--surface-2)]") }>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-[var(--surface)] text-[var(--accent)]">{service === "ride" ? <CarFront className="h-5 w-5" /> : service === "send" ? <Package className="h-5 w-5" /> : <Search className="h-5 w-5" />}</span>
-        <span className="min-w-0 flex-1"><strong className="block text-sm font-semibold">{enabled ? taskCopy[0] : `${current.label} is coming next`}</strong><span className="mt-0.5 block text-xs text-[var(--text-3)]">{enabled ? taskCopy[1] : `Spotly ${current.label} is opening area by area. Requests will only become available when verified operations and support are ready in your location.`}</span></span>
-        {enabled ? <ChevronRight className="h-5 w-5 text-[var(--text-3)]" /> : <Clock3 className="h-5 w-5 text-[var(--text-3)]" />}
-      </button>
-    </div>
-  );
+  return <div className="border-b border-[var(--border-subtle)] pb-5">
+    <div className="flex items-start justify-between gap-4"><div><button type="button" onClick={onExit} className="text-xs font-semibold text-[var(--accent)]">← Home</button><div className="mt-2 flex items-center gap-3"><span className={cn("flex h-10 w-10 items-center justify-center rounded-[12px] text-[var(--service-foreground)]", `spotly-service-${current.tone}`)}><ServiceGlyph service={current.key} /></span><h1 className="text-[30px] font-semibold tracking-[-.05em] sm:text-[38px]">{current.label}</h1></div></div><p className="hidden pt-6 text-xs font-semibold text-[var(--text-3)] sm:block">{location.area || location.city}</p></div>
+    <div className="no-scrollbar mt-5 flex gap-5 overflow-x-auto border-b border-[var(--border-subtle)]">{MARKETPLACE_SERVICES.map((item) => <button key={item.key} type="button" onClick={() => onSelectService(item.key)} className={cn("relative shrink-0 pb-3 text-sm font-semibold", item.key === service ? "text-[var(--text)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[var(--accent)]" : "text-[var(--text-3)] hover:text-[var(--text)]")}><span className="inline-flex items-center gap-1.5"><ServiceGlyph service={item.key} className="h-4 w-4" />{item.label}</span></button>)}</div>
+    <button type="button" onClick={enabled ? onSearch : undefined} className={cn("mt-4 flex min-h-16 w-full items-center gap-3 rounded-[16px] px-4 text-left transition", enabled ? "bg-[var(--surface-2)] hover:bg-[var(--surface-hover)]" : "cursor-default border border-[var(--border-subtle)] bg-[var(--surface-2)]")}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--surface)] text-[var(--accent)]">{enabled ? <Search className="h-5 w-5" /> : <Clock3 className="h-5 w-5" />}</span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold">{enabled ? taskCopy[0] : `${current.label} is not live here yet`}</strong><span className="mt-0.5 block text-xs text-[var(--text-3)]">{enabled ? taskCopy[1] : `We will enable ${current.label} when verified operations and support are ready in ${location.city}.`}</span></span>{enabled ? <ChevronRight className="h-5 w-5 text-[var(--text-3)]" /> : null}</button>
+  </div>;
 }

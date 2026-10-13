@@ -1,4 +1,4 @@
-# Clean deployment instructions — Spotly Web 6.2.0
+# Clean deployment instructions — Spotly Web 6.3.0 Launch Candidate
 
 This archive is a full-source replacement for the current Spotly Web project.
 
@@ -159,3 +159,112 @@ Before enabling a city/area, smoke-test with controlled Customer + Driver + Admi
 12. Confirm Customer Activity, notifications, Send-specific support and Admin timeline/exception views all reference the same parcel job.
 
 Do not enable Send broadly until Driver supply, support escalation, parcel restrictions, pricing, payment reconciliation, proof handling and scheduled-dispatch cadence are operationally verified.
+
+## 6.3.0 launch-candidate deployment
+
+6.3 is a production-readiness release. Deploy it as a clean source replacement together with the supplied Firebase rules/indexes. Do not merge only selected 6.3 files into an older release.
+
+### Required production sequence
+
+1. Deploy the application with Marketplace/Ride/Send launch switches kept at their intended pre-launch or pilot state.
+2. Deploy the supplied `firestore.rules`, `firestore.indexes.json`, and `storage.rules`.
+3. Verify the deployed rules/emulator matrix and set `SPOTLY_RULES_VERIFIED_AT` and `SPOTLY_STORAGE_RULES_VERIFIED_AT` only after that verification is complete.
+4. Verify that every production Spotly hostname is owned by the same trusted deployment, remove any dangling DNS/subdomain mapping, and set `SPOTLY_DOMAIN_SECURITY_VERIFIED_AT`. Parent-domain SSO cookies make this a launch-critical control.
+5. Enrol every platform administrator in a TOTP authenticator from Spotly Account → Sign-in and security **before** turning on Admin MFA enforcement.
+6. Set `SPOTLY_ENFORCE_ADMIN_MFA=true`. Admin intentionally does not use the sibling-domain custom-token bootstrap, so administrators must complete their Firebase second factor on the Admin origin.
+7. Remove `BOOTSTRAP_ADMIN_EMAILS` from production after permanent administrator roles are provisioned.
+8. Configure a server-only `SPOTLY_FINANCE_ENCRYPTION_KEY` of at least 32 characters and a strong `CRON_SECRET` when Ride or Send dispatch is enabled.
+9. Verify production Paynow credentials for every enabled currency, transactional email, push, staffed support contacts/hours, legal identity and policy URLs.
+10. Exercise monitoring/alerting and a backup/restore drill, then set the corresponding verification markers.
+11. Open Admin → Launch Readiness. Resolve all **HOLD** gates and review every **CONDITIONAL** gate. A release should not be promoted merely because configuration fields are present.
+12. Run the full cross-role smoke matrix below on the deployed production candidate. Set `SPOTLY_RELEASE_SMOKE_TESTED_AT` only after the matrix passes.
+13. Re-open Launch Readiness. Promote customer traffic only after the resulting state and any explicit operational exceptions are accepted by the responsible operators.
+
+### Cross-role smoke matrix
+
+**Customer commerce**
+- Eat/Shop discovery → live business/item → basket → pickup and delivery checkout → payment → Activity.
+- Payment failure/retry, cancellation, inventory release, promotion reservation/release and receipt totals.
+- Book/appointment capacity collision using two sessions.
+- Event ticket capacity collision, Paynow completion and ticket Activity.
+- Search, Saved, Notifications, Account, Help and contextual support deep links.
+
+**Business**
+- Business onboarding → location → catalogue/services → launch review.
+- Live order acceptance/rejection, preparation, pickup/delivery handoff and kiosk Driver pickup.
+- Booking/event operations, promotions, team permissions, settlement destination and finance visibility.
+
+**Driver / delivery**
+- Approved Driver goes online with current documents/vehicle and fresh GPS.
+- Prepared delivery offer → atomic acceptance → pickup verification → drop-off PIN → earnings.
+- Offline, suspended, stale-location and incompatible Drivers must not receive work.
+
+**Ride**
+- Enabled-area quote → request → Driver offer → acceptance → arrival → customer pickup PIN → trip → completion → rating/earnings.
+- Out-of-area pickup, incorrect PIN, cancellation, redispatch and Admin reassignment/exception paths.
+
+**Send**
+- Immediate and scheduled quote/request → Driver offer → pickup PIN → recipient PIN → proof photo when required → completion/earnings.
+- Parcel-size/weight restriction, prohibited-item acknowledgement, cancellation and delayed scheduled dispatch.
+
+**Admin / Staff / Support**
+- TOTP Admin sign-in and rejection of a non-MFA Admin API token when enforcement is enabled.
+- Admin Operations views for Ride, Send and deliveries; business/Driver queues; finance/reconciliation/refunds; launch controls.
+- Staff role permissions and support conversation/escalation workflows.
+- Attempting to open Marketplace/Ride/Send while Launch Readiness is HOLD must be rejected and recorded as `platform.settings.launch_blocked`.
+
+**Failure/device checks**
+- Session expiry, permission denial, slow/failed network, empty data, payment pending/failed and service unavailable states.
+- iPhone Safari, Android Chrome, desktop Safari/Chrome/Firefox, keyboard-only navigation, screen reader basics and reduced motion.
+
+### 6.3 environment markers
+
+The release introduces/uses these launch verification controls in addition to the existing Firebase/Paynow credentials:
+
+```text
+SPOTLY_ENFORCE_ADMIN_MFA=true
+SPOTLY_RULES_VERIFIED_AT=<ISO date/time or controlled verification marker>
+SPOTLY_STORAGE_RULES_VERIFIED_AT=<ISO date/time or controlled verification marker>
+SPOTLY_MONITORING_VERIFIED_AT=<verification marker>
+SPOTLY_BACKUP_VERIFIED_AT=<verification marker>
+SPOTLY_RELEASE_SMOKE_TESTED_AT=<verification marker>
+SPOTLY_DOMAIN_SECURITY_VERIFIED_AT=<verification marker after DNS/subdomain ownership audit>
+SPOTLY_FINANCE_ENCRYPTION_KEY=<server-only 32+ character key>
+CRON_SECRET=<server-only 32+ character secret when Ride/Send enabled>
+```
+
+Do not put private values into the repository or client-visible `NEXT_PUBLIC_*` variables.
+
+## 7.0.0 V7 experience-system deployment
+
+V7 is a clean presentation-layer and experience-system replacement on top of the production 6.3 operating platform. Deploy the repository as a whole; do not cherry-pick V7 customer components into an older release.
+
+### Deployment sequence
+
+1. Preserve all production environment variables, launch controls and server-only secrets from the verified 6.3 environment.
+2. Replace the deployed source with this V7 repository and let Vercel perform a clean dependency install and `next build`.
+3. Deploy the matching `firestore.rules`, `firestore.indexes.json` and `storage.rules` shipped with the release. V7 retains the production Ride, Send, commerce and role systems and therefore must keep those rule sets synchronized.
+4. Clear any stale CDN/browser test cache before visual acceptance so old 6.x customer bundles are not mistaken for V7.
+5. Test a brand-new signed-out browser: onboarding must explain Spotly, allow Explore first, ask location permission only after the explicit action, and never render fake `Again` or `Near you` content.
+6. Test an onboarded account with no history: the service canvas and city-appropriate discovery should render without repeat-history claims.
+7. Test a returning customer with completed commerce history: `Again` may appear only when a real completed transaction maps to a live business.
+8. Test an account with active order/ride/send/booking activity: the `Now` accessory and Activity timeline must lead to the same authoritative transaction state.
+9. Test Search before typing, zero-result recovery, Saved empty/signed-out states, Notifications, Profile preferences and contextual Help.
+10. Test desktop and mobile navigation. Desktop should show Spotly/Search, Home/Activity/Saved and location/notifications/profile; mobile should show Home/Search/Activity/Saved/Profile.
+11. Verify Reduce Motion, keyboard navigation, focus states and screen-reader labels on customer shell, onboarding, service tiles and modal/sheet flows.
+12. Smoke-test Business, Driver, Staff and Admin after the shared visual-system changes. Their operating workflows and permissions must remain identical to the production 6.3 behavior.
+13. Re-run the 6.3 production smoke matrix for payments, Ride, Send, Driver Money, Business finance and Admin operations before broad launch.
+
+### V7 visual acceptance gates
+
+- no duplicate global Search action on Home;
+- no Currency selector in the global customer header;
+- no `Open ↗` labels on service tiles;
+- unavailable Ride/Send never visually dominate live services;
+- `Again` is driven only by completed history;
+- `Near you` is used only after precise location is available;
+- every major customer empty state explains what belongs there and offers a next action;
+- customer utility routes remain inside the same Customer Shell;
+- service identity is recognizable without relying only on tile color;
+- reduced-motion users do not receive ornamental movement;
+- ordinary controls/cards use the V7 geometry system rather than arbitrary per-component radii.

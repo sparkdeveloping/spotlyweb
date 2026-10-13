@@ -27,8 +27,8 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-info: var(--info);
-  --radius-card: 0.75rem;
-  --radius-hero: 1.25rem;
+  --radius-card: 1rem;
+  --radius-hero: 1.5rem;
   --shadow-card: 0 1px 3px rgba(17, 24, 39, 0.06);
   --shadow-elevated: 0 16px 44px rgba(17, 24, 39, 0.14);
 }
@@ -50,6 +50,7 @@
   --text-3: #667085;
   --text-disabled: #7d8796;
   --text-inverse: #ffffff;
+  --service-foreground: #ffffff;
   --media-text: #ffffff;
   --media-surface: #ffffff;
   --media-ink: #111827;
@@ -149,6 +150,7 @@ html.dark {
   --text-3: #a0a9b8;
   --text-disabled: #8791a1;
   --text-inverse: #111827;
+  --service-foreground: #ffffff;
   --media-text: #ffffff;
   --media-surface: #ffffff;
   --media-ink: #111827;
@@ -286,7 +288,7 @@ button, a {
   width: 100%;
   min-height: 48px;
   border: 1px solid var(--control-border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-control);
   background: var(--control-bg);
   color: var(--control-text);
   padding: 0 0.875rem;
@@ -487,3 +489,101 @@ input:-webkit-autofill:focus {
 @media (prefers-reduced-motion: reduce) {
   .spotly-service-tile { transform: none !important; }
 }
+
+/* Spotly V7 experience system */
+:root {
+  --radius-control: 0.75rem;
+  --radius-card-v7: 1rem;
+  --radius-feature: 1.5rem;
+  --motion-press: 140ms;
+  --motion-state: 200ms;
+  --motion-sheet: 260ms;
+  --motion-page: 320ms;
+}
+
+.customer-topbar {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border-subtle) 82%, transparent);
+}
+
+.customer-shell-grid {
+  min-width: 0;
+}
+
+.spotly-v7-service {
+  box-shadow: 0 12px 36px rgba(17, 24, 39, 0.12);
+  transition: box-shadow var(--motion-state) ease, filter var(--motion-state) ease;
+}
+
+.spotly-v7-service:hover {
+  box-shadow: 0 18px 46px rgba(17, 24, 39, 0.16);
+  filter: saturate(1.04);
+}
+
+.spotly-path-line {
+  position: absolute;
+  right: -16%;
+  bottom: -25%;
+  width: 76%;
+  height: 76%;
+  border: 1px dashed rgba(255,255,255,.24);
+  border-radius: 999px;
+  transform: rotate(-16deg);
+}
+
+.spotly-service-art {
+  filter: saturate(.98);
+  transform-origin: center;
+}
+
+.spotly-steam path {
+  fill: none;
+  stroke: rgba(255,255,255,.55);
+  stroke-width: 4;
+  stroke-linecap: round;
+  animation: spotly-steam-rise 2.8s ease-in-out infinite;
+}
+.spotly-steam path:nth-child(2) { animation-delay: .4s; }
+.spotly-steam path:nth-child(3) { animation-delay: .8s; }
+
+@keyframes spotly-steam-rise {
+  0%, 100% { transform: translateY(4px); opacity: .2; }
+  50% { transform: translateY(-3px); opacity: .82; }
+}
+
+.v7-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.v7-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 68%, transparent), transparent);
+  animation: v7-shimmer 1.45s ease-in-out infinite;
+}
+@keyframes v7-shimmer { to { transform: translateX(100%); } }
+
+.v7-page-enter {
+  animation: v7-page-in var(--motion-page) cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes v7-page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotly-steam path,
+  .v7-skeleton::after,
+  .v7-page-enter { animation: none !important; }
+  .spotly-v7-service { transition: none !important; }
+}
+
+/* Service-mode hero surfaces share the same identity as the Home canvas. */
+.service-surface-ride { background: linear-gradient(145deg, #5142c4 0%, #7467e7 100%); }
+.service-surface-eat { background: linear-gradient(145deg, #9e4928 0%, #c8663d 100%); }
+.service-surface-shop { background: linear-gradient(145deg, #24594a 0%, #3f816e 100%); }
+.service-surface-book { background: linear-gradient(145deg, #365d8d 0%, #4e7fba 100%); }
+.service-surface-events { background: linear-gradient(145deg, #684188 0%, #8f62b5 100%); }
+.service-surface-send { background: linear-gradient(145deg, #765a28 0%, #a37f3d 100%); }

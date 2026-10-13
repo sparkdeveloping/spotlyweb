@@ -1,5 +1,5 @@
 import { enforceRateLimit } from "@/lib/rate-limit-server";
-import { apiError } from "@/lib/firebase-admin";
+import { apiError, verifyAppCheckRequest } from "@/lib/firebase-admin";
 
 export const runtime = "nodejs";
 
@@ -7,6 +7,7 @@ function clean(value, max = 160) { return String(value || "").trim().slice(0, ma
 
 export async function GET(request) {
   try {
+    await verifyAppCheckRequest(request, { required: false });
     await enforceRateLimit(request, { key: "public_geocode", limit: 20, windowMs: 60_000 });
     const url = new URL(request.url);
     const q = clean(url.searchParams.get("q"), 140);

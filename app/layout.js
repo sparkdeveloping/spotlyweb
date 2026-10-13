@@ -1,5 +1,6 @@
 import "./globals.css";
 import { AppProviders } from "@/components/providers";
+import { ConnectivityBanner } from "@/components/connectivity-banner";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyafrica.com";
 
@@ -61,7 +62,7 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /></head>
       <body>
-        <AppProviders>{children}</AppProviders>
+        <AppProviders><ConnectivityBanner />{children}</AppProviders>
       </body>
     </html>
   );

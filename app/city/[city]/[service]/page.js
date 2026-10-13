@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { MarketplaceApp } from "@/components/marketplace-app";
+import { CustomerPageSkeleton } from "@/components/customer-loading";
 
 export const revalidate = 300;
 
@@ -65,5 +66,5 @@ export default async function CityServicePage({ params }) {
     about: { "@type": "City", name: route.city, addressCountry: "ZW" },
     isPartOf: { "@type": "WebSite", name: "Spotly", url: "https://spotlyafrica.com" }
   };
-  return <><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structured).replace(/</g, "\\u003c") }} /><Suspense fallback={<main className="min-h-screen bg-[var(--background)]" />}><MarketplaceApp basePath={`/city/${route.citySlug}/${route.service}`} initialService={route.service} initialCity={route.city} /></Suspense></>;
+  return <><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structured).replace(/</g, "\\u003c") }} /><Suspense fallback={<CustomerPageSkeleton />}><MarketplaceApp basePath={`/city/${route.citySlug}/${route.service}`} initialService={route.service} initialCity={route.city} /></Suspense></>;
 }

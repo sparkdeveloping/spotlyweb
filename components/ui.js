@@ -22,10 +22,10 @@ export function Button({ children, variant = "primary", size = "md", className, 
     inverse: "border border-[var(--inverse-border)] bg-[var(--inverse-surface)] text-[var(--inverse-text)] hover:bg-[var(--inverse-surface-2)]"
   };
   const sizes = {
-    sm: "h-10 rounded-lg px-3.5 text-sm",
-    md: "h-[50px] rounded-lg px-5 text-[15px]",
-    lg: "h-14 rounded-xl px-6 text-base",
-    icon: "h-11 w-11 rounded-lg"
+    sm: "h-10 rounded-[12px] px-3.5 text-sm",
+    md: "h-[50px] rounded-[12px] px-5 text-[15px]",
+    lg: "h-14 rounded-[16px] px-6 text-base",
+    icon: "h-11 w-11 rounded-[12px]"
   };
   const isDisabled = Boolean(disabled || loading);
   const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition-transform duration-150 motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 motion-safe:active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--control-bg-disabled)] disabled:text-[var(--control-text-disabled)] disabled:opacity-100", variants[variant] || variants.primary, sizes[size], className);
@@ -65,7 +65,7 @@ const cardVariants = {
 };
 
 export function Card({ children, className, elevated = false, variant = elevated ? "raised" : "bordered", ...props }) {
-  return <div className={cn("rounded-xl", cardVariants[variant] || cardVariants.bordered, className)} {...props}>{children}</div>;
+  return <div className={cn("rounded-[16px]", cardVariants[variant] || cardVariants.bordered, className)} {...props}>{children}</div>;
 }
 
 export function SectionCard({ title, description, action, children, className, variant = "bordered", padded = false, contentClassName }) {
@@ -96,6 +96,14 @@ export function PageHeader({ eyebrow, title, description, actions, compact = fal
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
+}
+
+export function PageSkeleton({ cards = 3, rows = 4, className }) {
+  return <div className={cn("space-y-7", className)} aria-busy="true" aria-label="Loading">
+    <div className="max-w-2xl"><div className="v7-skeleton h-4 w-28 rounded-full" /><div className="v7-skeleton mt-3 h-9 w-64 max-w-[75vw] rounded-[12px]" /><div className="v7-skeleton mt-3 h-4 w-full max-w-xl rounded-[10px]" /></div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: cards }).map((_, index) => <div key={index} className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-4"><div className="v7-skeleton h-10 w-10 rounded-[12px]" /><div className="v7-skeleton mt-5 h-3 w-24 rounded-full" /><div className="v7-skeleton mt-2 h-7 w-32 rounded-[10px]" /></div>)}</div>
+    <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-4 sm:p-5"><div className="v7-skeleton h-5 w-44 rounded-[10px]" /><div className="mt-4 divide-y divide-[var(--border-subtle)]">{Array.from({ length: rows }).map((_, index) => <div key={index} className="flex items-center gap-3 py-4"><div className="v7-skeleton h-10 w-10 shrink-0 rounded-[12px]" /><div className="flex-1"><div className="v7-skeleton h-4 w-1/3 rounded-[10px]" /><div className="v7-skeleton mt-2 h-3 w-1/2 rounded-[10px]" /></div></div>)}</div></div>
+  </div>;
 }
 
 export function MetricCard({ label, value, delta, hint, icon: Icon, tone = "default", onClick }) {
@@ -149,7 +157,7 @@ export function StatusBadge({ status }) {
 
 export function SearchField({ value, onChange, placeholder = "Search", className, onFocus, onKeyDown, shortcut, label = "Search", inputProps = {} }) {
   return (
-    <label className={cn("flex h-[50px] items-center gap-3 rounded-lg border border-[var(--control-border)] bg-[var(--control-bg)] px-4 text-[var(--control-text)] transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]", className)}>
+    <label className={cn("flex h-[50px] items-center gap-3 rounded-[12px] border border-[var(--control-border)] bg-[var(--control-bg)] px-4 text-[var(--control-text)] transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]", className)}>
       <span className="sr-only">{label}</span>
       <Search className="h-5 w-5 shrink-0 text-tertiary" aria-hidden="true" />
       <input
@@ -460,10 +468,10 @@ export function Overlay({ open, onClose, title, description, children, mode = "m
   const panelClass = mode === "drawer"
     ? "inset-y-0 right-0 h-full w-full max-w-md border-y-0 border-r-0"
     : mode === "sheet"
-      ? "inset-x-0 bottom-0 max-h-[92dvh] w-full rounded-t-[20px]"
+      ? "inset-x-0 bottom-0 max-h-[92dvh] w-full rounded-t-[24px]"
       : mode === "full"
         ? "inset-0 h-full w-full max-h-none rounded-none border-0"
-        : cn("bottom-0 left-1/2 w-full -translate-x-1/2 rounded-t-[20px] sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-[20px]", widths[size]);
+        : cn("bottom-0 left-1/2 w-full -translate-x-1/2 rounded-t-[24px] sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-[16px]", widths[size]);
   const initial = mode === "drawer" ? { x: "100%" } : mode === "sheet" ? { y: "100%" } : mode === "full" ? { opacity: 0 } : { y: 30, opacity: 0, scale: 0.99 };
   const animate = mode === "drawer" ? { x: 0 } : mode === "sheet" ? { y: 0 } : mode === "full" ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 };
   const exit = initial;
@@ -559,7 +567,7 @@ export function EmptyState({ icon: Icon, lottie, title, description, action, cla
   const animation = lottie || EMPTY_STATE_LOTTIES[iconName];
   return (
     <div className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
-      {animation ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-20 w-20 items-center justify-center rounded-[22px] bg-[var(--accent-soft)]"><SpotlyLottie name={animation} mode="loop" className="h-[72px] w-[72px]" fallback={Icon ? <Icon className="h-6 w-6 text-[var(--accent)]" /> : null} /></motion.div> : Icon ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></motion.div> : null}
+      {animation ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-20 w-20 items-center justify-center rounded-[24px] bg-[var(--accent-soft)]"><SpotlyLottie name={animation} mode="loop" className="h-[72px] w-[72px]" fallback={Icon ? <Icon className="h-6 w-6 text-[var(--accent)]" /> : null} /></motion.div> : Icon ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></motion.div> : null}
       <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, delay: 0.04 }}><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-secondary">{description}</p>{action && <div className="mt-5">{action}</div>}</motion.div>
     </div>
   );

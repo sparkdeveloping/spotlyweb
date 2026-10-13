@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiError, verifyAppCheckRequest } from "@/lib/firebase-admin";
+import { enforceRateLimit } from "@/lib/rate-limit-server";
 
 const LeadSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -10,6 +12,8 @@ const LeadSchema = z.object({
 
 export async function POST(request) {
   try {
+    await verifyAppCheckRequest(request);
+    await enforceRateLimit(request, { key: "public-lead", limit: 5, windowMs: 30 * 60_000 });
     const payload = LeadSchema.parse(await request.json());
     const webhook = process.env.LEAD_WEBHOOK_URL;
 
@@ -20,7 +24,7 @@ export async function POST(request) {
         body: JSON.stringify({ ...payload, receivedAt: new Date().toISOString(), source: "spotly-web" }),
         signal: AbortSignal.timeout(8000)
       });
-      if (!response.ok) throw new Error(`Webhook returned ${response.status}`);
+      if (!response.ok) throw Object.assign(new Error("The support intake service is temporarily unavailable."), { status: 503 });
     }
 
     return Response.json({ ok: true });
@@ -28,7 +32,6 @@ export async function POST(request) {
     if (error instanceof z.ZodError) {
       return Response.json({ ok: false, error: "Invalid request", issues: error.issues }, { status: 400 });
     }
-    console.error("Lead API error", error);
-    return Response.json({ ok: false, error: "Unable to process request" }, { status: 500 });
+    return apiError(error);
   }
 }

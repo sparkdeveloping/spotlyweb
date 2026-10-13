@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, CheckCircle2, CircleDollarSign, Download, Landmark, LoaderCircle, Plus, ReceiptText, ShieldCheck, WalletCards } from "lucide-react";
-import { Badge, Button, Card, EmptyState, MetricCard, Modal, PageHeader, SectionCard, StatusBadge, Tabs } from "@/components/ui";
+import { Banknote, CheckCircle2, CircleDollarSign, Download, Landmark, Plus, ReceiptText, ShieldCheck, WalletCards } from "lucide-react";
+import { Badge, Button, Card, EmptyState, MetricCard, Modal, PageHeader, PageSkeleton, SectionCard, StatusBadge, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { useBusinessWorkspace } from "@/components/business/business-context";
 import { BusinessSwitcher, FieldLabel, fieldClass, selectClass } from "@/components/business/shared";
@@ -118,7 +118,7 @@ export function FinanceView() {
   }
   const tabs = [{ value: "overview", label: "Overview" }, { value: "activity", label: "Activity" }, { value: "payouts", label: "Payouts" }, { value: "settings", label: "Payment setup" }];
 
-  if (loading && !data) return <div className="space-y-6"><PageHeader title="Money" description="Payments, settlement, payouts and statements." actions={<BusinessSwitcher />} /><Card className="flex justify-center p-16"><LoaderCircle className="h-7 w-7 animate-spin text-business" /></Card></div>;
+  if (loading && !data) return <div className="space-y-6"><PageHeader title="Money" description="Payments, settlement, payouts and statements." actions={<BusinessSwitcher />} /><PageSkeleton cards={4} rows={4} /></div>;
   if (error && !data) return <div className="space-y-6"><PageHeader title="Money" description="Payments, settlement, payouts and statements." actions={<BusinessSwitcher />} /><EmptyState icon={Banknote} title="Money could not be loaded" description={error} action={<Button onClick={load}>Try again</Button>} /></div>;
 
   return <div className="space-y-6"><PageHeader title="Money" description="A server-authoritative view of customer payments, merchant settlement and payouts." actions={<BusinessSwitcher />} />{lifecycle?.businessState !== "live" && <Card variant="bordered" className="p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-semibold">Money is one part of launch preparation</p><p className="mt-1 max-w-3xl text-sm leading-6 text-secondary">Settlement verification only checks where Spotly can send eligible business funds. It is separate from your business-access approval and separate from the final Spotly launch review.</p></div><Badge tone={lifecycle?.launchChecks?.find((item) => item.id === "settlement")?.state === "in_review" ? "accent" : "neutral"}>{lifecycle?.launchChecks?.find((item) => item.id === "settlement")?.ownerLabel || "Launch preparation"}</Badge></div></Card>}<div className="flex flex-wrap items-center justify-between gap-3"><Tabs idPrefix="business-money" value={tab} onChange={setTab} tabs={tabs} /><select className={`${selectClass} w-auto min-w-[120px]`} value={currency} onChange={(event) => setCurrency(event.target.value)} aria-label="Money currency">{currencies.map((item) => <option key={item}>{item}</option>)}</select></div>

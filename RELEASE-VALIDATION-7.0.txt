@@ -1,0 +1,24 @@
+Spotly Web Platform 7.0.0 — Release Validation
+Date: 2026-10-13
+
+PASS  JavaScript-only + React hook import integrity
+PASS  Theme safety: 221 source files / 41 classified route patterns
+PASS  Launch-readiness static audit: 96 API routes
+PASS  V7 experience-system audit: 221 UI source files / 12 customer core files
+PASS  Node regression suite: 245 / 245 tests
+PASS  package.json version: 7.0.0
+PASS  package-lock.json version synchronized
+PASS  Customer Shell / onboarding / honest personalization / service-art audit
+PASS  Reduced-motion and semantic theme audit
+
+NOT RUN  npm run lint
+NOT RUN  npm run build
+Reason: project dependencies are intentionally not vendored and the working container could not complete a clean dependency install within the execution window. Vercel clean install/build is the final framework compiler gate.
+
+Deployment requirements:
+- deploy as a clean source replacement;
+- preserve production server-only environment variables;
+- deploy matching firestore.rules, firestore.indexes.json and storage.rules;
+- rerun the 6.3 production cross-role smoke matrix;
+- validate first-visit, no-history, returning-history and active-activity customer states;
+- validate desktop/mobile navigation, reduced motion and keyboard/screen-reader basics.

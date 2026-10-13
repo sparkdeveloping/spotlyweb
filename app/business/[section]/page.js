@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { BusinessApp } from "@/components/business-app";
+import { WorkspacePageSkeleton } from "@/components/workspace-loading";
 
 export async function generateMetadata({ params }) {
   const { section } = await params;
@@ -8,5 +9,5 @@ export async function generateMetadata({ params }) {
 
 export default async function BusinessSectionPage({ params }) {
   const { section } = await params;
-  return <Suspense fallback={<main className="min-h-screen bg-grouped" />}><BusinessApp section={section} /></Suspense>;
+  return <Suspense fallback={<WorkspacePageSkeleton role="business" />}><BusinessApp section={section} /></Suspense>;
 }

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { MarketplaceApp } from "@/components/marketplace-app";
+import { CustomerPageSkeleton } from "@/components/customer-loading";
 
 const copy = {
   eat: ["Eat", "Order food from live restaurants and food businesses on Spotly."],
@@ -17,5 +18,5 @@ export const metadata = {
 };
 
 export default function ServicePage() {
-  return <Suspense fallback={<main className="min-h-screen bg-[var(--background)]" />}><MarketplaceApp basePath="/book" initialService="book" /></Suspense>;
+  return <Suspense fallback={<CustomerPageSkeleton />}><MarketplaceApp basePath="/book" initialService="book" /></Suspense>;
 }

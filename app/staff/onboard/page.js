@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { StaffOnboarding } from "@/components/staff-onboarding";
+import { WorkspacePageSkeleton } from "@/components/workspace-loading";
 
 export default function StaffOnboardPage() {
-  return <Suspense fallback={<main className="min-h-screen bg-[var(--background)]" />}><StaffOnboarding /></Suspense>;
+  return <Suspense fallback={<WorkspacePageSkeleton role="staff" />}><StaffOnboarding /></Suspense>;
 }

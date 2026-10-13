@@ -5,13 +5,14 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CheckCircle2, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui";
+import { CustomerShell } from "@/components/customer-shell";
 import { useAuth } from "@/components/firebase-provider";
 import { authenticatedFetch } from "@/lib/api-client";
 
 export function PaymentReturnApp() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId") || "";
-  const { user, authReady } = useAuth();
+  const { user, profile, authReady } = useAuth();
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(true);
@@ -38,15 +39,22 @@ export function PaymentReturnApp() {
 
   const paid = result?.paid || result?.state === "paid";
   const transactionLabel = result?.transactionType === "ticket" ? "ticket" : result?.transactionType === "appointment" ? "appointment" : result?.transactionType === "booking" ? "booking" : result?.fulfilment === "delivery" ? "delivery order" : "order";
+  const locationLabel = profile?.preferences?.preferredCity || "Harare";
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4 py-16 text-[var(--text)]">
-      <div className="w-full max-w-xl rounded-[30px] border border-[var(--border)] bg-[var(--surface)] p-7 text-center shadow-[0_24px_80px_rgba(80,61,170,.12)] sm:p-10">
-        {checking ? <LoaderCircle className="mx-auto h-12 w-12 animate-spin text-[var(--accent)]" /> : paid ? <CheckCircle2 className="mx-auto h-14 w-14 text-[var(--success)]" /> : <CircleAlert className="mx-auto h-14 w-14 text-[var(--warning)]" />}
-        <h1 className="mt-6 text-3xl font-bold tracking-[-.04em]">{checking ? "Checking your payment" : paid ? "Payment confirmed" : "Payment is not confirmed yet"}</h1>
-        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[var(--text-2)]">{error || (paid ? `Your ${transactionLabel} payment is confirmed. Open Activity for the latest status${result?.businessName ? ` from ${result.businessName}` : ""}.` : "Some Paynow transactions take a moment to settle. Refresh the status before attempting another payment.")}</p>
-        {orderId && <p className="mt-4 rounded-xl bg-[var(--surface-2)] px-3 py-2 font-mono text-xs text-[var(--text-3)]">Order {orderId}</p>}
-        {!user && authReady ? <Button asChild className="mt-7 w-full"><Link href={`/login?next=${encodeURIComponent(`/payment/return?orderId=${orderId}`)}`}>Sign in to check payment</Link></Button> : <div className="mt-7 flex flex-col gap-3 sm:flex-row"><Button variant="outline" className="flex-1" onClick={check} disabled={checking}><RefreshCw className="h-4 w-4" />Check again</Button><Button asChild className="flex-1"><Link href={`/?view=activity&order=${encodeURIComponent(orderId)}`}>Open Activity</Link></Button></div>}
-      </div>
-    </main>
+    <CustomerShell current="activity" user={user} profile={profile} locationLabel={locationLabel}>
+      <section className="mx-auto flex min-h-[calc(100vh-220px)] max-w-3xl items-center justify-center py-8 sm:py-14">
+        <div className="w-full text-center">
+          <div className={`mx-auto flex h-20 w-20 items-center justify-center rounded-[24px] ${paid ? "bg-[var(--success-soft)] text-[var(--success)]" : checking ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--warning-soft)] text-[var(--warning)]"}`}>
+            {checking ? <LoaderCircle className="h-9 w-9 animate-spin" /> : paid ? <CheckCircle2 className="h-10 w-10" /> : <CircleAlert className="h-10 w-10" />}
+          </div>
+          <p className="mt-6 text-sm font-semibold text-[var(--accent)]">Payment</p>
+          <h1 className="mt-2 text-[34px] font-semibold tracking-[-.05em] sm:text-[44px]">{checking ? "Checking your payment" : paid ? "Payment confirmed" : "Payment is still settling"}</h1>
+          <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-[var(--text-2)]">{error || (paid ? `Your ${transactionLabel} payment is confirmed. Activity now has the latest status${result?.businessName ? ` from ${result.businessName}` : ""}.` : "Some Paynow payments take a moment to settle. Check the status again before attempting another payment so you do not pay twice.")}</p>
+          {orderId ? <div className="mx-auto mt-6 max-w-md border-y border-[var(--border-subtle)] py-4"><p className="text-xs font-semibold text-[var(--text-3)]">Reference</p><p className="mt-1 truncate font-mono text-xs text-[var(--text-2)]">{orderId}</p></div> : null}
+          {!user && authReady ? <Button asChild className="mt-7"><Link href={`/login?next=${encodeURIComponent(`/payment/return?orderId=${orderId}`)}`}>Sign in to check payment</Link></Button> : <div className="mx-auto mt-7 flex max-w-md flex-col gap-3 sm:flex-row"><Button variant="outline" className="flex-1" onClick={check} disabled={checking}><RefreshCw className="h-4 w-4" />Check again</Button><Button asChild className="flex-1"><Link href={`/?view=activity&order=${encodeURIComponent(orderId)}`}>Open Activity</Link></Button></div>}
+          <p className="mx-auto mt-5 max-w-md text-xs leading-5 text-[var(--text-3)]">You can safely leave this page. Spotly keeps payment and fulfilment status in Activity.</p>
+        </div>
+      </section>
+    </CustomerShell>
   );
 }
