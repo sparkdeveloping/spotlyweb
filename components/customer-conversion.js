@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
+  BadgePercent,
   CalendarDays,
   Check,
   Clock3,
@@ -21,6 +22,7 @@ import { useToast } from "@/components/providers";
 import { authenticatedFetch } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
+import { track } from "@/lib/firebase-services";
 
 function offerPrice(product, currency) {
   const raw = product?.prices?.[currency] ?? (product?.currency === currency || !product?.currency ? product?.price : undefined);
@@ -74,7 +76,7 @@ export function OfferDetailModal({
     <Modal open={open} onClose={onClose} title={product.name} description={branch?.branchName || branch?.name || archetype?.shortLabel || "Spotly"} size="lg">
       <div className="grid gap-0 md:grid-cols-[minmax(0,.92fr)_minmax(0,1.08fr)]">
         <div className="relative min-h-[240px] overflow-hidden bg-[var(--surface-2)] md:min-h-[520px]">
-          {product.image ? <Image src={product.image} alt={product.name} fill unoptimized className="object-cover" sizes="(max-width: 768px) 100vw, 45vw" /> : <div className="flex h-full min-h-[240px] items-center justify-center text-[var(--text-3)]"><ShoppingBasket className="h-14 w-14" /></div>}
+          {product.image ? <Image src={product.image} alt={product.name} fill  className="object-cover" sizes="(max-width: 768px) 100vw, 45vw" /> : <div className="flex h-full min-h-[240px] items-center justify-center text-[var(--text-3)]"><ShoppingBasket className="h-14 w-14" /></div>}
         </div>
         <div className="p-5 sm:p-7">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -125,6 +127,8 @@ export function CustomerTransactionModal({ open, onClose, product, business, bra
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(null);
+  const [promotion, setPromotion] = useState(null);
+  const [promotionLoading, setPromotionLoading] = useState(false);
   const [form, setForm] = useState({
     checkoutId: "",
     branchId: selectedBranchId || "",
@@ -137,12 +141,15 @@ export function CustomerTransactionModal({ open, onClose, product, business, bra
     startDate: tomorrowDate(),
     endDate: tomorrowDate(),
     guests: 1,
-    paymentMethod: "pay_later"
+    paymentMethod: "pay_later",
+    promoCode: ""
   });
 
   const kind = archetype?.id === "ticketing_events" ? "ticket" : archetype?.id === "appointments_services" ? "appointment" : "booking";
   const price = offerPrice(product, currency) ?? 0;
   const total = price * (kind === "ticket" ? Number(form.quantity || 1) : 1);
+  const promotionDiscount = Math.min(total, Math.max(0, Number(promotion?.discount || 0)));
+  const adjustedTotal = Math.max(0, total - promotionDiscount);
   const ticketLimit = kind === "ticket" ? Math.max(0, Math.min(Number(product?.maxQuantity || 10), Number(product?.remainingCapacity ?? product?.capacity ?? product?.maxQuantity ?? 10))) : 1;
   const branch = useMemo(() => branches.find((item) => item.id === form.branchId) || branches.find((item) => item.id === selectedBranchId) || branches[0] || null, [branches, form.branchId, selectedBranchId]);
 
@@ -163,13 +170,49 @@ export function CustomerTransactionModal({ open, onClose, product, business, bra
       startDate: tomorrowDate(),
       endDate: tomorrowDate(),
       guests: 1,
-      paymentMethod: defaultPayment
+      paymentMethod: defaultPayment,
+      promoCode: ""
     });
+    setPromotion(null);
   }, [open, product?.id, selectedBranchId, user?.displayName, user?.phoneNumber, kind, price, branches]);
 
   if (!product) return null;
 
   function update(key, value) { setForm((current) => ({ ...current, [key]: value })); }
+
+  async function quotePromotion() {
+    if (!user || user.isAnonymous) {
+      window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      return;
+    }
+    if (!form.branchId) { setError("Choose a business location first."); return; }
+    setPromotionLoading(true);
+    setError("");
+    try {
+      const result = await authenticatedFetch("/api/customer/promotions/quote", {
+        method: "POST",
+        body: JSON.stringify({
+          businessId: business.id,
+          branchId: form.branchId,
+          currency,
+          code: form.promoCode.trim(),
+          items: [{ productId: product.id, quantity: kind === "ticket" ? Number(form.quantity || 1) : 1 }]
+        })
+      });
+      setPromotion(result.applied ? result.promotion : null);
+      if (result.applied) {
+        track("promotion_applied", { service: kind, promotion_id: result.promotion?.id || "", discount: Number(result.promotion?.discount || 0), currency });
+        toast(`${result.promotion?.label || "Offer"} applied.`, { type: "success", title: "Promotion applied" });
+      } else {
+        setError("No automatic promotion applies to this request.");
+      }
+    } catch (reason) {
+      setPromotion(null);
+      setError(reason.message || "That promotion could not be applied.");
+    } finally {
+      setPromotionLoading(false);
+    }
+  }
 
   function validate() {
     if (!form.branchId) return "Choose a business location.";
@@ -203,10 +246,12 @@ export function CustomerTransactionModal({ open, onClose, product, business, bra
         contactName: form.contactName.trim(),
         contactPhone: form.contactPhone.trim(),
         notes: form.notes.trim(),
+        promoCode: form.promoCode.trim(),
         ...(kind === "appointment" ? { appointment: { date: form.date, time: form.time } } : {}),
         ...(kind === "booking" ? { booking: { startDate: form.startDate, endDate: form.endDate || form.startDate, guests: Number(form.guests || 1) } } : {})
       };
       const result = await authenticatedFetch("/api/customer/transactions/create", { method: "POST", body: JSON.stringify(payload) });
+      track("transaction_created", { service: kind, currency, payment_method: form.paymentMethod, amount: Number(result.total || adjustedTotal || 0), discount: Number(result.discount || 0) });
       if (result.paymentRequired && form.paymentMethod === "paynow") {
         const payment = await authenticatedFetch("/api/payments/paynow/initiate", { method: "POST", body: JSON.stringify({ orderId: result.orderId, channel: "web" }) });
         onComplete?.(result);
@@ -235,8 +280,8 @@ export function CustomerTransactionModal({ open, onClose, product, business, bra
           {error ? <div role="alert" className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{error}</div> : null}
 
           <div className="flex gap-4 rounded-[18px] bg-[var(--surface-2)] p-4">
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-[14px] bg-[var(--surface)]">{product.image ? <Image src={product.image} alt="" fill unoptimized className="object-cover" sizes="64px" /> : <div className="flex h-full items-center justify-center"><Ticket className="h-6 w-6 text-[var(--text-3)]" /></div>}</div>
-            <div className="min-w-0 flex-1"><p className="font-semibold">{product.name}</p><p className="mt-1 text-xs text-[var(--text-3)]">{business?.name}{branch ? ` · ${branch.branchName || branch.name}` : ""}</p><p className="mt-2 text-sm font-semibold">{price === 0 ? "Free" : formatCurrency(total, currency)}</p></div>
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-[14px] bg-[var(--surface)]">{product.image ? <Image src={product.image} alt="" fill  className="object-cover" sizes="64px" /> : <div className="flex h-full items-center justify-center"><Ticket className="h-6 w-6 text-[var(--text-3)]" /></div>}</div>
+            <div className="min-w-0 flex-1"><p className="font-semibold">{product.name}</p><p className="mt-1 text-xs text-[var(--text-3)]">{business?.name}{branch ? ` · ${branch.branchName || branch.name}` : ""}</p><p className="mt-2 text-sm font-semibold">{price === 0 ? "Free" : promotionDiscount > 0 ? <><span className="text-[var(--success)]">{formatCurrency(adjustedTotal, currency)}</span><span className="ml-2 text-xs font-normal text-[var(--text-3)] line-through">{formatCurrency(total, currency)}</span></> : formatCurrency(total, currency)}</p></div>
           </div>
 
           {branches.length > 1 ? <label className="block text-sm font-medium">Location<select className="field-control mt-2" value={form.branchId} onChange={(event) => update("branchId", event.target.value)}>{branches.map((item) => <option key={item.id} value={item.id}>{item.branchName || item.name} · {item.city || "Zimbabwe"}</option>)}</select></label> : null}
@@ -250,9 +295,11 @@ export function CustomerTransactionModal({ open, onClose, product, business, bra
           <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Name<input className="field-control mt-2" value={form.contactName} onChange={(event) => update("contactName", event.target.value)} /></label><label className="text-sm font-medium">Phone<input className="field-control mt-2" placeholder="+263" value={form.contactPhone} onChange={(event) => update("contactPhone", event.target.value)} /></label></div>
           <label className="block text-sm font-medium">Notes <span className="font-normal text-[var(--text-3)]">optional</span><textarea className="field-control mt-2 min-h-24" value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder={kind === "appointment" ? "Anything the business should know before the appointment" : "Add any useful details"} /></label>
 
-          {kind === "ticket" && total > 0 ? <div><p className="text-sm font-medium">Payment</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => update("paymentMethod", "paynow")} className={cn("rounded-[16px] border p-4 text-left", form.paymentMethod === "paynow" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "bg-[var(--surface)]")}><CreditCard className="h-5 w-5 text-[var(--accent)]" /><p className="mt-3 font-semibold">Pay online</p><p className="mt-1 text-xs text-[var(--text-3)]">Continue securely with Paynow.</p></button><button type="button" onClick={() => update("paymentMethod", "pay_later")} className={cn("rounded-[16px] border p-4 text-left", form.paymentMethod === "pay_later" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "bg-[var(--surface)]")}><Clock3 className="h-5 w-5 text-[var(--accent)]" /><p className="mt-3 font-semibold">Request first</p><p className="mt-1 text-xs text-[var(--text-3)]">Business confirmation before payment.</p></button></div></div> : null}
+          {total > 0 ? <div className="rounded-[18px] border border-[var(--border-subtle)] p-4"><div className="flex items-center gap-2"><BadgePercent className="h-5 w-5 text-[var(--accent)]" /><p className="text-sm font-semibold">Promotion</p></div><div className="mt-3 flex gap-2"><input className="field-control min-w-0 flex-1 uppercase" value={form.promoCode} onChange={(event) => { update("promoCode", event.target.value.toUpperCase()); setPromotion(null); }} placeholder="Code, if you have one" /><Button type="button" variant="outline" loading={promotionLoading} onClick={quotePromotion}>Apply</Button></div><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Spotly also checks automatic offers from this business.</p>{promotionDiscount > 0 ? <div className="mt-3 flex items-center justify-between rounded-xl bg-[var(--success-soft)] px-3 py-2 text-sm"><span className="font-medium">{promotion?.label || "Promotion applied"}</span><span className="font-semibold">−{formatCurrency(promotionDiscount, currency)}</span></div> : null}</div> : null}
+
+          {kind === "ticket" && adjustedTotal > 0 ? <div><p className="text-sm font-medium">Payment</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => update("paymentMethod", "paynow")} className={cn("rounded-[16px] border p-4 text-left", form.paymentMethod === "paynow" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "bg-[var(--surface)]")}><CreditCard className="h-5 w-5 text-[var(--accent)]" /><p className="mt-3 font-semibold">Pay online</p><p className="mt-1 text-xs text-[var(--text-3)]">Continue securely with Paynow.</p></button><button type="button" onClick={() => update("paymentMethod", "pay_later")} className={cn("rounded-[16px] border p-4 text-left", form.paymentMethod === "pay_later" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "bg-[var(--surface)]")}><Clock3 className="h-5 w-5 text-[var(--accent)]" /><p className="mt-3 font-semibold">Request first</p><p className="mt-1 text-xs text-[var(--text-3)]">Business confirmation before payment.</p></button></div></div> : null}
         </div>
-        <div className="flex items-center justify-between gap-3 border-t p-5"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={submit} loading={submitting}>{kind === "ticket" && form.paymentMethod === "paynow" && total > 0 ? "Continue to payment" : kind === "ticket" ? "Request tickets" : kind === "appointment" ? "Request appointment" : "Request booking"}</Button></div>
+        <div className="flex items-center justify-between gap-3 border-t p-5"><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={submit} loading={submitting}>{kind === "ticket" && form.paymentMethod === "paynow" && adjustedTotal > 0 ? "Continue to payment" : kind === "ticket" ? "Request tickets" : kind === "appointment" ? "Request appointment" : "Request booking"}</Button></div>
       </>}
     </Modal>
   );

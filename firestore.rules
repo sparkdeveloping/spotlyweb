@@ -297,9 +297,9 @@ service cloud.firestore {
     }
 
     match /promotions/{promotionId} {
-      allow read: if (resource.data.active == true && publicBusiness(resource.data.businessId)) || canViewBusiness(resource.data.businessId);
-      allow create: if canManageBusiness(request.resource.data.businessId);
-      allow update, delete: if canManageBusiness(resource.data.businessId);
+      allow read: if (("scope" in resource.data) && resource.data.scope == "platform" && platformAdmin()) || ((!(("scope" in resource.data) && resource.data.scope == "platform")) && ((resource.data.active == true && publicBusiness(resource.data.businessId)) || canViewBusiness(resource.data.businessId)));
+      allow create: if (("scope" in request.resource.data) && request.resource.data.scope == "platform" && platformAdmin()) || ((!(("scope" in request.resource.data) && request.resource.data.scope == "platform")) && canManageBusiness(request.resource.data.businessId));
+      allow update, delete: if (("scope" in resource.data) && resource.data.scope == "platform" && platformAdmin()) || ((!(("scope" in resource.data) && resource.data.scope == "platform")) && canManageBusiness(resource.data.businessId));
     }
 
     match /catalogTemplates/{templateId} {
@@ -371,6 +371,14 @@ service cloud.firestore {
       allow update: if activeAccount() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
       allow delete: if activeAccount() && resource.data.userId == request.auth.uid;
     }
+    // Growth and promotion accounting is server-authoritative. Customer-facing reads use scoped API routes.
+    match /promotionRedemptions/{redemptionId} { allow read, write: if false; }
+    match /referralProfiles/{profileId} { allow read, write: if false; }
+    match /referralCodes/{codeId} { allow read, write: if false; }
+    match /referralClaims/{claimId} { allow read, write: if false; }
+    match /referralRewards/{rewardId} { allow read, write: if false; }
+    match /businessReviews/{reviewId} { allow read, write: if false; }
+    match /availabilityReservations/{reservationId} { allow read, write: if false; }
 
     match /auditLogs/{logId} {
       allow read: if platformAdmin() || hasPermission("audit.read");

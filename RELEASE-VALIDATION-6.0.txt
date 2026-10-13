@@ -1,0 +1,15 @@
+Spotly Web Platform 6.0.0 — release validation
+Date: 2026-10-13
+
+PASS  npm run check:js
+      JavaScript-only and React-hook import checks passed.
+
+PASS  npm run check:theme
+      Theme safety passed for 197 source files and 41 classified route patterns.
+
+PASS  npm test
+      210 tests passed; 0 failed; 0 skipped.
+
+NOT RUN LOCALLY  npm run lint
+NOT RUN LOCALLY  npm run build
+Reason: the isolated packaging environment could not complete npm ci before the tool transport timeout, so eslint/next binaries were not available. Partial node_modules was removed before packaging. Vercel's production build remains the final compiler/linter gate.

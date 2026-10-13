@@ -58,6 +58,7 @@ test("shareable customer routes resolve into live marketplace state", async () =
   const item = await source("app/item/[id]/page.js");
   const place = await source("app/place/[id]/page.js");
   assert.match(app, /requestedOffer/);
-  assert.match(item, /business=.*offer=/);
-  assert.match(place, /business=/);
+  assert.match(item, /initialBusinessId=\{item\.businessId\}/);
+  assert.match(item, /initialOfferId=\{id\}/);
+  assert.match(place, /initialBusinessId=\{id\}/);
 });

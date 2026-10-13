@@ -5,6 +5,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { requireBusinessPermission } from "@/lib/access-control-server";
 import { releaseReservationInTransaction } from "@/lib/order-reservations-server";
 import { safeText } from "@/lib/server-helpers";
+import { qualifyReferralForCustomer } from "@/lib/referral-server";
 
 export const runtime = "nodejs";
 
@@ -124,6 +125,7 @@ export async function POST(request) {
       }
     });
 
+    if (body.changes.paymentStatus === "paid" && order.customerId) await qualifyReferralForCustomer(db, order.customerId, body.orderId).catch(() => null);
     return Response.json({ ok: true, orderId: body.orderId, status: nextStatus || order.status });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the order update details.", details: error.flatten() }, { status: 400 });

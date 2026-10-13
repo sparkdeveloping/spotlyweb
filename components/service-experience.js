@@ -21,7 +21,7 @@ import {
   Truck,
   UtensilsCrossed
 } from "lucide-react";
-import { loadServiceFeed } from "@/lib/firebase-services";
+import { loadServiceFeed, track } from "@/lib/firebase-services";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { Badge, Button, EmptyState, SearchField } from "@/components/ui";
@@ -145,10 +145,10 @@ function BusinessCard({ business, favorite, onFavorite, onOpen, service, currenc
   return <article className="group overflow-hidden rounded-[22px] border border-[var(--border-subtle)] bg-[var(--surface)] transition hover:-translate-y-0.5 hover:shadow-card">
     <button type="button" onClick={() => onOpen(business)} className="block w-full text-left">
       <div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]">
-        {image ? <Image src={image} alt="" fill unoptimized className="object-cover transition duration-300 group-hover:scale-[1.02]" sizes="(max-width: 768px) 100vw, 33vw" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-9 w-9" /></div>}
+        {image ? <Image src={image} alt="" fill  className="object-cover transition duration-300 group-hover:scale-[1.02]" sizes="(max-width: 768px) 100vw, 33vw" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-9 w-9" /></div>}
         <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
         <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
-          <div className="flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}</div>
+          <div className="flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div>
           {business.rating ? <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--media-ink)_58%,transparent)] px-2 py-1 text-xs font-semibold text-[var(--media-text)]"><Star className="h-3.5 w-3.5 fill-current" />{business.rating.toFixed(1)}</span> : null}
         </div>
       </div>
@@ -175,8 +175,8 @@ function ItemCard({ item, service, currency, saved, onOpen, onSave }) {
   return <article className="group overflow-hidden rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface)] transition hover:-translate-y-0.5 hover:shadow-card">
     <button type="button" onClick={() => onOpen(item)} className="block w-full text-left">
       <div className="relative aspect-[4/3] overflow-hidden bg-[var(--surface-2)]">
-        {image ? <Image src={image} alt="" fill unoptimized className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 640px) 50vw, 260px" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]">{event ? <Ticket className="h-8 w-8" /> : book ? <CalendarDays className="h-8 w-8" /> : <ShoppingBag className="h-8 w-8" />}</div>}
-        <div className="absolute left-3 top-3 flex flex-wrap gap-2">{item.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}{deal ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><Tag className="mr-1 h-3 w-3" />Deal</Badge> : null}</div>
+        {image ? <Image src={image} alt="" fill  className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 640px) 50vw, 260px" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]">{event ? <Ticket className="h-8 w-8" /> : book ? <CalendarDays className="h-8 w-8" /> : <ShoppingBag className="h-8 w-8" />}</div>}
+        <div className="absolute left-3 top-3 flex flex-wrap gap-2">{item.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}{deal ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><Tag className="mr-1 h-3 w-3" />Deal</Badge> : null}{item.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{item.promotion.name || "Offer"}</Badge> : null}</div>
       </div>
       <div className="p-4">
         <p className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--text-3)]">{item.businessName || item.category}</p>
@@ -244,6 +244,7 @@ export function ServiceDiscoveryView({
     setFilter("all");
     setSort(service === "events" ? "soonest" : "recommended");
   }, [service]);
+  useEffect(() => { track("service_view", { service, city: location.city || "", area_selected: Boolean(location.area) }); }, [service, location.city, location.area]);
 
   useEffect(() => {
     let active = true;
@@ -255,6 +256,7 @@ export function ServiceDiscoveryView({
         const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, limit: 24 });
         if (!active) return;
         setFeed(result);
+        if (query.trim().length >= 2) track(result.totalItems || result.totalBusinesses ? "service_search_results" : "service_search_zero_results", { service, query_length: query.trim().length, item_count: Number(result.totalItems || 0), business_count: Number(result.totalBusinesses || 0), city: location.city || "" });
       } catch (reason) {
         if (!active) return;
         setError(reason.message || `${config.label} could not be refreshed right now.`);
@@ -278,7 +280,7 @@ export function ServiceDiscoveryView({
     }
   }
 
-  const itemFilterMatches = useMemo(() => feed.items.filter((item) => service === "events" ? filterEvent(item, filter) : filter === "deals" ? Number(item.compareAtPrice || 0) > Number(item.price || 0) && Number(item.price || 0) > 0 : true).filter((item) => category === "all" || item.category === category), [feed.items, filter, category, service]);
+  const itemFilterMatches = useMemo(() => feed.items.filter((item) => service === "events" ? filterEvent(item, filter) : filter === "deals" ? ((Number(item.compareAtPrice || 0) > Number(item.price || 0) && Number(item.price || 0) > 0) || Boolean(item.promotion)) : true).filter((item) => category === "all" || item.category === category), [feed.items, filter, category, service]);
   const itemBusinessIds = useMemo(() => new Set(itemFilterMatches.map((item) => item.businessId)), [itemFilterMatches]);
   const visibleBusinesses = useMemo(() => feed.businesses.filter((business) => filterBusiness(business, filter)).filter((business) => category === "all" || [business.category, ...(business.categories || [])].includes(category) || itemBusinessIds.has(business.id)).filter((business) => !["deals", "today", "tonight", "weekend", "free"].includes(filter) || itemBusinessIds.has(business.id)), [feed.businesses, filter, category, itemBusinessIds]);
   const visibleItems = useMemo(() => sortItems(itemFilterMatches, sort, service, currency), [itemFilterMatches, sort, service, currency]);
@@ -315,7 +317,7 @@ export function ServiceDiscoveryView({
       {loading ? <div className="mt-5"><ServiceSkeleton /></div> : error && !feed.businesses.length ? <EmptyState className="mt-5" icon={Search} title={`${config.label} is temporarily unavailable`} description={error} action={<Button variant="outline" onClick={() => setQuery((value) => `${value} `)}>Try again</Button>} /> : visibleBusinesses.length ? <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{visibleBusinesses.slice(0, 12).map((business) => <BusinessCard key={business.id} business={business} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />)}</div> : <EmptyState className="mt-5" icon={Store} title={`No matching ${config.label.toLowerCase()} businesses`} description="Try another filter, category or search, or broaden your location." action={<Button onClick={() => { setFilter("all"); setCategory("all"); setQuery(""); }}>Clear filters</Button>} />}
     </section>
 
-    {featured.length > 0 && !query ? <section className="mt-9 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Featured on Spotly</p><h2 className="mt-1 text-xl font-semibold tracking-[-.03em]">Worth a look</h2></div><span className="text-xs text-[var(--text-3)]">Published businesses</span></div><div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto pb-2">{featured.map((business) => <button type="button" key={business.id} onClick={() => onOpenBusiness(business)} className="w-[230px] shrink-0 text-left"><div className="relative aspect-[1.4/1] overflow-hidden rounded-[18px] bg-[var(--surface-2)]">{imageForBusiness(business) ? <Image src={imageForBusiness(business)} alt="" fill unoptimized className="object-cover" sizes="230px" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-7 w-7" /></div>}</div><p className="mt-3 truncate text-sm font-semibold">{business.name}</p><p className="mt-1 truncate text-xs text-[var(--text-3)]">{business.category} · {business.area || business.city}</p></button>)}</div></section> : null}
+    {featured.length > 0 && !query ? <section className="mt-9 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Featured on Spotly</p><h2 className="mt-1 text-xl font-semibold tracking-[-.03em]">Worth a look</h2></div><span className="text-xs text-[var(--text-3)]">Published businesses</span></div><div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto pb-2">{featured.map((business) => <button type="button" key={business.id} onClick={() => onOpenBusiness(business)} className="w-[230px] shrink-0 text-left"><div className="relative aspect-[1.4/1] overflow-hidden rounded-[18px] bg-[var(--surface-2)]">{imageForBusiness(business) ? <Image src={imageForBusiness(business)} alt="" fill  className="object-cover" sizes="230px" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-7 w-7" /></div>}</div><p className="mt-3 truncate text-sm font-semibold">{business.name}</p><p className="mt-1 truncate text-xs text-[var(--text-3)]">{business.category} · {business.area || business.city}</p></button>)}</div></section> : null}
 
     <section className="mt-9">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">Across {config.label}</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">{config.items}</h2><p className="mt-1 text-sm text-[var(--text-3)]">{feed.totalItems || 0} published {feed.totalItems === 1 ? "offering" : "offerings"}</p></div><select value={sort} onChange={(event) => setSort(event.target.value)} className="field-control h-10 min-w-[150px] self-start text-sm sm:self-auto"><option value="recommended">Recommended</option>{service === "events" ? <option value="soonest">Soonest</option> : null}<option value="price">Price: low to high</option></select></div>

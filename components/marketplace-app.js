@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, BadgeCheck, ChevronRight, CreditCard, Heart, LoaderCircle, LocateFixed, MapPin, Minus, PackageCheck, Plus, RefreshCw, Search, ShieldCheck, ShoppingBasket, Store, Truck, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, BadgePercent, ChevronRight, CreditCard, Heart, LoaderCircle, LocateFixed, MapPin, Minus, PackageCheck, Plus, RefreshCw, Search, ShieldCheck, ShoppingBasket, Star, Store, Truck, X } from "lucide-react";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Badge, Button, Card, EmptyState, Modal, Overlay, SearchField, StatusBadge } from "@/components/ui";
-import { authenticatedFetch } from "@/lib/api-client";
+import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { deleteSavedItem, loadPublicMarketplaceBusiness, saveFavorite, saveSavedItem, searchLiveBusinesses, searchSpotly, subscribeCustomerOrders, subscribeFavorites, subscribeSavedItems, track } from "@/lib/firebase-services";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
@@ -28,6 +28,7 @@ const CART_KEY = "spotly-marketplace-cart";
 const CHECKOUT_KEY = "spotly-checkout-draft";
 const LOCATION_KEY = "spotly-marketplace-location";
 const RECENT_SEARCH_KEY = "spotly-recent-searches";
+const RECENT_BUSINESS_KEY = "spotly-recent-businesses";
 const MARKETPLACE_TABS_ID = "marketplace-sections";
 const SERVICE_PATHS = new Set(["/ride", "/eat", "/shop", "/book", "/events", "/send"]);
 
@@ -65,7 +66,7 @@ function LocationControl({ value, cities, supportedAreas, onChange, onLocate, lo
 
 function BusinessVisual({ business }) {
   const image = business.coverImage || business.image || business.logoUrl;
-  if (image) return <Image src={image} alt="" fill unoptimized className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />;
+  if (image) return <Image src={image} alt="" fill  className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />;
   return <div className="flex h-full items-center justify-center bg-[var(--surface-2)]"><span className="flex h-16 w-16 items-center justify-center rounded-xl border bg-[var(--surface)] text-2xl font-semibold text-violet">{(business.name || "B").slice(0, 1).toUpperCase()}</span></div>;
 }
 
@@ -91,7 +92,7 @@ function ProductCard({ product, quantity, onChange, onOpen, currency, archetype 
     <Card className="overflow-hidden p-0" variant="bordered">
       <button type="button" onClick={() => onOpen(product)} className="flex w-full gap-4 p-4 text-left">
         <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-[14px] bg-[var(--surface-2)]">
-          {product.image ? <Image src={product.image} alt="" fill unoptimized className="object-cover" sizes="96px" /> : <div className="flex h-full items-center justify-center text-[var(--text-3)]"><ShoppingBasket className="h-8 w-8" /></div>}
+          {product.image ? <Image src={product.image} alt="" fill  className="object-cover" sizes="96px" /> : <div className="flex h-full items-center justify-center text-[var(--text-3)]"><ShoppingBasket className="h-8 w-8" /></div>}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
@@ -123,6 +124,18 @@ function customerPaymentNeeded(order = {}) {
 
 function customerActivityCancellable(order = {}) {
   return ["awaiting_payment", "submitted", "new", "requested", "confirmed", "accepted"].includes(order.status) && !["paid", "refund_pending", "refunded"].includes(order.paymentStatus);
+}
+
+function customerReviewEligible(order = {}) {
+  const status = String(order.status || "").toLowerCase();
+  const delivery = String(order.deliveryStatus || "").toLowerCase();
+  return ["completed", "delivered", "checked_out"].includes(status) || delivery === "delivered";
+}
+
+function customerActivityRecoverable(order = {}) {
+  const status = String(order.status || "").toLowerCase();
+  const payment = String(order.paymentStatus || "").toLowerCase();
+  return ["payment_failed", "expired"].includes(status) || ["failed", "expired", "cancelled"].includes(payment);
 }
 
 function activityKind(order = {}) {
@@ -178,7 +191,7 @@ function OrderCard({ order, onPay, onCancel, onOpen, highlighted = false, innerR
     </Card>
   </div>;
 }
-function ActivityDetailModal({ order, open, onClose, onPay, onCancel }) {
+function ActivityDetailModal({ order, open, onClose, onPay, onCancel, onReview, onRetry }) {
   const [delivery, setDelivery] = useState(null);
   useEffect(() => {
     let active = true;
@@ -196,15 +209,46 @@ function ActivityDetailModal({ order, open, onClose, onPay, onCancel }) {
   const subtotal = Number(order.totals?.subtotal ?? 0);
   const serviceFee = Number(order.totals?.serviceFee ?? 0);
   const deliveryFee = Number(order.totals?.deliveryFee ?? 0);
+  const discount = Number(order.totals?.discount ?? order.promotion?.discount ?? 0);
   const currentDeliveryState = delivery?.state || order.deliveryStatus;
 
   return <Modal open={open} onClose={onClose} title={order.businessName || "Spotly Activity"} description={order.number || order.orderNumber || order.id} size="lg"><div className="p-5 sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm text-[var(--text-3)]">{created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }) : "Recently created"}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{transactionKind === "ticket" ? "Ticket activity" : transactionKind === "appointment" ? "Appointment" : transactionKind === "booking" ? "Booking" : order.fulfilment === "delivery" ? "Delivery order" : "Pickup order"}</h2></div><div className="flex flex-wrap gap-2"><StatusBadge status={order.status || "submitted"} />{order.paymentStatus ? <Badge tone={order.paymentStatus === "paid" ? "success" : ["failed", "refunded"].includes(order.paymentStatus) ? "danger" : "warning"}>{String(order.paymentStatus).replaceAll("_", " ")}</Badge> : null}</div></div>
     {transactionKind ? <TransactionSummary order={order} /> : order.fulfilment === "delivery" ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="font-semibold">{deliveryStateLabel(currentDeliveryState)}</p><p className="mt-1 text-sm text-[var(--text-2)]">{order.delivery?.address || order.delivery?.suburb || "Delivery address"}</p>{delivery?.customerPin && !["delivered","cancelled","failed","returned"].includes(delivery.state) ? <div className="mt-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] p-3"><p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">Delivery PIN</p><p className="mt-1 font-mono text-2xl font-semibold tracking-[.16em]">{delivery.customerPin}</p><p className="mt-1 text-xs text-[var(--text-3)]">Only share this when the Driver is with you and ready to hand over the order.</p></div> : null}</div> : <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="font-semibold">Pickup</p><p className="mt-1 text-sm text-[var(--text-2)]">{order.pickup?.date || "Date pending"} · {order.pickup?.slot || "Time pending"}</p><p className="mt-1 text-sm text-[var(--text-3)]">{order.branchName || order.locationName || "Selected location"}</p></div>}
     <div className="mt-6"><h3 className="text-sm font-semibold">{transactionKind === "ticket" ? "Tickets" : transactionKind ? "Offering" : "Items"}</h3><div className="mt-3 divide-y divide-[var(--divider)] rounded-[16px] border border-[var(--border-subtle)] px-4">{(order.items || []).map((item, index) => <div key={`${item.productId || item.name}-${index}`} className="flex gap-3 py-3 text-sm"><span className="font-semibold">{Number(item.quantity || 1)}×</span><div className="min-w-0 flex-1"><p className="font-medium">{item.name || "Item"}</p>{item.variant ? <p className="mt-1 text-xs text-[var(--text-3)]">{item.variant}</p> : null}</div>{Number(item.lineTotal ?? item.unitPrice ?? 0) > 0 ? <span className="font-semibold">{formatCurrency(item.lineTotal ?? Number(item.unitPrice || 0) * Number(item.quantity || 1), order.currency || "USD")}</span> : null}</div>)}</div></div>
-    {total > 0 ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4 text-sm"><div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{formatCurrency(subtotal || Math.max(0, total - serviceFee - deliveryFee), order.currency || "USD")}</span></div>{serviceFee > 0 ? <div className="mt-2 flex justify-between"><span>Service fee</span><span>{formatCurrency(serviceFee, order.currency || "USD")}</span></div> : null}{deliveryFee > 0 ? <div className="mt-2 flex justify-between"><span>Delivery</span><span>{formatCurrency(deliveryFee, order.currency || "USD")}</span></div> : null}<div className="mt-3 flex justify-between border-t border-[var(--divider)] pt-3 text-base font-semibold"><span>Total</span><span>{formatCurrency(total, order.currency || "USD")}</span></div></div> : null}
-    <div className="mt-6 flex flex-col gap-2 sm:flex-row"><Button asChild variant="outline" className="flex-1"><Link href={`/support?order=${encodeURIComponent(order.id)}`}>Get help</Link></Button>{paymentNeeded ? <Button className="flex-1" onClick={() => onPay(order)}><CreditCard className="h-4 w-4" />Continue payment</Button> : null}{cancellable ? <Button variant="outline" className="flex-1" onClick={() => onCancel(order)}>Cancel</Button> : null}</div>
+    {total > 0 ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4 text-sm"><div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{formatCurrency(subtotal || Math.max(0, total - serviceFee - deliveryFee), order.currency || "USD")}</span></div>{discount > 0 ? <div className="mt-2 flex justify-between text-[var(--success)]"><span>{order.promotion?.name || "Promotion"}</span><span className="font-semibold">−{formatCurrency(discount, order.currency || "USD")}</span></div> : null}{serviceFee > 0 ? <div className="mt-2 flex justify-between"><span>Service fee</span><span>{formatCurrency(serviceFee, order.currency || "USD")}</span></div> : null}{deliveryFee > 0 ? <div className="mt-2 flex justify-between"><span>Delivery</span><span>{formatCurrency(deliveryFee, order.currency || "USD")}</span></div> : null}<div className="mt-3 flex justify-between border-t border-[var(--divider)] pt-3 text-base font-semibold"><span>Total</span><span>{formatCurrency(total, order.currency || "USD")}</span></div></div> : null}
+    {customerActivityRecoverable(order) ? <div className="mt-5 rounded-[16px] border border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm"><p className="font-semibold text-[var(--on-warning-soft)]">This payment did not complete</p><p className="mt-1 leading-6 text-[var(--text-2)]">Spotly releases inventory or held availability after a failed or expired payment. Start again to recheck current stock, price and availability before paying.</p></div> : null}
+    <div className="mt-6 flex flex-col gap-2 sm:flex-row"><Button asChild variant="outline" className="flex-1"><Link href={`/support?order=${encodeURIComponent(order.id)}`}>Get help</Link></Button>{customerActivityRecoverable(order) ? <Button className="flex-1" onClick={() => onRetry?.(order)}><RefreshCw className="h-4 w-4" />Start again</Button> : null}{customerReviewEligible(order) ? <Button variant="outline" className="flex-1" onClick={() => onReview?.(order)}><Star className={cn("h-4 w-4", order.customerRating && "fill-current")} />{order.customerRating ? "Update review" : "Rate experience"}</Button> : null}{paymentNeeded ? <Button className="flex-1" onClick={() => onPay(order)}><CreditCard className="h-4 w-4" />Continue payment</Button> : null}{cancellable ? <Button variant="outline" className="flex-1" onClick={() => onCancel(order)}>Cancel</Button> : null}</div>
   </div></Modal>;
+}
+
+function ReviewModal({ order, open, onClose }) {
+  const { toast } = useToast();
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || !order) return;
+    setRating(Math.max(1, Math.min(5, Number(order.customerRating || 5))));
+    setComment(String(order.customerReviewComment || ""));
+  }, [open, order]);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!order?.id || saving) return;
+    setSaving(true);
+    try {
+      await authenticatedFetch("/api/customer/reviews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: order.id, rating, comment }) });
+      track("review_submitted", { rating, transaction_type: activityKind(order) });
+      toast(order.customerRating ? "Your review has been updated." : "Thanks for sharing your experience.", { title: "Review saved" });
+      onClose?.();
+    } catch (error) {
+      toast(error.message || "Your review could not be saved.", { type: "error", title: "Could not save review" });
+    } finally { setSaving(false); }
+  }
+
+  return <Modal open={open} onClose={() => !saving && onClose?.()} title={`Rate ${order?.businessName || "this experience"}`} description="Verified Spotly activity" size="sm"><form onSubmit={submit} className="p-5"><div><p className="text-sm font-semibold">Your rating</p><div className="mt-3 flex gap-2" role="radiogroup" aria-label="Rating from 1 to 5 stars">{[1,2,3,4,5].map((value) => <button key={value} type="button" role="radio" aria-checked={rating === value} aria-label={`${value} star${value === 1 ? "" : "s"}`} onClick={() => setRating(value)} className="rounded-lg p-1.5 transition hover:bg-[var(--surface-hover)]"><Star className={cn("h-7 w-7", value <= rating ? "fill-[var(--warning)] text-[var(--warning)]" : "text-[var(--text-3)]")} /></button>)}</div></div><label className="mt-5 block text-sm font-semibold">Comment <span className="font-normal text-[var(--text-3)]">(optional)</span><textarea className="field-control mt-2 min-h-28 w-full" maxLength={1000} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="What stood out? Keep it useful for other customers." /></label><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Your review is shown as a verified Spotly experience. Your name, email and phone are not published with it.</p><div className="mt-5 flex gap-3"><Button type="button" variant="outline" className="flex-1" disabled={saving} onClick={onClose}>Cancel</Button><Button type="submit" className="flex-1" loading={saving}>Save review</Button></div></form></Modal>;
 }
 
 function BasketContents({ cartItems, cartTotal, currency, onCheckout, onClose }) {
@@ -218,14 +262,19 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ checkoutId: "", branchId: "", fulfilment: defaultFulfilment === "delivery" ? "delivery" : "pickup", date: "", slot: "", slotId: "", paymentMethod: "", contactName: user?.displayName || "", contactPhone: user?.phoneNumber || "", alternativePhone: "", notes: "", substitutionPreference: "contact_me", address: "", suburb: "", landmark: "", instructions: "", lat: null, lng: null });
+  const [promotion, setPromotion] = useState(null);
+  const [promotionLoading, setPromotionLoading] = useState(false);
+  const [form, setForm] = useState({ checkoutId: "", promoCode: "", branchId: "", fulfilment: defaultFulfilment === "delivery" ? "delivery" : "pickup", date: "", slot: "", slotId: "", paymentMethod: "", contactName: user?.displayName || "", contactPhone: user?.phoneNumber || "", alternativePhone: "", notes: "", substitutionPreference: "contact_me", address: "", suburb: "", landmark: "", instructions: "", lat: null, lng: null });
   const selectedBranch = branches.find((branch) => branch.id === form.branchId);
   const deliveryEnabled = Boolean(selectedBranch?.delivery?.enabled && !selectedBranch?.delivery?.paused && (selectedBranch?.fulfilment || []).includes("delivery"));
   const availability = useMemo(() => pickupAvailability(selectedBranch), [selectedBranch]);
   const methods = useMemo(() => branchPaymentMethods(selectedBranch).filter((method) => form.fulfilment !== "delivery" || !["cash", "bank_transfer"].includes(method)), [selectedBranch, form.fulfilment]);
   const total = cartItems.reduce((sum, item) => sum + (priceFor(item, currency) || 0) * item.quantity, 0);
   const deliveryFee = form.fulfilment === "delivery" ? Number(selectedBranch?.delivery?.fee ?? 3.5) : 0;
+  const promotionDiscount = Number(promotion?.discount || 0);
+  const estimatedTotal = Math.max(0, total - promotionDiscount + deliveryFee);
   const unresolvedPrice = cartItems.some((item) => !priceFor(item, currency));
+  const cartSignature = cartItems.map((item) => `${item.id}:${item.quantity}`).join("|");
   const steps = ["Basket", "How to get it", form.fulfilment === "delivery" ? "Delivery details" : "Pickup details", "Payment", "Review"];
 
   useEffect(() => {
@@ -237,6 +286,7 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
   }, [open, branches, selectedBranchId, user, defaultFulfilment]);
 
   useEffect(() => { if (open) writeState(CHECKOUT_KEY, user, form); }, [form, open, user]);
+  useEffect(() => { setPromotion(null); }, [form.branchId, currency, cartSignature]);
   useEffect(() => {
     if (!selectedBranch) return;
     const nextAvailability = pickupAvailability(selectedBranch);
@@ -273,15 +323,30 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
       setLocating(false);
     }, () => { setLocating(false); setError("We could not read your location. Allow location access and try again."); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   }
+  async function quotePromotion() {
+    const code = String(form.promoCode || "").trim();
+    if (!user || user.isAnonymous) { setError("Sign in before applying a promotion code."); return; }
+    if (!form.branchId || !cartItems.length) return;
+    setPromotionLoading(true); setError("");
+    try {
+      const result = await authenticatedFetch("/api/customer/promotions/quote", { method: "POST", body: JSON.stringify({ businessId: business.id, branchId: form.branchId, currency, code, items: cartItems.map((item) => ({ productId: item.id, quantity: item.quantity })) }) });
+      setPromotion(result.promotion || null);
+      if (result.promotion) track("promotion_applied", { promotion_id: result.promotion.id || "", discount: Number(result.promotion.discount || 0), currency, service: "order" });
+      if (code && !result.promotion) setError("That promotion is not available for this order.");
+    } catch (reason) { setPromotion(null); setError(reason.message || "That promotion could not be applied."); }
+    finally { setPromotionLoading(false); }
+  }
+
   async function submit() {
     const message = validationFor(4); if (message) { setError(message); return; }
     if (!user || user.isAnonymous) { window.location.assign(`/login?next=${encodeURIComponent("/marketplace")}`); return; }
     setSubmitting(true); setError("");
     try {
-      const payload = { checkoutId: form.checkoutId, businessId: business.id, branchId: form.branchId, items: cartItems.map((item) => ({ productId: item.id, quantity: item.quantity })), currency, paymentMethod: form.paymentMethod, fulfilment: form.fulfilment };
+      const payload = { checkoutId: form.checkoutId, promoCode: String(form.promoCode || "").trim(), businessId: business.id, branchId: form.branchId, items: cartItems.map((item) => ({ productId: item.id, quantity: item.quantity })), currency, paymentMethod: form.paymentMethod, fulfilment: form.fulfilment };
       if (form.fulfilment === "pickup") payload.pickup = { date: form.date, slot: form.slot, slotId: form.slotId, contactName: form.contactName, contactPhone: form.contactPhone, alternativePhone: form.alternativePhone, notes: form.notes, substitutionPreference: form.substitutionPreference };
       else payload.delivery = { contactName: form.contactName, contactPhone: form.contactPhone, address: form.address, suburb: form.suburb, landmark: form.landmark, instructions: form.instructions, lat: Number(form.lat), lng: Number(form.lng), substitutionPreference: form.substitutionPreference };
       const order = await authenticatedFetch("/api/orders/create", { method: "POST", body: JSON.stringify(payload) });
+      track("order_created", { business_id: business.id, branch_id: form.branchId, currency, fulfilment: form.fulfilment, payment_method: form.paymentMethod, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0), amount: Number(order.total || estimatedTotal || 0), discount: Number(order.discount || 0) });
       if (order.paymentRequired) {
         const channel = ["ecocash", "onemoney"].includes(form.paymentMethod) ? form.paymentMethod : "web";
         const payment = await authenticatedFetch("/api/payments/paynow/initiate", { method: "POST", body: JSON.stringify({ orderId: order.orderId, channel, phone: form.contactPhone }) });
@@ -293,12 +358,12 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
   }
   const field = (key) => ({ value: form[key] ?? "", onChange: (event) => setForm({ ...form, [key]: event.target.value }) });
   return <Modal open={open} onClose={onClose} title="Complete your order" description={`Step ${step + 1} of ${steps.length}: ${steps[step]}`} size="lg"><div className="border-b px-5 py-4"><div className="flex gap-2">{steps.map((label, index) => <div key={label} className="min-w-0 flex-1"><div className={cn("h-1.5 rounded-full", index <= step ? "bg-violet" : "bg-[var(--border)]")} /><p className={cn("mt-2 hidden text-xs sm:block", index === step ? "font-semibold text-violet" : "text-[var(--text-3)]")}>{label}</p></div>)}</div></div><div className="min-h-[380px] p-5 sm:p-6">{error && <div role="alert" className="mb-5 rounded-lg border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-3 text-sm text-[var(--on-danger-soft)]">{error}</div>}
-  {step === 0 && <div><div className="rounded-lg bg-[var(--accent-soft)] p-4"><p className="font-semibold">{business?.name}</p><p className="mt-1 text-sm text-[var(--on-accent-soft)]">{cartItems.reduce((sum,item) => sum + item.quantity,0)} items · {formatCurrency(total,currency)}</p></div><div className="mt-5 divide-y">{cartItems.map((item) => <div key={item.id} className="flex gap-3 py-3 text-sm"><span className="font-semibold">{item.quantity}×</span><span className="flex-1">{item.name}</span><span className="font-semibold">{priceFor(item,currency) ? formatCurrency(priceFor(item,currency)*item.quantity,currency) : "Price unavailable"}</span></div>)}</div></div>}
+  {step === 0 && <div><div className="rounded-lg bg-[var(--accent-soft)] p-4"><p className="font-semibold">{business?.name}</p><p className="mt-1 text-sm text-[var(--on-accent-soft)]">{cartItems.reduce((sum,item) => sum + item.quantity,0)} items · {formatCurrency(total,currency)}</p></div><div className="mt-5 divide-y">{cartItems.map((item) => <div key={item.id} className="flex gap-3 py-3 text-sm"><span className="font-semibold">{item.quantity}×</span><span className="flex-1">{item.name}</span><span className="font-semibold">{priceFor(item,currency) ? formatCurrency(priceFor(item,currency)*item.quantity,currency) : "Price unavailable"}</span></div>)}</div><div className="mt-5 rounded-xl border border-[var(--border-subtle)] p-4"><div className="flex items-center gap-2"><BadgePercent className="h-4 w-4 text-[var(--accent)]"/><p className="text-sm font-semibold">Promotion code</p></div><div className="mt-3 flex gap-2"><input className="field-control min-w-0 flex-1 uppercase" value={form.promoCode || ""} onChange={(event) => { setForm({ ...form, promoCode: event.target.value.toUpperCase() }); setPromotion(null); }} placeholder="Optional code"/><Button type="button" variant="outline" loading={promotionLoading} onClick={quotePromotion}>Apply</Button></div>{promotion ? <div className="mt-3 flex items-center justify-between rounded-lg bg-[var(--success-soft)] px-3 py-2 text-sm text-[var(--on-success-soft)]"><span>{promotion.name || promotion.label || "Promotion applied"}</span><strong>-{formatCurrency(promotionDiscount,currency)}</strong></div> : <p className="mt-2 text-xs text-[var(--text-3)]">Eligible automatic offers are also checked securely when you place the order.</p>}</div></div>}
   {step === 1 && <div className="space-y-5"><label className="text-sm font-medium">Business location<select {...field("branchId")} className="field-control mt-2 w-full">{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.branchName || branch.name || "Main location"} · {branch.city || "Zimbabwe"}</option>)}</select></label><div><p className="text-sm font-medium">How do you want it?</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setForm((current) => ({ ...current, fulfilment: "pickup" }))} className={cn("rounded-xl border p-4 text-left", form.fulfilment === "pickup" ? "border-violet bg-violet-soft ring-2 ring-violet/10" : "bg-[var(--surface)]")}><PackageCheck className="h-5 w-5 text-violet" /><p className="mt-3 font-semibold">Pick up</p><p className="mt-1 text-sm text-secondary">Choose a time and collect from the business.</p></button><button type="button" disabled={!deliveryEnabled} onClick={() => setForm((current) => ({ ...current, fulfilment: "delivery" }))} className={cn("rounded-xl border p-4 text-left disabled:cursor-not-allowed disabled:opacity-50", form.fulfilment === "delivery" ? "border-violet bg-violet-soft ring-2 ring-violet/10" : "bg-[var(--surface)]")}><MapPin className="h-5 w-5 text-violet" /><p className="mt-3 font-semibold">Delivery</p><p className="mt-1 text-sm text-secondary">{deliveryEnabled ? `Delivered from ${selectedBranch?.branchName || selectedBranch?.name || "this location"}.` : "Delivery is not enabled at this location yet."}</p></button></div></div></div>}
   {step === 2 && form.fulfilment === "pickup" && <div className="space-y-5">{availability.available ? <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Pickup day<select value={form.date} onChange={(event) => { const nextDay = availability.days.find((item) => item.date === event.target.value); const nextSlot = nextDay?.slots?.[0] || null; setForm({ ...form, date: event.target.value, slotId: nextSlot?.id || "", slot: nextSlot?.label || "" }); }} className="field-control mt-2 w-full">{availability.days.map((item) => <option key={item.date} value={item.date}>{item.label}</option>)}</select></label><label className="text-sm font-medium">Pickup time<select value={form.slotId} onChange={(event) => { const selected = day?.slots.find((slot) => slot.id === event.target.value); setForm({ ...form, slotId: selected?.id || "", slot: selected?.label || "" }); }} className="field-control mt-2 w-full">{(day?.slots || []).map((slot) => <option key={slot.id} value={slot.id}>{slot.label}{slot.remaining <= 3 ? ` · ${slot.remaining} left` : ""}</option>)}</select></label></div> : <div className="rounded-lg border border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm text-[var(--on-warning-soft)]"><p className="font-semibold">Pickup is not available for online checkout.</p><p className="mt-1">{availability.reason}</p></div>}<div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Pickup contact name<input {...field("contactName")} className="field-control mt-2 w-full" /></label><label className="text-sm font-medium">Phone<input {...field("contactPhone")} className="field-control mt-2 w-full" placeholder="+263" /></label><label className="text-sm font-medium sm:col-span-2">Pickup notes <span className="font-normal text-tertiary">optional</span><textarea {...field("notes")} className="field-control mt-2 min-h-24 w-full" /></label></div></div>}
   {step === 2 && form.fulfilment === "delivery" && <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">Delivery address<input {...field("address")} className="field-control mt-2 w-full" placeholder="Street / complex / house" /></label><label className="text-sm font-medium">Area or suburb<input {...field("suburb")} className="field-control mt-2 w-full" placeholder="Highlands" /></label><label className="text-sm font-medium">Landmark <span className="font-normal text-tertiary">optional</span><input {...field("landmark")} className="field-control mt-2 w-full" /></label><label className="text-sm font-medium">Delivery contact name<input {...field("contactName")} className="field-control mt-2 w-full" /></label><label className="text-sm font-medium">Phone<input {...field("contactPhone")} className="field-control mt-2 w-full" placeholder="+263" /></label><label className="text-sm font-medium sm:col-span-2">Delivery instructions <span className="font-normal text-tertiary">optional</span><textarea {...field("instructions")} className="field-control mt-2 min-h-24 w-full" placeholder="Gate, entrance, landmark or handoff instructions" /></label></div><div className="rounded-xl border bg-[var(--surface-2)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className="flex-1"><p className="font-semibold">Set the delivery pin</p><p className="mt-1 text-sm text-secondary">Spotly uses the map location for dispatch and Driver navigation.</p>{Number.isFinite(Number(form.lat)) && Number.isFinite(Number(form.lng)) && <p className="mt-2 text-xs font-semibold text-success">Location set · {Number(form.lat).toFixed(5)}, {Number(form.lng).toFixed(5)}</p>}</div><Button type="button" variant="outline" onClick={useCurrentLocation} loading={locating}><LocateFixed className="h-4 w-4" />Use my location</Button></div></div></div>}
   {step === 3 && <div className="space-y-5"><div className="grid gap-3 sm:grid-cols-2">{methods.map((method) => <button type="button" key={method} onClick={() => setForm((current) => ({ ...current, paymentMethod: method }))} className={cn("rounded-xl border p-4 text-left", form.paymentMethod === method ? "border-violet bg-violet-soft ring-2 ring-violet/10" : "bg-[var(--surface)]")}><CreditCard className="h-5 w-5 text-violet" /><p className="mt-3 font-semibold">{method.replaceAll("_", " ")}</p></button>)}</div>{form.fulfilment === "delivery" && <p className="text-sm text-secondary">Cash on delivery is intentionally unavailable. Choose a supported digital payment method.</p>}</div>}
-  {step === 4 && <div className="space-y-4"><div className="rounded-xl border p-5"><p className="text-sm font-semibold text-violet">{form.fulfilment === "delivery" ? "Delivery" : "Pickup"}</p><h3 className="mt-2 text-xl font-semibold">{selectedBranch?.branchName || selectedBranch?.name || business?.name}</h3><p className="mt-2 text-sm text-secondary">{form.fulfilment === "delivery" ? `${form.address}${form.suburb ? ` · ${form.suburb}` : ""}` : `${form.date} · ${form.slot}`}</p></div><div className="rounded-xl bg-[var(--surface-2)] p-5 text-sm"><div className="flex justify-between"><span>Items</span><span className="font-semibold">{formatCurrency(total,currency)}</span></div>{form.fulfilment === "delivery" && <div className="mt-2 flex justify-between"><span>Delivery</span><span className="font-semibold">{formatCurrency(deliveryFee,currency)}</span></div>}<div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-semibold">Estimated total</span><span className="font-semibold">{formatCurrency(total + deliveryFee,currency)}</span></div></div><p className="text-xs leading-5 text-tertiary">The server verifies product prices, fees, branch availability and fulfilment before creating the order.</p></div>}
+  {step === 4 && <div className="space-y-4"><div className="rounded-xl border p-5"><p className="text-sm font-semibold text-violet">{form.fulfilment === "delivery" ? "Delivery" : "Pickup"}</p><h3 className="mt-2 text-xl font-semibold">{selectedBranch?.branchName || selectedBranch?.name || business?.name}</h3><p className="mt-2 text-sm text-secondary">{form.fulfilment === "delivery" ? `${form.address}${form.suburb ? ` · ${form.suburb}` : ""}` : `${form.date} · ${form.slot}`}</p></div><div className="rounded-xl bg-[var(--surface-2)] p-5 text-sm"><div className="flex justify-between"><span>Items</span><span className="font-semibold">{formatCurrency(total,currency)}</span></div>{promotionDiscount > 0 && <div className="mt-2 flex justify-between text-[var(--success)]"><span>Promotion</span><span className="font-semibold">-{formatCurrency(promotionDiscount,currency)}</span></div>}{form.fulfilment === "delivery" && <div className="mt-2 flex justify-between"><span>Delivery</span><span className="font-semibold">{formatCurrency(deliveryFee,currency)}</span></div>}<div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-semibold">Estimated total</span><span className="font-semibold">{formatCurrency(estimatedTotal,currency)}</span></div></div><p className="text-xs leading-5 text-tertiary">The server verifies product prices, fees, branch availability and fulfilment before creating the order.</p></div>}
   </div><div className="flex items-center justify-between gap-3 border-t p-5"><Button variant="outline" onClick={() => step ? setStep((value) => value - 1) : onClose()}>{step ? "Back" : "Cancel"}</Button>{step < 4 ? <Button onClick={next}>{step === 0 ? "Choose fulfilment" : step === 1 ? (form.fulfilment === "delivery" ? "Add delivery details" : "Choose fulfilment") : step === 2 ? "Choose payment" : "Review order"}</Button> : <Button onClick={submit} loading={submitting}>Place {form.fulfilment === "delivery" ? "delivery" : "pickup"} order</Button>}</div></Modal>;
 }
 
@@ -335,6 +400,16 @@ function BusinessDetailView({
   const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) || branches[0] || null;
   const verified = ["approved", "verified"].includes(business.verificationStatus);
   const capabilityTitle = isPickup ? (archetype.id === "restaurant_food" ? "Order from this location" : "Shop this location") : archetype.id === "ticketing_events" ? "Choose an event or ticket" : archetype.id === "appointments_services" ? "Choose a service" : archetype.id === "accommodation_activities" ? "Choose a listing" : "Explore this business";
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!business?.id) { setReviews([]); return undefined; }
+    setReviewsLoading(true);
+    publicApiFetch(`/api/public/reviews?businessId=${encodeURIComponent(business.id)}`, { cache: "default" }).then((result) => { if (active) setReviews(Array.isArray(result.reviews) ? result.reviews : []); }).catch(() => { if (active) setReviews([]); }).finally(() => { if (active) setReviewsLoading(false); });
+    return () => { active = false; };
+  }, [business?.id]);
 
   return <section className="pb-8">
     <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]"><ArrowLeft className="h-4 w-4" />Back</button>
@@ -346,7 +421,7 @@ function BusinessDetailView({
         <div className="absolute inset-x-0 bottom-0 p-5 text-[var(--media-text)] sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0">{business.category || archetype.shortLabel}</Badge>
-            {verified ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><BadgeCheck className="mr-1 h-3.5 w-3.5" />Verified</Badge> : null}
+            {verified ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><BadgeCheck className="mr-1 h-3.5 w-3.5" />Verified</Badge> : null}{Number(business.rating || 0) > 0 ? <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0"><Star className="mr-1 h-3.5 w-3.5 fill-current" />{Number(business.rating).toFixed(1)}{Number(business.reviewCount || 0) > 0 ? ` · ${business.reviewCount}` : ""}</Badge> : null}
           </div>
           <div className="mt-3 flex items-end justify-between gap-4">
             <div className="min-w-0"><h1 className="text-3xl font-semibold tracking-[-.045em] sm:text-5xl">{business.name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[color-mix(in_srgb,var(--media-text)_82%,transparent)] sm:text-base">{business.description || `${archetype.label} on Spotly.`}</p></div>
@@ -373,6 +448,8 @@ function BusinessDetailView({
 
           {businessDetailLoading ? <div className="mt-5 flex items-center gap-3 rounded-xl border p-5 text-sm text-secondary"><LoaderCircle className="h-5 w-5 animate-spin text-violet"/>Loading published offerings…</div> : catalogError ? <div role="alert" className="mt-5 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{catalogError}</div> : visibleProducts.length ? <div className="mt-5 grid gap-3 xl:grid-cols-2">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} quantity={cart[product.id] || 0} onChange={onQuantityChange} onOpen={onOfferOpen} currency={currency} archetype={archetype} />)}</div> : branchProducts.length ? <LottieEmptyState className="mt-5" name="search-nearby" title="No matching offerings" description="Try another search or category." action={<Button variant="outline" onClick={() => { setProductQuery(""); setCategory("all"); }}>Clear filters</Button>} /> : <LottieEmptyState className="mt-5" name="storefront-open" title={`${archetype.nouns.catalog} not available yet`} description={`This business has not published available ${archetype.nouns.items} for this location.`} action={<div className="flex flex-wrap justify-center gap-2"><Button asChild variant="outline"><Link href="/support?topic=listing-update">Suggest an update</Link></Button><Button onClick={onBack}>Browse similar businesses</Button></div>} />}
         </div>
+
+        <section className="mt-7 rounded-[20px] bg-[var(--surface)] p-5" aria-labelledby="business-reviews-title"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Verified experiences</p><h2 id="business-reviews-title" className="mt-1 text-2xl font-semibold tracking-[-.035em]">Customer reviews</h2></div>{Number(business.rating || 0) > 0 ? <div className="text-right"><p className="flex items-center justify-end gap-1 text-lg font-semibold"><Star className="h-5 w-5 fill-[var(--warning)] text-[var(--warning)]" />{Number(business.rating).toFixed(1)}</p><p className="text-xs text-[var(--text-3)]">{Number(business.reviewCount || 0)} verified review{Number(business.reviewCount || 0) === 1 ? "" : "s"}</p></div> : null}</div>{reviewsLoading ? <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-3)]"><LoaderCircle className="h-4 w-4 animate-spin" />Loading reviews…</div> : reviews.length ? <div className="mt-4 grid gap-3 sm:grid-cols-2">{reviews.slice(0, 6).map((review) => <article key={review.id} className="rounded-[16px] bg-[var(--surface-2)] p-4"><div className="flex items-center gap-1" aria-label={`${review.rating} out of 5 stars`}>{[1,2,3,4,5].map((value) => <Star key={value} className={cn("h-4 w-4", value <= Number(review.rating || 0) ? "fill-[var(--warning)] text-[var(--warning)]" : "text-[var(--border-strong)]")} />)}</div>{review.comment ? <p className="mt-3 text-sm leading-6 text-[var(--text-2)]">{review.comment}</p> : <p className="mt-3 text-sm text-[var(--text-3)]">Rated after a verified Spotly experience.</p>}<div className="mt-3 flex items-center gap-2 text-xs text-[var(--text-3)]"><BadgeCheck className="h-3.5 w-3.5" />Verified Spotly activity{review.createdAt ? ` · ${new Date(review.createdAt).toLocaleDateString("en-ZW", { dateStyle: "medium" })}` : ""}</div></article>)}</div> : <p className="mt-4 text-sm leading-6 text-[var(--text-3)]">No customer reviews yet. Reviews can only be left after completed Spotly activity.</p>}</section>
       </div>
 
       {isPickup ? <aside className="h-fit rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface)] lg:sticky lg:top-24"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onCheckout={onCheckout} /></aside> : <aside className="h-fit rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface)] p-5 lg:sticky lg:top-24"><ShieldCheck className="h-5 w-5 text-[var(--accent)]" /><h2 className="mt-4 text-lg font-semibold">Book through Spotly</h2><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Choose a published {archetype.nouns.item} to send a real request. It will appear in Activity and in the business workspace for confirmation.</p><div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4 text-xs leading-5 text-[var(--text-3)]"><p className="font-semibold text-[var(--text)]">What happens next</p><p className="mt-2">1. Choose an offering.</p><p>2. Add the date, time or ticket quantity.</p><p>3. Spotly sends it to the business.</p><p>4. Track confirmation in Activity.</p></div></aside>}
@@ -387,7 +464,7 @@ function normalizeMarketplaceView(value) {
   return ["home", "search", "activity", "saved"].includes(value) ? value : "home";
 }
 
-export function MarketplaceApp({ basePath = "/marketplace", initialService = null }) {
+export function MarketplaceApp({ basePath = "/marketplace", initialService = null, initialBusinessId = null, initialOfferId = null, initialCity = null }) {
   const { user, profile, authReady } = useAuth();
   const { settings, settingsReady } = usePlatform();
   const { toast } = useToast();
@@ -397,11 +474,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
   const requestedView = searchParams.get("view");
   const requestedOrder = searchParams.get("order");
-  const requestedBusiness = searchParams.get("business");
-  const requestedOffer = searchParams.get("offer");
+  const requestedBusiness = searchParams.get("business") || initialBusinessId;
+  const requestedOffer = searchParams.get("offer") || initialOfferId;
   const requestedService = searchParams.get("service");
   const launchCities = settings.launch?.launchCities?.length ? settings.launch.launchCities : ["Harare"];
-  const defaultLocation = { city: settings.launch?.primaryCity || launchCities[0], area: "", radiusKm: 20, coordinates: null };
+  const defaultLocation = { city: initialCity && launchCities.includes(initialCity) ? initialCity : settings.launch?.primaryCity || launchCities[0], area: "", radiusKm: 20, coordinates: null };
 
   const [location, setLocation] = useState(defaultLocation);
   const [locating, setLocating] = useState(false);
@@ -429,8 +506,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [recentSearches, setRecentSearches] = useState([]);
+  const [recentBusinessIds, setRecentBusinessIds] = useState([]);
   const [activityFilter, setActivityFilter] = useState("all");
   const [activityDetail, setActivityDetail] = useState(null);
+  const [reviewTarget, setReviewTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
@@ -444,6 +523,15 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [businessDetailLoading, setBusinessDetailLoading] = useState(false);
   const [currency, setCurrency] = useState("USD");
   const [reloadKey, setReloadKey] = useState(0);
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const update = () => setOnline(typeof navigator === "undefined" ? true : navigator.onLine !== false);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
 
   const maintenance = settings.launch?.publicMode === "maintenance";
   const ridesEnabled = settings.mobility?.ridesEnabled === true || settings.launch?.ridesEnabled === true;
@@ -510,11 +598,13 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     const nextService = MARKETPLACE_SERVICE_KEYS.has(requestedService) ? requestedService : MARKETPLACE_SERVICE_KEYS.has(initialService) ? initialService : null;
     setService(nextService);
   }, [requestedService, initialService]);
+  useEffect(() => { if (settingsReady) track("marketplace_view", { view, service: service || "home", city: location.city || "", signed_in: Boolean(user && !user.isAnonymous) }); }, [view, service, location.city, settingsReady, user?.uid, user?.isAnonymous]);
 
   useEffect(() => {
     const migratedCart = migrateLegacyState(CART_KEY, user);
     setCart(migratedCart || readState(CART_KEY, user, {}));
     setLocation(migrateLegacyState(LOCATION_KEY, user) || readState(LOCATION_KEY, user, defaultLocation));
+    setRecentBusinessIds(readState(RECENT_BUSINESS_KEY, user, [], "local"));
   }, [user]);
 
   useEffect(() => { writeState(CART_KEY, user, cart); }, [cart, user]);
@@ -637,6 +727,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
         if (!active) return;
         setSearchResults(result.results || []);
         setSearchCounts(result.counts || {});
+        track((result.results || []).length ? "global_search_results" : "global_search_zero_results", { query_length: term.length, result_count: (result.results || []).length, city: location.city || "", service: service || "all" });
       } catch (error) {
         if (!active) return;
         setSearchResults([]);
@@ -872,6 +963,22 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     }
   }
 
+  function retryActivity(order) {
+    if (!order) return;
+    track("activity_retry_started", { transaction_type: activityKind(order), payment_state: String(order.paymentStatus || "unknown") });
+    setActivityDetail(null);
+    const productId = order.items?.[0]?.productId;
+    if (productId && ["appointment", "booking", "ticket"].includes(activityKind(order))) {
+      router.push(`/item/${encodeURIComponent(productId)}`);
+      return;
+    }
+    if (order.businessId) {
+      router.push(`/place/${encodeURIComponent(order.businessId)}`);
+      return;
+    }
+    openHome();
+  }
+
   async function cancelActivity() {
     if (!cancelTarget) return;
     if (cancelReason.trim().length < 3) {
@@ -895,6 +1002,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }
 
   function openBusiness(business) {
+    if (business?.id) {
+      const nextRecent = [business.id, ...recentBusinessIds.filter((id) => id !== business.id)].slice(0, 8);
+      setRecentBusinessIds(nextRecent);
+      writeState(RECENT_BUSINESS_KEY, user, nextRecent, "local");
+    }
     track("select_business", { business_id: business.id || "", city: location.city || "", area: location.area || "", service: service || "home" });
     setSelected(business);
     setSelectedOffer(null);
@@ -956,6 +1068,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     </header>
 
     <main className="mx-auto max-w-[1180px] px-3 pb-28 pt-4 sm:px-6 sm:pt-6 lg:pb-12">
+      {!online ? <div role="status" className="mb-4 rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm"><p className="font-semibold text-[var(--on-warning-soft)]">You’re offline</p><p className="mt-1 leading-6 text-[var(--text-2)]">You can keep viewing anything already loaded. Search, checkout, payments and updates will resume when your connection returns.</p></div> : null}
       {loadError && businesses.length ? <div role="status" className="mb-4 flex flex-col gap-3 rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="font-semibold text-[var(--on-warning-soft)]">Marketplace refresh is delayed</p><p className="mt-1 leading-6 text-secondary">{loadError}</p></div><Button variant="outline" size="sm" onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="h-4 w-4" />Retry</Button></div> : null}
 
       {selected ? (
@@ -989,7 +1102,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
           onCheckout={() => { track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) }); setCheckout(true); }}
         />
       ) : view === "home" && !service ? (
-        loading && !businesses.length ? <div className="flex min-h-[55vh] flex-col items-center justify-center text-center"><SpotlyLottie name="marketplace-discover" mode="loop" eager className="h-28 w-28" fallback={<Store className="h-9 w-9 text-violet" />} /><p className="mt-4 text-sm font-semibold">Opening Spotly in {location.city}…</p><p className="mt-2 max-w-sm text-xs leading-5 text-[var(--text-3)]">Loading verified businesses and current availability.</p></div> : loadError && !businesses.length ? <LottieEmptyState name="marketplace-discover" title="Spotly could not load nearby businesses" description={loadError} action={<Button onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="h-4 w-4" />Reload</Button>} /> : <MarketplaceHome businessResults={businessResults} orders={orders} location={location} ridesEnabled={ridesEnabled} sendEnabled={sendEnabled} onSelectService={enterService} onOpenBusiness={openBusiness} onSearch={openSearch} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} onLocation={() => setLocationOpen(true)} />
+        loading && !businesses.length ? <div className="flex min-h-[55vh] flex-col items-center justify-center text-center"><SpotlyLottie name="marketplace-discover" mode="loop" eager className="h-28 w-28" fallback={<Store className="h-9 w-9 text-violet" />} /><p className="mt-4 text-sm font-semibold">Opening Spotly in {location.city}…</p><p className="mt-2 max-w-sm text-xs leading-5 text-[var(--text-3)]">Loading verified businesses and current availability.</p></div> : loadError && !businesses.length ? <LottieEmptyState name="marketplace-discover" title="Spotly could not load nearby businesses" description={loadError} action={<Button onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="h-4 w-4" />Reload</Button>} /> : <MarketplaceHome businessResults={businessResults} orders={orders} recentBusinessIds={recentBusinessIds} location={location} ridesEnabled={ridesEnabled} sendEnabled={sendEnabled} onSelectService={enterService} onOpenBusiness={openBusiness} onSearch={openSearch} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} onLocation={() => setLocationOpen(true)} />
       ) : view === "activity" ? (
         <section className="rounded-[26px] bg-[var(--surface)] p-5 sm:p-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -1068,7 +1181,8 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     <Overlay open={basketOpen} onClose={() => setBasketOpen(false)} title="Your basket" description={`${cartItems.length} products`} mode="sheet"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onClose={() => setBasketOpen(false)} onCheckout={() => { track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) }); setBasketOpen(false); setCheckout(true); }} /></Overlay>
     <Modal open={Boolean(pendingBranchId)} onClose={() => setPendingBranchId("")} title="Switch business location?" description="Products, prices and availability can differ by location." size="sm"><div className="p-5"><p className="text-sm leading-6 text-secondary">Switching will clear the current basket so you can build an accurate order for the new location.</p><div className="mt-5 flex gap-3"><Button variant="outline" className="flex-1" onClick={() => setPendingBranchId("")}>Keep this location</Button><Button className="flex-1" onClick={confirmBranchChange}>Switch and clear</Button></div></div></Modal>
     {selectedIsPickup ? <CheckoutModal open={checkout} onClose={() => setCheckout(false)} business={selected} branches={branches} selectedBranchId={selectedBranchId} cartItems={cartItems} currency={currency} user={user} defaultFulfilment={profile?.preferences?.defaultFulfilment || "pickup"} onComplete={(order) => { setCart({}); removeState(CART_KEY, user); updateUrl("activity", { order: order.orderId || order.id, business: null, service: null, offer: null }); }} /> : null}
-    <ActivityDetailModal order={activityDetail} open={Boolean(activityDetail)} onClose={() => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); }} onPay={payOrder} onCancel={(record) => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); setCancelTarget(record); setCancelReason(""); }} />
+    <ActivityDetailModal order={activityDetail} open={Boolean(activityDetail)} onClose={() => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); }} onPay={payOrder} onRetry={retryActivity} onReview={(record) => { setActivityDetail(null); setReviewTarget(record); }} onCancel={(record) => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); setCancelTarget(record); setCancelReason(""); }} />
+    <ReviewModal order={reviewTarget} open={Boolean(reviewTarget)} onClose={() => setReviewTarget(null)} />
     <Modal open={Boolean(cancelTarget)} onClose={() => { if (!cancelling) { setCancelTarget(null); setCancelReason(""); } }} title="Cancel this activity?" description="Spotly will release any held availability when cancellation is still allowed." size="sm"><div className="p-5"><label className="block text-sm font-medium">Reason<textarea className="field-control mt-2 min-h-24 w-full" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Tell the business why you are cancelling" /></label><p className="mt-3 text-xs leading-5 text-[var(--text-3)]">Paid activity cannot be cancelled here. Use support if a payment has already been captured.</p><div className="mt-5 flex gap-3"><Button className="flex-1" variant="outline" disabled={cancelling} onClick={() => { setCancelTarget(null); setCancelReason(""); }}>Keep it</Button><Button className="flex-1" loading={cancelling} onClick={cancelActivity}>Cancel activity</Button></div></div></Modal>
     <OfferDetailModal product={selectedOffer} open={Boolean(selectedOffer)} onClose={closeOffer} currency={currency} archetype={selectedArchetype} quantity={selectedOffer ? (cart[selectedOffer.id] || 0) : 0} onQuantityChange={changeQuantity} onBook={startTransaction} branch={selectedBranch} saved={selectedOffer ? savedItems.some((item) => item.type === savedTypeForProduct(selectedOffer) && item.entityId === selectedOffer.id) : false} onSave={toggleSavedProduct} />
     <CustomerTransactionModal open={Boolean(transactionOffer)} onClose={() => setTransactionOffer(null)} product={transactionOffer} business={selected} branches={branches} selectedBranchId={selectedBranchId} currency={currency} user={user} archetype={selectedArchetype} onComplete={(order) => { track("booking_created", { order_id: order.orderId || "", business_id: selected?.id || "", branch_id: selectedBranchId || "", transaction_type: order.transactionType || selectedArchetype.id }); }} />

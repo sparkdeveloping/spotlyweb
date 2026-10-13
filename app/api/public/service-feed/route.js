@@ -1,11 +1,27 @@
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { pickupAvailability } from "@/lib/pickup-availability";
+import { promotionWindowActive, publicPromotionRecord } from "@/lib/customer-growth";
 
 export const runtime = "nodejs";
 
 const SERVICES = new Set(["eat", "shop", "book", "events"]);
 const HARARE_TIME_ZONE = "Africa/Harare";
+const SEED_TTL_MS = 30_000;
+let seedCache = { expiresAt: 0, value: null, pending: null };
+
+async function publicSeed(db) {
+  const now = Date.now();
+  if (seedCache.value && seedCache.expiresAt > now) return seedCache.value;
+  if (seedCache.pending) return seedCache.pending;
+  seedCache.pending = Promise.all([
+    db.collection("businesses").where("public", "==", true).limit(500).get(),
+    db.collection("branches").where("public", "==", true).limit(1200).get(),
+    db.collection("products").where("published", "==", true).limit(2000).get(),
+    db.collection("promotions").where("active", "==", true).limit(1000).get()
+  ]).then((value) => { seedCache = { expiresAt: Date.now() + SEED_TTL_MS, value, pending: null }; return value; }).catch((error) => { seedCache.pending = null; throw error; });
+  return seedCache.pending;
+}
 
 function text(value) {
   return String(value || "").trim().toLowerCase();
@@ -230,10 +246,20 @@ function itemMatchesService(service, item = {}, business = {}) {
   return service === "eat" ? matchesService("eat", business) : service === "shop" ? matchesService("shop", business) : false;
 }
 
+function trustAdjustedRating(business = {}) {
+  const rating = Math.max(0, Math.min(5, Number(business.rating || 0)));
+  const count = Math.max(0, Number(business.reviewCount || 0));
+  if (!rating || count <= 0) return 4.1;
+  const prior = 4.1;
+  const priorWeight = 6;
+  return (prior * priorWeight + rating * Math.min(count, 250)) / (priorWeight + Math.min(count, 250));
+}
+
 function sortBusinesses(a, b) {
   return Number(b.isFeatured) - Number(a.isFeatured)
     || Number(b.operational?.openNow) - Number(a.operational?.openNow)
-    || Number(b.rating || 0) - Number(a.rating || 0)
+    || Number(String(b.verificationStatus || "").toLowerCase() === "verified") - Number(String(a.verificationStatus || "").toLowerCase() === "verified")
+    || trustAdjustedRating(b) - trustAdjustedRating(a)
     || String(a.name).localeCompare(String(b.name), "en", { sensitivity: "base" });
 }
 
@@ -262,11 +288,7 @@ export async function GET(request) {
     const itemLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 8), 48) : 24;
     const { db } = getAdminServices();
 
-    const [businessSnapshot, branchSnapshot, productSnapshot] = await Promise.all([
-      db.collection("businesses").where("public", "==", true).limit(500).get(),
-      db.collection("branches").where("public", "==", true).limit(1200).get(),
-      db.collection("products").where("published", "==", true).limit(2000).get()
-    ]);
+    const [businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot] = await publicSeed(db);
 
     const allBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data())).map(businessRecord);
     const branchMap = new Map();
@@ -278,11 +300,32 @@ export async function GET(request) {
       branchMap.set(branch.businessId, group);
     });
 
+    const promotionMap = new Map();
+    const platformPromotions = [];
+    promotionSnapshot.docs.forEach((doc) => {
+      const raw = { id: doc.id, ...(doc.data() || {}) };
+      if (!promotionWindowActive(raw) || (raw.audience && raw.audience !== "all_customers") || String(raw.code || "").trim()) return;
+      if (raw.scope === "platform") {
+        platformPromotions.push(publicPromotionRecord(raw));
+        return;
+      }
+      if (!raw.businessId) return;
+      const group = promotionMap.get(raw.businessId) || [];
+      group.push(publicPromotionRecord(raw));
+      promotionMap.set(raw.businessId, group);
+    });
+
+    for (const business of allBusinesses) {
+      const applicable = platformPromotions.filter((promotion) => !promotion.businessIds?.length || promotion.businessIds.includes(business.id));
+      if (!applicable.length) continue;
+      promotionMap.set(business.id, [...(promotionMap.get(business.id) || []), ...applicable]);
+    }
+
     const eligibleBusinesses = allBusinesses
       .filter((business) => matchesService(service, business))
       .filter((business) => !city || !text(business.city) || text(business.city) === city || (branchMap.get(business.id) || []).some((branch) => text(branch.city) === city))
       .filter((business) => matchesArea(business, branchMap.get(business.id) || [], area))
-      .map((business) => ({ ...business, operational: operationalSummary(branchMap.get(business.id) || []) }));
+      .map((business) => ({ ...business, operational: operationalSummary(branchMap.get(business.id) || []), promotion: (promotionMap.get(business.id) || [])[0] || null }));
 
     const eligibleBusinessMap = new Map(eligibleBusinesses.map((business) => [business.id, business]));
     const itemsAll = productSnapshot.docs
@@ -292,7 +335,7 @@ export async function GET(request) {
         if (!business || raw.active === false || raw.available === false || text(raw.status) === "archived") return false;
         return itemMatchesService(service, raw, business);
       })
-      .map((doc) => itemRecord(doc, eligibleBusinessMap.get(doc.data()?.businessId), service))
+      .map((doc) => { const record = itemRecord(doc, eligibleBusinessMap.get(doc.data()?.businessId), service); const offers = promotionMap.get(record.businessId) || []; const scoped = offers.find((offer) => !offer.productIds?.length || offer.productIds.includes(record.id)); return { ...record, promotion: scoped || null }; })
       .filter((item) => matchesQuery(item, query))
       .filter((item) => service !== "events" || !item.endsAt || new Date(item.endsAt).getTime() >= Date.now() - 6 * 60 * 60 * 1000)
       .sort((a, b) => sortItems(service, a, b));
@@ -312,7 +355,7 @@ export async function GET(request) {
       pickup: businesses.filter((business) => business.operational?.pickupAvailable).length,
       delivery: businesses.filter((business) => business.operational?.deliveryAvailable).length,
       featuredBusinesses: businesses.filter((business) => business.isFeatured).length,
-      deals: itemsAll.filter((item) => Number(item.compareAtPrice || 0) > Number(item.price || 0) && Number(item.price || 0) > 0).length,
+      deals: itemsAll.filter((item) => (Number(item.compareAtPrice || 0) > Number(item.price || 0) && Number(item.price || 0) > 0) || item.promotion).length,
       freeEvents: service === "events" ? itemsAll.filter((item) => Number(item.price || 0) <= 0).length : 0
     };
 

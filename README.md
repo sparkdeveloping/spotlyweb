@@ -22,7 +22,7 @@ spotlyafrica.com/staff/schedule   → staff.spotlyafrica.com/schedule
 
 The internal App Router still uses `/business`, `/driver`, `/staff`, and `/admin` route trees. `proxy.js` maps clean product-domain URLs into those internal routes so the application does not need five duplicated codebases.
 
-This repository is based on **Spotly Web Platform 5.7.0** and includes the Driver + Delivery activation, Business production hardening, notification architecture, Marketplace/marketing conversion work, Lottie motion system, and the full subdomain/SSO migration.
+This repository is **Spotly Web Platform 6.0.0**. It includes the production customer marketplace and conversion system, dedicated Eat/Shop/Book/Events experiences, Customer Utility layer, production hardening and growth systems, Driver + Delivery operations, Business hardening, notifications, and the full subdomain/SSO architecture.
 
 ## Canonical routes
 
@@ -217,3 +217,24 @@ Search 2.0, Activity 2.0, Saved 2.0, customer Notifications, saved places, shopp
 Eat, Shop, Book and Events are now first-class marketplace destinations backed by a live public service-feed API. Each service has purpose-built discovery, filters, categories, cross-business offerings, responsive cards, Saved/Activity continuity and direct handoff into the existing transaction system. Ride and Send remain feature-gated until their operational backends are enabled.
 
 See `SPOTLY-CUSTOMER-SERVICE-EXPERIENCES-2.0-2026-10-13.md` for the implementation details.
+
+
+## Spotly 6.0.0 — Production Hardening + Growth
+
+The 6.0 release hardens the existing marketplace rather than adding a fake new service surface. It includes:
+
+- server-revalidated merchant and Spotly-funded promotions with atomic usage reservations and release on failed/cancelled reservations;
+- customer referrals with first-purchase qualification, self-referral/late-claim prevention, configurable rewards and Admin reward review;
+- verified-purchase business reviews and rating aggregates;
+- booking/appointment capacity reservations that are rechecked inside the Firestore transaction;
+- safer payment recovery, checkout idempotency and expired/cancelled reservation release;
+- recent/repeat behavior for customer discovery;
+- privacy-filtered Firebase Analytics funnel instrumentation;
+- public business/item metadata, structured data, city/service landing pages and dynamic sitemap entries;
+- service-feed pagination, bounded server caching, stale-while-revalidate responses, Next Image optimization and trust-adjusted business ranking.
+
+Spotly-funded campaigns are operated from **Admin → Content & growth → Campaigns**. Referral campaign amounts and auto-approval are configured under **Admin → Platform configuration**. Merchant-funded promotions remain in each Business workspace.
+
+The 6.0 growth accounting collections (`promotionRedemptions`, `referralProfiles`, `referralCodes`, `referralClaims`, `referralRewards`, `businessReviews`, `availabilityReservations`) are server-authoritative. Deploy the matching Firestore rules with this release.
+
+See `SPOTLY-WEB-6.0-PRODUCTION-HARDENING-GROWTH-2026-10-13.md` for the release implementation record.

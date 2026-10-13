@@ -5,6 +5,8 @@ import { pickupAvailability } from "@/lib/pickup-availability";
 import { safeText } from "@/lib/server-helpers";
 import { haversineKm, makeCode, makeDeliveryNumber } from "@/lib/driver-delivery-server";
 import { buildOrderTotals, shoppingReserveAmount } from "@/lib/order-money";
+import { enforceRateLimit } from "@/lib/rate-limit-server";
+import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
 
 export const runtime = "nodejs";
 
@@ -15,6 +17,7 @@ const schema = z.object({
   branchId: z.string().min(1).max(180),
   items: z.array(itemSchema).min(1).max(60),
   currency: z.enum(["USD", "ZWG"]).default("USD"),
+  promoCode: z.string().max(40).optional(),
   paymentMethod: z.enum(["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"]),
   fulfilment: z.enum(["pickup", "delivery"]).default("pickup"),
   delivery: z.object({
@@ -85,6 +88,7 @@ function lineFromProduct(snapshot, body, quantity) {
 
 export async function POST(request) {
   try {
+    const rate = await enforceRateLimit(request, { key: "customer-order-create", limit: 30, windowMs: 60_000 });
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
     if (!user.email) throw Object.assign(new Error("Add and verify an email-and-password sign-in before ordering."), { status: 409 });
@@ -144,13 +148,17 @@ export async function POST(request) {
     }
 
     const requested = new Map(body.items.map((item) => [item.productId, item.quantity]));
+    const [promotionRefs, priorOrders] = await Promise.all([
+      promotionCandidateRefs(db, body.businessId, body.promoCode || ""),
+      db.collection("orders").where("customerId", "==", user.uid).limit(1).get()
+    ]);
     const productRefs = [...requested.keys()].map((id) => db.collection("products").doc(id));
     const orderRef = db.collection("orders").doc();
     const eventRef = db.collection("orderEvents").doc();
     const notificationRef = db.collection("notifications").doc();
     const businessRef = db.collection("businesses").doc(body.businessId);
     const branchRef = db.collection("branches").doc(body.branchId);
-    const paymentRequired = body.paymentMethod !== "cash" && body.paymentMethod !== "bank_transfer";
+    const paymentMethodRequiresCapture = body.paymentMethod !== "cash" && body.paymentMethod !== "bank_transfer";
     if (body.fulfilment === "delivery" && ["cash", "bank_transfer"].includes(body.paymentMethod)) throw Object.assign(new Error("Delivery requires an instantly confirmable digital payment method."), { status: 422 });
     const number = orderNumber();
     const serviceFee = Number(Math.max(0, Number(settings.commerce?.customerServiceFee || 0)).toFixed(2));
@@ -158,10 +166,11 @@ export async function POST(request) {
     const result = await db.runTransaction(async (transaction) => {
       const freshRequest = await transaction.get(requestRef);
       if (freshRequest.exists) return freshRequest.data();
-      const [freshBusiness, freshBranch, productSnapshots] = await Promise.all([
+      const [freshBusiness, freshBranch, productSnapshots, promotionSnapshots] = await Promise.all([
         transaction.get(businessRef),
         transaction.get(branchRef),
-        Promise.all(productRefs.map((ref) => transaction.get(ref)))
+        Promise.all(productRefs.map((ref) => transaction.get(ref))),
+        Promise.all(promotionRefs.map((ref) => transaction.get(ref)))
       ]);
       const currentBusiness = freshBusiness.exists ? freshBusiness.data() : null;
       if (!currentBusiness?.public || !(currentBusiness.status === "active" || currentBusiness.lifecycleStatus === "live")) {
@@ -184,10 +193,13 @@ export async function POST(request) {
       const driverShopping = body.fulfilment === "delivery" && branchData.delivery?.fulfilmentMode === "driver_shops";
       const reservePercent = driverShopping ? Number(branchData.delivery?.shoppingReservePercent ?? settings.commerce?.driverShoppingReservePercent ?? 12) : 0;
       const shoppingReserve = driverShopping ? shoppingReserveAmount(subtotal, reservePercent) : 0;
+      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta });
+      if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
+      const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
       const commissionPercent = Number(finance.commissionPercent ?? settings.commerce?.commissionPercent ?? 0);
-      const totals = buildOrderTotals({ subtotal, serviceFee, deliveryFee, shoppingReserve, commissionPercent });
+      const totals = buildOrderTotals({ subtotal, discount: promotionDiscount, serviceFee, deliveryFee, shoppingReserve, commissionPercent });
       const total = totals.total;
-      if (total <= 0) throw Object.assign(new Error("The order total must be greater than zero."), { status: 422 });
+      const paymentRequired = paymentMethodRequiresCapture && total > 0;
 
       const slotKey = slot?.id || null;
       const bookedSlots = slotKey ? { ...(branchData.pickup?.bookedSlots || {}), [slotKey]: Number(branchData.pickup?.bookedSlots?.[slotKey] || 0) + 1 } : null;
@@ -205,7 +217,8 @@ export async function POST(request) {
         branchName: branchData.branchName || branchData.name,
         items: lines,
         totals,
-        commerceSnapshot: { commissionPercent: totals.commissionPercent, settlementModel: "platform", deliveryFulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared" },
+        commerceSnapshot: { commissionPercent: totals.commissionPercent, settlementModel: "platform", deliveryFulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", promotionId: promotionResult?.quote?.eligible ? promotionResult.promotion.id : null },
+        promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         shopping: driverShopping ? { mode: "driver_shops", state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), actualSubtotal: null, finalTotal: null, unusedReserve: null, topUpRequired: 0, substitutionPreference: normalizedSubstitution, receiptStoragePath: "", changes: [], updatedAt: new Date().toISOString() } : null,
         currency: body.currency,
         fulfilment: body.fulfilment,
@@ -221,6 +234,11 @@ export async function POST(request) {
       };
 
       transaction.create(orderRef, order);
+      if (promotionResult?.quote?.eligible) {
+        const promotionRef = db.collection("promotions").doc(promotionResult.promotion.id);
+        transaction.set(promotionRef, { usedCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        transaction.create(db.collection("promotionRedemptions").doc(`${promotionResult.promotion.id}_${orderRef.id}`), { promotionId: promotionResult.promotion.id, orderId: orderRef.id, customerId: user.uid, businessId: body.businessId, branchId: body.branchId, code: promotionResult.quote.code || "", discount: promotionDiscount, currency: body.currency, status: "reserved", createdAt: FieldValue.serverTimestamp() });
+      }
       if (body.fulfilment === "delivery") {
         const deliveryRef = db.collection("deliveryJobs").doc();
         const deliveryNumber = makeDeliveryNumber();
@@ -243,19 +261,19 @@ export async function POST(request) {
         });
         transaction.set(orderRef, { deliveryJobId: deliveryRef.id, deliveryNumber, deliveryStatus: driverShopping ? (paymentRequired ? "awaiting_payment" : "awaiting_dispatch") : "business_preparing" }, { merge: true });
       }
-      transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", previousStatus: null, status: order.status, actorType: "customer", actorId: user.uid, source: "checkout", metadata: { number, paymentMethod: body.paymentMethod, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", slotId: slot?.id || null }, createdAt: FieldValue.serverTimestamp() });
+      transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", previousStatus: null, status: order.status, actorType: "customer", actorId: user.uid, source: "checkout", metadata: { number, paymentMethod: body.paymentMethod, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", slotId: slot?.id || null, promotionId: promotionResult?.quote?.eligible ? promotionResult.promotion.id : null, discount: promotionDiscount }, createdAt: FieldValue.serverTimestamp() });
       transaction.create(notificationRef, { userId: user.uid, title: "Order created", body: `${number} was sent to ${businessSnapshot.data().name}.`, href: `/marketplace?order=${orderRef.id}`, category: "order", read: false, createdAt: FieldValue.serverTimestamp() });
       if (bookedSlots) transaction.update(branchRef, { "pickup.bookedSlots": bookedSlots, updatedAt: FieldValue.serverTimestamp() });
       currentProducts.forEach(({ product, line }, index) => {
         const stock = Number(product.stockQuantity);
         if (Number.isFinite(stock) && stock >= 0) transaction.update(productRefs[index], { reservedQuantity: FieldValue.increment(line.quantity), updatedAt: FieldValue.serverTimestamp() });
       });
-      const response = { orderId: orderRef.id, number, total, currency: body.currency, paymentRequired, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", shoppingReserve };
+      const response = { orderId: orderRef.id, number, total, currency: body.currency, paymentRequired, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", shoppingReserve, discount: promotionDiscount, promotion: order.promotion };
       transaction.create(requestRef, { ...response, customerId: user.uid, checkoutId: body.checkoutId, createdAt: FieldValue.serverTimestamp() });
       return response;
     });
 
-    return Response.json({ ok: true, ...result });
+    return Response.json({ ok: true, ...result }, { headers: { "X-RateLimit-Remaining": String(rate.remaining), "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the fulfilment and payment details.", details: error.flatten() }, { status: 400 });
     return apiError(error);

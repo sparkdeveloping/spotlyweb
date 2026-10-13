@@ -1,4 +1,4 @@
-# Clean deployment instructions — Spotly Web 5.7.0
+# Clean deployment instructions — Spotly Web 6.0.0
 
 This archive is a full-source replacement for the current Spotly Web project.
 
@@ -71,3 +71,22 @@ Deploy this archive as a clean replacement of the previous web source. Keep prod
 ## 5.9.0 dedicated service deployment
 
 This release adds `/api/public/service-feed` and first-class `/eat`, `/shop`, `/book`, `/events`, `/ride`, and `/send` customer routes. No new Firestore rules are required specifically for the public feed because it reads through Firebase Admin on the server and returns only explicitly public/live marketplace records. Deploy the complete source tree rather than merging individual route files into an older build.
+
+
+## 6.0.0 production-hardening deployment
+
+This release changes Firestore security rules and adds server-authoritative growth/accounting collections. Deploy the supplied `firestore.rules` together with the application. No private credentials are included in the archive.
+
+After Vercel completes its production build, smoke-test at minimum:
+
+1. Eat/Shop cart → checkout → payment/order → Activity.
+2. Book appointment/booking capacity collision behavior using two sessions.
+3. Event ticket capacity and payment retry.
+4. Merchant promotion and Spotly campaign code/automatic offer application.
+5. Cancellation/payment failure releasing inventory, availability and reserved promotion usage.
+6. Referral claim before first purchase → paid qualifying order → Admin reward review.
+7. Verified-purchase review submission and public rating refresh.
+8. `/place/<id>`, `/item/<id>`, `/city/<city>/<service>` metadata and `/sitemap.xml`.
+9. Search, Saved, Activity, Account, Notifications and Help on mobile Safari and Android Chrome.
+
+Run the full Vercel `next build` before promoting the deployment. Source integrity tests are not a substitute for the framework compiler.

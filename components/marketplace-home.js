@@ -41,7 +41,7 @@ export function serviceMatchesBusiness(service, business) {
 
 function MarketplaceImage({ business, sizes = "(max-width: 768px) 70vw, 280px" }) {
   const image = business.coverImage || business.image || business.logoUrl || business.logo;
-  if (image) return <Image src={image} alt="" fill unoptimized sizes={sizes} className="object-cover transition duration-300 group-hover:scale-[1.02]" />;
+  if (image) return <Image src={image} alt="" fill  sizes={sizes} className="object-cover transition duration-300 group-hover:scale-[1.02]" />;
   return <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2))] text-[var(--accent)]"><Store className="h-9 w-9" /></div>;
 }
 
@@ -105,6 +105,7 @@ function RepeatAction({ icon: Icon, title, subtitle, onClick }) {
 export function MarketplaceHome({
   businessResults,
   orders = [],
+  recentBusinessIds = [],
   location,
   ridesEnabled = false,
   sendEnabled = false,
@@ -118,6 +119,7 @@ export function MarketplaceHome({
   const food = businessResults.filter(({ business }) => serviceMatchesBusiness("eat", business)).slice(0, 8);
   const bookable = businessResults.filter(({ business }) => serviceMatchesBusiness("book", business)).slice(0, 8);
   const events = businessResults.filter(({ business }) => serviceMatchesBusiness("events", business)).slice(0, 8);
+  const recent = recentBusinessIds.map((id) => businessResults.find(({ business }) => business.id === id)).filter(Boolean).slice(0, 6);
   const latestOrder = orders?.[0];
   const latestOrderBusiness = latestOrder ? businessResults.find(({ business }) => business.id === latestOrder.businessId)?.business : null;
 
@@ -177,6 +179,8 @@ export function MarketplaceHome({
           {nearby.length ? <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div> : <p className="text-sm leading-6 text-[var(--text-3)]">Businesses will appear here as verified locations in {location.city} go live.</p>}
         </div>
       </section> : null}
+
+      {recent.length ? <section className="mt-8 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><SectionHeader title="Recently viewed" /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{recent.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
       {food.length ? <section className="mt-8 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><SectionHeader title="Eat nearby" action="Explore Eat" onAction={() => onSelectService("eat")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{food.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
