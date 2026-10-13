@@ -7,6 +7,7 @@ import {
   Check,
   Clock3,
   CreditCard,
+  Heart,
   MapPin,
   Minus,
   PackageCheck,
@@ -52,7 +53,9 @@ export function OfferDetailModal({
   quantity = 0,
   onQuantityChange,
   onBook,
-  branch
+  branch,
+  saved = false,
+  onSave
 }) {
   if (!product) return null;
   const price = offerPrice(product, currency);
@@ -79,7 +82,7 @@ export function OfferDetailModal({
               <Badge tone="neutral">{product.category || archetype?.shortLabel || "Offering"}</Badge>
               <h2 className="mt-3 text-2xl font-semibold tracking-[-.035em]">{product.name}</h2>
             </div>
-            <p className={cn("text-xl font-semibold", price === null && "text-warning")}>{price === null ? `No ${currency} price` : price === 0 ? "Free" : formatCurrency(price, currency)}</p>
+            <div className="flex items-center gap-2"><p className={cn("text-xl font-semibold", price === null && "text-warning")}>{price === null ? `No ${currency} price` : price === 0 ? "Free" : formatCurrency(price, currency)}</p>{onSave ? <button type="button" onClick={() => onSave(product)} className={cn("flex h-10 w-10 items-center justify-center rounded-full border transition", saved ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")} aria-label={saved ? "Remove from Saved" : "Save item"}><Heart className={cn("h-5 w-5", saved && "fill-current")} /></button> : null}</div>
           </div>
 
           {product.description ? <p className="mt-5 text-sm leading-7 text-[var(--text-2)]">{product.description}</p> : null}

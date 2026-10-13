@@ -43,6 +43,8 @@ export function notificationModule(item = {}) {
   if (text.includes("location") || text.includes("branch")) return "locations";
   if (text.includes("payout") || text.includes("money") || text.includes("finance") || text.includes("settlement") || text.includes("payment")) return "money";
   if (text.includes("support") || text.includes("conversation")) return "support";
+  if (text.includes("booking") || text.includes("appointment") || text.includes("ticket") || text.includes("event")) return "bookings";
+  if (text.includes("account") || text.includes("profile") || text.includes("login") || text.includes("password")) return "account";
   if (text.includes("order") || text.includes("delivery") || text.includes("pickup")) return "orders";
   if (isReviewNotification(item)) return "reviews";
   if (text.includes("driver")) return "driver";
@@ -56,6 +58,8 @@ const moduleMeta = {
   locations: { label: "Locations", icon: MapPin },
   money: { label: "Money", icon: CircleDollarSign },
   support: { label: "Support", icon: LifeBuoy },
+  bookings: { label: "Bookings & tickets", icon: ClipboardCheck },
+  account: { label: "Account", icon: ShieldCheck },
   driver: { label: "Driver", icon: Truck },
   access: { label: "Access", icon: ShieldCheck },
   general: { label: "Activity", icon: Bell }
@@ -112,6 +116,7 @@ export function NotificationCenter({
   businessId = null,
   businessOptions = [],
   showModuleFilters = false,
+  customerMode = false,
   title = "Notifications",
   description = "Activity, reviews and important updates for this workspace."
 }) {
@@ -136,7 +141,7 @@ export function NotificationCenter({
   }), [businessFilter, businessId, items, workspace]);
 
   const counts = useMemo(() => {
-    const result = { all: scoped.length, unread: 0, reviews: 0, orders: 0, locations: 0, money: 0, support: 0 };
+    const result = { all: scoped.length, unread: 0, reviews: 0, orders: 0, bookings: 0, account: 0, locations: 0, money: 0, support: 0 };
     scoped.forEach((item) => {
       if (!item.read) result.unread += 1;
       const module = notificationModule(item);
@@ -148,7 +153,7 @@ export function NotificationCenter({
   const visible = scoped.filter((item) => {
     if (filter === "unread") return !item.read;
     if (filter === "reviews") return isReviewNotification(item);
-    if (["orders", "locations", "money", "support"].includes(filter)) return notificationModule(item) === filter;
+    if (["orders", "bookings", "account", "locations", "money", "support"].includes(filter)) return notificationModule(item) === filter;
     return true;
   });
 
@@ -163,7 +168,14 @@ export function NotificationCenter({
     await Promise.allSettled(unreadItems.map((item) => markNotificationRead(item.id)));
   }
 
-  const tabs = [
+  const tabs = customerMode ? [
+    { value: "all", label: `All (${counts.all})`, icon: Bell },
+    { value: "unread", label: `Unread (${counts.unread})`, icon: Inbox },
+    { value: "orders", label: `Orders (${counts.orders})`, icon: PackageCheck },
+    { value: "bookings", label: `Bookings (${counts.bookings})`, icon: ClipboardCheck },
+    { value: "support", label: `Support (${counts.support})`, icon: LifeBuoy },
+    { value: "account", label: `Account (${counts.account})`, icon: ShieldCheck }
+  ] : [
     { value: "all", label: `All (${counts.all})`, icon: Bell },
     { value: "unread", label: `Unread (${counts.unread})`, icon: Inbox },
     ...(showModuleFilters ? [
@@ -208,7 +220,7 @@ export function NotificationBell({ className = "", workspace = "" }) {
     <Overlay open={open} onClose={() => setOpen(false)} title="Notifications" description={workspace ? `Latest activity for your ${workspace} workspace.` : "Latest activity across your Spotly account and workspaces."} mode="sheet">
       <div className="space-y-3 p-4">
         {error ? <Card className="border-danger/30 bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</Card> : trayItems.length ? trayItems.map((item) => <NotificationRow key={item.id} item={item} onRead={read} />) : <LottieEmptyState name="notification-bell" title="You're caught up" description="New Spotly activity will appear here." />}
-        <Button asChild variant="outline" className="w-full" onClick={() => setOpen(false)}><Link href={workspace === "business" ? "/notifications" : "/account#notifications"}>Open all notifications</Link></Button>
+        <Button asChild variant="outline" className="w-full" onClick={() => setOpen(false)}><Link href={workspace === "customer" ? "/notifications" : workspace === "business" ? "/notifications" : "/account#notifications"}>Open all notifications</Link></Button>
       </div>
     </Overlay>
   </>;

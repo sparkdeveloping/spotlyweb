@@ -207,3 +207,7 @@ Always run the actual Next.js production build in CI/Vercel before promoting a r
 - staging smoke tests on real mobile devices and all five web origins
 
 Historical implementation reports under `docs/history/` and version-specific root reports describe earlier releases and should not be treated as the current canonical routing or capability state.
+
+## Spotly 5.8.0 — Customer Utility Layer
+
+Search 2.0, Activity 2.0, Saved 2.0, customer Notifications, saved places, shopping defaults, and contextual customer Help are implemented against the production Firebase/auth/transaction systems. See `SPOTLY-CUSTOMER-UTILITY-2.0-2026-10-13.md`.

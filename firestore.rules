@@ -365,6 +365,12 @@ service cloud.firestore {
       allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if activeAccount() && resource.data.userId == request.auth.uid;
     }
+    match /savedItems/{savedItemId} {
+      allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
+      allow read: if activeAccount() && resource.data.userId == request.auth.uid;
+      allow update: if activeAccount() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if activeAccount() && resource.data.userId == request.auth.uid;
+    }
 
     match /auditLogs/{logId} {
       allow read: if platformAdmin() || hasPermission("audit.read");

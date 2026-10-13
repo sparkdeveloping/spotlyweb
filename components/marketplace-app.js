@@ -10,7 +10,7 @@ import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Badge, Button, Card, EmptyState, Modal, Overlay, SearchField, StatusBadge } from "@/components/ui";
 import { authenticatedFetch } from "@/lib/api-client";
-import { loadPublicMarketplaceBusiness, saveFavorite, searchLiveBusinesses, subscribeCustomerOrders, subscribeFavorites, track } from "@/lib/firebase-services";
+import { deleteSavedItem, loadPublicMarketplaceBusiness, saveFavorite, saveSavedItem, searchLiveBusinesses, searchSpotly, subscribeCustomerOrders, subscribeFavorites, subscribeSavedItems, track } from "@/lib/firebase-services";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { businessArchetype } from "@/data/business-archetypes";
@@ -21,10 +21,12 @@ import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { resolveProductForBranch } from "@/lib/product-offers";
 import { MARKETPLACE_SERVICE_KEYS, MarketplaceHome, ServiceModeHeader, serviceMatchesBusiness } from "@/components/marketplace-home";
 import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "@/components/customer-conversion";
+import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
 
 const CART_KEY = "spotly-marketplace-cart";
 const CHECKOUT_KEY = "spotly-checkout-draft";
 const LOCATION_KEY = "spotly-marketplace-location";
+const RECENT_SEARCH_KEY = "spotly-recent-searches";
 const MARKETPLACE_TABS_ID = "marketplace-sections";
 
 function timestamp(value) {
@@ -121,6 +123,29 @@ function customerActivityCancellable(order = {}) {
   return ["awaiting_payment", "submitted", "new", "requested", "confirmed", "accepted"].includes(order.status) && !["paid", "refund_pending", "refunded"].includes(order.paymentStatus);
 }
 
+function activityKind(order = {}) {
+  return order.transactionType || (order.fulfilment === "appointment" ? "appointment" : order.fulfilment === "booking" ? "booking" : order.fulfilment === "ticketing" ? "ticket" : order.fulfilment === "delivery" ? "delivery" : "order");
+}
+
+function activityScheduleDate(order = {}) {
+  const raw = order.appointment?.date || order.booking?.startDate || order.event?.startsAt || order.event?.date || order.pickup?.date || null;
+  if (!raw) return null;
+  const parsed = new Date(String(raw).length === 10 ? `${raw}T12:00:00` : raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function activityBucket(order = {}) {
+  const status = String(order.status || "").toLowerCase();
+  const payment = String(order.paymentStatus || "").toLowerCase();
+  const delivery = String(order.deliveryStatus || "").toLowerCase();
+  if (["failed", "payment_failed", "disputed"].includes(status) || ["failed", "chargeback"].includes(payment) || ["failed", "returned"].includes(delivery)) return "problem";
+  if (["completed", "delivered", "cancelled", "canceled", "refunded", "rejected", "expired"].includes(status) || delivery === "delivered" || ["refunded"].includes(payment)) return "past";
+  const schedule = activityScheduleDate(order);
+  if (schedule && schedule.getTime() > Date.now() + 30 * 60 * 1000 && ["appointment", "booking", "ticket"].includes(activityKind(order))) return "upcoming";
+  if (["submitted", "new", "requested", "confirmed", "accepted", "preparing", "ready", "awaiting_payment", "processing", "in_progress"].includes(status) || ["awaiting_dispatch", "searching_driver", "driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification", "collected", "en_route", "driver_arrived_customer", "handoff_verification"].includes(delivery)) return "active";
+  return schedule && schedule.getTime() > Date.now() ? "upcoming" : "active";
+}
+
 function deliveryStateLabel(state) {
   return { awaiting_dispatch: "Business is preparing", searching_driver: "Finding your Driver", driver_assigned: "Driver assigned", driver_to_pickup: "Driver is going to the shop", driver_arrived_pickup: "Driver is at the shop", pickup_verification: "Pickup is being verified", collected: "Driver has your order", en_route: "Driver is on the way", driver_arrived_customer: "Driver has arrived", handoff_verification: "Confirming delivery", delivered: "Delivered" }[state] || String(state || "Business is preparing").replaceAll("_", " ");
 }
@@ -185,13 +210,13 @@ function BasketContents({ cartItems, cartTotal, currency, onCheckout, onClose })
   return <div className="p-5"><div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold">Your basket</h2><p className="mt-1 text-xs text-secondary">Built for this exact business location</p></div>{onClose && <button onClick={onClose} className="rounded-lg p-2 hover:bg-[var(--surface-hover)]" aria-label="Close basket"><X className="h-5 w-5" /></button>}</div>{cartItems.length ? <><div className="mt-5 space-y-3"><AnimatePresence initial={false}>{cartItems.map((item) => <motion.div layout key={item.id} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? undefined : { opacity: 0, x: 12 }} className="flex items-center gap-3 rounded-lg bg-[var(--surface-2)] px-3 py-2.5 text-sm"><motion.span key={item.quantity} initial={reduce ? false : { scale: .8 }} animate={{ scale: 1 }} className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--accent-soft)] font-semibold text-[var(--on-accent-soft)]">{item.quantity}</motion.span><span className="min-w-0 flex-1 truncate font-medium">{item.name}</span><span className="font-semibold">{formatCurrency(priceFor(item, currency) * item.quantity, currency)}</span></motion.div>)}</AnimatePresence></div><div className="my-5 border-t" /><div className="flex items-center justify-between text-lg font-semibold"><span>Subtotal</span><span>{formatCurrency(cartTotal, currency)}</span></div><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Pickup and delivery availability come from the exact location you choose.</p><Button className="mt-5 w-full" onClick={onCheckout}>Choose pickup or delivery<ChevronRight className="h-4 w-4" /></Button></> : <div className="py-7 text-center"><SpotlyLottie name="empty-basket" mode="loop" className="mx-auto h-24 w-24" ariaLabel="Empty basket" /><p className="mt-2 text-sm font-semibold">Your basket is ready when you are</p><p className="mx-auto mt-2 max-w-[240px] text-xs leading-5 text-secondary">Add a product and Spotly will keep the basket tied to this location's prices and availability.</p></div>}</div>;
 }
 
-function CheckoutModal({ open, onClose, business, branches, selectedBranchId, cartItems, currency, user, onComplete }) {
+function CheckoutModal({ open, onClose, business, branches, selectedBranchId, cartItems, currency, user, defaultFulfilment = "pickup", onComplete }) {
   const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ checkoutId: "", branchId: "", fulfilment: "pickup", date: "", slot: "", slotId: "", paymentMethod: "", contactName: user?.displayName || "", contactPhone: user?.phoneNumber || "", alternativePhone: "", notes: "", substitutionPreference: "contact_me", address: "", suburb: "", landmark: "", instructions: "", lat: null, lng: null });
+  const [form, setForm] = useState({ checkoutId: "", branchId: "", fulfilment: defaultFulfilment === "delivery" ? "delivery" : "pickup", date: "", slot: "", slotId: "", paymentMethod: "", contactName: user?.displayName || "", contactPhone: user?.phoneNumber || "", alternativePhone: "", notes: "", substitutionPreference: "contact_me", address: "", suburb: "", landmark: "", instructions: "", lat: null, lng: null });
   const selectedBranch = branches.find((branch) => branch.id === form.branchId);
   const deliveryEnabled = Boolean(selectedBranch?.delivery?.enabled && !selectedBranch?.delivery?.paused && (selectedBranch?.fulfilment || []).includes("delivery"));
   const availability = useMemo(() => pickupAvailability(selectedBranch), [selectedBranch]);
@@ -206,8 +231,8 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
     const saved = migrateLegacyState(CHECKOUT_KEY, user) || readState(CHECKOUT_KEY, user, null);
     const preferred = branches.some((branch) => branch.id === selectedBranchId) ? selectedBranchId : branches[0]?.id || "";
     const checkoutId = saved?.checkoutId || globalThis.crypto?.randomUUID?.() || `checkout-${new Date().getTime().toString(36)}`;
-    setForm((current) => ({ ...current, ...(saved || {}), checkoutId: saved?.checkoutId || current.checkoutId || checkoutId, branchId: saved?.branchId && branches.some((branch) => branch.id === saved.branchId) ? saved.branchId : preferred, contactName: saved?.contactName || current.contactName || user?.displayName || "", contactPhone: saved?.contactPhone || current.contactPhone || user?.phoneNumber || "" }));
-  }, [open, branches, selectedBranchId, user]);
+    setForm((current) => ({ ...current, ...(saved || {}), checkoutId: saved?.checkoutId || current.checkoutId || checkoutId, branchId: saved?.branchId && branches.some((branch) => branch.id === saved.branchId) ? saved.branchId : preferred, fulfilment: saved?.fulfilment || (defaultFulfilment === "delivery" ? "delivery" : "pickup"), contactName: saved?.contactName || current.contactName || user?.displayName || "", contactPhone: saved?.contactPhone || current.contactPhone || user?.phoneNumber || "" }));
+  }, [open, branches, selectedBranchId, user, defaultFulfilment]);
 
   useEffect(() => { if (open) writeState(CHECKOUT_KEY, user, form); }, [form, open, user]);
   useEffect(() => {
@@ -393,7 +418,15 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [cart, setCart] = useState({});
   const [basketOpen, setBasketOpen] = useState(false);
   const [favorites, setFavorites] = useState([]);
+  const [favoriteBusinesses, setFavoriteBusinesses] = useState([]);
+  const [savedItems, setSavedItems] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchCounts, setSearchCounts] = useState({});
+  const [searchFilter, setSearchFilter] = useState("all");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [recentSearches, setRecentSearches] = useState([]);
   const [activityFilter, setActivityFilter] = useState("all");
   const [activityDetail, setActivityDetail] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -476,6 +509,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
   useEffect(() => { writeState(CART_KEY, user, cart); }, [cart, user]);
   useEffect(() => { writeState(LOCATION_KEY, user, location); }, [location, user]);
+  useEffect(() => {
+    const preferred = profile?.preferences?.preferredCurrency;
+    if (preferred && !selectedBranchId) setCurrency(preferred);
+  }, [profile?.preferences?.preferredCurrency, selectedBranchId]);
 
   useEffect(() => {
     let active = true;
@@ -547,8 +584,60 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     if (match) setSelectedOffer(match);
   }, [requestedOffer, selected?.id, products]);
 
+  useEffect(() => {
+    setRecentSearches(readState(RECENT_SEARCH_KEY, user, [], "local"));
+  }, [user]);
   useEffect(() => user?.uid && !user.isAnonymous ? subscribeFavorites(user.uid, setFavorites, () => {}) : undefined, [user?.uid, user?.isAnonymous]);
+  useEffect(() => {
+    if (!favorites.length) {
+      setFavoriteBusinesses([]);
+      return undefined;
+    }
+    let active = true;
+    Promise.all(favorites.slice(0, 100).map(async (businessId) => {
+      try {
+        const result = await loadPublicMarketplaceBusiness(businessId);
+        return result?.business || null;
+      } catch {
+        return null;
+      }
+    })).then((items) => {
+      if (active) setFavoriteBusinesses(items.filter(Boolean));
+    });
+    return () => { active = false; };
+  }, [favorites]);
+  useEffect(() => user?.uid && !user.isAnonymous ? subscribeSavedItems(user.uid, setSavedItems, () => {}) : undefined, [user?.uid, user?.isAnonymous]);
   useEffect(() => user?.uid && !user.isAnonymous ? subscribeCustomerOrders(user.uid, setOrders, () => {}) : undefined, [user?.uid, user?.isAnonymous]);
+  useEffect(() => {
+    if (view !== "search") return undefined;
+    const term = query.trim();
+    if (term.length < 2) {
+      setSearchResults([]);
+      setSearchCounts({});
+      setSearchLoading(false);
+      setSearchError("");
+      return undefined;
+    }
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setSearchLoading(true);
+      setSearchError("");
+      try {
+        const result = await searchSpotly(term, 60, { city: location.city, service });
+        if (!active) return;
+        setSearchResults(result.results || []);
+        setSearchCounts(result.counts || {});
+      } catch (error) {
+        if (!active) return;
+        setSearchResults([]);
+        setSearchCounts({});
+        setSearchError(error.message || "Search could not be completed.");
+      } finally {
+        if (active) setSearchLoading(false);
+      }
+    }, 220);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [view, query, location.city, service]);
   useEffect(() => {
     if (!requestedOrder || view !== "activity" || !orders.length) return;
     const match = orders.find((order) => order.id === requestedOrder);
@@ -608,6 +697,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     if (activityFilter === "deliveries") return order.fulfilment === "delivery";
     return true;
   }), [orders, activityFilter]);
+  const activityGroups = useMemo(() => {
+    const groups = { problem: [], active: [], upcoming: [], past: [] };
+    activityOrders.forEach((order) => groups[activityBucket(order)].push(order));
+    return groups;
+  }, [activityOrders]);
 
   function locate() {
     if (!navigator.geolocation) {
@@ -663,6 +757,100 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     const next = !favorites.includes(id);
     setFavorites((current) => next ? [...current, id] : current.filter((item) => item !== id));
     try { await saveFavorite(user.uid, id, next); } catch (error) { toast(error.message, { type: "error" }); }
+  }
+
+  function savedTypeForProduct(product) {
+    const itemType = String(product?.itemType || "").toLowerCase();
+    if (["event", "ticket"].includes(itemType) || selectedArchetype.id === "ticketing_events") return "event";
+    if (["service", "appointment", "booking", "activity", "stay"].includes(itemType) || ["appointments_services", "accommodation_activities"].includes(selectedArchetype.id)) return "service";
+    return "product";
+  }
+
+  function isSavedResult(result) {
+    if (result?.type === "business") return favorites.includes(result.entityId || result.id);
+    return savedItems.some((item) => item.type === result?.type && item.entityId === (result?.entityId || result?.id));
+  }
+
+  function rememberSearch(value) {
+    const term = String(value || "").trim();
+    if (term.length < 2) return;
+    const next = [term, ...recentSearches.filter((item) => item.toLowerCase() !== term.toLowerCase())].slice(0, 8);
+    setRecentSearches(next);
+    writeState(RECENT_SEARCH_KEY, user, next, "local");
+    track("search_submitted", { query_length: term.length, city: location.city || "", service: service || "all" });
+  }
+
+  function clearRecentSearches() {
+    setRecentSearches([]);
+    writeState(RECENT_SEARCH_KEY, user, [], "local");
+  }
+
+  async function toggleSavedResult(result) {
+    if (!user || user.isAnonymous) return window.location.assign(`/login?next=${encodeURIComponent(`${basePath || "/"}?view=saved`)}`);
+    if (result.type === "business") return toggleFavorite(result.entityId || result.id);
+    const entityId = result.entityId || result.id;
+    const saved = isSavedResult(result);
+    try {
+      if (saved) await deleteSavedItem(user.uid, result.type, entityId);
+      else await saveSavedItem(user.uid, {
+        type: result.type, entityId, businessId: result.businessId || result.business?.id || null,
+        title: result.title || result.name, subtitle: result.subtitle || result.description || "", image: result.image || "",
+        href: result.href || "", city: result.city || "", area: result.area || "", address: result.address || "",
+        metadata: { category: result.category || "", itemType: result.itemType || "", currency: result.currency || "", price: result.price ?? null }
+      });
+      toast(saved ? "Removed from Saved." : "Saved for later.", { title: saved ? "Removed" : "Saved" });
+    } catch (error) { toast(error.message, { type: "error", title: "Saved could not be updated" }); }
+  }
+
+  async function toggleSavedProduct(product) {
+    const type = savedTypeForProduct(product);
+    await toggleSavedResult({
+      ...product, type, entityId: product.id, businessId: selected?.id || product.businessId,
+      title: product.name, subtitle: [selected?.name, product.category].filter(Boolean).join(" · "),
+      href: selected?.id ? `/?business=${selected.id}&offer=${product.id}` : ""
+    });
+  }
+
+  async function openSearchResult(result) {
+    rememberSearch(query);
+    if (result.type === "business") { openBusiness(result); return; }
+    const business = result.business || businesses.find((item) => item.id === result.businessId);
+    if (business) {
+      setSelected(business);
+      setSelectedOffer(null);
+      setTransactionOffer(null);
+      setProductQuery("");
+      setCategory("all");
+      updateUrl("home", { business: business.id, order: null, service: null, offer: ["product", "service", "event"].includes(result.type) ? result.entityId : null });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (result.businessId) {
+      try {
+        const loaded = await loadPublicMarketplaceBusiness(result.businessId);
+        if (loaded?.business) {
+          setSelected(loaded.business);
+          updateUrl("home", { business: loaded.business.id, order: null, service: null, offer: ["product", "service", "event"].includes(result.type) ? result.entityId : null });
+        }
+      } catch (error) { toast(error.message || "This result is not available right now.", { type: "error" }); }
+    }
+  }
+
+  async function openSavedItem(item) {
+    if (item.type === "place" && !item.businessId) {
+      setLocation((current) => ({ ...current, city: item.city || current.city, area: item.area || item.address || "", coordinates: null }));
+      openHome();
+      return;
+    }
+    await openSearchResult({ ...item, id: item.entityId, entityId: item.entityId });
+  }
+
+  async function removeSavedItem(item) {
+    if (!user?.uid) return;
+    try {
+      await deleteSavedItem(user.uid, item.type, item.entityId);
+      toast("Removed from Saved.", { title: "Removed" });
+    } catch (error) { toast(error.message, { type: "error", title: "Could not update Saved" }); }
   }
 
   async function payOrder(order) {
@@ -795,26 +983,54 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       ) : view === "activity" ? (
         <section className="rounded-[26px] bg-[var(--surface)] p-5 sm:p-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div><p className="text-sm font-semibold text-[var(--accent)]">Activity</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Everything you have in motion</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">Orders, deliveries, appointments, bookings and ticket activity live in one timeline.</p></div>
-            <Button variant="outline" onClick={openHome}>Back to Home</Button>
+            <div><p className="text-sm font-semibold text-[var(--accent)]">Activity</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Everything you have in motion</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">Track active orders, upcoming bookings and tickets, completed activity, payments and anything that needs attention.</p></div>
+            <div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/support?topic=orders">Get help</Link></Button><Button variant="outline" onClick={openHome}>Back to Home</Button></div>
           </div>
           {user && !user.isAnonymous && orders.length ? <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">{[
             ["all", "All"], ["orders", "Orders"], ["deliveries", "Deliveries"], ["bookings", "Bookings"], ["tickets", "Tickets"]
           ].map(([value,label]) => <button key={value} type="button" onClick={() => setActivityFilter(value)} className={cn("shrink-0 rounded-full border px-3 py-2 text-sm font-semibold", activityFilter === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "bg-[var(--surface)]")}>{label}</button>)}</div> : null}
-          {!user || user.isAnonymous ? <EmptyState className="mt-6" icon={PackageCheck} title="Sign in to see your activity" description="Your orders, bookings, tickets and delivery progress stay tied to your Spotly account." action={<Button asChild><Link href={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=activity`)}`}>Sign in</Link></Button>} /> : activityOrders.length ? <div className="mt-6 grid gap-4 lg:grid-cols-2">{activityOrders.map((order) => <OrderCard key={order.id} order={order} onPay={payOrder} onCancel={(record) => { setCancelTarget(record); setCancelReason(""); }} onOpen={(record) => { setActivityDetail(record); updateUrl("activity", { order: record.id, business: null, service: null, offer: null }); }} highlighted={order.id === requestedOrder} innerRef={(node) => { orderRefs.current[order.id] = node; }} />)}</div> : <EmptyState className="mt-6" icon={PackageCheck} title={orders.length ? "Nothing in this filter" : "Nothing here yet"} description={orders.length ? "Choose another Activity filter." : "Your orders, bookings and other Spotly activity will appear here."} action={<Button onClick={orders.length ? () => setActivityFilter("all") : openHome}>{orders.length ? "Show all Activity" : "Explore Spotly"}</Button>} />}
+          {!user || user.isAnonymous ? <EmptyState className="mt-6" icon={PackageCheck} title="Sign in to see your activity" description="Your orders, bookings, tickets and delivery progress stay tied to your Spotly account." action={<Button asChild><Link href={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=activity`)}`}>Sign in</Link></Button>} /> : activityOrders.length ? <div className="mt-7 space-y-8">{[
+            ["problem", "Needs attention", "Payment, fulfilment or another issue needs your attention."],
+            ["active", "Active now", "Orders and deliveries currently moving."],
+            ["upcoming", "Upcoming", "Bookings, appointments and tickets scheduled ahead."],
+            ["past", "Past", "Completed, cancelled and resolved activity."]
+          ].map(([bucket, title, description]) => activityGroups[bucket].length ? <section key={bucket}><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className={cn("text-lg font-semibold", bucket === "problem" && "text-[var(--danger)]")}>{title}</h2><p className="mt-1 text-xs text-[var(--text-3)]">{description}</p></div><span className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-3)]">{activityGroups[bucket].length}</span></div><div className="grid gap-4 lg:grid-cols-2">{activityGroups[bucket].map((order) => <OrderCard key={order.id} order={order} onPay={payOrder} onCancel={(record) => { setCancelTarget(record); setCancelReason(""); }} onOpen={(record) => { setActivityDetail(record); updateUrl("activity", { order: record.id, business: null, service: null, offer: null }); }} highlighted={order.id === requestedOrder} innerRef={(node) => { orderRefs.current[order.id] = node; }} />)}</div></section> : null)}</div> : <EmptyState className="mt-6" icon={PackageCheck} title={orders.length ? "Nothing in this filter" : "Nothing here yet"} description={orders.length ? "Choose another Activity filter." : "Your orders, bookings and other Spotly activity will appear here."} action={<Button onClick={orders.length ? () => setActivityFilter("all") : openHome}>{orders.length ? "Show all Activity" : "Explore Spotly"}</Button>} />}
         </section>
       ) : view === "search" ? (
-        <section className="rounded-[26px] bg-[var(--surface)] p-5 sm:p-7">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">Search{service ? ` · ${serviceLabel}` : ""}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Find something on Spotly</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">Search verified businesses and categories available in {location.city}.</p></div>{service ? <button type="button" onClick={() => updateUrl("search", { business: null, order: null, service: null })} className="text-sm font-semibold text-[var(--accent)]">Search all Spotly</button> : null}</div>
-          <div className="mt-5"><SearchField value={query} onChange={setQuery} label="Search Spotly" placeholder={service === "eat" ? "Restaurant, café or food" : service === "shop" ? "Store, category or business" : service === "book" ? "Spa, salon, service or activity" : service === "events" ? "Event, venue or category" : "Business or category"} /></div>
-          <div className="mt-5 flex flex-wrap items-center gap-2"><button type="button" onClick={() => setLocationOpen(true)} className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-2 text-sm font-semibold"><MapPin className="h-4 w-4" />{location.area || location.city}</button>{service ? <button type="button" onClick={() => updateUrl("search", { service: null })} className="rounded-full bg-[var(--surface-2)] px-3 py-2 text-sm font-semibold">{serviceLabel} ×</button> : null}</div>
-          {loading ? <div className="flex items-center justify-center py-20"><LoaderCircle className="h-7 w-7 animate-spin text-violet" /></div> : shownBusinesses.length ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{shownBusinesses.map(({ business, distance }) => <BusinessCard key={business.id} business={business} distance={distance} favorite={favorites.includes(business.id)} onFavorite={toggleFavorite} onOpen={openBusiness} />)}</div> : <LottieEmptyState className="mt-6" name="search-nearby" title={query ? `No results for “${query}”` : `No ${service ? `${serviceLabel.toLowerCase()} ` : ""}businesses found nearby`} description="Try a broader search, another area, or come back as more verified businesses go live." action={<Button variant="outline" onClick={() => { setQuery(""); setLocation((current) => ({ ...current, area: "", radiusKm: 50 })); }}>Broaden search</Button>} />}
-        </section>
+        <CustomerSearchView
+          query={query}
+          onQuery={setQuery}
+          results={searchResults}
+          loading={searchLoading}
+          error={searchError}
+          filter={searchFilter}
+          onFilter={setSearchFilter}
+          counts={searchCounts}
+          recentSearches={recentSearches}
+          onRecent={(term) => { setQuery(term); rememberSearch(term); }}
+          onClearRecent={clearRecentSearches}
+          onOpenResult={openSearchResult}
+          onSaveResult={toggleSavedResult}
+          isSaved={isSavedResult}
+          location={location}
+          onLocation={() => setLocationOpen(true)}
+          service={service}
+          serviceLabel={serviceLabel}
+          onClearService={() => updateUrl("search", { service: null })}
+          onExplore={openHome}
+        />
       ) : view === "saved" ? (
-        <section className="rounded-[26px] bg-[var(--surface)] p-5 sm:p-7">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">Saved</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Places you want to come back to</h1></div><Button variant="outline" onClick={openHome}>Explore more</Button></div>
-          {!user || user.isAnonymous ? <EmptyState className="mt-6" icon={Heart} title="Sign in to use Saved" description="Save businesses and keep them synced to your Spotly account." action={<Button asChild><Link href={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=saved`)}`}>Sign in</Link></Button>} /> : shownBusinesses.length ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{shownBusinesses.map(({ business, distance }) => <BusinessCard key={business.id} business={business} distance={distance} favorite onFavorite={toggleFavorite} onOpen={openBusiness} />)}</div> : <LottieEmptyState className="mt-6" name="verified-business" title="Nothing saved yet" description="Save a business to find it quickly later." action={<Button onClick={openHome}>Browse Spotly</Button>} />}
-        </section>
+        <CustomerSavedView
+          user={user}
+          businessEntries={favoriteBusinesses.map((business) => ({ business, distance: null }))}
+          savedItems={savedItems}
+          onOpenBusiness={openBusiness}
+          onOpenSavedItem={openSavedItem}
+          onRemoveBusiness={toggleFavorite}
+          onRemoveItem={removeSavedItem}
+          onExplore={openHome}
+          loginHref={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=saved`)}`}
+        />
       ) : (
         <div>
           <ServiceModeHeader service={service} location={location} ridesEnabled={ridesEnabled} sendEnabled={sendEnabled} onSelectService={enterService} onExit={openHome} onSearch={openSearch} />
@@ -841,10 +1057,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
     <Overlay open={basketOpen} onClose={() => setBasketOpen(false)} title="Your basket" description={`${cartItems.length} products`} mode="sheet"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onClose={() => setBasketOpen(false)} onCheckout={() => { track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) }); setBasketOpen(false); setCheckout(true); }} /></Overlay>
     <Modal open={Boolean(pendingBranchId)} onClose={() => setPendingBranchId("")} title="Switch business location?" description="Products, prices and availability can differ by location." size="sm"><div className="p-5"><p className="text-sm leading-6 text-secondary">Switching will clear the current basket so you can build an accurate order for the new location.</p><div className="mt-5 flex gap-3"><Button variant="outline" className="flex-1" onClick={() => setPendingBranchId("")}>Keep this location</Button><Button className="flex-1" onClick={confirmBranchChange}>Switch and clear</Button></div></div></Modal>
-    {selectedIsPickup ? <CheckoutModal open={checkout} onClose={() => setCheckout(false)} business={selected} branches={branches} selectedBranchId={selectedBranchId} cartItems={cartItems} currency={currency} user={user} onComplete={(order) => { setCart({}); removeState(CART_KEY, user); updateUrl("activity", { order: order.orderId || order.id, business: null, service: null, offer: null }); }} /> : null}
+    {selectedIsPickup ? <CheckoutModal open={checkout} onClose={() => setCheckout(false)} business={selected} branches={branches} selectedBranchId={selectedBranchId} cartItems={cartItems} currency={currency} user={user} defaultFulfilment={profile?.preferences?.defaultFulfilment || "pickup"} onComplete={(order) => { setCart({}); removeState(CART_KEY, user); updateUrl("activity", { order: order.orderId || order.id, business: null, service: null, offer: null }); }} /> : null}
     <ActivityDetailModal order={activityDetail} open={Boolean(activityDetail)} onClose={() => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); }} onPay={payOrder} onCancel={(record) => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); setCancelTarget(record); setCancelReason(""); }} />
     <Modal open={Boolean(cancelTarget)} onClose={() => { if (!cancelling) { setCancelTarget(null); setCancelReason(""); } }} title="Cancel this activity?" description="Spotly will release any held availability when cancellation is still allowed." size="sm"><div className="p-5"><label className="block text-sm font-medium">Reason<textarea className="field-control mt-2 min-h-24 w-full" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Tell the business why you are cancelling" /></label><p className="mt-3 text-xs leading-5 text-[var(--text-3)]">Paid activity cannot be cancelled here. Use support if a payment has already been captured.</p><div className="mt-5 flex gap-3"><Button className="flex-1" variant="outline" disabled={cancelling} onClick={() => { setCancelTarget(null); setCancelReason(""); }}>Keep it</Button><Button className="flex-1" loading={cancelling} onClick={cancelActivity}>Cancel activity</Button></div></div></Modal>
-    <OfferDetailModal product={selectedOffer} open={Boolean(selectedOffer)} onClose={closeOffer} currency={currency} archetype={selectedArchetype} quantity={selectedOffer ? (cart[selectedOffer.id] || 0) : 0} onQuantityChange={changeQuantity} onBook={startTransaction} branch={selectedBranch} />
+    <OfferDetailModal product={selectedOffer} open={Boolean(selectedOffer)} onClose={closeOffer} currency={currency} archetype={selectedArchetype} quantity={selectedOffer ? (cart[selectedOffer.id] || 0) : 0} onQuantityChange={changeQuantity} onBook={startTransaction} branch={selectedBranch} saved={selectedOffer ? savedItems.some((item) => item.type === savedTypeForProduct(selectedOffer) && item.entityId === selectedOffer.id) : false} onSave={toggleSavedProduct} />
     <CustomerTransactionModal open={Boolean(transactionOffer)} onClose={() => setTransactionOffer(null)} product={transactionOffer} business={selected} branches={branches} selectedBranchId={selectedBranchId} currency={currency} user={user} archetype={selectedArchetype} onComplete={(order) => { track("booking_created", { order_id: order.orderId || "", business_id: selected?.id || "", branch_id: selectedBranchId || "", transaction_type: order.transactionType || selectedArchetype.id }); }} />
   </div>;
 }

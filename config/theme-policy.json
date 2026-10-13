@@ -36,7 +36,8 @@
     "/search",
     "/place/[id]",
     "/item/[id]",
-    "/order/[id]"
+    "/order/[id]",
+    "/notifications"
   ],
   "fixedDark": [
     "/business/kiosk/live"

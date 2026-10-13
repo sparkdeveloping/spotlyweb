@@ -63,3 +63,7 @@ launch.sendEnabled
 ```
 
 Until then the customer interface communicates that the service is opening area-by-area. It does not simulate transactions.
+
+## 5.8.0 customer utility deployment
+
+Deploy this archive as a clean replacement of the previous web source. Keep production `.env` values in Vercel. New Firestore rules include the self-scoped `savedItems` collection and must be deployed with the matching release.
