@@ -20,6 +20,7 @@ import { NotificationBell } from "@/components/notification-center";
 import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { resolveProductForBranch } from "@/lib/product-offers";
 import { MARKETPLACE_SERVICE_KEYS, MarketplaceHome, ServiceModeHeader, serviceMatchesBusiness } from "@/components/marketplace-home";
+import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "@/components/customer-conversion";
 
 const CART_KEY = "spotly-marketplace-cart";
 const CHECKOUT_KEY = "spotly-checkout-draft";
@@ -75,16 +76,59 @@ function BusinessCard({ business, favorite, onFavorite, onOpen, distance }) {
   return <article className="overflow-hidden rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface)] transition hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] hover:shadow-card"><button onClick={() => onOpen(business)} className="block w-full text-left"><div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} /><div className="absolute inset-0 bg-gradient-to-t from-black/38 via-transparent to-transparent" /><div className="absolute bottom-3 left-3 flex flex-wrap gap-2"><Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">{business.category || archetype.shortLabel}</Badge>{verified && <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><BadgeCheck className="mr-1 h-3.5 w-3.5" />Verified</Badge>}</div></div><div className="p-5"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-lg font-semibold tracking-[-.025em]">{business.name}</h2><p className="mt-1 flex items-center gap-1 text-sm text-[var(--text-3)]"><MapPin className="h-4 w-4" />{distance !== null ? `${distance.toFixed(1)} km away` : locationCount ? `${locationCount} ${archetype.nouns.branch}${locationCount === 1 ? "" : "s"}` : business.area || business.city || "Location not provided"}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div><p className="mt-4 line-clamp-2 text-sm leading-6 text-[var(--text-2)]">{business.description || `View ${archetype.nouns.catalog.toLowerCase()}, locations and currently published information.`}</p><div className="mt-4 flex flex-wrap gap-2"><Badge tone="neutral">{capabilityLabel}</Badge>{locationCount > 0 && <Badge tone="neutral"><MapPin className="mr-1 h-3.5 w-3.5" />{locationCount} {locationCount === 1 ? "location" : "locations"}</Badge>}{canOrder && <Badge tone="neutral"><Truck className="mr-1 h-3.5 w-3.5" />Pickup / delivery by location</Badge>}</div></div></button><div className="flex items-center gap-2 border-t border-[var(--border-subtle)] p-3"><Button onClick={() => onOpen(business)} className="flex-1" size="sm">{cta}</Button><Button onClick={() => onFavorite(business.id)} size="icon" variant="outline" aria-label={favorite ? "Remove from saved" : "Save business"}><Heart className={cn("h-5 w-5", favorite && "fill-[var(--danger)] text-[var(--danger)]")} /></Button></div></article>;
 }
 
-function ProductCard({ product, quantity, onChange, currency, archetype }) {
+function ProductCard({ product, quantity, onChange, onOpen, currency, archetype }) {
   const reduce = useReducedMotion();
   const price = priceFor(product, currency);
   const unavailable = product.available === false || product.active === false || product.stockStatus === "out_of_stock";
-  return <motion.div layout whileHover={reduce ? undefined : { y: -3 }} transition={{ duration: .18 }}><Card className="flex gap-4 p-4" variant="bordered"><div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-2)]">{product.image ? <Image src={product.image} alt="" fill unoptimized className="object-cover" sizes="96px" /> : <div className="flex h-full items-center justify-center text-[var(--text-3)]"><ShoppingBasket className="h-8 w-8" /></div>}</div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{product.name}</h3><p className="mt-1 line-clamp-2 text-sm text-secondary">{[product.unit, product.packSize, product.description || product.category || `Available ${archetype.capabilities.includes("pickup_orders") ? "for pickup" : "from this business"}`].filter(Boolean).join(" · ")}</p></div><p className={cn("shrink-0 font-semibold", !price && "text-warning")}>{price ? formatCurrency(price, currency) : `Not available in ${currency}`}</p></div><div className="mt-4 flex items-center justify-between gap-3">{unavailable ? <Badge tone="neutral">Unavailable</Badge> : product.stockQuantity > 0 ? <span className="text-xs text-secondary">{product.stockQuantity} available</span> : <span />}<AnimatePresence mode="popLayout" initial={false}>{quantity ? <motion.div key="quantity" initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} exit={reduce ? undefined : { opacity: 0, scale: .94 }} className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"><motion.button whileTap={reduce ? undefined : { scale: .9 }} onClick={() => onChange(product, quantity - 1)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-[var(--surface-hover)]" aria-label={`Decrease ${product.name}`}><Minus className="h-4 w-4" /></motion.button><motion.span key={quantity} initial={reduce ? false : { y: 5, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-9 text-center text-sm font-semibold">{quantity}</motion.span><motion.button whileTap={reduce ? undefined : { scale: .9 }} disabled={!price || unavailable || (product.maxQuantity && quantity >= product.maxQuantity)} onClick={() => onChange(product, quantity + 1)} className="flex h-8 w-8 items-center justify-center rounded-md bg-violet text-[var(--on-accent)] disabled:opacity-40" aria-label={`Increase ${product.name}`}><Plus className="h-4 w-4" /></motion.button></motion.div> : <motion.div key="add" initial={reduce ? false : { opacity: 0, scale: .92 }} animate={{ opacity: 1, scale: 1 }} exit={reduce ? undefined : { opacity: 0, scale: .94 }}><Button size="sm" disabled={!price || unavailable} onClick={() => onChange(product, 1)}>{price ? <SpotlyLottie name="basket-add" mode="hover" className="h-5 w-5" fallback={<Plus className="h-4 w-4" />} /> : <Plus className="h-4 w-4" />}{price ? "Add to basket" : "Price unavailable"}</Button></motion.div>}</AnimatePresence></div></div></Card></motion.div>;
+  const pickup = archetype.capabilities.includes("pickup_orders");
+  const actionLabel = archetype.id === "ticketing_events" ? "View tickets" : archetype.id === "appointments_services" ? "View service" : archetype.id === "accommodation_activities" ? "View booking" : "View details";
+
+  return <motion.div layout whileHover={reduce ? undefined : { y: -3 }} transition={{ duration: .18 }}>
+    <Card className="overflow-hidden p-0" variant="bordered">
+      <button type="button" onClick={() => onOpen(product)} className="flex w-full gap-4 p-4 text-left">
+        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-[14px] bg-[var(--surface-2)]">
+          {product.image ? <Image src={product.image} alt="" fill unoptimized className="object-cover" sizes="96px" /> : <div className="flex h-full items-center justify-center text-[var(--text-3)]"><ShoppingBasket className="h-8 w-8" /></div>}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0"><h3 className="truncate font-semibold">{product.name}</h3><p className="mt-1 line-clamp-2 text-sm leading-5 text-secondary">{[product.unit, product.packSize, product.description || product.category || `Available from this business`].filter(Boolean).join(" · ")}</p></div>
+            <p className={cn("shrink-0 font-semibold", price === null && "text-warning")}>{price === null ? `No ${currency} price` : price === 0 ? "Free" : formatCurrency(price, currency)}</p>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            {unavailable ? <Badge tone="neutral">Unavailable</Badge> : product.stockQuantity > 0 && pickup ? <span className="text-xs text-secondary">{product.stockQuantity} available</span> : product.durationMinutes > 0 ? <span className="text-xs text-secondary">{product.durationMinutes} min</span> : product.startsAt ? <span className="text-xs text-secondary">Scheduled</span> : <span />}
+            {!pickup ? <span className="text-xs font-semibold text-[var(--accent)]">{actionLabel} →</span> : null}
+          </div>
+        </div>
+      </button>
+      {pickup ? <div className="flex items-center justify-end border-t border-[var(--border-subtle)] px-4 py-3">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {quantity ? <motion.div key="quantity" initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} exit={reduce ? undefined : { opacity: 0, scale: .94 }} className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1">
+            <motion.button whileTap={reduce ? undefined : { scale: .9 }} onClick={() => onChange(product, quantity - 1)} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[var(--surface-hover)]" aria-label={`Decrease ${product.name}`}><Minus className="h-4 w-4" /></motion.button>
+            <motion.span key={quantity} initial={reduce ? false : { y: 5, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-9 text-center text-sm font-semibold">{quantity}</motion.span>
+            <motion.button whileTap={reduce ? undefined : { scale: .9 }} disabled={price === null || unavailable || (product.maxQuantity && quantity >= product.maxQuantity)} onClick={() => onChange(product, quantity + 1)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet text-[var(--on-accent)] disabled:opacity-40" aria-label={`Increase ${product.name}`}><Plus className="h-4 w-4" /></motion.button>
+          </motion.div> : <motion.div key="add" initial={reduce ? false : { opacity: 0, scale: .92 }} animate={{ opacity: 1, scale: 1 }} exit={reduce ? undefined : { opacity: 0, scale: .94 }}><Button size="sm" disabled={price === null || unavailable} onClick={() => onChange(product, 1)}>{price !== null ? <SpotlyLottie name="basket-add" mode="hover" className="h-5 w-5" fallback={<Plus className="h-4 w-4" />} /> : <Plus className="h-4 w-4" />}{price !== null ? "Add to basket" : "Price unavailable"}</Button></motion.div>}
+        </AnimatePresence>
+      </div> : null}
+    </Card>
+  </motion.div>;
 }
 
-function OrderCard({ order, onPay, highlighted = false, innerRef }) {
+function customerPaymentNeeded(order = {}) {
+  return ["unpaid", "pending", "initiated"].includes(order.paymentStatus) && Number(order.totals?.total || order.total || 0) > 0;
+}
+
+function customerActivityCancellable(order = {}) {
+  return ["awaiting_payment", "submitted", "new", "requested", "confirmed", "accepted"].includes(order.status) && !["paid", "refund_pending", "refunded"].includes(order.paymentStatus);
+}
+
+function deliveryStateLabel(state) {
+  return { awaiting_dispatch: "Business is preparing", searching_driver: "Finding your Driver", driver_assigned: "Driver assigned", driver_to_pickup: "Driver is going to the shop", driver_arrived_pickup: "Driver is at the shop", pickup_verification: "Pickup is being verified", collected: "Driver has your order", en_route: "Driver is on the way", driver_arrived_customer: "Driver has arrived", handoff_verification: "Confirming delivery", delivered: "Delivered" }[state] || String(state || "Business is preparing").replaceAll("_", " ");
+}
+
+function OrderCard({ order, onPay, onCancel, onOpen, highlighted = false, innerRef }) {
   const created = timestamp(order.createdAt);
-  const paymentNeeded = ["unpaid", "pending"].includes(order.paymentStatus);
+  const paymentNeeded = customerPaymentNeeded(order);
+  const cancellable = customerActivityCancellable(order);
   const [delivery, setDelivery] = useState(null);
   useEffect(() => {
     let active = true;
@@ -93,9 +137,49 @@ function OrderCard({ order, onPay, highlighted = false, innerRef }) {
     const timer = setInterval(() => authenticatedFetch(`/api/orders/delivery-status?orderId=${encodeURIComponent(order.id)}`, { cache: "no-store" }).then((value) => { if (active) setDelivery(value.delivery || null); }).catch(() => {}), 15000);
     return () => { active = false; clearInterval(timer); };
   }, [order.id, order.fulfilment]);
-  const deliveryLabel = { awaiting_dispatch: "Business is preparing", searching_driver: "Finding your Driver", driver_assigned: "Driver assigned", driver_to_pickup: "Driver is going to the shop", driver_arrived_pickup: "Driver is at the shop", pickup_verification: "Pickup is being verified", collected: "Driver has your order", en_route: "Driver is on the way", driver_arrived_customer: "Driver has arrived", handoff_verification: "Confirming delivery", delivered: "Delivered" }[delivery?.state] || String(delivery?.state || order.deliveryStatus || "Business is preparing").replaceAll("_", " ");
-  return <div ref={innerRef}><Card className={cn("p-5 transition", highlighted && "border-violet ring-4 ring-violet/10")}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold tracking-[.08em] text-[var(--text-3)]">{order.number || order.id}</p><h3 className="mt-2 text-lg font-semibold">{order.businessName || "Spotly order"}</h3><p className="mt-1 text-sm text-secondary">{created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }) : "Just now"}</p></div><div className="text-right"><StatusBadge status={order.status || "submitted"} /><p className="mt-3 font-semibold">{formatCurrency(order.totals?.total || 0, order.currency)}</p></div></div>{order.fulfilment === "delivery" ? <div className="mt-4 rounded-lg bg-[var(--surface-2)] p-4 text-sm"><div className="flex items-center justify-between gap-3"><p className="font-semibold capitalize">{deliveryLabel}</p>{delivery?.number && <Badge tone="info">{delivery.number}</Badge>}</div><p className="mt-1 text-[var(--text-2)]">{order.delivery?.suburb || order.delivery?.address || "Delivery address"}</p>{delivery?.customerPin && !["delivered","cancelled","failed","returned"].includes(delivery.state) && <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-tertiary">YOUR DELIVERY PIN</p><p className="mt-1 font-mono text-2xl font-semibold tracking-[.18em]">{delivery.customerPin}</p><p className="mt-1 text-xs text-secondary">Only tell the Driver this PIN when they are with you and ready to hand over the order.</p></div>}</div> : <div className="mt-4 rounded-lg bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">Pickup: {order.pickup?.date || "To be confirmed"} · {order.pickup?.slot || "Time pending"}</p><p className="mt-1 text-[var(--text-2)]">{order.branchName || "Pickup location"}</p></div>}{paymentNeeded && <Button className="mt-4 w-full" onClick={() => onPay(order)}><CreditCard className="h-4 w-4" />Continue payment</Button>}</Card></div>;
+  const deliveryLabel = deliveryStateLabel(delivery?.state || order.deliveryStatus);
+  const transactionKind = order.transactionType || (order.fulfilment === "appointment" ? "appointment" : order.fulfilment === "booking" ? "booking" : order.fulfilment === "ticketing" ? "ticket" : null);
+
+  return <div ref={innerRef}>
+    <Card className={cn("p-5 transition", highlighted && "border-violet ring-4 ring-violet/10")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-xs font-semibold tracking-[.08em] text-[var(--text-3)]">{order.number || order.id}</p><h3 className="mt-2 text-lg font-semibold">{order.businessName || "Spotly activity"}</h3><p className="mt-1 text-sm text-secondary">{created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }) : "Just now"}</p></div>
+        <div className="text-right"><StatusBadge status={order.status || "submitted"} /><p className="mt-3 font-semibold">{Number(order.totals?.total || order.total || 0) > 0 ? formatCurrency(order.totals?.total || order.total || 0, order.currency) : transactionKind ? "" : formatCurrency(0, order.currency)}</p></div>
+      </div>
+      {transactionKind ? <TransactionSummary order={order} /> : order.fulfilment === "delivery" ? <div className="mt-4 rounded-lg bg-[var(--surface-2)] p-4 text-sm"><div className="flex items-center justify-between gap-3"><p className="font-semibold capitalize">{deliveryLabel}</p>{delivery?.number && <Badge tone="info">{delivery.number}</Badge>}</div><p className="mt-1 text-[var(--text-2)]">{order.delivery?.suburb || order.delivery?.address || "Delivery address"}</p>{delivery?.customerPin && !["delivered","cancelled","failed","returned"].includes(delivery.state) && <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-tertiary">YOUR DELIVERY PIN</p><p className="mt-1 font-mono text-2xl font-semibold tracking-[.18em]">{delivery.customerPin}</p><p className="mt-1 text-xs text-secondary">Only tell the Driver this PIN when they are with you and ready to hand over the order.</p></div>}</div> : <div className="mt-4 rounded-lg bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">Pickup: {order.pickup?.date || "To be confirmed"} · {order.pickup?.slot || "Time pending"}</p><p className="mt-1 text-[var(--text-2)]">{order.branchName || "Pickup location"}</p></div>}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button className="flex-1" variant={paymentNeeded ? "outline" : "primary"} onClick={() => onOpen?.(order)}>View details</Button>{paymentNeeded ? <Button className="flex-1" onClick={() => onPay(order)}><CreditCard className="h-4 w-4" />Continue payment</Button> : null}{cancellable ? <Button className="flex-1" variant="outline" onClick={() => onCancel?.(order)}>Cancel</Button> : null}</div>
+    </Card>
+  </div>;
 }
+function ActivityDetailModal({ order, open, onClose, onPay, onCancel }) {
+  const [delivery, setDelivery] = useState(null);
+  useEffect(() => {
+    let active = true;
+    if (!open || !order?.id || order.fulfilment !== "delivery") { setDelivery(null); return undefined; }
+    authenticatedFetch(`/api/orders/delivery-status?orderId=${encodeURIComponent(order.id)}`, { cache: "no-store" }).then((value) => { if (active) setDelivery(value.delivery || null); }).catch(() => {});
+    const timer = window.setInterval(() => authenticatedFetch(`/api/orders/delivery-status?orderId=${encodeURIComponent(order.id)}`, { cache: "no-store" }).then((value) => { if (active) setDelivery(value.delivery || null); }).catch(() => {}), 15000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [open, order?.id, order?.fulfilment]);
+  if (!order) return null;
+  const created = timestamp(order.createdAt);
+  const transactionKind = order.transactionType || (order.fulfilment === "appointment" ? "appointment" : order.fulfilment === "booking" ? "booking" : order.fulfilment === "ticketing" ? "ticket" : null);
+  const paymentNeeded = customerPaymentNeeded(order);
+  const cancellable = customerActivityCancellable(order);
+  const total = Number(order.totals?.total ?? order.total ?? 0);
+  const subtotal = Number(order.totals?.subtotal ?? 0);
+  const serviceFee = Number(order.totals?.serviceFee ?? 0);
+  const deliveryFee = Number(order.totals?.deliveryFee ?? 0);
+  const currentDeliveryState = delivery?.state || order.deliveryStatus;
+
+  return <Modal open={open} onClose={onClose} title={order.businessName || "Spotly Activity"} description={order.number || order.orderNumber || order.id} size="lg"><div className="p-5 sm:p-6">
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm text-[var(--text-3)]">{created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }) : "Recently created"}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{transactionKind === "ticket" ? "Ticket activity" : transactionKind === "appointment" ? "Appointment" : transactionKind === "booking" ? "Booking" : order.fulfilment === "delivery" ? "Delivery order" : "Pickup order"}</h2></div><div className="flex flex-wrap gap-2"><StatusBadge status={order.status || "submitted"} />{order.paymentStatus ? <Badge tone={order.paymentStatus === "paid" ? "success" : ["failed", "refunded"].includes(order.paymentStatus) ? "danger" : "warning"}>{String(order.paymentStatus).replaceAll("_", " ")}</Badge> : null}</div></div>
+    {transactionKind ? <TransactionSummary order={order} /> : order.fulfilment === "delivery" ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="font-semibold">{deliveryStateLabel(currentDeliveryState)}</p><p className="mt-1 text-sm text-[var(--text-2)]">{order.delivery?.address || order.delivery?.suburb || "Delivery address"}</p>{delivery?.customerPin && !["delivered","cancelled","failed","returned"].includes(delivery.state) ? <div className="mt-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] p-3"><p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">Delivery PIN</p><p className="mt-1 font-mono text-2xl font-semibold tracking-[.16em]">{delivery.customerPin}</p><p className="mt-1 text-xs text-[var(--text-3)]">Only share this when the Driver is with you and ready to hand over the order.</p></div> : null}</div> : <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="font-semibold">Pickup</p><p className="mt-1 text-sm text-[var(--text-2)]">{order.pickup?.date || "Date pending"} · {order.pickup?.slot || "Time pending"}</p><p className="mt-1 text-sm text-[var(--text-3)]">{order.branchName || order.locationName || "Selected location"}</p></div>}
+    <div className="mt-6"><h3 className="text-sm font-semibold">{transactionKind === "ticket" ? "Tickets" : transactionKind ? "Offering" : "Items"}</h3><div className="mt-3 divide-y divide-[var(--divider)] rounded-[16px] border border-[var(--border-subtle)] px-4">{(order.items || []).map((item, index) => <div key={`${item.productId || item.name}-${index}`} className="flex gap-3 py-3 text-sm"><span className="font-semibold">{Number(item.quantity || 1)}×</span><div className="min-w-0 flex-1"><p className="font-medium">{item.name || "Item"}</p>{item.variant ? <p className="mt-1 text-xs text-[var(--text-3)]">{item.variant}</p> : null}</div>{Number(item.lineTotal ?? item.unitPrice ?? 0) > 0 ? <span className="font-semibold">{formatCurrency(item.lineTotal ?? Number(item.unitPrice || 0) * Number(item.quantity || 1), order.currency || "USD")}</span> : null}</div>)}</div></div>
+    {total > 0 ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4 text-sm"><div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{formatCurrency(subtotal || Math.max(0, total - serviceFee - deliveryFee), order.currency || "USD")}</span></div>{serviceFee > 0 ? <div className="mt-2 flex justify-between"><span>Service fee</span><span>{formatCurrency(serviceFee, order.currency || "USD")}</span></div> : null}{deliveryFee > 0 ? <div className="mt-2 flex justify-between"><span>Delivery</span><span>{formatCurrency(deliveryFee, order.currency || "USD")}</span></div> : null}<div className="mt-3 flex justify-between border-t border-[var(--divider)] pt-3 text-base font-semibold"><span>Total</span><span>{formatCurrency(total, order.currency || "USD")}</span></div></div> : null}
+    <div className="mt-6 flex flex-col gap-2 sm:flex-row"><Button asChild variant="outline" className="flex-1"><Link href={`/support?order=${encodeURIComponent(order.id)}`}>Get help</Link></Button>{paymentNeeded ? <Button className="flex-1" onClick={() => onPay(order)}><CreditCard className="h-4 w-4" />Continue payment</Button> : null}{cancellable ? <Button variant="outline" className="flex-1" onClick={() => onCancel(order)}>Cancel</Button> : null}</div>
+  </div></Modal>;
+}
+
 function BasketContents({ cartItems, cartTotal, currency, onCheckout, onClose }) {
   const reduce = useReducedMotion();
   return <div className="p-5"><div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold">Your basket</h2><p className="mt-1 text-xs text-secondary">Built for this exact business location</p></div>{onClose && <button onClick={onClose} className="rounded-lg p-2 hover:bg-[var(--surface-hover)]" aria-label="Close basket"><X className="h-5 w-5" /></button>}</div>{cartItems.length ? <><div className="mt-5 space-y-3"><AnimatePresence initial={false}>{cartItems.map((item) => <motion.div layout key={item.id} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? undefined : { opacity: 0, x: 12 }} className="flex items-center gap-3 rounded-lg bg-[var(--surface-2)] px-3 py-2.5 text-sm"><motion.span key={item.quantity} initial={reduce ? false : { scale: .8 }} animate={{ scale: 1 }} className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--accent-soft)] font-semibold text-[var(--on-accent-soft)]">{item.quantity}</motion.span><span className="min-w-0 flex-1 truncate font-medium">{item.name}</span><span className="font-semibold">{formatCurrency(priceFor(item, currency) * item.quantity, currency)}</span></motion.div>)}</AnimatePresence></div><div className="my-5 border-t" /><div className="flex items-center justify-between text-lg font-semibold"><span>Subtotal</span><span>{formatCurrency(cartTotal, currency)}</span></div><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Pickup and delivery availability come from the exact location you choose.</p><Button className="mt-5 w-full" onClick={onCheckout}>Choose pickup or delivery<ChevronRight className="h-4 w-4" /></Button></> : <div className="py-7 text-center"><SpotlyLottie name="empty-basket" mode="loop" className="mx-auto h-24 w-24" ariaLabel="Empty basket" /><p className="mt-2 text-sm font-semibold">Your basket is ready when you are</p><p className="mx-auto mt-2 max-w-[240px] text-xs leading-5 text-secondary">Add a product and Spotly will keep the basket tied to this location's prices and availability.</p></div>}</div>;
@@ -192,6 +276,84 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
 }
 
 
+function BusinessDetailView({
+  business,
+  favorite,
+  onFavorite,
+  onBack,
+  businessDetailLoading,
+  branchError,
+  branches,
+  selectedBranchId,
+  onBranchChange,
+  locationNoun,
+  catalogError,
+  branchProducts,
+  visibleProducts,
+  categories,
+  category,
+  setCategory,
+  productQuery,
+  setProductQuery,
+  archetype,
+  isPickup,
+  currency,
+  cart,
+  onQuantityChange,
+  onOfferOpen,
+  cartItems,
+  cartTotal,
+  onCheckout
+}) {
+  const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) || branches[0] || null;
+  const verified = ["approved", "verified"].includes(business.verificationStatus);
+  const capabilityTitle = isPickup ? (archetype.id === "restaurant_food" ? "Order from this location" : "Shop this location") : archetype.id === "ticketing_events" ? "Choose an event or ticket" : archetype.id === "appointments_services" ? "Choose a service" : archetype.id === "accommodation_activities" ? "Choose a listing" : "Explore this business";
+
+  return <section className="pb-8">
+    <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]"><ArrowLeft className="h-4 w-4" />Back</button>
+
+    <div className="mt-4 overflow-hidden rounded-[28px] bg-[var(--surface)]">
+      <div className="relative min-h-[220px] overflow-hidden bg-[var(--surface-2)] sm:min-h-[300px]">
+        <BusinessVisual business={business} />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-5 text-[var(--media-text)] sm:p-7">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0">{business.category || archetype.shortLabel}</Badge>
+            {verified ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><BadgeCheck className="mr-1 h-3.5 w-3.5" />Verified</Badge> : null}
+          </div>
+          <div className="mt-3 flex items-end justify-between gap-4">
+            <div className="min-w-0"><h1 className="text-3xl font-semibold tracking-[-.045em] sm:text-5xl">{business.name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[color-mix(in_srgb,var(--media-text)_82%,transparent)] sm:text-base">{business.description || `${archetype.label} on Spotly.`}</p></div>
+            <Button size="icon" variant="outline" onClick={() => onFavorite(business.id)} aria-label={favorite ? "Remove from saved" : "Save business"} className="shrink-0 border-[color-mix(in_srgb,var(--media-surface)_40%,transparent)] bg-[var(--media-surface)] text-[var(--media-ink)] hover:opacity-95"><Heart className={cn("h-5 w-5", favorite && "fill-[var(--danger)] text-[var(--danger)]")} /></Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 border-t border-[var(--border-subtle)] p-4 sm:grid-cols-3 sm:p-5">
+        <div className="rounded-[16px] bg-[var(--surface-2)] p-4"><p className="text-xs font-semibold uppercase tracking-[.08em] text-[var(--text-3)]">Experience</p><p className="mt-2 text-sm font-semibold">{archetype.shortLabel}</p></div>
+        <div className="rounded-[16px] bg-[var(--surface-2)] p-4"><p className="text-xs font-semibold uppercase tracking-[.08em] text-[var(--text-3)]">Location</p><p className="mt-2 text-sm font-semibold">{selectedBranch?.branchName || selectedBranch?.name || business.area || business.city || "Choose below"}</p></div>
+        <div className="rounded-[16px] bg-[var(--surface-2)] p-4"><p className="text-xs font-semibold uppercase tracking-[.08em] text-[var(--text-3)]">Online</p><p className="mt-2 text-sm font-semibold">{isPickup ? "Pickup / delivery where available" : archetype.id === "ticketing_events" ? "Ticket requests" : archetype.id === "appointments_services" ? "Appointment requests" : archetype.id === "accommodation_activities" ? "Booking requests" : "Business information"}</p></div>
+      </div>
+    </div>
+
+    <div className="mt-6 grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div>
+        {businessDetailLoading ? <Card variant="bordered" className="p-6"><div className="flex items-center gap-3"><LoaderCircle className="h-5 w-5 animate-spin text-violet"/><div><p className="font-semibold">Loading this business</p><p className="mt-1 text-sm text-secondary">Checking locations, offerings, prices and availability.</p></div></div></Card> : branchError ? <div role="alert" className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{branchError}</div> : branches.length ? <div className="rounded-[20px] bg-[var(--surface)] p-5"><div className="flex items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 text-[var(--accent)]" /><div><h2 className="font-semibold">Choose the exact {locationNoun}</h2><p className="mt-1 text-sm leading-6 text-[var(--text-2)]">Prices and availability can differ by location.</p></div></div><div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1">{branches.map((branch) => { const active = branch.id === selectedBranchId; const availability = pickupAvailability(branch); return <button key={branch.id} type="button" onClick={() => onBranchChange(branch.id)} className={cn("min-w-[210px] rounded-[16px] border px-4 py-3 text-left", active ? "border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[color-mix(in_srgb,var(--accent)_18%,transparent)]" : "bg-[var(--surface)] hover:border-[var(--border-strong)]")}><span className="block text-sm font-semibold">{branch.branchName || branch.name || `Main ${locationNoun}`}</span><span className="mt-1 block text-xs text-[var(--text-3)]">{branch.city || "Zimbabwe"}{branch.address ? ` · ${branch.address}` : ""}</span>{isPickup ? <span className={cn("mt-2 block text-xs font-semibold", availability.available ? "text-success" : "text-warning")}>{availability.available ? `Earliest ${availability.earliest.date} ${availability.earliest.slot.label}` : availability.reason}</span> : null}</button>; })}</div></div> : <LottieEmptyState name="location-pin" title="No customer location is published" description="This business needs a public location before online activity can begin." />}
+
+        <div className="mt-7">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{archetype.shortLabel}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{capabilityTitle}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-[var(--text-2)]">Open an item for full details before adding it to a basket or sending a booking request.</p></div><p className="text-sm text-[var(--text-3)]">{visibleProducts.length} available</p></div>
+
+          {branchProducts.length > 0 ? <div className="mt-5 space-y-3"><SearchField value={productQuery} onChange={setProductQuery} label={`Search ${archetype.nouns.catalog}`} placeholder={`Search ${archetype.nouns.items}`} /><div className="no-scrollbar flex gap-2 overflow-x-auto pb-1"><button onClick={() => setCategory("all")} className={cn("rounded-full border px-3 py-2 text-sm font-semibold", category === "all" ? "border-violet bg-violet-soft text-violet-strong" : "bg-[var(--surface)]")}>All</button>{categories.map((item) => <button key={item} onClick={() => setCategory(item)} className={cn("rounded-full border px-3 py-2 text-sm font-semibold", category === item ? "border-violet bg-violet-soft text-violet-strong" : "bg-[var(--surface)]")}>{item}</button>)}</div></div> : null}
+
+          {businessDetailLoading ? <div className="mt-5 flex items-center gap-3 rounded-xl border p-5 text-sm text-secondary"><LoaderCircle className="h-5 w-5 animate-spin text-violet"/>Loading published offerings…</div> : catalogError ? <div role="alert" className="mt-5 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{catalogError}</div> : visibleProducts.length ? <div className="mt-5 grid gap-3 xl:grid-cols-2">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} quantity={cart[product.id] || 0} onChange={onQuantityChange} onOpen={onOfferOpen} currency={currency} archetype={archetype} />)}</div> : branchProducts.length ? <LottieEmptyState className="mt-5" name="search-nearby" title="No matching offerings" description="Try another search or category." action={<Button variant="outline" onClick={() => { setProductQuery(""); setCategory("all"); }}>Clear filters</Button>} /> : <LottieEmptyState className="mt-5" name="storefront-open" title={`${archetype.nouns.catalog} not available yet`} description={`This business has not published available ${archetype.nouns.items} for this location.`} action={<div className="flex flex-wrap justify-center gap-2"><Button asChild variant="outline"><Link href="/support?topic=listing-update">Suggest an update</Link></Button><Button onClick={onBack}>Browse similar businesses</Button></div>} />}
+        </div>
+      </div>
+
+      {isPickup ? <aside className="h-fit rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface)] lg:sticky lg:top-24"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onCheckout={onCheckout} /></aside> : <aside className="h-fit rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface)] p-5 lg:sticky lg:top-24"><ShieldCheck className="h-5 w-5 text-[var(--accent)]" /><h2 className="mt-4 text-lg font-semibold">Book through Spotly</h2><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Choose a published {archetype.nouns.item} to send a real request. It will appear in Activity and in the business workspace for confirmation.</p><div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4 text-xs leading-5 text-[var(--text-3)]"><p className="font-semibold text-[var(--text)]">What happens next</p><p className="mt-2">1. Choose an offering.</p><p>2. Add the date, time or ticket quantity.</p><p>3. Spotly sends it to the business.</p><p>4. Track confirmation in Activity.</p></div></aside>}
+    </div>
+  </section>;
+}
+
+
 function normalizeMarketplaceView(value) {
   if (value === "orders") return "activity";
   if (value === "discover") return "home";
@@ -209,6 +371,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const requestedView = searchParams.get("view");
   const requestedOrder = searchParams.get("order");
   const requestedBusiness = searchParams.get("business");
+  const requestedOffer = searchParams.get("offer");
   const requestedService = searchParams.get("service");
   const launchCities = settings.launch?.launchCities?.length ? settings.launch.launchCities : ["Harare"];
   const defaultLocation = { city: settings.launch?.primaryCity || launchCities[0], area: "", radiusKm: 20, coordinates: null };
@@ -221,6 +384,8 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [category, setCategory] = useState("all");
   const [businesses, setBusinesses] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [selectedOffer, setSelectedOffer] = useState(null);
+  const [transactionOffer, setTransactionOffer] = useState(null);
   const [products, setProducts] = useState([]);
   const [branches, setBranches] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
@@ -229,6 +394,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [basketOpen, setBasketOpen] = useState(false);
   const [favorites, setFavorites] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [activityFilter, setActivityFilter] = useState("all");
+  const [activityDetail, setActivityDetail] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
   const [view, setView] = useState(requestedOrder ? "activity" : normalizeMarketplaceView(requestedView));
   const [service, setService] = useState(MARKETPLACE_SERVICE_KEYS.has(requestedService) ? requestedService : MARKETPLACE_SERVICE_KEYS.has(initialService) ? initialService : null);
   const [checkout, setCheckout] = useState(false);
@@ -257,6 +427,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     if (extras.order === null) params.delete("order"); else if (extras.order) params.set("order", extras.order);
     if (extras.business === null) params.delete("business"); else if (extras.business) params.set("business", extras.business);
     if (extras.service === null) params.delete("service"); else if (extras.service) params.set("service", extras.service);
+    if (extras.offer === null) params.delete("offer"); else if (extras.offer) params.set("offer", extras.offer);
     router.push(routeFor(params), { scroll: false });
     setView(normalized);
     if (Object.prototype.hasOwnProperty.call(extras, "service")) setService(MARKETPLACE_SERVICE_KEYS.has(extras.service) ? extras.service : null);
@@ -264,21 +435,27 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
   function openHome() {
     setSelected(null);
+    setSelectedOffer(null);
+    setTransactionOffer(null);
     setQuery("");
-    updateUrl("home", { business: null, order: null, service: null });
+    updateUrl("home", { business: null, order: null, service: null, offer: null });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function enterService(nextService) {
     setSelected(null);
+    setSelectedOffer(null);
+    setTransactionOffer(null);
     setQuery("");
-    updateUrl("home", { business: null, order: null, service: nextService });
+    updateUrl("home", { business: null, order: null, service: nextService, offer: null });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function openSearch() {
     setSelected(null);
-    updateUrl("search", { business: null, order: null, service });
+    setSelectedOffer(null);
+    setTransactionOffer(null);
+    updateUrl("search", { business: null, order: null, service, offer: null });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -321,10 +498,16 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }, [location.city, query, reloadKey]);
 
   useEffect(() => {
-    if (!requestedBusiness || selected || !businesses.length) return;
+    let active = true;
+    if (!requestedBusiness || selected?.id === requestedBusiness) return () => { active = false; };
     const found = businesses.find((business) => business.id === requestedBusiness);
-    if (found) setSelected(found);
-  }, [requestedBusiness, businesses, selected]);
+    if (found) { setSelected(found); return () => { active = false; }; }
+    loadPublicMarketplaceBusiness(requestedBusiness).then((result) => {
+      if (!active || !result?.business) return;
+      setSelected(result.business);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [requestedBusiness, businesses, selected?.id]);
 
   useEffect(() => {
     let active = true;
@@ -358,10 +541,18 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     return () => { active = false; };
   }, [selected?.id]);
 
+  useEffect(() => {
+    if (!requestedOffer || !selected?.id || !products.length) return;
+    const match = products.find((product) => product.id === requestedOffer);
+    if (match) setSelectedOffer(match);
+  }, [requestedOffer, selected?.id, products]);
+
   useEffect(() => user?.uid && !user.isAnonymous ? subscribeFavorites(user.uid, setFavorites, () => {}) : undefined, [user?.uid, user?.isAnonymous]);
   useEffect(() => user?.uid && !user.isAnonymous ? subscribeCustomerOrders(user.uid, setOrders, () => {}) : undefined, [user?.uid, user?.isAnonymous]);
   useEffect(() => {
     if (!requestedOrder || view !== "activity" || !orders.length) return;
+    const match = orders.find((order) => order.id === requestedOrder);
+    if (match) setActivityDetail(match);
     const timer = setTimeout(() => orderRefs.current[requestedOrder]?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     return () => clearTimeout(timer);
   }, [requestedOrder, view, orders]);
@@ -402,6 +593,21 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const cartItems = useMemo(() => products.filter((product) => cart[product.id] && priceFor(product, currency)).map((product) => ({ ...product, quantity: cart[product.id] })), [cart, products, currency]);
   const cartTotal = cartItems.reduce((sum, item) => sum + priceFor(item, currency) * item.quantity, 0);
   const shownBusinesses = view === "saved" ? businessResults.filter(({ business }) => favorites.includes(business.id)) : serviceResults;
+  useEffect(() => {
+    if (!activityDetail?.id) return;
+    const current = orders.find((order) => order.id === activityDetail.id);
+    if (current) setActivityDetail(current);
+  }, [orders, activityDetail?.id]);
+
+  const activityOrders = useMemo(() => orders.filter((order) => {
+    if (activityFilter === "all") return true;
+    const kind = order.transactionType || (order.fulfilment === "appointment" ? "appointment" : order.fulfilment === "booking" ? "booking" : order.fulfilment === "ticketing" ? "ticket" : "order");
+    if (activityFilter === "orders") return kind === "order";
+    if (activityFilter === "bookings") return ["appointment", "booking"].includes(kind);
+    if (activityFilter === "tickets") return kind === "ticket";
+    if (activityFilter === "deliveries") return order.fulfilment === "delivery";
+    return true;
+  }), [orders, activityFilter]);
 
   function locate() {
     if (!navigator.geolocation) {
@@ -430,6 +636,28 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     if (previous > 0 && next === 0) track("remove_from_cart", { product_id: product.id, business_id: selected?.id || "", branch_id: selectedBranchId || "", currency });
   }
 
+  function openOffer(product) {
+    setSelectedOffer(product);
+    if (selected?.id) updateUrl("home", { business: selected.id, order: null, service, offer: product.id });
+    track("view_item", { product_id: product.id, business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_type: product.itemType || selectedArchetype.nouns.item });
+  }
+
+  function closeOffer() {
+    setSelectedOffer(null);
+    if (selected?.id) updateUrl("home", { business: selected.id, order: null, service, offer: null });
+  }
+
+  function startTransaction(product) {
+    if (!user || user.isAnonymous) {
+      window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      return;
+    }
+    setSelectedOffer(null);
+    if (selected?.id) updateUrl("home", { business: selected.id, order: null, service, offer: null });
+    setTransactionOffer(product);
+    track("begin_booking", { product_id: product.id, business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, business_type: selectedArchetype.id });
+  }
+
   async function toggleFavorite(id) {
     if (!user || user.isAnonymous) return window.location.assign(`/login?next=${encodeURIComponent(`${basePath || "/"}?view=saved`)}`);
     const next = !favorites.includes(id);
@@ -446,18 +674,44 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     }
   }
 
+  async function cancelActivity() {
+    if (!cancelTarget) return;
+    if (cancelReason.trim().length < 3) {
+      toast("Add a short cancellation reason.", { type: "error", title: "Reason required" });
+      return;
+    }
+    setCancelling(true);
+    try {
+      await authenticatedFetch("/api/orders/cancel", { method: "POST", body: JSON.stringify({ orderId: cancelTarget.id, reason: cancelReason.trim() }) });
+      track("activity_cancelled", { order_id: cancelTarget.id, transaction_type: cancelTarget.transactionType || cancelTarget.fulfilment || "order" });
+      toast("This activity was cancelled.", { type: "success", title: "Cancelled" });
+      setCancelTarget(null);
+      setCancelReason("");
+      setActivityDetail(null);
+      updateUrl("activity", { order: null, business: null, service: null, offer: null });
+    } catch (error) {
+      toast(error.message || "This activity could not be cancelled.", { type: "error", title: "Could not cancel" });
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   function openBusiness(business) {
     track("select_business", { business_id: business.id || "", city: location.city || "", area: location.area || "", service: service || "home" });
     setSelected(business);
+    setSelectedOffer(null);
+    setTransactionOffer(null);
     setProductQuery("");
     setCategory("all");
-    updateUrl("home", { business: business.id, order: null, service });
+    updateUrl("home", { business: business.id, order: null, service, offer: null });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function closeBusiness() {
     setSelected(null);
-    updateUrl("home", { business: null, order: null, service });
+    setSelectedOffer(null);
+    setTransactionOffer(null);
+    updateUrl("home", { business: null, order: null, service, offer: null });
   }
 
   function requestBranchChange(id) {
@@ -507,13 +761,47 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       {loadError && businesses.length ? <div role="status" className="mb-4 flex flex-col gap-3 rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="font-semibold text-[var(--on-warning-soft)]">Marketplace refresh is delayed</p><p className="mt-1 leading-6 text-secondary">{loadError}</p></div><Button variant="outline" size="sm" onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="h-4 w-4" />Retry</Button></div> : null}
 
       {selected ? (
-<section className="mt-7"><button type="button" onClick={closeBusiness} className="inline-flex items-center gap-2 text-sm font-semibold text-violet"><ArrowLeft className="h-4 w-4" />Back to businesses</button><div className="mt-5 flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-center"><div className="relative h-20 w-20 overflow-hidden rounded-xl bg-[var(--surface-2)]"><BusinessVisual business={selected} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="text-3xl font-semibold tracking-[-.04em]">{selected.name}</h1>{["approved","verified"].includes(selected.verificationStatus)&&<Badge tone="success"><BadgeCheck className="mr-1 h-3.5 w-3.5" />Verified</Badge>}</div><p className="mt-2 text-sm text-secondary">{selected.description||selected.category}</p></div><Link href={`/claim?business=${selected.id}`} className="text-sm font-semibold text-violet hover:underline">Manage or correct this listing</Link></div><div className="mt-7 grid gap-7 lg:grid-cols-[1fr_340px]"><div>{businessDetailLoading?<Card variant="bordered" className="mb-6 p-6"><div className="flex items-center gap-3"><LoaderCircle className="h-5 w-5 animate-spin text-violet"/><div><p className="font-semibold">Loading this business</p><p className="mt-1 text-sm text-secondary">Checking published locations, availability and products.</p></div></div></Card>:branchError?<div role="alert" className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{branchError}</div>:branches.length?<div className="mb-6 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,var(--border))] bg-[var(--surface)] p-5"><div className="flex items-start gap-4"><MapPin className="mt-1 h-5 w-5 text-violet" /><div className="min-w-0 flex-1"><p className="font-semibold">Choose the exact {locationNoun}</p><p className="mt-1 text-sm leading-6 text-[var(--text-2)]">Products, prices, currency and pickup availability can differ by location.</p><div className="mt-4 flex flex-wrap gap-2">{branches.map((branch)=>{const active=branch.id===selectedBranchId;const availability=pickupAvailability(branch);return <button key={branch.id} type="button" onClick={()=>requestBranchChange(branch.id)} className={cn("rounded-lg border px-4 py-3 text-left",active?"border-violet bg-[var(--accent-soft)] ring-2 ring-[color-mix(in_srgb,var(--accent)_20%,transparent)]":"hover:border-violet/40")}><span className="block text-sm font-semibold">{branch.branchName||branch.name||`Main ${locationNoun}`}</span><span className="mt-1 block text-xs text-[var(--text-3)]">{branch.city||"Zimbabwe"}{branch.address?` · ${branch.address}`:""}</span><span className={cn("mt-2 block text-xs font-semibold",availability.available?"text-success":"text-warning")}>{availability.available?`Earliest ${availability.earliest.date} ${availability.earliest.slot.label}`:availability.reason}</span></button>;})}</div></div></div></div>:<LottieEmptyState name="location-pin" title="No customer location is published" description="This business cannot accept an online pickup order until it publishes a location." />}{businessDetailLoading?<div className="mt-5 flex items-center gap-3 rounded-xl border p-5 text-sm text-secondary"><LoaderCircle className="h-5 w-5 animate-spin text-violet"/>Loading published products…</div>:catalogError?<div role="alert" className="mt-5 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{catalogError}</div>:<><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-violet">{selectedArchetype.shortLabel}</p><h2 className="mt-2 text-2xl font-semibold">{selectedArchetype.nouns.catalog}</h2></div><p className="text-sm text-[var(--text-3)]">{visibleProducts.length} shown</p></div>{branchProducts.length>0&&<div className="mt-5 space-y-3"><SearchField value={productQuery} onChange={setProductQuery} label={`Search ${selectedArchetype.nouns.catalog}`} placeholder={`Search ${selectedArchetype.nouns.items}`} /><div className="no-scrollbar flex gap-2 overflow-x-auto pb-1"><button onClick={()=>setCategory("all")} className={cn("rounded-full border px-3 py-2 text-sm font-semibold",category==="all"?"border-violet bg-violet-soft text-violet-strong":"bg-[var(--surface)]")}>All</button>{categories.map((item)=><button key={item} onClick={()=>setCategory(item)} className={cn("rounded-full border px-3 py-2 text-sm font-semibold",category===item?"border-violet bg-violet-soft text-violet-strong":"bg-[var(--surface)]")}>{item}</button>)}</div></div>}{visibleProducts.length?<div className="mt-5 grid gap-3 xl:grid-cols-2">{visibleProducts.map((product)=><ProductCard key={product.id} product={product} quantity={cart[product.id]||0} onChange={changeQuantity} currency={currency} archetype={selectedArchetype} />)}</div>:branchProducts.length?<LottieEmptyState className="mt-5" name="search-nearby" title="No matching products" description="Try another search or category." action={<Button variant="outline" onClick={()=>{setProductQuery("");setCategory("all");}}>Clear filters</Button>} />:<LottieEmptyState className="mt-5" name="storefront-open" title={`${selectedArchetype.nouns.catalog} not available yet`} description={`This business has not published available ${selectedArchetype.nouns.items} for this location.`} action={<div className="flex flex-wrap justify-center gap-2"><Button asChild variant="outline"><Link href="/support?topic=listing-update">Suggest an update</Link></Button><Button onClick={closeBusiness}>Browse similar businesses</Button></div>} />}</>}</div>{selectedIsPickup?<aside className="hidden h-fit rounded-xl border border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-24 lg:block"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onCheckout={()=>{track("begin_checkout",{business_id:selected?.id||"",branch_id:selectedBranchId||"",currency,item_count:cartItems.reduce((sum,item)=>sum+item.quantity,0)});setCheckout(true);}} /></aside>:<aside className="h-fit rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,var(--border))] bg-[var(--accent-soft)] p-5 lg:sticky lg:top-24"><ShieldCheck className="h-5 w-5 text-[var(--on-accent-soft)]" /><h2 className="mt-4 font-semibold">Online actions are not available yet</h2><p className="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--on-accent-soft)_75%,transparent)]">You can review published information. This business has not enabled online {selectedArchetype.nouns.activity}.</p></aside>}</div></section>
+        <BusinessDetailView
+          business={selected}
+          favorite={favorites.includes(selected.id)}
+          onFavorite={toggleFavorite}
+          onBack={closeBusiness}
+          businessDetailLoading={businessDetailLoading}
+          branchError={branchError}
+          branches={branches}
+          selectedBranchId={selectedBranchId}
+          onBranchChange={requestBranchChange}
+          locationNoun={locationNoun}
+          catalogError={catalogError}
+          branchProducts={branchProducts}
+          visibleProducts={visibleProducts}
+          categories={categories}
+          category={category}
+          setCategory={setCategory}
+          productQuery={productQuery}
+          setProductQuery={setProductQuery}
+          archetype={selectedArchetype}
+          isPickup={selectedIsPickup}
+          currency={currency}
+          cart={cart}
+          onQuantityChange={changeQuantity}
+          onOfferOpen={openOffer}
+          cartItems={cartItems}
+          cartTotal={cartTotal}
+          onCheckout={() => { track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) }); setCheckout(true); }}
+        />
       ) : view === "home" && !service ? (
         loading && !businesses.length ? <div className="flex min-h-[55vh] flex-col items-center justify-center text-center"><SpotlyLottie name="marketplace-discover" mode="loop" eager className="h-28 w-28" fallback={<Store className="h-9 w-9 text-violet" />} /><p className="mt-4 text-sm font-semibold">Opening Spotly in {location.city}…</p><p className="mt-2 max-w-sm text-xs leading-5 text-[var(--text-3)]">Loading verified businesses and current availability.</p></div> : loadError && !businesses.length ? <LottieEmptyState name="marketplace-discover" title="Spotly could not load nearby businesses" description={loadError} action={<Button onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="h-4 w-4" />Reload</Button>} /> : <MarketplaceHome businessResults={businessResults} orders={orders} location={location} ridesEnabled={ridesEnabled} sendEnabled={sendEnabled} onSelectService={enterService} onOpenBusiness={openBusiness} onSearch={openSearch} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} onLocation={() => setLocationOpen(true)} />
       ) : view === "activity" ? (
         <section className="rounded-[26px] bg-[var(--surface)] p-5 sm:p-7">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">Activity</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Everything you have in motion</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">Orders and deliveries are live here now. Rides and bookings will join this same timeline as those services open.</p></div><Button variant="outline" onClick={openHome}>Back to Home</Button></div>
-          {!user || user.isAnonymous ? <EmptyState className="mt-6" icon={PackageCheck} title="Sign in to see your activity" description="Orders and delivery progress are tied to your Spotly account." action={<Button asChild><Link href={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=activity`)}`}>Sign in</Link></Button>} /> : orders.length ? <div className="mt-6 grid gap-4 lg:grid-cols-2">{orders.map((order) => <OrderCard key={order.id} order={order} onPay={payOrder} highlighted={order.id === requestedOrder} innerRef={(node) => { orderRefs.current[order.id] = node; }} />)}</div> : <EmptyState className="mt-6" icon={PackageCheck} title="Nothing here yet" description="Your orders and other Spotly activity will appear here." action={<Button onClick={openHome}>Explore Spotly</Button>} />}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div><p className="text-sm font-semibold text-[var(--accent)]">Activity</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Everything you have in motion</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">Orders, deliveries, appointments, bookings and ticket activity live in one timeline.</p></div>
+            <Button variant="outline" onClick={openHome}>Back to Home</Button>
+          </div>
+          {user && !user.isAnonymous && orders.length ? <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">{[
+            ["all", "All"], ["orders", "Orders"], ["deliveries", "Deliveries"], ["bookings", "Bookings"], ["tickets", "Tickets"]
+          ].map(([value,label]) => <button key={value} type="button" onClick={() => setActivityFilter(value)} className={cn("shrink-0 rounded-full border px-3 py-2 text-sm font-semibold", activityFilter === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "bg-[var(--surface)]")}>{label}</button>)}</div> : null}
+          {!user || user.isAnonymous ? <EmptyState className="mt-6" icon={PackageCheck} title="Sign in to see your activity" description="Your orders, bookings, tickets and delivery progress stay tied to your Spotly account." action={<Button asChild><Link href={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=activity`)}`}>Sign in</Link></Button>} /> : activityOrders.length ? <div className="mt-6 grid gap-4 lg:grid-cols-2">{activityOrders.map((order) => <OrderCard key={order.id} order={order} onPay={payOrder} onCancel={(record) => { setCancelTarget(record); setCancelReason(""); }} onOpen={(record) => { setActivityDetail(record); updateUrl("activity", { order: record.id, business: null, service: null, offer: null }); }} highlighted={order.id === requestedOrder} innerRef={(node) => { orderRefs.current[order.id] = node; }} />)}</div> : <EmptyState className="mt-6" icon={PackageCheck} title={orders.length ? "Nothing in this filter" : "Nothing here yet"} description={orders.length ? "Choose another Activity filter." : "Your orders, bookings and other Spotly activity will appear here."} action={<Button onClick={orders.length ? () => setActivityFilter("all") : openHome}>{orders.length ? "Show all Activity" : "Explore Spotly"}</Button>} />}
         </section>
       ) : view === "search" ? (
         <section className="rounded-[26px] bg-[var(--surface)] p-5 sm:p-7">
@@ -553,6 +841,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
     <Overlay open={basketOpen} onClose={() => setBasketOpen(false)} title="Your basket" description={`${cartItems.length} products`} mode="sheet"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onClose={() => setBasketOpen(false)} onCheckout={() => { track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) }); setBasketOpen(false); setCheckout(true); }} /></Overlay>
     <Modal open={Boolean(pendingBranchId)} onClose={() => setPendingBranchId("")} title="Switch business location?" description="Products, prices and availability can differ by location." size="sm"><div className="p-5"><p className="text-sm leading-6 text-secondary">Switching will clear the current basket so you can build an accurate order for the new location.</p><div className="mt-5 flex gap-3"><Button variant="outline" className="flex-1" onClick={() => setPendingBranchId("")}>Keep this location</Button><Button className="flex-1" onClick={confirmBranchChange}>Switch and clear</Button></div></div></Modal>
-    {selectedIsPickup ? <CheckoutModal open={checkout} onClose={() => setCheckout(false)} business={selected} branches={branches} selectedBranchId={selectedBranchId} cartItems={cartItems} currency={currency} user={user} onComplete={(order) => { setCart({}); removeState(CART_KEY, user); updateUrl("activity", { order: order.orderId || order.id, business: null, service: null }); }} /> : null}
+    {selectedIsPickup ? <CheckoutModal open={checkout} onClose={() => setCheckout(false)} business={selected} branches={branches} selectedBranchId={selectedBranchId} cartItems={cartItems} currency={currency} user={user} onComplete={(order) => { setCart({}); removeState(CART_KEY, user); updateUrl("activity", { order: order.orderId || order.id, business: null, service: null, offer: null }); }} /> : null}
+    <ActivityDetailModal order={activityDetail} open={Boolean(activityDetail)} onClose={() => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); }} onPay={payOrder} onCancel={(record) => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); setCancelTarget(record); setCancelReason(""); }} />
+    <Modal open={Boolean(cancelTarget)} onClose={() => { if (!cancelling) { setCancelTarget(null); setCancelReason(""); } }} title="Cancel this activity?" description="Spotly will release any held availability when cancellation is still allowed." size="sm"><div className="p-5"><label className="block text-sm font-medium">Reason<textarea className="field-control mt-2 min-h-24 w-full" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Tell the business why you are cancelling" /></label><p className="mt-3 text-xs leading-5 text-[var(--text-3)]">Paid activity cannot be cancelled here. Use support if a payment has already been captured.</p><div className="mt-5 flex gap-3"><Button className="flex-1" variant="outline" disabled={cancelling} onClick={() => { setCancelTarget(null); setCancelReason(""); }}>Keep it</Button><Button className="flex-1" loading={cancelling} onClick={cancelActivity}>Cancel activity</Button></div></div></Modal>
+    <OfferDetailModal product={selectedOffer} open={Boolean(selectedOffer)} onClose={closeOffer} currency={currency} archetype={selectedArchetype} quantity={selectedOffer ? (cart[selectedOffer.id] || 0) : 0} onQuantityChange={changeQuantity} onBook={startTransaction} branch={selectedBranch} />
+    <CustomerTransactionModal open={Boolean(transactionOffer)} onClose={() => setTransactionOffer(null)} product={transactionOffer} business={selected} branches={branches} selectedBranchId={selectedBranchId} currency={currency} user={user} archetype={selectedArchetype} onComplete={(order) => { track("booking_created", { order_id: order.orderId || "", business_id: selected?.id || "", branch_id: selectedBranchId || "", transaction_type: order.transactionType || selectedArchetype.id }); }} />
   </div>;
 }

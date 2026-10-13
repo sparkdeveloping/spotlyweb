@@ -333,7 +333,7 @@ export function OrdersView() {
   const selectedRecord = selected ? orders.find((item) => item.id === selected.id) || selected : null;
   const visible = useMemo(() => {
     const term = queryText.trim().toLowerCase();
-    return scoped.filter((record) => filter === "all" || groupFor(record, flow) === filter).filter((record) => !term || [reference(record), customerName(record), record.customerEmail, record.customerPhone, record.branchName, record.status].filter(Boolean).join(" ").toLowerCase().includes(term));
+    return scoped.filter((record) => filter === "all" || groupFor(record, flow) === filter).filter((record) => !term || [reference(record), record.ticketCode, customerName(record), record.customerEmail, record.customerPhone, record.branchName, record.status].filter(Boolean).join(" ").toLowerCase().includes(term));
   }, [scoped, filter, queryText, flow]);
 
   const counts = {

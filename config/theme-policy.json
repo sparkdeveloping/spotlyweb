@@ -29,7 +29,14 @@
     "/book",
     "/events",
     "/send",
-    "/staff/onboard"
+    "/staff/onboard",
+    "/activity",
+    "/activity/[id]",
+    "/saved",
+    "/search",
+    "/place/[id]",
+    "/item/[id]",
+    "/order/[id]"
   ],
   "fixedDark": [
     "/business/kiosk/live"

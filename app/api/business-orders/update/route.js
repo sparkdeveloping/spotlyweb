@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
@@ -44,6 +45,10 @@ function transitionAllowed(current, next) {
   return !next || current === next || ALLOWED_STATUS_TRANSITIONS.get(current)?.has(next) === true;
 }
 
+function createTicketCode() {
+  return `SPT-${randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
@@ -72,6 +77,10 @@ export async function POST(request) {
 
       const changes = { ...body.changes, updatedAt: FieldValue.serverTimestamp(), updatedBy: user.uid };
       if (body.changes.paymentStatus === "paid") changes.paidAt = FieldValue.serverTimestamp();
+      if (nextStatus === "issued" && fresh.transactionType === "ticket") {
+        changes.ticketCode = fresh.ticketCode || createTicketCode();
+        changes.issuedAt = fresh.issuedAt || FieldValue.serverTimestamp();
+      }
       const timelineEntry = { status: nextStatus || fresh.status, note, at: new Date().toISOString(), actorId: user.uid, actorName: user.name || user.email || "Business team" };
       changes.timeline = FieldValue.arrayUnion(timelineEntry);
 
@@ -107,7 +116,7 @@ export async function POST(request) {
           orderId: body.orderId,
           title: `Order ${fresh.number || body.orderId.slice(0, 8)}`,
           body: note || `Your order is now ${String(nextStatus || fresh.status).replaceAll("_", " ")}.`,
-          href: `/marketplace?order=${body.orderId}`,
+          href: `/?view=activity&order=${body.orderId}`,
           category: "order",
           read: false,
           createdAt: FieldValue.serverTimestamp()

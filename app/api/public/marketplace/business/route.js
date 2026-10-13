@@ -7,6 +7,14 @@ function text(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function publicDate(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function liveBusiness(record = {}) {
   const status = text(record.status);
   const lifecycle = text(record.lifecycleStatus);
@@ -111,8 +119,9 @@ function publicProduct(doc) {
     itemType: item.itemType || "product",
     durationMinutes: Number(item.durationMinutes || 0),
     capacity: Number(item.capacity || 0),
-    startsAt: item.startsAt || null,
-    endsAt: item.endsAt || null,
+    remainingCapacity: Number(item.capacity || 0) > 0 ? Math.max(0, Number(item.capacity || 0) - Math.max(0, Number(item.reservedQuantity || 0))) : null,
+    startsAt: publicDate(item.startsAt),
+    endsAt: publicDate(item.endsAt),
     venue: item.venue || ""
   };
 }

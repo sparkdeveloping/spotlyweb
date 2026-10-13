@@ -50,6 +50,9 @@
   --text-3: #667085;
   --text-disabled: #7d8796;
   --text-inverse: #ffffff;
+  --media-text: #ffffff;
+  --media-surface: #ffffff;
+  --media-ink: #111827;
 
   --border: #cbd2dc;
   --border-subtle: #e2e7ee;
@@ -146,6 +149,9 @@ html.dark {
   --text-3: #a0a9b8;
   --text-disabled: #8791a1;
   --text-inverse: #111827;
+  --media-text: #ffffff;
+  --media-surface: #ffffff;
+  --media-ink: #111827;
 
   --border: #465063;
   --border-subtle: #303848;

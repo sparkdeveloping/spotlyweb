@@ -22,13 +22,13 @@ spotlyafrica.com/staff/schedule   → staff.spotlyafrica.com/schedule
 
 The internal App Router still uses `/business`, `/driver`, `/staff`, and `/admin` route trees. `proxy.js` maps clean product-domain URLs into those internal routes so the application does not need five duplicated codebases.
 
-This repository is based on **Spotly Web Platform 5.6.0** and includes the Driver + Delivery activation, Business production hardening, notification architecture, Marketplace/marketing conversion work, Lottie motion system, and the full subdomain/SSO migration.
+This repository is based on **Spotly Web Platform 5.7.0** and includes the Driver + Delivery activation, Business production hardening, notification architecture, Marketplace/marketing conversion work, Lottie motion system, and the full subdomain/SSO migration.
 
 ## Canonical routes
 
 | Product | Canonical examples |
 |---|---|
-| Spotly | `spotlyafrica.com/`, `/eat`, `/shop`, `/book`, `/events`, `/ride`, `/send`, `/marketplace`, `/account`, `/claim`, `/drive`, `/support` |
+| Spotly | `spotlyafrica.com/`, `/eat`, `/shop`, `/book`, `/events`, `/ride`, `/send`, `/activity`, `/saved`, `/search`, `/place/<id>`, `/item/<id>`, `/order/<id>`, `/marketplace`, `/account`, `/claim`, `/drive`, `/support` |
 | Business | `business.spotlyafrica.com/`, `/today`, `/activity`, `/catalog`, `/branches`, `/delivery`, `/kiosk`, `/staff`, `/finance`, `/support`, `/settings` |
 | Driver | `driver.spotlyafrica.com/`, `/jobs`, `/active`, `/earnings`, `/history`, `/notifications`, `/support`, `/profile` |
 | Staff | `staff.spotlyafrica.com/`, `/work`, `/schedule`, `/leave`, `/learning`, `/performance`, `/pay`, `/notifications`, `/profile` |

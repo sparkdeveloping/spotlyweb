@@ -35,7 +35,7 @@ const ORIGIN_LOCAL_PREFIXES = [
 // /support is intentionally not listed because Business and Driver own clean /support routes.
 const CUSTOMER_HOST_PREFIXES = [
   "/account", "/marketplace", "/privacy", "/terms", "/payment", "/claim", "/drive",
-  "/ride", "/eat", "/shop", "/book", "/events", "/send"
+  "/ride", "/eat", "/shop", "/book", "/events", "/send", "/saved", "/search", "/place", "/item", "/order"
 ];
 
 function hostname(request) {

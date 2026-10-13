@@ -73,12 +73,16 @@ test("branch offers inherit defaults until an explicit override is set and can r
   assert.equal(resolveProductForBranch(reset, "a").price, 2);
 });
 
-test("merchant ledger separates total capture from Spotly platform fee", () => {
-  const order = { totals: { total: 21, serviceFee: 1 }, currency: "USD" };
-  assert.equal(merchantNetAmount(order), 20);
+test("merchant ledger separates customer capture from merchant proceeds and Spotly commission", () => {
+  const order = {
+    businessId: "business-1",
+    totals: { total: 22, capturedTotal: 22, subtotal: 20, serviceFee: 1, deliveryFee: 1, merchantGross: 20, platformCommission: 1, merchantNet: 19 },
+    currency: "USD"
+  };
+  assert.equal(merchantNetAmount(order), 19);
   assert.deepEqual(paymentLedgerPlan(order), [
-    { type: "payment_captured", amount: 21, direction: "credit", effects: { pending: 21 } },
-    { type: "platform_fee", amount: 1, direction: "debit", effects: { pending: -1 } }
+    { type: "merchant_sale_captured", amount: 20, direction: "credit", effects: { pending: 20 }, metadata: { capturedCustomerTotal: 22 } },
+    { type: "platform_commission", amount: 1, direction: "debit", effects: { pending: -1 } }
   ]);
 });
 

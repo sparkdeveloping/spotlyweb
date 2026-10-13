@@ -381,6 +381,7 @@ service cloud.firestore {
 
     match /paymentCallbacks/{callbackId} { allow read, write: if false; }
     match /paymentInitiationLocks/{lockId} { allow read, write: if false; }
+    match /customerTransactionRequests/{requestId} { allow read, write: if false; }
     match /paymentReconciliationIssues/{issueId} { allow read: if financeStaff(); allow write: if false; }
     match /refundRequests/{refundId} { allow read: if financeStaff(); allow write: if false; }
 

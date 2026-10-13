@@ -1,4 +1,4 @@
-# Clean deployment instructions — Spotly Web 5.6.0
+# Clean deployment instructions — Spotly Web 5.7.0
 
 This archive is a full-source replacement for the current Spotly Web project.
 
@@ -38,9 +38,12 @@ npm run build
 - `/events` — opens Events mode
 - `/ride` — opens Ride mode; requests remain unavailable until the ride operations feature flag is enabled
 - `/send` — opens Send mode; peer delivery remains unavailable until the operations feature flag is enabled
-- `/?view=search` — customer search
-- `/?view=activity` — customer order/delivery activity
-- `/?view=saved` — saved businesses
+- `/search` or `/?view=search` — customer search
+- `/activity` or `/?view=activity` — orders, deliveries, appointments, bookings and tickets
+- `/saved` or `/?view=saved` — saved businesses
+- `/place/<businessId>` — shareable business detail
+- `/item/<itemId>?business=<businessId>` — shareable offering detail
+- `/activity/<id>` or `/order/<id>` — direct Activity detail
 - `/marketplace` — compatibility marketplace route
 
 ## Feature flags

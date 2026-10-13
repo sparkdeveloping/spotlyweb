@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { releaseReservationInTransaction } from "@/lib/order-reservations-server";
 import { safeText } from "@/lib/server-helpers";
+import { enforceRateLimit } from "@/lib/rate-limit-server";
 
 export const runtime = "nodejs";
 const schema = z.object({ orderId: z.string().min(3).max(180), reason: z.string().min(3).max(500) });
@@ -10,6 +11,7 @@ const CANCELLABLE = new Set(["awaiting_payment", "submitted", "new", "requested"
 
 export async function POST(request) {
   try {
+    const rate = await enforceRateLimit(request, { key: "customer-order-cancel", limit: 20, windowMs: 60_000 });
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
     const { db } = getAdminServices();
@@ -42,7 +44,7 @@ export async function POST(request) {
         orderPatch: { cancellationReason: safeText(body.reason, 500), cancelledBy: user.uid, cancelledAt: FieldValue.serverTimestamp() }
       });
     });
-    return Response.json({ ok: true, orderId: body.orderId, status: "cancelled" });
+    return Response.json({ ok: true, orderId: body.orderId, status: "cancelled" }, { headers: { "X-RateLimit-Remaining": String(rate.remaining) } });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Enter a cancellation reason." }, { status: 400 });
     return apiError(error);

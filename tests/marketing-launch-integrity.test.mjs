@@ -12,10 +12,11 @@ test("root domain is controlled by platform launch mode instead of hardwired com
   assert.match(page, /PublicHomeRouter/);
   assert.doesNotMatch(page, /ComingSoonApp/);
   assert.match(router, /publicMode/);
-  assert.match(router, /marketplace/);
-  assert.match(router, /private-beta/);
   assert.match(router, /maintenance/);
-  assert.match(router, /router\.replace\("\/marketplace"\)/);
+  assert.match(router, /MarketplaceApp/);
+  assert.match(router, /basePath="\/"/);
+  assert.doesNotMatch(router, /private-beta/);
+  assert.doesNotMatch(router, /router\.replace\("\/marketplace"\)/);
 });
 
 test("Admin exposes an intentional root-domain launch switch", () => {
