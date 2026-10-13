@@ -211,3 +211,9 @@ Historical implementation reports under `docs/history/` and version-specific roo
 ## Spotly 5.8.0 — Customer Utility Layer
 
 Search 2.0, Activity 2.0, Saved 2.0, customer Notifications, saved places, shopping defaults, and contextual customer Help are implemented against the production Firebase/auth/transaction systems. See `SPOTLY-CUSTOMER-UTILITY-2.0-2026-10-13.md`.
+
+## Spotly 5.9.0 — Dedicated Customer Service Experiences
+
+Eat, Shop, Book and Events are now first-class marketplace destinations backed by a live public service-feed API. Each service has purpose-built discovery, filters, categories, cross-business offerings, responsive cards, Saved/Activity continuity and direct handoff into the existing transaction system. Ride and Send remain feature-gated until their operational backends are enabled.
+
+See `SPOTLY-CUSTOMER-SERVICE-EXPERIENCES-2.0-2026-10-13.md` for the implementation details.

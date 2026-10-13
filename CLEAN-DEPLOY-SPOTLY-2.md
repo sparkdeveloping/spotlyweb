@@ -67,3 +67,7 @@ Until then the customer interface communicates that the service is opening area-
 ## 5.8.0 customer utility deployment
 
 Deploy this archive as a clean replacement of the previous web source. Keep production `.env` values in Vercel. New Firestore rules include the self-scoped `savedItems` collection and must be deployed with the matching release.
+
+## 5.9.0 dedicated service deployment
+
+This release adds `/api/public/service-feed` and first-class `/eat`, `/shop`, `/book`, `/events`, `/ride`, and `/send` customer routes. No new Firestore rules are required specifically for the public feed because it reads through Firebase Admin on the server and returns only explicitly public/live marketplace records. Deploy the complete source tree rather than merging individual route files into an older build.

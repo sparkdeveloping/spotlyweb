@@ -22,12 +22,14 @@ import { resolveProductForBranch } from "@/lib/product-offers";
 import { MARKETPLACE_SERVICE_KEYS, MarketplaceHome, ServiceModeHeader, serviceMatchesBusiness } from "@/components/marketplace-home";
 import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "@/components/customer-conversion";
 import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
+import { ServiceDiscoveryView } from "@/components/service-experience";
 
 const CART_KEY = "spotly-marketplace-cart";
 const CHECKOUT_KEY = "spotly-checkout-draft";
 const LOCATION_KEY = "spotly-marketplace-location";
 const RECENT_SEARCH_KEY = "spotly-recent-searches";
 const MARKETPLACE_TABS_ID = "marketplace-sections";
+const SERVICE_PATHS = new Set(["/ride", "/eat", "/shop", "/book", "/events", "/send"]);
 
 function timestamp(value) {
   if (!value) return null;
@@ -471,6 +473,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setSelectedOffer(null);
     setTransactionOffer(null);
     setQuery("");
+    if (SERVICE_PATHS.has(basePath)) {
+      router.push("/");
+      return;
+    }
     updateUrl("home", { business: null, order: null, service: null, offer: null });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -480,6 +486,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setSelectedOffer(null);
     setTransactionOffer(null);
     setQuery("");
+    if (MARKETPLACE_SERVICE_KEYS.has(nextService)) {
+      router.push(`/${nextService}`);
+      return;
+    }
     updateUrl("home", { business: null, order: null, service: nextService, offer: null });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1032,9 +1042,9 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
           loginHref={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=saved`)}`}
         />
       ) : (
-        <div>
+        ["eat", "shop", "book", "events"].includes(service) ? <ServiceDiscoveryView service={service} location={location} currency={currency} favorites={favorites} savedItems={savedItems} orders={orders} onOpenBusiness={openBusiness} onOpenItem={openSearchResult} onToggleFavorite={toggleFavorite} onToggleSaved={toggleSavedResult} onHome={openHome} onSelectService={enterService} onSearchAll={openSearch} onLocation={() => setLocationOpen(true)} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} /> : <div>
           <ServiceModeHeader service={service} location={location} ridesEnabled={ridesEnabled} sendEnabled={sendEnabled} onSelectService={enterService} onExit={openHome} onSearch={openSearch} />
-          {serviceUnavailable ? <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-6 sm:p-8"><div className="max-w-2xl"><p className="text-sm font-semibold text-[var(--accent)]">Opening area by area</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{serviceLabel} is not accepting requests here yet.</h2><p className="mt-3 text-sm leading-7 text-[var(--text-2)]">We will only switch this on when the matching driver operations, safety support, and local availability are ready. You can keep using Spotly’s live marketplace in the meantime.</p><div className="mt-5 flex flex-wrap gap-3"><Button onClick={openHome}>Explore Spotly</Button><Button variant="outline" asChild><Link href="/support">Get support</Link></Button></div></div></section> : <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{serviceLabel} in {location.area || location.city}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{service === "eat" ? "Food around you" : service === "shop" ? "Shops and essentials" : service === "book" ? "Services and places" : service === "events" ? "Events and venues" : "Available nearby"}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Choose a verified business to see its exact locations, published offerings, prices, and availability.</p></div><p className="text-sm text-[var(--text-3)]">{shownBusinesses.length} available</p></div>{loading ? <div className="flex items-center justify-center py-16"><LoaderCircle className="h-7 w-7 animate-spin text-violet" /></div> : shownBusinesses.length ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{shownBusinesses.map(({ business, distance }) => <BusinessCard key={business.id} business={business} distance={distance} favorite={favorites.includes(business.id)} onFavorite={toggleFavorite} onOpen={openBusiness} />)}</div> : <LottieEmptyState className="mt-6" name="search-nearby" title={`No ${serviceLabel.toLowerCase()} businesses are live here yet`} description={`Try another area or use Search to browse everything currently available in ${location.city}.`} action={<Button onClick={openSearch}>Search Spotly</Button>} />}</section>}
+          {serviceUnavailable ? <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-6 sm:p-8"><div className="max-w-2xl"><p className="text-sm font-semibold text-[var(--accent)]">Opening area by area</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{serviceLabel} is not accepting requests here yet.</h2><p className="mt-3 text-sm leading-7 text-[var(--text-2)]">We will only switch this on when the matching driver operations, safety support, and local availability are ready. You can keep using Spotly’s live marketplace in the meantime.</p><div className="mt-5 flex flex-wrap gap-3"><Button onClick={openHome}>Explore Spotly</Button><Button variant="outline" asChild><Link href="/support">Get support</Link></Button></div></div></section> : <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{serviceLabel} in {location.area || location.city}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">Available nearby</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Choose a verified business to see its exact locations, published offerings, prices, and availability.</p></div><p className="text-sm text-[var(--text-3)]">{shownBusinesses.length} available</p></div>{loading ? <div className="flex items-center justify-center py-16"><LoaderCircle className="h-7 w-7 animate-spin text-violet" /></div> : shownBusinesses.length ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{shownBusinesses.map(({ business, distance }) => <BusinessCard key={business.id} business={business} distance={distance} favorite={favorites.includes(business.id)} onFavorite={toggleFavorite} onOpen={openBusiness} />)}</div> : <LottieEmptyState className="mt-6" name="search-nearby" title={`No ${serviceLabel.toLowerCase()} businesses are live here yet`} description={`Try another area or use Search to browse everything currently available in ${location.city}.`} action={<Button onClick={openSearch}>Search Spotly</Button>} />}</section>}
         </div>
       )}
     </main>
