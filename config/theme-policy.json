@@ -22,7 +22,14 @@
     "/admin/[section]",
     "/admin/queues/[queue]",
     "/admin/support-view/[businessId]",
-    "/devstatus"
+    "/devstatus",
+    "/ride",
+    "/eat",
+    "/shop",
+    "/book",
+    "/events",
+    "/send",
+    "/staff/onboard"
   ],
   "fixedDark": [
     "/business/kiosk/live"
@@ -33,6 +40,7 @@
     "components/coming-soon-app.js",
     "components/business/no-business.js",
     "components/business/shared.js",
-    "components/business/kiosk.js"
+    "components/business/kiosk.js",
+    "components/marketplace-home.js"
   ]
 }

@@ -1,0 +1,135 @@
+import { FieldValue } from "firebase-admin/firestore";
+import { z } from "zod";
+import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
+import { requirePlatformPermission } from "@/lib/access-control-server";
+import { businessRoleTemplates } from "@/data/business-config";
+import { safeText } from "@/lib/server-helpers";
+import { notifyUser } from "@/lib/notification-server";
+
+export const runtime = "nodejs";
+
+const schema = z.object({
+  claimId: z.string().min(3).max(180),
+  decision: z.enum(["approve", "request", "reject"]),
+  reason: z.string().max(1000).optional().default("")
+});
+
+const template = (id) => businessRoleTemplates.find((item) => item.id === id);
+const OWNER_PERMISSIONS = ["businesses.*", "branches.*", "catalog.*", "orders.*", "staff.*", "finance.*"];
+
+function approvedGrant(claim) {
+  if (claim.roleAtBusiness === "owner") {
+    return claim.organizationId
+      ? { role: "organization_owner", permissions: template("organization_owner")?.permissions || OWNER_PERMISSIONS }
+      : { role: "business_owner", permissions: OWNER_PERMISSIONS };
+  }
+  if (claim.roleAtBusiness === "branch_manager") return { role: "branch_manager", permissions: template("branch_manager")?.permissions || [] };
+  return { role: "business_manager", permissions: template("business_manager")?.permissions || [] };
+}
+
+export async function POST(request) {
+  try {
+    const user = await authenticateRequest(request);
+    requirePlatformPermission(user, "claims.review", { roles: ["verification_officer"] });
+    const body = schema.parse(await request.json());
+    const { db, messaging, auth } = getAdminServices();
+    const claimRef = db.collection("businessClaims").doc(body.claimId);
+    let reviewedClaim = null;
+
+    await db.runTransaction(async (transaction) => {
+      const claimSnapshot = await transaction.get(claimRef);
+      if (!claimSnapshot.exists) throw Object.assign(new Error("The business claim was not found."), { status: 404 });
+      const claim = claimSnapshot.data();
+      reviewedClaim = { id: claimSnapshot.id, ...claim };
+      if (!["submitted", "needs_information", "under_review"].includes(claim.status)) {
+        throw Object.assign(new Error("This claim has already reached a terminal decision."), { status: 409 });
+      }
+      const businessRef = db.collection("businesses").doc(claim.businessId);
+      const businessSnapshot = await transaction.get(businessRef);
+      if (!businessSnapshot.exists) throw Object.assign(new Error("The linked business was not found."), { status: 404 });
+      const business = businessSnapshot.data();
+      const status = body.decision === "approve" ? "approved" : body.decision === "request" ? "needs_information" : "rejected";
+
+      let memberRef = null;
+      let memberSnapshot = null;
+      let organizationId = null;
+      if (body.decision === "approve") {
+        organizationId = claim.organizationId || business.organizationId;
+        if (!organizationId) throw Object.assign(new Error("The approved claim must be linked to an organization."), { status: 409 });
+        memberRef = db.collection("memberships").doc(`${organizationId}_${claim.applicantId}`);
+        memberSnapshot = await transaction.get(memberRef);
+      }
+
+      // Firestore transactions require every read to complete before the first write.
+      transaction.set(claimRef, {
+        status,
+        decisionReason: safeText(body.reason, 1000),
+        reviewedBy: user.uid,
+        reviewedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      if (body.decision === "approve") {
+        const existing = memberSnapshot?.exists ? memberSnapshot.data() : {};
+        const grant = approvedGrant(claim);
+        const branchIds = [...new Set([...(existing.branchIds || []), ...(claim.branchIds || []), ...(claim.branchId ? [claim.branchId] : [])])];
+        const businessIds = [...new Set([...(existing.businessIds || []), claim.businessId])];
+        transaction.set(memberRef, {
+          organizationId,
+          businessId: existing.businessId || claim.businessId,
+          businessIds,
+          branchIds,
+          userId: claim.applicantId,
+          email: claim.applicantEmail || existing.email || "",
+          displayName: claim.applicantName || existing.displayName || "",
+          role: grant.role,
+          permissions: grant.permissions,
+          status: "active",
+          grantedBy: user.uid,
+          grantedFromClaimId: body.claimId,
+          ...(memberSnapshot?.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        transaction.set(businessRef, {
+          claimStatus: "claimed",
+          verificationStatus: "approved",
+          ownerIds: grant.role.includes("owner") ? FieldValue.arrayUnion(claim.applicantId) : business.ownerIds || [],
+          status: claim.claimType === "new_business" ? "draft" : (business.status || "active"),
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      } else {
+        transaction.set(businessRef, {
+          claimStatus: body.decision === "request" ? "claim_needs_information" : "unclaimed",
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+
+      transaction.create(db.collection("auditLogs").doc(), {
+        action: `business_claim.${status}`,
+        entityType: "businessClaim",
+        entityId: body.claimId,
+        actorId: user.uid,
+        actorEmail: user.email || "",
+        metadata: { businessId: claim.businessId, reason: safeText(body.reason, 1000) },
+        createdAt: FieldValue.serverTimestamp()
+      });
+    });
+
+    if (reviewedClaim?.applicantId) {
+      const decisionTitle = body.decision === "approve" ? "Business access approved" : body.decision === "request" ? "Spotly needs more information" : "Business claim not approved";
+      const decisionBody = body.decision === "approve"
+        ? "Your business claim was approved. Open Spotly Business to continue setup and manage your approved locations."
+        : safeText(body.reason || (body.decision === "request" ? "Open your claim to review what Spotly needs next." : "Open Spotly to review the decision."), 700);
+      await notifyUser({
+        db, messaging, auth, userId: reviewedClaim.applicantId, title: decisionTitle, body: decisionBody, href: "/",
+        category: "business_claim_review", workspace: "business", module: "reviews", eventType: `business_claim.${body.decision === "request" ? "changes_requested" : body.decision === "approve" ? "approved" : "rejected"}`,
+        importance: "high", businessId: reviewedClaim.businessId, entityType: "businessClaim", entityId: body.claimId, email: true, forceOperationalEmail: true
+      }).catch(() => {});
+    }
+
+    return Response.json({ ok: true });
+  } catch (error) {
+    if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the claim decision.", details: error.flatten() }, { status: 400 });
+    return apiError(error);
+  }
+}
