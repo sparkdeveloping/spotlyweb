@@ -155,3 +155,10 @@ test("open dataset documentation records attribution and excluded sources", () =
   assert.match(docs, /Retailer catalogues/);
   assert.match(docs, /Google Maps-derived bulk records/);
 });
+
+test("open marketplace datasets are bundled into Vercel functions instead of runtime fs reads", () => {
+  const source = read("lib/open-marketplace-data.js");
+  assert.match(source, /zimbabwe-open-places\.json/);
+  assert.match(source, /zimbabwe-open-products\.json/);
+  assert.doesNotMatch(source, /readFileSync|process\.cwd\(\)/);
+});
