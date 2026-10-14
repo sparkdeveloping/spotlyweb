@@ -5,6 +5,7 @@ import { promotionWindowActive, publicPromotionRecord } from "@/lib/customer-gro
 import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
+import { serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
 
 export const runtime = "nodejs";
 
@@ -43,17 +44,7 @@ function liveBusiness(record = {}) {
 }
 
 function matchesService(service, business = {}) {
-  const type = text(business.businessType);
-  if (service === "eat" && type === "restaurant_food") return true;
-  if (service === "shop" && type === "grocery_retail") return true;
-  if (service === "book" && ["appointments_services", "accommodation_activities"].includes(type)) return true;
-  if (service === "events" && type === "ticketing_events") return true;
-  const haystack = [business.businessType, business.category, ...(business.categories || []), ...(business.capabilities || []), ...(business.tags || [])].filter(Boolean).join(" ").toLowerCase();
-  if (service === "eat") return /(restaurant|food|cafe|coffee|bakery|takeaway|dining|menu)/.test(haystack);
-  if (service === "shop") return /(grocery|retail|store|shop|pharmacy|fashion|hardware|flowers|gift|product)/.test(haystack);
-  if (service === "book") return /(appointment|service|beauty|wellness|spa|salon|health|doctor|fitness|gym|booking|accommodation|activity|stay)/.test(haystack);
-  if (service === "events") return /(event|ticket|venue|festival|concert|market|show)/.test(haystack);
-  return false;
+  return serviceMatchesMarketplaceBusiness(service, business);
 }
 
 function businessRecord(snapshot) {

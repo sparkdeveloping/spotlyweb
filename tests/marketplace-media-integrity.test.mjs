@@ -38,8 +38,8 @@ test("marketplace UI identifies generic editorial media instead of implying it i
   const service = fs.readFileSync(new URL("../components/service-experience.js", import.meta.url), "utf8");
   const home = fs.readFileSync(new URL("../components/marketplace-home.js", import.meta.url), "utf8");
   const app = fs.readFileSync(new URL("../components/marketplace-app.js", import.meta.url), "utf8");
-  assert.match(service, /Category image/);
-  assert.match(home, /Category image/);
-  assert.match(app, /Category image/);
+  assert.match(service, /Editorial category image/);
+  assert.match(home, /Editorial category image/);
+  assert.match(app, /Editorial category image/);
   assert.doesNotMatch(service, /marketplace\/editorial\/eat\.webp/);
 });
