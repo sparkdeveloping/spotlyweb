@@ -22,15 +22,5 @@
     "app/api/internal/parcel-dispatch/route.js": {
       "maxDuration": 60
     }
-  },
-  "crons": [
-    {
-      "path": "/api/internal/ride-dispatch",
-      "schedule": "*/2 * * * *"
-    },
-    {
-      "path": "/api/internal/parcel-dispatch",
-      "schedule": "*/2 * * * *"
-    }
-  ]
+  }
 }
