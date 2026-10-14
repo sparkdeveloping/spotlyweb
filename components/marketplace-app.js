@@ -21,7 +21,7 @@ import { resolveProductForBranch } from "@/lib/product-offers";
 import { MARKETPLACE_SERVICE_KEYS, MarketplaceHome, ServiceModeHeader, serviceMatchesBusiness } from "@/components/marketplace-home";
 import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "@/components/customer-conversion";
 import { MarketplaceTrustBadge, MarketplaceTrustNotice } from "@/components/marketplace-trust-ui";
-import { marketplaceEditorialImage } from "@/lib/marketplace-editorial";
+import { marketplaceMedia } from "@/lib/marketplace-editorial";
 import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
 import { ServiceDiscoveryView } from "@/components/service-experience";
 import { CustomerShell } from "@/components/customer-shell";
@@ -83,9 +83,8 @@ function LocationControl({ value, cities, supportedAreas, onChange, onLocate, lo
 }
 
 function BusinessVisual({ business }) {
-  const merchantImage = business.coverImage || business.image || business.logoUrl;
-  const image = merchantImage || marketplaceEditorialImage(business);
-  return <><Image src={image} alt="" fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />{!merchantImage ? <span className="absolute right-3 top-3 rounded-full bg-[var(--media-surface)] px-2.5 py-1 text-[10px] font-semibold text-[var(--media-ink)] shadow-sm">Category image</span> : null}</>;
+  const media = marketplaceMedia(business);
+  return <><Image src={media.src} alt="" fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />{media.kind === "editorial" ? <span className="absolute right-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--media-surface)_92%,transparent)] px-2.5 py-1 text-[10px] font-semibold text-[var(--media-ink)] shadow-sm backdrop-blur">Category image</span> : null}</>;
 }
 
 function BusinessCard({ business, favorite, onFavorite, onOpen, distance }) {

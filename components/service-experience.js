@@ -26,7 +26,7 @@ import { Badge, Button, EmptyState, SearchField } from "@/components/ui";
 import { MARKETPLACE_SERVICES } from "@/components/marketplace-home";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
 import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
-import { marketplaceEditorialImage } from "@/lib/marketplace-editorial";
+import { marketplaceMedia, marketplaceMediaSet } from "@/lib/marketplace-editorial";
 
 const SERVICE_CONFIG = {
   eat: {
@@ -110,8 +110,12 @@ function money(item, currency) {
   return Number.isFinite(value) && value > 0 ? formatCurrency(value, currency || item?.currency || "USD") : value === 0 ? "Free" : "";
 }
 
+function mediaForBusiness(business) {
+  return marketplaceMedia(business);
+}
+
 function imageForBusiness(business) {
-  return business.coverImage || business.image || business.logoUrl || business.logo || marketplaceEditorialImage(business);
+  return mediaForBusiness(business).src;
 }
 
 function pickupTimeLabel(value) {
@@ -142,14 +146,16 @@ function ServiceSkeleton() {
   </div>;
 }
 
-function BusinessCard({ business, favorite, onFavorite, onOpen, service, currency }) {
-  const image = imageForBusiness(business);
+function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, onOpen, service, currency }) {
+  const media = assignedMedia || mediaForBusiness(business);
+  const image = media.src;
   const operation = business.operational || {};
   return <article className="group overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card">
     <button type="button" onClick={() => onOpen(business)} className="block w-full text-left">
       <div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]">
         {image ? <Image src={image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 768px) 100vw, 33vw" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-9 w-9" /></div>}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        {media.kind === "editorial" ? <span className="absolute right-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--media-surface)_92%,transparent)] px-2.5 py-1 text-[10px] font-semibold text-[var(--media-ink)] shadow-sm backdrop-blur">Category image</span> : null}
         <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
           <div className="flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}<MarketplaceTrustBadge business={business} compact />{business.commerceVerified === true && operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div>
           {business.rating ? <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--media-ink)_58%,transparent)] px-2 py-1 text-xs font-semibold text-[var(--media-text)]"><Star className="h-3.5 w-3.5 fill-current" />{business.rating.toFixed(1)}</span> : null}
@@ -333,7 +339,7 @@ export function ServiceDiscoveryView({
 
       {feed.categories?.length ? <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1"><button type="button" onClick={() => setCategory("all")} className={cn("shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === "all" ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>All categories</button>{feed.categories.slice(0, 18).map((item) => <button type="button" key={item} onClick={() => setCategory(item)} className={cn("shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === item ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{item}</button>)}</div> : null}
 
-      {loading ? <div className="mt-5"><ServiceSkeleton /></div> : error && !feed.businesses.length ? <EmptyState className="mt-5" icon={Search} title={`${config.label} is temporarily unavailable`} description="Spotly could not refresh this service right now. Your other services and Activity are still available." action={<Button variant="outline" onClick={() => setQuery((value) => `${value} `)}>Try again</Button>} /> : visibleBusinesses.length ? <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{visibleBusinesses.slice(0, 12).map((business) => <BusinessCard key={business.id} business={business} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />)}</div> : <EmptyState className="mt-5" icon={Store} title={`Nothing matching this ${config.label.toLowerCase()} search yet`} description={`Try another category or broaden the search. Spotly will keep showing what is actually published in ${location.city || "your city"}.`} action={<Button onClick={() => { setFilter("all"); setCategory("all"); setQuery(""); }}>Show all {config.label.toLowerCase()}</Button>} />}
+      {loading ? <div className="mt-5"><ServiceSkeleton /></div> : error && !feed.businesses.length ? <EmptyState className="mt-5" icon={Search} title={`${config.label} is temporarily unavailable`} description="Spotly could not refresh this service right now. Your other services and Activity are still available." action={<Button variant="outline" onClick={() => setQuery((value) => `${value} `)}>Try again</Button>} /> : visibleBusinesses.length ? <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed = visibleBusinesses.slice(0, 12); const media = marketplaceMediaSet(listed); return listed.map((business) => <BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />); })()}</div> : <EmptyState className="mt-5" icon={Store} title={`Nothing matching this ${config.label.toLowerCase()} search yet`} description={`Try another category or broaden the search. Spotly will keep showing what is actually published in ${location.city || "your city"}.`} action={<Button onClick={() => { setFilter("all"); setCategory("all"); setQuery(""); }}>Show all {config.label.toLowerCase()}</Button>} />}
     </section>
 
     {featured.length > 0 && !query ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-8"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Featured on Spotly</p><h2 className="mt-1 text-xl font-semibold tracking-[-.03em]">Worth a look</h2></div><span className="text-xs text-[var(--text-3)]">Published businesses</span></div><div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto pb-2">{featured.map((business) => <button type="button" key={business.id} onClick={() => onOpenBusiness(business)} className="w-[230px] shrink-0 text-left"><div className="relative aspect-[1.4/1] overflow-hidden rounded-[var(--radius-card)] bg-[var(--surface-2)]">{imageForBusiness(business) ? <Image src={imageForBusiness(business)} alt="" fill className="object-cover transition duration-300 hover:scale-[1.02]" sizes="230px" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-7 w-7" /></div>}</div><p className="mt-3 truncate text-sm font-semibold">{business.name}</p><p className="mt-1 truncate text-xs text-[var(--text-3)]">{business.category} · {business.area || business.city}</p></button>)}</div></section> : null}

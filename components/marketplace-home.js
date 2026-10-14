@@ -22,7 +22,7 @@ import { businessArchetype } from "@/data/business-archetypes";
 import { cn } from "@/lib/cn";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
 import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
-import { marketplaceEditorialImage } from "@/lib/marketplace-editorial";
+import { marketplaceMedia } from "@/lib/marketplace-editorial";
 
 export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
@@ -59,9 +59,8 @@ function interestMatchesBusiness(interests = [], business = {}) {
 }
 
 function MarketplaceImage({ business, sizes = "(max-width: 768px) 72vw, 292px" }) {
-  const merchantImage = business.coverImage || business.image || business.logoUrl || business.logo;
-  const image = merchantImage || marketplaceEditorialImage(business);
-  return <><Image src={image} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />{!merchantImage ? <span className="absolute right-3 top-3 rounded-full bg-[var(--media-surface)] px-2 py-1 text-[9px] font-semibold text-[var(--media-ink)] shadow-sm">Category image</span> : null}</>;
+  const media = marketplaceMedia(business);
+  return <><Image src={media.src} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />{media.kind === "editorial" ? <span className="absolute right-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--media-surface)_92%,transparent)] px-2 py-1 text-[9px] font-semibold text-[var(--media-ink)] shadow-sm backdrop-blur">Category image</span> : null}</>;
 }
 
 function MarketplaceRailCard({ item, onOpen }) {
