@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { marketplaceTrust, safeMarketplaceCapabilities, isMarketplaceDiscoverable } from "../lib/marketplace-trust.js";
+import placeDataset from "../lib/generated/open-marketplace-places.js";
+import productDataset from "../lib/generated/open-marketplace-products.js";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
-const readJson = (path) => JSON.parse(read(path));
 
 test("curated Zimbabwe place graph is rights-tagged and non-transactional", () => {
-  const dataset = readJson("data/open-marketplace/zimbabwe-open-places.json");
+  const dataset = placeDataset;
   assert.equal(dataset.meta.recordCount, dataset.records.length);
   assert.ok(dataset.records.length >= 2000);
   const cities = new Set(dataset.records.map((item) => item.city));
@@ -26,7 +27,7 @@ test("curated Zimbabwe place graph is rights-tagged and non-transactional", () =
 });
 
 test("canonical products do not imply store price, stock, pickup or delivery", () => {
-  const dataset = readJson("data/open-marketplace/zimbabwe-open-products.json");
+  const dataset = productDataset;
   assert.equal(dataset.meta.recordCount, dataset.records.length);
   assert.ok(dataset.records.length >= 100);
   assert.ok(dataset.records.some((item) => item.sourceType === "open_food_facts"));
@@ -156,15 +157,24 @@ test("open dataset documentation records attribution and excluded sources", () =
   assert.match(docs, /Google Maps-derived bulk records/);
 });
 
-test("open marketplace datasets are bundled into Vercel functions instead of runtime fs reads", () => {
+test("open marketplace datasets are compiled into Git-safe JavaScript modules", () => {
   const source = read("lib/open-marketplace-data.js");
-  assert.match(source, /zimbabwe-open-places\.json/);
-  assert.match(source, /zimbabwe-open-products\.json/);
-  assert.doesNotMatch(source, /readFileSync|process\.cwd\(\)/);
+  assert.match(source, /generated\/open-marketplace-places/);
+  assert.match(source, /generated\/open-marketplace-products/);
+  assert.doesNotMatch(source, /zimbabwe-open-(places|products)\.json|readFileSync|process\.cwd\(\)/);
+  const places = read("lib/generated/open-marketplace-places.js");
+  const products = read("lib/generated/open-marketplace-products.js");
+  assert.match(places, /openMarketplacePlacesDataset/);
+  assert.match(products, /openMarketplaceProductsDataset/);
 });
 
-test("deploy-required marketplace and Lottie JSON files are not hidden by gitignore", () => {
+test("deployment runtime does not depend on JSON files that Git may ignore", () => {
   const ignore = read(".gitignore");
-  assert.match(ignore, /!data\/open-marketplace\/\*\.json/);
-  assert.match(ignore, /!public\/lottie\/\*\.json/);
+  const marketplace = read("lib/open-marketplace-data.js");
+  const lottie = read("components/spotly-lottie.js");
+  assert.match(ignore, /\*\.json/);
+  assert.doesNotMatch(marketplace, /@\/data\/open-marketplace\/.*\.json/);
+  assert.doesNotMatch(lottie, /fetch\(.*\/lottie\//);
+  assert.match(lottie, /bundledLottieAsset/);
+  assert.match(read("lib/generated/lottie-assets.js"), /LOTTIE_ASSETS/);
 });
