@@ -30,7 +30,8 @@ import {
   subscribeSupportConversations,
   subscribeSupportMessages,
   track,
-  uploadSupportAttachment
+  uploadSupportAttachment,
+  updateSupportConversation
 } from "@/lib/firebase-services";
 import { readState, removeState, writeState } from "@/lib/browser-state";
 
@@ -66,9 +67,11 @@ function ChatPanel({ onClose, context = {} }) {
   const endRef = useRef(null);
 
   useEffect(() => {
+    const linked = String(context.conversation || "").trim();
     const saved = readState("spotly-support-conversation", user, "", "session");
-    if (saved) setConversationId(saved);
-  }, [user]);
+    if (linked) { setConversationId(linked); writeState("spotly-support-conversation", user, linked, "session"); }
+    else if (saved) setConversationId(saved);
+  }, [context.conversation, user]);
   useEffect(() => {
     if (!conversationId) return undefined;
     return subscribeSupportMessages(conversationId, setMessages, (error) => toast(error.message, { type: "error", title: "Conversation unavailable" }));
@@ -77,6 +80,10 @@ function ChatPanel({ onClose, context = {} }) {
     if (!conversationId || !user?.uid) return undefined;
     return subscribeSupportConversations((items) => setConversation(items.find((item) => item.id === conversationId) || null), { requesterId: user.uid, limit: 50, onError: () => {} });
   }, [conversationId, user?.uid]);
+  useEffect(() => {
+    if (!conversationId || !user?.uid) return;
+    updateSupportConversation(conversationId, { markRead: true }, user).catch(() => {});
+  }, [conversationId, messages.length, user]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function start(event) {
@@ -140,10 +147,10 @@ function ChatPanel({ onClose, context = {} }) {
 export function SupportApp() {
   const searchParams = useSearchParams();
   const requestedTopic = searchParams.get("topic") || searchParams.get("subject") || (searchParams.get("order") ? "orders" : searchParams.get("payment") ? "payments" : searchParams.get("claim") ? "business_claim" : searchParams.get("job") ? "driver-job" : searchParams.get("task") ? "staff-task" : "");
-  const supportContext = { topic: requestedTopic, subject: searchParams.get("subject") || "", reference: searchParams.get("reference") || searchParams.get("order") || searchParams.get("claim") || searchParams.get("payment") || searchParams.get("job") || searchParams.get("task") || "", businessId: searchParams.get("business") || "", orderId: searchParams.get("order") || "", claimId: searchParams.get("claim") || "", paymentId: searchParams.get("payment") || "", jobId: searchParams.get("job") || "", taskId: searchParams.get("task") || "" };
+  const supportContext = { conversation: searchParams.get("conversation") || "", topic: requestedTopic, subject: searchParams.get("subject") || "", reference: searchParams.get("reference") || searchParams.get("order") || searchParams.get("claim") || searchParams.get("payment") || searchParams.get("job") || searchParams.get("task") || "", businessId: searchParams.get("business") || "", orderId: searchParams.get("order") || "", claimId: searchParams.get("claim") || "", paymentId: searchParams.get("payment") || "", jobId: searchParams.get("job") || "", taskId: searchParams.get("task") || "" };
   const [query, setQuery] = useState("");
   const [resources, setResources] = useState(defaultResources);
-  const [chatOpen, setChatOpen] = useState(Boolean(requestedTopic));
+  const [chatOpen, setChatOpen] = useState(Boolean(requestedTopic || searchParams.get("conversation")));
   const language = "en";
   const { settings } = usePlatform();
   const { user, profile } = useAuth();
