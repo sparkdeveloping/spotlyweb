@@ -17,7 +17,7 @@ const schema = z.object({
   quantity: z.number().int().min(1).max(20).default(1),
   currency: z.enum(["USD", "ZWG"]).default("USD"),
   promoCode: z.string().max(40).optional(),
-  paymentMethod: z.enum(["paynow", "ecocash", "onemoney", "card", "bank_transfer", "pay_later"]).default("pay_later"),
+  paymentMethod: z.enum(["paynow", "ecocash", "onemoney", "card", "bank_transfer", "pay_later", "superadmin_test"]).default("pay_later"),
   contactName: z.string().min(2).max(120),
   contactPhone: z.string().min(7).max(40),
   notes: z.string().max(600).optional(),
@@ -122,10 +122,13 @@ export async function POST(request) {
 
     const settings = settingsSnapshot.data() || {};
     const roles = user.profile?.roles || [];
+    const isSuperAdmin = roles.includes("super_admin");
     const elevatedPreview = roles.some((role) => ["super_admin", "platform_admin", "operations_manager", "support_manager"].includes(role));
     const marketplaceOpen = settings.launch?.marketplaceEnabled === true;
     const privatePreview = settings.launch?.privateBetaEnabled !== false && (user.profile?.privateBeta === true || elevatedPreview);
     if (!marketplaceOpen && !privatePreview) throw Object.assign(new Error("This customer service is currently limited to approved preview accounts."), { status: 403 });
+    const superAdminTestPayment = body.paymentMethod === "superadmin_test";
+    if (superAdminTestPayment && !isSuperAdmin) throw Object.assign(new Error("Super Admin test payment is restricted to Super Admin accounts."), { status: 403 });
 
     if (kind === "appointment" && !body.appointment) throw Object.assign(new Error("Choose an appointment date and time."), { status: 422 });
     if (kind === "booking" && !body.booking) throw Object.assign(new Error("Choose booking dates."), { status: 422 });
@@ -237,7 +240,7 @@ export async function POST(request) {
         serviceFee: Number(finance.customerServiceFee || settings.commerce?.bookingServiceFee || 0),
         commissionPercent: Number(finance.commissionPercent ?? settings.commerce?.defaultCommissionPercent ?? 0)
       });
-      const paymentRequired = body.paymentMethod !== "pay_later" && latestTotals.total > 0;
+      const paymentRequired = !["pay_later", "superadmin_test"].includes(body.paymentMethod) && latestTotals.total > 0;
 
 
       const base = {
@@ -262,7 +265,8 @@ export async function POST(request) {
         total: latestTotals.total,
         promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         paymentMethod: body.paymentMethod,
-        paymentStatus: paymentRequired ? "unpaid" : latestTotals.total <= 0 ? "not_required" : "pay_later",
+        paymentStatus: superAdminTestPayment ? "test_paid" : paymentRequired ? "unpaid" : latestTotals.total <= 0 ? "not_required" : "pay_later",
+        ...(superAdminTestPayment ? { isTestOrder: true, testPaymentMode: "super_admin", merchantSettlementStatus: "test_excluded" } : {}),
         status: paymentRequired && kind === "ticket" ? "awaiting_payment" : kind === "ticket" ? "submitted" : "requested",
         notes: safeText(body.notes, 600),
         inventoryReservationStatus: kind === "ticket" || availabilitySpecs.length ? "reserved" : "not_applicable",

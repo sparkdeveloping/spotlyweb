@@ -18,7 +18,7 @@ const schema = z.object({
   items: z.array(itemSchema).min(1).max(60),
   currency: z.enum(["USD", "ZWG"]).default("USD"),
   promoCode: z.string().max(40).optional(),
-  paymentMethod: z.enum(["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"]),
+  paymentMethod: z.enum(["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer", "superadmin_test"]),
   fulfilment: z.enum(["pickup", "delivery"]).default("pickup"),
   delivery: z.object({
     contactName: z.string().min(2).max(120),
@@ -120,6 +120,7 @@ export async function POST(request) {
 
     const settings = settingsSnapshot.data() || {};
     const roles = user.profile?.roles || [];
+    const isSuperAdmin = roles.includes("super_admin");
     const elevatedPreview = roles.some((role) => ["super_admin", "platform_admin", "operations_manager", "support_manager"].includes(role));
     const marketplaceOpen = settings.launch?.marketplaceEnabled === true;
     const privatePreview = settings.launch?.privateBetaEnabled !== false && (user.profile?.privateBeta === true || elevatedPreview);
@@ -138,7 +139,9 @@ export async function POST(request) {
     const businessMethods = finance.paymentMethods || platformMethods;
     const branchMethods = branch.paymentMethods || businessMethods;
     const allowedMethods = platformMethods.filter((method) => businessMethods.includes(method) && branchMethods.includes(method));
-    if (!allowedMethods.includes(body.paymentMethod)) throw Object.assign(new Error("That payment method is not currently available for this branch."), { status: 422 });
+    const superAdminTestPayment = body.paymentMethod === "superadmin_test";
+    if (superAdminTestPayment && !isSuperAdmin) throw Object.assign(new Error("Super Admin test payment is restricted to Super Admin accounts."), { status: 403 });
+    if (!superAdminTestPayment && !allowedMethods.includes(body.paymentMethod)) throw Object.assign(new Error("That payment method is not currently available for this branch."), { status: 422 });
 
     const platformCurrencies = settings.commerce?.currencies || ["USD", "ZWG"];
     const businessCurrencies = finance.acceptedCurrencies || platformCurrencies;
@@ -158,7 +161,7 @@ export async function POST(request) {
     const notificationRef = db.collection("notifications").doc();
     const businessRef = db.collection("businesses").doc(body.businessId);
     const branchRef = db.collection("branches").doc(body.branchId);
-    const paymentMethodRequiresCapture = body.paymentMethod !== "cash" && body.paymentMethod !== "bank_transfer";
+    const paymentMethodRequiresCapture = !["cash", "bank_transfer", "superadmin_test"].includes(body.paymentMethod);
     if (body.fulfilment === "delivery" && ["cash", "bank_transfer"].includes(body.paymentMethod)) throw Object.assign(new Error("Delivery requires an instantly confirmable digital payment method."), { status: 422 });
     const number = orderNumber();
     const serviceFee = Number(Math.max(0, Number(settings.commerce?.customerServiceFee || 0)).toFixed(2));
@@ -225,7 +228,8 @@ export async function POST(request) {
         pickup: body.fulfilment === "pickup" ? { ...body.pickup, substitutionPreference: normalizedSubstitution, notes: safeText(body.pickup.notes, 500), reservedSlotId: slot.id } : null,
         delivery: body.fulfilment === "delivery" ? { ...body.delivery, substitutionPreference: normalizedSubstitution, instructions: safeText(body.delivery.instructions, 500) } : null,
         paymentMethod: body.paymentMethod,
-        paymentStatus: paymentRequired ? "unpaid" : body.paymentMethod === "cash" ? "due_at_pickup" : "awaiting_transfer",
+        paymentStatus: superAdminTestPayment ? "test_paid" : paymentRequired ? "unpaid" : body.paymentMethod === "cash" ? "due_at_pickup" : "awaiting_transfer",
+        ...(superAdminTestPayment ? { isTestOrder: true, testPaymentMode: "super_admin", merchantSettlementStatus: "test_excluded" } : {}),
         status: paymentRequired ? "awaiting_payment" : "submitted",
         inventoryReservationStatus: "reserved",
         timeline: [{ status: paymentRequired ? "awaiting_payment" : "submitted", at: new Date().toISOString(), actorId: user.uid }],

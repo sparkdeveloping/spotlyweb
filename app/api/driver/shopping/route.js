@@ -71,7 +71,7 @@ export async function POST(request) {
       const orderSnap = await transaction.get(orderRef);
       if (!orderSnap.exists) throw Object.assign(new Error("The customer order was not found."), { status: 404 });
       const order = orderSnap.data();
-      if (order.paymentStatus !== "paid") throw Object.assign(new Error("Customer payment is not confirmed yet. Do not buy the items."), { status: 409 });
+      if (!["paid", "test_paid"].includes(order.paymentStatus)) throw Object.assign(new Error("Customer payment is not confirmed yet. Do not buy the items."), { status: 409 });
 
       const items = Array.isArray(job.shopping?.items) ? job.shopping.items.map((item) => ({ ...item })) : [];
       const maxAuthorized = round(order.shopping?.maxAuthorizedMerchandise ?? job.shopping?.maxAuthorizedMerchandise ?? 0);
