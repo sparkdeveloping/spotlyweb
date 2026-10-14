@@ -89,13 +89,13 @@ test("Admin Ride Operations exposes dispatch, assignment, exceptions and network
   assert.match(api, /clear_exception/);
 });
 
-test("Ride dispatch watchdog is secret-protected and configured as a Vercel cron", async () => {
+test("Ride dispatch watchdog is secret-protected and ready for an external Hobby-safe scheduler", async () => {
   const [route, vercel, env] = await Promise.all([read("app/api/internal/ride-dispatch/route.js"), read("vercel.json"), read(".env.example")]);
   assert.match(route, /CRON_SECRET/);
   assert.match(route, /authorization/);
-  assert.match(route, /state", "==", "searching_driver/);
+  assert.match(route, /state\", \"==\", \"searching_driver/);
   assert.match(route, /dispatchRide/);
-  assert.match(vercel, /api\/internal\/ride-dispatch/);
+  assert.doesNotMatch(vercel, /"crons"/);
   assert.match(env, /CRON_SECRET=/);
 });
 

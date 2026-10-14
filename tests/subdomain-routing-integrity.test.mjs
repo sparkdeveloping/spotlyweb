@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { resolveSpotlyHref, spotlyPortalUrl, stripPortalPrefix } from "../lib/spotly-domains.js";
+import { canonicalSpotlyUrl, resolveSpotlyHref, spotlyPortalUrl, stripPortalPrefix } from "../lib/spotly-domains.js";
 
 const source = fs.readFileSync(new URL("../proxy.js", import.meta.url), "utf8");
 
@@ -35,6 +35,16 @@ test("global customer destinations canonicalize to the apex while portal support
   assert.doesNotMatch(source, /CUSTOMER_HOST_PREFIXES = \[[^\]]*"\/support"/s);
   assert.equal(resolveSpotlyHref("/account", { currentPortal: "business" }), "https://spotlyafrica.com/account");
   assert.equal(resolveSpotlyHref("/business/support", { currentPortal: "business", legacyMode: false }), "/support");
+});
+
+
+
+test("workspace-local routes win when a customer route uses the same path name", () => {
+  assert.match(source, /matchesPrefix\(pathname, CUSTOMER_HOST_PREFIXES\) && !localSection\(host, pathname\)/);
+  assert.equal(resolveSpotlyHref("/marketplace", { currentPortal: "admin" }), "/marketplace");
+  assert.equal(canonicalSpotlyUrl("https://admin.spotlyafrica.com/marketplace?view=curation", "admin"), "https://admin.spotlyafrica.com/marketplace?view=curation");
+  assert.equal(canonicalSpotlyUrl("/marketplace?view=curation", "admin"), "https://admin.spotlyafrica.com/marketplace?view=curation");
+  assert.equal(canonicalSpotlyUrl("/marketplace", "business"), "https://spotlyafrica.com/marketplace");
 });
 
 test("portal-specific login requests are sent to the portal hostname", () => {
