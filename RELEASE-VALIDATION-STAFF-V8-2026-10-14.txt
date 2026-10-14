@@ -1,0 +1,38 @@
+SPOTLY STAFF V8 + CAREERS — FINAL VALIDATION
+Date: 2026-10-14
+Source: user-uploaded full Next.js project archive (not GitHub main)
+
+PASSED IN THIS ENVIRONMENT
+- npm run check:js
+  JavaScript-only and React-hook import checks passed.
+- npm run check:theme
+  249 source files / 47 classified route patterns passed.
+- npm run audit:launch
+  105 API routes audited; release 7.0.0 passed.
+- npm test
+  309 / 309 tests passed; 0 failed.
+- independent TypeScript parser syntax pass
+  366 JavaScript/JSX source files parsed with 0 syntax failures.
+- git diff --check
+  passed.
+
+DEPENDENCY/BUILD ENVIRONMENT CONSTRAINT
+- clean npm ci was attempted repeatedly.
+- registry.npmjs.org package fetches failed with EAI_AGAIN DNS errors in the execution environment.
+- because dependencies could not be restored, eslint and next were unavailable after the clean-install attempt.
+- npm run lint therefore could not execute (eslint: not found).
+- npm run build therefore could not execute (next: not found).
+- no claim is made that a fresh lint/build passed in this sandbox.
+
+RELEASE GATE TO RUN WHERE NPM REGISTRY ACCESS IS AVAILABLE
+npm ci && npm run check
+
+PACKAGING
+- complete source project, not a patch.
+- .git excluded.
+- .next excluded because it belongs to the pre-change uploaded build.
+- failed/partial node_modules excluded.
+- .env.local excluded because it is local secret material and is already ignored by the project; .env.example is included.
+
+NO GITHUB PUSH PERFORMED.
+NO PRODUCTION DEPLOYMENT PERFORMED.

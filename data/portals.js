@@ -90,7 +90,7 @@ export const portals = {
       { id: "today", label: "Today", icon: House, href: "/" },
       { id: "work", label: "My work", icon: ListChecks, href: "/work" },
       { id: "schedule", label: "Schedule", icon: CalendarDays, href: "/schedule" },
-      { id: "leave", label: "Leave", icon: Heart, href: "/leave" },
+      { id: "leave", label: "Time off", icon: Heart, href: "/leave" },
       { id: "learning", label: "Learning", icon: BookOpenCheck, href: "/learning" },
       { id: "performance", label: "Performance", icon: Sparkles, href: "/performance" },
       { id: "pay", label: "Pay", icon: WalletCards, href: "/pay" },

@@ -142,6 +142,7 @@ export const STAFF_EMPLOYMENT_TYPES = [
 ];
 
 export const STAFF_DEPARTMENTS = [
+  "Operations",
   "Business Operations",
   "Customer Operations",
   "Trust & Verification",
@@ -152,6 +153,17 @@ export const STAFF_DEPARTMENTS = [
   "Growth & Content",
   "Executive"
 ];
+
+export const STAFF_LIFECYCLE_STATES = Object.freeze({
+  preboarding: { label: "Preboarding", access: "limited", description: "Complete setup, required learning, and first-day preparation before full activation." },
+  probation: { label: "Probation", access: "active", description: "Active staff access with probation check-ins and onboarding follow-through." },
+  active: { label: "Active", access: "active", description: "Normal day-to-day staff access." },
+  leave: { label: "On leave", access: "active", description: "Employment remains active while the employee is away from normal duties." },
+  suspended: { label: "Access suspended", access: "blocked", description: "Staff access is temporarily suspended. People Operations can explain the next step." },
+  offboarding: { label: "Offboarding", access: "blocked", description: "Employment is ending and access has moved into the controlled offboarding process." },
+  former: { label: "Former employee", access: "blocked", description: "This employment record is no longer active." },
+  alumni: { label: "Former employee", access: "blocked", description: "This employment record is no longer active." }
+});
 
 export const LEAVE_TYPES = [
   "Annual leave",
@@ -172,8 +184,34 @@ export function rolePackFor(profile = {}, staffProfile = null) {
 }
 
 export function hasStaffAccess(profile = {}, staffProfile = null) {
-  if (staffProfile?.status === "active" || staffProfile?.status === "probation" || staffProfile?.status === "preboarding") return true;
+  if (["active", "probation", "preboarding", "leave"].includes(staffProfile?.status)) return true;
+  if (["suspended", "offboarding", "former", "alumni"].includes(staffProfile?.status)) return false;
   return Boolean(rolePackFor(profile, staffProfile));
+}
+
+export function staffLifecycleFor(staffProfile = null) {
+  const status = staffProfile?.status || "active";
+  return STAFF_LIFECYCLE_STATES[status] || { label: status.replaceAll("_", " "), access: "active", description: "Your employment state controls the Staff experience and access." };
+}
+
+export function staffPermissions(profile = {}, staffProfile = null) {
+  const pack = rolePackFor(profile, staffProfile);
+  return new Set([...(profile?.customPermissions || []), ...(staffProfile?.permissions || []), ...(pack?.permissions || [])]);
+}
+
+export function hasStaffPermission(profile = {}, staffProfile = null, ...requested) {
+  const permissions = staffPermissions(profile, staffProfile);
+  if (permissions.has("*")) return true;
+  return requested.some((permission) => {
+    if (!permission) return false;
+    if (permissions.has(permission)) return true;
+    const prefix = String(permission).split(".")[0];
+    return permissions.has(`${prefix}.*`);
+  });
+}
+
+export function canRecruitStaff(profile = {}, staffProfile = null) {
+  return hasStaffPermission(profile, staffProfile, "recruitment.read", "recruitment.manage") || ["people_operations_admin", "platform_admin"].includes(rolePackFor(profile, staffProfile)?.id);
 }
 
 export function isPeopleManager(profile = {}, staffProfile = null) {

@@ -5,14 +5,16 @@ const PORTALS = {
   "business.spotlyafrica.com": "/business",
   "admin.spotlyafrica.com": "/admin",
   "driver.spotlyafrica.com": "/driver",
-  "staff.spotlyafrica.com": "/staff"
+  "staff.spotlyafrica.com": "/staff",
+  "careers.spotlyafrica.com": "/careers"
 };
 
 const PATH_TO_HOST = {
   business: "business.spotlyafrica.com",
   admin: "admin.spotlyafrica.com",
   driver: "driver.spotlyafrica.com",
-  staff: "staff.spotlyafrica.com"
+  staff: "staff.spotlyafrica.com",
+  careers: "careers.spotlyafrica.com"
 };
 
 // Clean product-domain paths are intentionally allowed to use words that are also
