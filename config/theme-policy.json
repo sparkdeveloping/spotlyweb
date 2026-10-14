@@ -39,7 +39,9 @@
     "/order/[id]",
     "/notifications",
     "/city/[city]/[service]",
-    "/referrals"
+    "/referrals",
+    "/business/get-started",
+    "/business/claim-status/[claimId]"
   ],
   "fixedDark": [
     "/business/kiosk/live"

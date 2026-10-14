@@ -164,7 +164,7 @@ export function BusinessDataProvider({ children }) {
   // Portfolio is produced by the trusted server and can legitimately expose direct-owner access
   // for older businesses that predate membership documents. Keep client permissions aligned with
   // that trusted access instead of making an owner look read-only only on the Locations screen.
-  const membership = storedMembership || (selectedChoice ? {
+  const membership = useMemo(() => storedMembership || (selectedChoice ? {
     id: `portfolio:${selectedBusinessId}`,
     userId: user?.uid || "",
     businessId: selectedBusinessId,
@@ -173,7 +173,7 @@ export function BusinessDataProvider({ children }) {
     status: "active",
     branchIds: selectedChoice.branchIds || [],
     permissions: selectedChoice.permissions || []
-  } : null);
+  } : null), [selectedBusinessId, selectedChoice, storedMembership, user?.uid]);
 
   useEffect(() => {
     if (portfolioLoading) return;

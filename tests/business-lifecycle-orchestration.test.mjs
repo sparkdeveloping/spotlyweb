@@ -62,8 +62,8 @@ test("pre-live navigation is lifecycle-gated instead of setup-complete gated", (
   const nav = read("data/business-archetypes.js");
   const workspace = read("components/business/business-workspace.js");
   assert.match(nav, /navigationMode/);
-  assert.match(nav, /Launch checklist/);
-  assert.match(nav, /Business details/);
+  assert.match(nav, /Get live/);
+  assert.match(nav, /Business setup/);
   assert.match(workspace, /navigationMode === "basics"/);
   // recoverable null lifecycle must not crash workspace navigation while lifecycle loads/fails
   assert.match(workspace, /if \(!lifecycle\) return/);
