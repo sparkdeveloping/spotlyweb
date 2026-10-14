@@ -228,7 +228,7 @@ export async function POST(request) {
         ticketType: kind === "ticket" ? safeText(latestProduct.variant || latestProduct.name || "Standard", 120) : "",
         durationLabel: kind === "appointment" ? `${Number(latestProduct.durationMinutes || 30)} min` : ""
       };
-      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines: [line], code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta });
+      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines: [line], code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta: privatePreview });
       if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
       const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
       const latestTotals = buildOrderTotals({
