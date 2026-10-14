@@ -1,4 +1,5 @@
 import "./globals.css";
+import "./v7-experience.css";
 import { AppProviders } from "@/components/providers";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
 
