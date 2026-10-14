@@ -162,3 +162,9 @@ test("open marketplace datasets are bundled into Vercel functions instead of run
   assert.match(source, /zimbabwe-open-products\.json/);
   assert.doesNotMatch(source, /readFileSync|process\.cwd\(\)/);
 });
+
+test("deploy-required marketplace and Lottie JSON files are not hidden by gitignore", () => {
+  const ignore = read(".gitignore");
+  assert.match(ignore, /!data\/open-marketplace\/\*\.json/);
+  assert.match(ignore, /!public\/lottie\/\*\.json/);
+});
