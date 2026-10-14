@@ -7,6 +7,7 @@ import { haversineKm, makeCode, makeDeliveryNumber } from "@/lib/driver-delivery
 import { buildOrderTotals, shoppingReserveAmount } from "@/lib/order-money";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
+import { marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
 
@@ -114,6 +115,7 @@ export async function POST(request) {
     const businessData = businessSnapshot.exists ? businessSnapshot.data() : null;
     const businessLive = Boolean(businessData?.public) && (businessData?.status === "active" || businessData?.lifecycleStatus === "live");
     if (!businessLive) throw Object.assign(new Error("This business is not accepting customer orders yet."), { status: 404 });
+    if (!marketplaceTrust(businessData).commerceVerified) throw Object.assign(new Error("This listing is not commerce verified yet. You can explore or claim it, but it cannot accept Spotly orders."), { status: 409 });
     if (!branchSnapshot.exists || branchSnapshot.data().businessId !== body.businessId) throw Object.assign(new Error("Choose a valid business location."), { status: 422 });
     if (body.fulfilment === "delivery" && !body.delivery) throw Object.assign(new Error("Add a delivery address and map location."), { status: 422 });
     if (body.fulfilment === "pickup" && !body.pickup) throw Object.assign(new Error("Choose a pickup time."), { status: 422 });

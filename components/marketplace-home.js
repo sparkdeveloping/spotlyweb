@@ -21,6 +21,8 @@ import {
 import { businessArchetype } from "@/data/business-archetypes";
 import { cn } from "@/lib/cn";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
+import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
+import { marketplaceEditorialImage } from "@/lib/marketplace-editorial";
 
 export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
@@ -57,9 +59,9 @@ function interestMatchesBusiness(interests = [], business = {}) {
 }
 
 function MarketplaceImage({ business, sizes = "(max-width: 768px) 72vw, 292px" }) {
-  const image = business.coverImage || business.image || business.logoUrl || business.logo;
-  if (image) return <Image src={image} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />;
-  return <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2))] text-[var(--accent)]"><Store className="h-9 w-9" /></div>;
+  const merchantImage = business.coverImage || business.image || business.logoUrl || business.logo;
+  const image = merchantImage || marketplaceEditorialImage(business);
+  return <><Image src={image} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />{!merchantImage ? <span className="absolute right-3 top-3 rounded-full bg-[var(--media-surface)] px-2 py-1 text-[9px] font-semibold text-[var(--media-ink)] shadow-sm">Category image</span> : null}</>;
 }
 
 function MarketplaceRailCard({ item, onOpen }) {
@@ -72,7 +74,7 @@ function MarketplaceRailCard({ item, onOpen }) {
       {business.isFeatured ? <span className="absolute left-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text)] shadow-sm backdrop-blur">Featured</span> : null}
     </div>
     <div className="mt-3 flex items-start gap-3">
-      <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3><p className="mt-1 truncate text-xs text-[var(--text-3)]">{archetype.shortLabel}{distance !== null ? ` · ${distance.toFixed(1)} km` : business.area ? ` · ${business.area}` : business.city ? ` · ${business.city}` : ""}</p></div>
+      <div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-2"><h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3><MarketplaceTrustBadge business={business} compact /></div><p className="mt-1 truncate text-xs text-[var(--text-3)]">{archetype.shortLabel}{distance !== null ? ` · ${distance.toFixed(1)} km` : business.area ? ` · ${business.area}` : business.city ? ` · ${business.city}` : ""}</p></div>
       <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-3)] transition group-hover:translate-x-0.5" />
     </div>
   </button>;
@@ -182,6 +184,8 @@ export function MarketplaceHome({
     {recent.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Recently viewed" description="Pick up where you left off" /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{recent.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
     {interestMatches.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Based on your interests" description="Using the interests you chose during Spotly setup" action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{interestMatches.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+
+    {nearby.length ? <div className="mt-8 flex flex-col gap-3 rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface-2)] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold">A fuller Spotly directory, without fake availability.</p><p className="mt-1 text-xs leading-5 text-secondary">Listed businesses are useful for discovery, directions and saving. Ordering, pickup, bookings, stock and payment only appear after merchant commerce verification.</p></div><div className="flex shrink-0 flex-wrap gap-2"><span className="rounded-full bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold">Listed on Spotly</span><span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--on-success-soft)]">Commerce verified</span></div></div> : null}
 
     {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Near you" : `Popular in ${location.city}`} description={location.coordinates ? "Using the location you shared" : "Based on what is live in your selected city"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 

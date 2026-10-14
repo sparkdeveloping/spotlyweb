@@ -1,167 +1,26 @@
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
+import { openPlaceById } from "@/lib/open-marketplace-data";
+import { publicBusinessRecord, plainDate } from "@/lib/marketplace-public";
+import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
+const text=(value)=>String(value||"").trim().toLowerCase();
+function publicBranch(doc){const item=doc.data()||{};return{id:doc.id,businessId:item.businessId||"",branchName:item.branchName||item.name||item.displayName||"Location",name:item.branchName||item.name||item.displayName||"Location",city:item.city||"",suburb:item.suburb||item.area||"",area:item.suburb||item.area||"",address:item.address||"",phone:item.phone||item.contactPhone||"",status:item.status||"active",public:item.public===true,fulfilment:Array.isArray(item.fulfilment)?item.fulfilment:[],openingHours:item.openingHours||{},specialHours:item.specialHours||item.openingExceptions||[],pickup:item.pickup||{},paymentMethods:Array.isArray(item.paymentMethods)?item.paymentMethods:[],acceptedCurrencies:Array.isArray(item.acceptedCurrencies)?item.acceptedCurrencies:["USD"],delivery:item.delivery?{enabled:item.delivery.enabled===true,paused:item.delivery.paused===true,fee:Number(item.delivery.fee||0),radiusKm:Number(item.delivery.radiusKm||0)}:null,location:item.location&&Number.isFinite(Number(item.location.lat))&&Number.isFinite(Number(item.location.lng))?{lat:Number(item.location.lat),lng:Number(item.location.lng)}:null};}
+function publicProduct(doc){const item=doc.data()||{};return{id:doc.id,businessId:item.businessId,name:item.name||"Product",description:item.description||"",category:item.category||"General",image:item.image||item.imageUrl||"",brand:item.brand||"",variant:item.variant||"",packSize:item.packSize||"",unit:item.unit||"",currency:item.currency||"USD",price:Number(item.price||0),prices:item.prices||{},compareAtPrice:item.compareAtPrice==null?null:Number(item.compareAtPrice),sku:item.sku||"",stockMode:item.stockMode||"status",stockQuantity:Number(item.stockQuantity||0),stockStatus:item.stockStatus||"in_stock",active:item.active!==false,available:item.available!==false,pickupEligible:item.pickupEligible!==false,maxQuantity:item.maxQuantity==null?null:Number(item.maxQuantity),published:item.published===true,itemType:item.itemType||"product",startAt:plainDate(item.startAt),endAt:plainDate(item.endAt),venue:item.venue||""};}
 
-function text(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function publicDate(value) {
-  if (!value) return null;
-  if (typeof value.toDate === "function") return value.toDate().toISOString();
-  if (value instanceof Date) return value.toISOString();
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-function liveBusiness(record = {}) {
-  const status = text(record.status);
-  const lifecycle = text(record.lifecycleStatus);
-  return record.public === true && status !== "archived" && !record.canonicalBusinessId && (["active", "paused"].includes(status) || ["live", "paused"].includes(lifecycle));
-}
-
-
-function publicBusiness(snapshot) {
-  const item = snapshot.data() || {};
-  return {
-    id: snapshot.id,
-    name: item.name || item.brandName || "Business",
-    brandName: item.brandName || "",
-    category: item.category || item.categories?.[0] || "Business",
-    categories: Array.isArray(item.categories) ? item.categories : [],
-    description: item.description || "",
-    city: item.city || "",
-    area: item.area || item.suburb || "",
-    suburb: item.suburb || "",
-    address: item.address || "",
-    logoUrl: item.logoUrl || item.logo || "",
-    logo: item.logo || item.logoUrl || "",
-    image: item.image || "",
-    coverImage: item.coverImage || "",
-    verificationStatus: item.verificationStatus || "",
-    businessType: item.businessType || "",
-    capabilities: Array.isArray(item.capabilities) ? item.capabilities : [],
-    status: item.status || "",
-    lifecycleStatus: item.lifecycleStatus || "",
-    public: item.public === true,
-    coordinates: item.coordinates || item.location || null,
-    latitude: item.latitude ?? null,
-    longitude: item.longitude ?? null,
-    rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
-    reviewCount: Number.isFinite(Number(item.reviewCount)) ? Number(item.reviewCount) : 0,
-    priceLevel: Number.isFinite(Number(item.priceLevel)) ? Math.max(1, Math.min(4, Number(item.priceLevel))) : null,
-    tags: Array.isArray(item.tags) ? item.tags.slice(0, 24) : [],
-    isFeatured: item.isFeatured === true || item.featured === true
-  };
-}
-
-function publicBranch(doc) {
-  const item = doc.data() || {};
-  return {
-    id: doc.id,
-    businessId: item.businessId,
-    branchName: item.branchName || item.name || item.displayName || "Location",
-    name: item.name || item.branchName || item.displayName || "Location",
-    displayName: item.displayName || item.branchName || item.name || "Location",
-    city: item.city || "",
-    suburb: item.suburb || item.area || "",
-    address: item.address || "",
-    phone: item.phone || item.contactPhone || "",
-    status: item.status || "active",
-    public: item.public === true,
-    fulfilment: Array.isArray(item.fulfilment) ? item.fulfilment : [],
-    openingHours: item.openingHours || {},
-    specialHours: item.specialHours || item.openingExceptions || [],
-    pickup: item.pickup || {},
-    paymentMethods: Array.isArray(item.paymentMethods) ? item.paymentMethods : [],
-    acceptedCurrencies: Array.isArray(item.acceptedCurrencies) ? item.acceptedCurrencies : ["USD"],
-    delivery: item.delivery ? {
-      enabled: item.delivery.enabled === true,
-      paused: item.delivery.paused === true,
-      fee: Number(item.delivery.fee || 0),
-      radiusKm: Number(item.delivery.radiusKm || 0)
-    } : null,
-    location: item.location && Number.isFinite(Number(item.location.lat)) && Number.isFinite(Number(item.location.lng)) ? {
-      lat: Number(item.location.lat),
-      lng: Number(item.location.lng)
-    } : null
-  };
-}
-
-function publicProduct(doc) {
-  const item = doc.data() || {};
-  return {
-    id: doc.id,
-    businessId: item.businessId,
-    name: item.name || "Product",
-    description: item.description || "",
-    category: item.category || "General",
-    image: item.image || "",
-    brand: item.brand || "",
-    variant: item.variant || "",
-    packSize: item.packSize || "",
-    unit: item.unit || "",
-    currency: item.currency || "USD",
-    price: Number(item.price || 0),
-    prices: item.prices || {},
-    compareAtPrice: item.compareAtPrice == null ? null : Number(item.compareAtPrice),
-    sku: item.sku || "",
-    stockMode: item.stockMode || "status",
-    stockQuantity: Number(item.stockQuantity || 0),
-    stockStatus: item.stockStatus || "in_stock",
-    active: item.active !== false,
-    available: item.available !== false,
-    pickupEligible: item.pickupEligible !== false,
-    maxQuantity: item.maxQuantity == null ? null : Number(item.maxQuantity),
-    branchIds: Array.isArray(item.branchIds) ? item.branchIds : [],
-    branchOverrides: item.branchOverrides || {},
-    itemType: item.itemType || "product",
-    durationMinutes: Number(item.durationMinutes || 0),
-    capacity: Number(item.capacity || 0),
-    remainingCapacity: Number(item.capacity || 0) > 0 ? Math.max(0, Number(item.capacity || 0) - Math.max(0, Number(item.reservedQuantity || 0))) : null,
-    startsAt: publicDate(item.startsAt),
-    endsAt: publicDate(item.endsAt),
-    venue: item.venue || ""
-  };
-}
-
-export async function GET(request) {
-  try {
-    await verifyAppCheckRequest(request, { required: false });
-    const rate = await enforceRateLimit(request, { key: "public-marketplace-business", limit: 180, windowMs: 60_000 });
-    const url = new URL(request.url);
-    const businessId = String(url.searchParams.get("businessId") || "").trim();
-    if (!businessId) throw Object.assign(new Error("Choose a business first."), { status: 422 });
-
-    const { db } = getAdminServices();
-    const businessSnapshot = await db.collection("businesses").doc(businessId).get();
-    if (!businessSnapshot.exists || !liveBusiness(businessSnapshot.data())) throw Object.assign(new Error("This business is not currently available in the marketplace."), { status: 404 });
-
-    // Query only by businessId. Public visibility and publication flags are filtered on the
-    // server so missing composite indexes cannot make a live business look empty to customers.
-    const [branchesSnapshot, productsSnapshot] = await Promise.all([
-      db.collection("branches").where("businessId", "==", businessId).limit(250).get(),
-      db.collection("products").where("businessId", "==", businessId).limit(1000).get()
-    ]);
-
-    const branches = branchesSnapshot.docs
-      .filter((doc) => doc.data()?.public === true && !["archived", "removed"].includes(text(doc.data()?.status)))
-      .map(publicBranch)
-      .sort((a, b) => String(a.branchName).localeCompare(String(b.branchName), "en", { sensitivity: "base" }));
-
-    const products = productsSnapshot.docs
-      .filter((doc) => doc.data()?.published === true && doc.data()?.active !== false && doc.data()?.status !== "archived")
-      .map(publicProduct)
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), "en", { sensitivity: "base" }));
-
-    return Response.json({ ok: true, businessId, business: publicBusiness(businessSnapshot), branches, products }, {
-      headers: {
-        "Cache-Control": "public, max-age=10, stale-while-revalidate=30",
-        "X-RateLimit-Remaining": String(rate.remaining)
-      }
-    });
-  } catch (error) {
-    return apiError(error);
-  }
+export async function GET(request){
+ try{
+  await verifyAppCheckRequest(request,{required:false}); const rate=await enforceRateLimit(request,{key:"public-marketplace-business",limit:180,windowMs:60_000});
+  const businessId=new URL(request.url).searchParams.get("businessId")||""; if(!businessId) throw Object.assign(new Error("Business ID is required."),{status:400});
+  const {db}=getAdminServices(); const [businessSnapshot,branchSnapshot,productSnapshot]=await Promise.all([db.collection("businesses").doc(businessId).get(),db.collection("branches").where("businessId","==",businessId).limit(100).get(),db.collection("products").where("businessId","==",businessId).limit(1000).get()]);
+  const curated=openPlaceById(businessId); const source=businessSnapshot.exists?{...(curated||{}),...businessSnapshot.data()}:curated;
+  if(!source||!isMarketplaceDiscoverable(source)) throw Object.assign(new Error("This business is not publicly available."),{status:404});
+  const business=publicBusinessRecord(businessId,{...source,curated:Boolean(curated)}); const trust=marketplaceTrust(source);
+  let branches=branchSnapshot.docs.filter((doc)=>doc.data()?.public===true&&!["archived","removed"].includes(text(doc.data()?.status))).map(publicBranch);
+  if(!trust.commerceVerified) branches=branches.map((branch)=>({...branch,fulfilment:[],pickup:{},paymentMethods:[],delivery:null}));
+  if(!branches.length&&business.coordinates)branches=[{id:`${businessId}-place`,businessId,branchName:business.area||business.city||"Location",name:business.name,city:business.city,area:business.area,suburb:business.suburb,address:business.address,phone:business.phone,status:"listed",public:true,fulfilment:[],openingHours:business.openingHours||{},specialHours:[],pickup:{},paymentMethods:[],acceptedCurrencies:[],delivery:null,location:{lat:business.latitude,lng:business.longitude},curated:true}];
+  const products=trust.commerceVerified?productSnapshot.docs.map(publicProduct).filter((item)=>item.published&&item.active&&item.available):[];
+  return Response.json({ok:true,business,branches,products,transactional:trust.commerceVerified,claimAvailable:trust.discovery.claim,dataAttribution:business.source?.type==="openstreetmap"?{openStreetMap:"© OpenStreetMap contributors",license:"ODbL-1.0",licenseUrl:"https://www.openstreetmap.org/copyright"}:null},{headers:{"Cache-Control":"public, max-age=20, stale-while-revalidate=60","X-RateLimit-Remaining":String(rate.remaining)}});
+ }catch(error){return apiError(error);}
 }

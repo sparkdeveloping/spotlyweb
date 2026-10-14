@@ -20,6 +20,8 @@ import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { resolveProductForBranch } from "@/lib/product-offers";
 import { MARKETPLACE_SERVICE_KEYS, MarketplaceHome, ServiceModeHeader, serviceMatchesBusiness } from "@/components/marketplace-home";
 import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "@/components/customer-conversion";
+import { MarketplaceTrustBadge, MarketplaceTrustNotice } from "@/components/marketplace-trust-ui";
+import { marketplaceEditorialImage } from "@/lib/marketplace-editorial";
 import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
 import { ServiceDiscoveryView } from "@/components/service-experience";
 import { CustomerShell } from "@/components/customer-shell";
@@ -81,20 +83,19 @@ function LocationControl({ value, cities, supportedAreas, onChange, onLocate, lo
 }
 
 function BusinessVisual({ business }) {
-  const image = business.coverImage || business.image || business.logoUrl;
-  if (image) return <Image src={image} alt="" fill  className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />;
-  return <div className="flex h-full items-center justify-center bg-[var(--surface-2)]"><span className="flex h-16 w-16 items-center justify-center rounded-xl border bg-[var(--surface)] text-2xl font-semibold text-[var(--accent)]">{(business.name || "B").slice(0, 1).toUpperCase()}</span></div>;
+  const merchantImage = business.coverImage || business.image || business.logoUrl;
+  const image = merchantImage || marketplaceEditorialImage(business);
+  return <><Image src={image} alt="" fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />{!merchantImage ? <span className="absolute right-3 top-3 rounded-full bg-[var(--media-surface)] px-2.5 py-1 text-[10px] font-semibold text-[var(--media-ink)] shadow-sm">Category image</span> : null}</>;
 }
 
 function BusinessCard({ business, favorite, onFavorite, onOpen, distance }) {
   const archetype = businessArchetype(business);
   const locationCount = Number(business.branchCount || business.locationCount || 0);
-  const verified = ["approved", "verified"].includes(business.verificationStatus);
-  const canOrder = archetype.capabilities.includes("pickup_orders");
-  const cta = archetype.id === "restaurant_food" ? "View menu" : archetype.id === "grocery_retail" ? "Shop this business" : archetype.id === "ticketing_events" ? "View events" : archetype.id === "appointments_services" ? "View services" : archetype.id === "accommodation_activities" ? "View listings" : "View details";
-  const capabilityLabel = canOrder ? "Online ordering" : archetype.id === "ticketing_events" ? "Events" : archetype.id === "appointments_services" ? "Services" : archetype.id === "accommodation_activities" ? "Bookings profile" : "Business profile";
+  const canOrder = business.commerceVerified === true && archetype.capabilities.includes("pickup_orders");
+  const cta = business.commerceVerified !== true ? "View details" : archetype.id === "restaurant_food" ? "View menu" : archetype.id === "grocery_retail" ? "Shop this business" : archetype.id === "ticketing_events" ? "View events" : archetype.id === "appointments_services" ? "View services" : archetype.id === "accommodation_activities" ? "View listings" : "View details";
+  const capabilityLabel = business.commerceVerified !== true ? "Discovery listing" : canOrder ? "Online ordering" : archetype.id === "ticketing_events" ? "Events" : archetype.id === "appointments_services" ? "Services" : archetype.id === "accommodation_activities" ? "Bookings profile" : "Business profile";
 
-  return <article className="overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] transition hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] hover:shadow-card"><button onClick={() => onOpen(business)} className="block w-full text-left"><div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} /><div className="absolute inset-0 bg-gradient-to-t from-black/38 via-transparent to-transparent" /><div className="absolute bottom-3 left-3 flex flex-wrap gap-2"><Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">{business.category || archetype.shortLabel}</Badge>{verified && <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><BadgeCheck className="mr-1 h-3.5 w-3.5" />Verified</Badge>}</div></div><div className="p-5"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-lg font-semibold tracking-[-.025em]">{business.name}</h2><p className="mt-1 flex items-center gap-1 text-sm text-[var(--text-3)]"><MapPin className="h-4 w-4" />{distance !== null ? `${distance.toFixed(1)} km away` : locationCount ? `${locationCount} ${archetype.nouns.branch}${locationCount === 1 ? "" : "s"}` : business.area || business.city || "Location not provided"}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div><p className="mt-4 line-clamp-2 text-sm leading-6 text-[var(--text-2)]">{business.description || `View ${archetype.nouns.catalog.toLowerCase()}, locations and currently published information.`}</p><div className="mt-4 flex flex-wrap gap-2"><Badge tone="neutral">{capabilityLabel}</Badge>{locationCount > 0 && <Badge tone="neutral"><MapPin className="mr-1 h-3.5 w-3.5" />{locationCount} {locationCount === 1 ? "location" : "locations"}</Badge>}{canOrder && <Badge tone="neutral"><Truck className="mr-1 h-3.5 w-3.5" />Pickup / delivery by location</Badge>}</div></div></button><div className="flex items-center gap-2 border-t border-[var(--border-subtle)] p-3"><Button onClick={() => onOpen(business)} className="flex-1" size="sm">{cta}</Button><Button onClick={() => onFavorite(business.id)} size="icon" variant="outline" aria-label={favorite ? "Remove from saved" : "Save business"}><Heart className={cn("h-5 w-5", favorite && "fill-[var(--danger)] text-[var(--danger)]")} /></Button></div></article>;
+  return <article className="overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] transition hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] hover:shadow-card"><button onClick={() => onOpen(business)} className="block w-full text-left"><div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} /><div className="absolute inset-0 bg-gradient-to-t from-black/38 via-transparent to-transparent" /><div className="absolute bottom-3 left-3 flex flex-wrap gap-2"><Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">{business.category || archetype.shortLabel}</Badge><MarketplaceTrustBadge business={business} compact /></div></div><div className="p-5"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-lg font-semibold tracking-[-.025em]">{business.name}</h2><p className="mt-1 flex items-center gap-1 text-sm text-[var(--text-3)]"><MapPin className="h-4 w-4" />{distance !== null ? `${distance.toFixed(1)} km away` : locationCount ? `${locationCount} ${archetype.nouns.branch}${locationCount === 1 ? "" : "s"}` : business.area || business.city || "Location not provided"}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div><p className="mt-4 line-clamp-2 text-sm leading-6 text-[var(--text-2)]">{business.description || `View ${archetype.nouns.catalog.toLowerCase()}, locations and currently published information.`}</p><div className="mt-4 flex flex-wrap gap-2"><Badge tone="neutral">{capabilityLabel}</Badge>{locationCount > 0 && <Badge tone="neutral"><MapPin className="mr-1 h-3.5 w-3.5" />{locationCount} {locationCount === 1 ? "location" : "locations"}</Badge>}{canOrder && <Badge tone="neutral"><Truck className="mr-1 h-3.5 w-3.5" />Pickup / delivery by location</Badge>}</div></div></button><div className="flex items-center gap-2 border-t border-[var(--border-subtle)] p-3"><Button onClick={() => onOpen(business)} className="flex-1" size="sm">{cta}</Button><Button onClick={() => onFavorite(business.id)} size="icon" variant="outline" aria-label={favorite ? "Remove from saved" : "Save business"}><Heart className={cn("h-5 w-5", favorite && "fill-[var(--danger)] text-[var(--danger)]")} /></Button></div></article>;
 }
 
 function ProductCard({ product, quantity, onChange, onOpen, currency, archetype }) {
@@ -472,8 +473,8 @@ function BusinessDetailView({
   onCheckout
 }) {
   const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) || branches[0] || null;
-  const verified = ["approved", "verified"].includes(business.verificationStatus);
-  const capabilityTitle = isPickup ? (archetype.id === "restaurant_food" ? "Order from this location" : "Shop this location") : archetype.id === "ticketing_events" ? "Choose an event or ticket" : archetype.id === "appointments_services" ? "Choose a service" : archetype.id === "accommodation_activities" ? "Choose a listing" : "Explore this business";
+  const commerceVerified = business.commerceVerified === true;
+  const capabilityTitle = !commerceVerified ? "About this business" : isPickup ? (archetype.id === "restaurant_food" ? "Order from this location" : "Shop this location") : archetype.id === "ticketing_events" ? "Choose an event or ticket" : archetype.id === "appointments_services" ? "Choose a service" : archetype.id === "accommodation_activities" ? "Choose a listing" : "Explore this business";
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
@@ -495,7 +496,7 @@ function BusinessDetailView({
         <div className="absolute inset-x-0 bottom-0 p-5 text-[var(--media-text)] sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0">{business.category || archetype.shortLabel}</Badge>
-            {verified ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0"><BadgeCheck className="mr-1 h-3.5 w-3.5" />Verified</Badge> : null}{Number(business.rating || 0) > 0 ? <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0"><Star className="mr-1 h-3.5 w-3.5 fill-current" />{Number(business.rating).toFixed(1)}{Number(business.reviewCount || 0) > 0 ? ` · ${business.reviewCount}` : ""}</Badge> : null}
+            <MarketplaceTrustBadge business={business} />{Number(business.rating || 0) > 0 ? <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0"><Star className="mr-1 h-3.5 w-3.5 fill-current" />{Number(business.rating).toFixed(1)}{Number(business.reviewCount || 0) > 0 ? ` · ${business.reviewCount}` : ""}</Badge> : null}
           </div>
           <div className="mt-3 flex items-end justify-between gap-4">
             <div className="min-w-0"><h1 className="text-3xl font-semibold tracking-[-.045em] sm:text-5xl">{business.name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[color-mix(in_srgb,var(--media-text)_82%,transparent)] sm:text-base">{business.description || `${archetype.label} on Spotly.`}</p></div>
@@ -507,9 +508,11 @@ function BusinessDetailView({
       <div className="grid border-t border-[var(--border-subtle)] sm:grid-cols-3">
         <div className="border-b border-[var(--border-subtle)] p-4 sm:border-b-0 sm:border-r sm:p-5"><p className="text-xs font-semibold text-[var(--text-3)]">Experience</p><p className="mt-2 text-sm font-semibold">{archetype.shortLabel}</p></div>
         <div className="border-b border-[var(--border-subtle)] p-4 sm:border-b-0 sm:border-r sm:p-5"><p className="text-xs font-semibold text-[var(--text-3)]">Location</p><p className="mt-2 text-sm font-semibold">{selectedBranch?.branchName || selectedBranch?.name || business.area || business.city || "Choose below"}</p></div>
-        <div className="p-4 sm:p-5"><p className="text-xs font-semibold text-[var(--text-3)]">Available through Spotly</p><p className="mt-2 text-sm font-semibold">{isPickup ? "Pickup / delivery where available" : archetype.id === "ticketing_events" ? "Ticket requests" : archetype.id === "appointments_services" ? "Appointment requests" : archetype.id === "accommodation_activities" ? "Booking requests" : "Business information"}</p></div>
+        <div className="p-4 sm:p-5"><p className="text-xs font-semibold text-[var(--text-3)]">Available through Spotly</p><p className="mt-2 text-sm font-semibold">{!commerceVerified ? "Discovery, save, contact and directions" : isPickup ? "Pickup / delivery where available" : archetype.id === "ticketing_events" ? "Ticket requests" : archetype.id === "appointments_services" ? "Appointment requests" : archetype.id === "accommodation_activities" ? "Booking requests" : "Business information"}</p></div>
       </div>
     </div>
+
+    <MarketplaceTrustNotice business={business} className="mt-4" />
 
     <div className="mt-6 grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div>
@@ -1037,6 +1040,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
   async function openSearchResult(result) {
     rememberSearch(query);
+    if (result.catalogReference) {
+      setQuery(result.title || result.name || query);
+      toast("This is a Spotly product reference. A store price, stock level or pickup option will only appear when a merchant publishes a verified offer.", { title: "Product catalogue" });
+      return;
+    }
     if (result.type === "business") { openBusiness(result); return; }
     const business = result.business || businesses.find((item) => item.id === result.businessId);
     if (business) {
@@ -1207,7 +1215,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
           productQuery={productQuery}
           setProductQuery={setProductQuery}
           archetype={selectedArchetype}
-          isPickup={selectedIsPickup}
+          isPickup={selectedIsPickup && selected?.commerceVerified === true}
           currency={currency}
           cart={cart}
           onQuantityChange={changeQuantity}

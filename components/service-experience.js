@@ -25,13 +25,15 @@ import { formatCurrency } from "@/lib/format";
 import { Badge, Button, EmptyState, SearchField } from "@/components/ui";
 import { MARKETPLACE_SERVICES } from "@/components/marketplace-home";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
+import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
+import { marketplaceEditorialImage } from "@/lib/marketplace-editorial";
 
 const SERVICE_CONFIG = {
   eat: {
     label: "Eat",
     eyebrow: "Food around you",
     title: "What are you craving?",
-    description: "Find food that is actually available around you, then choose pickup or delivery where the location supports it.",
+    description: "Discover food businesses around you. Menus, ordering, pickup and delivery only appear where the merchant has enabled them.",
     search: "Search dishes, restaurants or cuisines",
     businesses: "Restaurants to explore",
     items: "Popular dishes",
@@ -41,7 +43,7 @@ const SERVICE_CONFIG = {
     label: "Shop",
     eyebrow: "Stores and essentials",
     title: "Find what you need nearby",
-    description: "Browse live products from local stores and open the exact location for stock, pickup and delivery options.",
+    description: "Discover local shops and grocery products. Price, stock, pickup and delivery only appear where a merchant has published a verified offer.",
     search: "Search products, brands or stores",
     businesses: "Stores to explore",
     items: "Products to explore",
@@ -109,7 +111,7 @@ function money(item, currency) {
 }
 
 function imageForBusiness(business) {
-  return business.coverImage || business.image || business.logoUrl || business.logo || "";
+  return business.coverImage || business.image || business.logoUrl || business.logo || marketplaceEditorialImage(business);
 }
 
 function pickupTimeLabel(value) {
@@ -149,7 +151,7 @@ function BusinessCard({ business, favorite, onFavorite, onOpen, service, currenc
         {image ? <Image src={image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 768px) 100vw, 33vw" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-9 w-9" /></div>}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
         <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
-          <div className="flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div>
+          <div className="flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}<MarketplaceTrustBadge business={business} compact />{business.commerceVerified === true && operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div>
           {business.rating ? <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--media-ink)_58%,transparent)] px-2 py-1 text-xs font-semibold text-[var(--media-text)]"><Star className="h-3.5 w-3.5 fill-current" />{business.rating.toFixed(1)}</span> : null}
         </div>
       </div>

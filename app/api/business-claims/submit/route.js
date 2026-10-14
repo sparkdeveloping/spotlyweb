@@ -171,8 +171,9 @@ export async function POST(request) {
         }
 
         const ownerCreated = provisional.source?.type === "owner_created";
-        if (!ownerCreated) {
-          throw Object.assign(new Error("This provisional listing has not been added to the Spotly directory yet."), { status: 409 });
+        const openCurated = provisional.source?.type === "openstreetmap" && provisional.source?.rightsStatus === "open_odbl";
+        if (!ownerCreated && !openCurated) {
+          throw Object.assign(new Error("This listing cannot be claimed until Spotly confirms its source rights."), { status: 409 });
         }
 
         resolvedOrganizationId = input.organizationId || `org_${input.businessId}`;
@@ -182,7 +183,7 @@ export async function POST(request) {
         const branchRef = db.collection("branches").doc(resolvedBranchId);
         const membershipRef = db.collection("memberships").doc(`${resolvedOrganizationId}_${actor.uid}`);
         const businessType = provisional.businessType || "directory_profile";
-        const capabilities = provisional.capabilities || [];
+        const capabilities = ownerCreated ? (provisional.capabilities || []) : ["discover", "save", "share", "directions", "contact"];
         const branchName = safeText(provisional.branchName || "Main location", 180);
 
         transaction.create(organizationRef, {
@@ -210,8 +211,8 @@ export async function POST(request) {
           public: false,
           requestedPublic: true,
           reviewStatus: "pending_launch_review",
-          fulfilment: defaultFulfilment(capabilities),
-          paymentMethods: ["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"],
+          fulfilment: [],
+          paymentMethods: [],
           acceptedCurrencies: ["USD", "ZWG"],
           searchTerms: searchTerms(provisional.name, branchName, provisional.city, provisional.address),
           createdAt: FieldValue.serverTimestamp(),
@@ -249,10 +250,17 @@ export async function POST(request) {
           website: safeText(provisional.website || "", 500),
           instagram: safeText(provisional.instagram || "", 180),
           description: safeText(provisional.description || "", 1000),
-          public: false,
-          status: "draft",
-          claimStatus: "claimed_pending_verification",
+          public: true,
+          status: "provisional",
+          lifecycleStatus: "listed",
+          ownershipStatus: "claim_pending",
+          claimStatus: "claim_pending",
           verificationStatus: "pending",
+          commerceVerificationStatus: "not_verified",
+          commerceEnabled: false,
+          commerceVerified: false,
+          fulfilment: [],
+          paymentMethods: [],
           onboardingStatus: "not_started",
           ownerIds: [actor.uid],
           branchIds: [resolvedBranchId],

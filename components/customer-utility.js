@@ -22,6 +22,7 @@ import { Badge, Button, EmptyState, SearchField } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { ServiceGlyph } from "@/components/service-artwork";
+import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 
 const typeMeta = {
   business: { label: "Businesses", icon: Store },
@@ -54,8 +55,8 @@ function SearchResult({ result, onOpen, saved, onSave }) {
         {result.image ? <Image src={result.image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.03]" sizes="72px" /> : <Icon className="h-6 w-6" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold tracking-[-.02em]">{result.title || result.name}</span><Badge tone="neutral">{meta.label.slice(0, -1)}</Badge></span>
-        {result.subtitle ? <span className="mt-1 block truncate text-xs text-[var(--text-3)]">{result.subtitle}</span> : null}
+        <span className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold tracking-[-.02em]">{result.title || result.name}</span>{result.type === "business" ? <MarketplaceTrustBadge business={result} compact /> : result.catalogReference ? <Badge tone="info">Product reference</Badge> : <Badge tone="neutral">{meta.label.slice(0, -1)}</Badge>}</span>
+        {result.subtitle ? <span className="mt-1 block truncate text-xs text-[var(--text-3)]">{result.subtitle}</span> : null}{result.catalogReference ? <span className="mt-1 block text-xs font-medium text-[var(--accent)]">Catalogue identity · store stock and price not confirmed</span> : null}
         {result.description ? <span className="mt-2 line-clamp-2 block text-sm leading-6 text-[var(--text-2)]">{result.description}</span> : null}
         <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-3)]">{money(result) ? <strong className="text-[var(--text)]">{money(result)}</strong> : null}{result.city || result.area ? <span>{[result.area, result.city].filter(Boolean).join(" · ")}</span> : null}{result.startsAt ? <span>{new Date(result.startsAt).toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Harare" })}</span> : null}</span>
       </span>

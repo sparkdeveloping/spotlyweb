@@ -6,6 +6,7 @@ import { safeText } from "@/lib/server-helpers";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
 import { appointmentReservationSpecs, bookingReservationSpecs, reservationCanFit } from "@/lib/availability-reservations";
+import { marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
 
@@ -98,6 +99,7 @@ export async function POST(request) {
       throw Object.assign(new Error("Sign in with email, Google or Apple before continuing."), { status: 409 });
     }
     if (!businessSnapshot.exists) throw Object.assign(new Error("This business is no longer available."), { status: 404 });
+    if (!marketplaceTrust(businessSnapshot.data() || {}).commerceVerified) throw Object.assign(new Error("This listing is not commerce verified yet and cannot accept bookings or tickets."), { status: 409 });
     if (!branchSnapshot.exists) throw Object.assign(new Error("Choose a valid location."), { status: 422 });
     if (!productSnapshot.exists) throw Object.assign(new Error("This offering is no longer available."), { status: 404 });
 

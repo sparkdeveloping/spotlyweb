@@ -2,6 +2,9 @@ import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebas
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { pickupAvailability } from "@/lib/pickup-availability";
 import { promotionWindowActive, publicPromotionRecord } from "@/lib/customer-growth";
+import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
+import { publicBusinessRecord } from "@/lib/marketplace-public";
+import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
 
@@ -36,9 +39,7 @@ function plainDate(value) {
 }
 
 function liveBusiness(record = {}) {
-  const status = text(record.status);
-  const lifecycle = text(record.lifecycleStatus);
-  return record.public === true && status !== "archived" && !record.canonicalBusinessId && (["active", "paused"].includes(status) || ["live", "paused"].includes(lifecycle));
+  return isMarketplaceDiscoverable(record);
 }
 
 function matchesService(service, business = {}) {
@@ -56,38 +57,7 @@ function matchesService(service, business = {}) {
 }
 
 function businessRecord(snapshot) {
-  const item = snapshot.data() || {};
-  return {
-    id: snapshot.id,
-    name: item.name || item.brandName || "Business",
-    brandName: item.brandName || "",
-    category: item.category || item.categories?.[0] || "Business",
-    categories: Array.isArray(item.categories) ? item.categories : [],
-    description: item.description || "",
-    city: item.city || "",
-    area: item.area || item.suburb || "",
-    suburb: item.suburb || "",
-    address: item.address || "",
-    logoUrl: item.logoUrl || item.logo || "",
-    logo: item.logo || item.logoUrl || "",
-    image: item.image || "",
-    coverImage: item.coverImage || "",
-    verificationStatus: item.verificationStatus || "",
-    businessType: item.businessType || "",
-    capabilities: Array.isArray(item.capabilities) ? item.capabilities : [],
-    rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
-    reviewCount: Number.isFinite(Number(item.reviewCount)) ? Number(item.reviewCount) : 0,
-    priceLevel: Number.isFinite(Number(item.priceLevel)) ? Math.max(1, Math.min(4, Number(item.priceLevel))) : null,
-    tags: Array.isArray(item.tags) ? item.tags.slice(0, 24) : [],
-    isFeatured: item.isFeatured === true || item.featured === true,
-    openingHours: item.openingHours || null,
-    status: item.status || "",
-    lifecycleStatus: item.lifecycleStatus || "",
-    public: item.public === true,
-    coordinates: item.coordinates || item.location || null,
-    latitude: item.latitude ?? null,
-    longitude: item.longitude ?? null
-  };
+  return publicBusinessRecord(snapshot.id, snapshot.data() || {});
 }
 
 function branchRecord(doc) {
@@ -290,7 +260,9 @@ export async function GET(request) {
 
     const [businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot] = await publicSeed(db);
 
-    const allBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data())).map(businessRecord);
+    const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data())).map(businessRecord);
+    const curatedBusinesses = queryOpenPlaces({ city, service, limit: 2500 }).records.map((item) => publicBusinessRecord(item.id, item));
+    const allBusinesses = mergeCuratedWithFirestore(curatedBusinesses, firestoreBusinesses);
     const branchMap = new Map();
     branchSnapshot.docs.forEach((doc) => {
       const branch = branchRecord(doc);
@@ -332,7 +304,7 @@ export async function GET(request) {
       .filter((doc) => {
         const raw = doc.data() || {};
         const business = eligibleBusinessMap.get(raw.businessId);
-        if (!business || raw.active === false || raw.available === false || text(raw.status) === "archived") return false;
+        if (!business || !marketplaceTrust(business).commerceVerified || raw.active === false || raw.available === false || text(raw.status) === "archived") return false;
         return itemMatchesService(service, raw, business);
       })
       .map((doc) => { const record = itemRecord(doc, eligibleBusinessMap.get(doc.data()?.businessId), service); const offers = promotionMap.get(record.businessId) || []; const scoped = offers.find((offer) => !offer.productIds?.length || offer.productIds.includes(record.id)); return { ...record, promotion: scoped || null }; })
