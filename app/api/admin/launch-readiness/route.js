@@ -1,6 +1,7 @@
 import { authenticateRequest, apiError, getAdminServices } from "@/lib/firebase-admin";
 import { requirePlatformPermission } from "@/lib/access-control-server";
 import { BUILD_INFO } from "@/lib/build-info";
+import { getSecretBundle, secretVaultReady } from "@/lib/platform-secrets-server";
 
 export const runtime = "nodejs";
 
@@ -30,10 +31,10 @@ export async function GET(request) {
     const support = settings.support || {};
     const mobility = settings.mobility || {};
     const send = mobility.send || {};
+    const [paynowVault, resendVault, schedulerVault, monitoringVault] = await Promise.all([getSecretBundle("paynow"), getSecretBundle("resend"), getSecretBundle("scheduler"), getSecretBundle("monitoring")]);
 
-    const paynowCredentials = (present(process.env.PAYNOW_INTEGRATION_ID) && present(process.env.PAYNOW_INTEGRATION_KEY))
-      || (present(process.env.PAYNOW_INTEGRATION_ID_USD) && present(process.env.PAYNOW_INTEGRATION_KEY_USD));
-    const emailCredentials = present(process.env.RESEND_API_KEY) && present(process.env.RESEND_FROM_EMAIL);
+    const paynowCredentials = (present(paynowVault.integrationId) && present(paynowVault.integrationKey)) || (present(paynowVault.integrationIdUsd) && present(paynowVault.integrationKeyUsd)) || (present(process.env.PAYNOW_INTEGRATION_ID) && present(process.env.PAYNOW_INTEGRATION_KEY)) || (present(process.env.PAYNOW_INTEGRATION_ID_USD) && present(process.env.PAYNOW_INTEGRATION_KEY_USD));
+    const emailCredentials = (present(resendVault.apiKey) && present(resendVault.fromEmail)) || (present(process.env.RESEND_API_KEY) && present(process.env.RESEND_FROM_EMAIL));
     const pushCredentials = present(process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY);
     const appCheckCredentials = present(process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY);
     const appCheckEnforced = process.env.SPOTLY_ENFORCE_APP_CHECK === "true";
@@ -41,15 +42,16 @@ export async function GET(request) {
     const refundConfigured = present(legal.refundPolicyUrl);
     const supportConfigured = present(support.hours) && (present(support.email) || present(support.phone) || present(support.whatsapp));
     const rulesVerified = present(process.env.SPOTLY_RULES_VERIFIED_AT) && present(process.env.SPOTLY_STORAGE_RULES_VERIFIED_AT);
-    const monitoringConfigured = present(process.env.SENTRY_DSN) || present(process.env.NEXT_PUBLIC_SENTRY_DSN) || present(process.env.SPOTLY_MONITORING_VERIFIED_AT);
+    const monitoringConfigured = present(monitoringVault.sentryDsn) || present(monitoringVault.verifiedAt) || present(process.env.SENTRY_DSN) || present(process.env.NEXT_PUBLIC_SENTRY_DSN) || present(process.env.SPOTLY_MONITORING_VERIFIED_AT);
     const backupVerified = present(process.env.SPOTLY_BACKUP_VERIFIED_AT);
     const firebaseAdminConfigured = (present(process.env.FIREBASE_ADMIN_PROJECT_ID) && present(process.env.FIREBASE_ADMIN_CLIENT_EMAIL) && present(process.env.FIREBASE_ADMIN_PRIVATE_KEY)) || present(process.env.GOOGLE_APPLICATION_CREDENTIALS);
     const storageConfigured = present(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
     const productionOrigin = String(process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/$/, "");
     const productionOriginReady = productionOrigin === "https://spotlyafrica.com";
     const marketplaceIndexable = process.env.NEXT_PUBLIC_MARKETPLACE_INDEXABLE === "true";
-    const financeEncryptionConfigured = present(process.env.SPOTLY_FINANCE_ENCRYPTION_KEY);
-    const cronSecretConfigured = present(process.env.CRON_SECRET) && String(process.env.CRON_SECRET).trim().length >= 24;
+    const financeEncryptionConfigured = present(process.env.SPOTLY_FINANCE_ENCRYPTION_KEY) || secretVaultReady();
+    const schedulerSecret = String(schedulerVault.secret || process.env.CRON_SECRET || "").trim();
+    const cronSecretConfigured = schedulerSecret.length >= 24;
     const bootstrapAllowlistPresent = present(process.env.BOOTSTRAP_ADMIN_EMAILS);
     const ridesEnabled = mobility.ridesEnabled === true || settings.launch?.ridesEnabled === true;
     const rideCities = Array.isArray(mobility.enabledCities) ? mobility.enabledCities.filter(Boolean) : [];

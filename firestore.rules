@@ -138,6 +138,8 @@ service cloud.firestore {
       allow write: if platformAdmin() || hasPermission("admin.configuration");
     }
 
+    match /platformSecrets/{id} { allow read, write: if false; }
+
     match /businesses/{businessId} {
       allow read: if resource.data.public == true || canViewBusiness(businessId) || hasPermission("businesses.read");
       allow create: if false;

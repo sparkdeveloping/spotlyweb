@@ -132,20 +132,14 @@ export const portals = {
     darkAccent: "#78A5D8",
     description: "Operate the platform, review risk, and manage access.",
     nav: [
-      { group: "Operations", id: "dashboard", label: "Control centre", icon: LayoutDashboard, href: "/" },
-      { group: "Operations", id: "operations", label: "Operations", icon: Truck, href: "/operations" },
-      { group: "Operations", id: "notifications", label: "Notifications", icon: Bell, href: "/notifications" },
-      { group: "Marketplace", id: "organizations", label: "Organizations", icon: Building2, href: "/organizations" },
-      { group: "Marketplace", id: "businesses", label: "Businesses", icon: Store, href: "/businesses" },
-      { group: "People", id: "people", label: "People", icon: UsersRound, href: "/people" },
-      { group: "Operations", id: "drivers", label: "Drivers & delivery", icon: Bike, href: "/drivers" },
-      { group: "Marketplace", id: "customers", label: "Customers", icon: CircleUserRound, href: "/customers" },
-      { group: "Money", id: "finance", label: "Money", icon: CreditCard, href: "/finance" },
-      { group: "Growth", id: "content", label: "Content & growth", icon: Compass, href: "/content" },
-      { group: "Platform", id: "platform-map", label: "Platform map", icon: GitBranch, href: "/platform-map" },
-      { group: "Platform", id: "platform", label: "Configuration", icon: ShieldCheck, href: "/platform" },
-      { group: "Platform", id: "audit", label: "Audit log", icon: ClipboardList, href: "/audit" },
-      { group: "Platform", id: "settings", label: "Settings", icon: Settings, href: "/settings" }
+      { group: "Operate", id: "home", label: "Home", icon: LayoutDashboard, href: "/" },
+      { group: "Operate", id: "work", label: "Work", icon: ListChecks, href: "/work" },
+      { group: "Operate", id: "marketplace", label: "Marketplace", icon: Store, href: "/marketplace" },
+      { group: "Operate", id: "mobility", label: "Mobility", icon: Bike, href: "/mobility" },
+      { group: "Operate", id: "money", label: "Money", icon: CreditCard, href: "/money" },
+      { group: "Build", id: "growth", label: "Growth", icon: Compass, href: "/growth" },
+      { group: "Build", id: "team", label: "Team & access", icon: UsersRound, href: "/team" },
+      { group: "Build", id: "system", label: "System", icon: ShieldCheck, href: "/system" }
     ]
   }
 };
