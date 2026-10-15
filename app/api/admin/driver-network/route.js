@@ -19,7 +19,7 @@ export async function GET(request) {
   try {
     await authenticateRequest(request, { roles: ADMIN_ROLES });
     const { db } = getAdminServices();
-    const [driversSnap, applicationsSnap, presenceSnap, deliveriesSnap, ridesSnap, parcelsSnap, incidentsSnap, vehiclesSnap, documentsSnap] = await Promise.all([
+    const [driversSnap, applicationsSnap, presenceSnap, deliveriesSnap, ridesSnap, parcelsSnap, incidentsSnap, vehiclesSnap, documentsSnap, queueItemsSnap] = await Promise.all([
       db.collection("drivers").limit(500).get(),
       db.collection("driverApplications").limit(500).get(),
       db.collection("driverPresence").limit(500).get(),
@@ -28,7 +28,8 @@ export async function GET(request) {
       db.collection("parcelJobs").limit(500).get(),
       db.collection("driverIncidents").limit(500).get(),
       db.collection("driverVehicles").limit(1000).get(),
-      db.collection("driverDocuments").limit(2000).get()
+      db.collection("driverDocuments").limit(2000).get(),
+      db.collection("adminQueueItems").limit(2000).get()
     ]);
 
     const drivers = docsData(driversSnap);
@@ -40,6 +41,7 @@ export async function GET(request) {
     const incidents = docsData(incidentsSnap).filter((item) => !["resolved", "closed"].includes(item.status));
     const vehicles = docsData(vehiclesSnap);
     const documents = docsData(documentsSnap);
+    const queueItems = docsData(queueItemsSnap).filter((item) => ["driver-applications", "driver-documents", "driver-vehicles"].includes(item.queue) && !["completed", "closed", "resolved", "approved", "rejected"].includes(String(item.status || "open")));
     const applicationMap = new Map(applications.map((item) => [item.userId || item.id, item]));
     const vehiclesByDriver = new Map();
     const documentsByDriver = new Map();
@@ -103,7 +105,8 @@ export async function GET(request) {
           vehicleType: selectedVehicle?.type || application.vehicle?.type || "car",
           documents: driverDocuments,
           application,
-          phase: "operational"
+          phase: "operational",
+          vehicleId: selectedVehicle?.id || ""
         })
       }));
       const readyCapabilities = readiness.filter((item) => item.ready).map((item) => item.capabilityId);
@@ -149,11 +152,32 @@ export async function GET(request) {
         work: workByDriver.get(item.id) || null,
         openIncidents: incidentCount.get(item.id) || 0
       }));
+    const queueDriverRow = (item) => {
+      const driverId = item.driverId || item.userId || item.entityId || "";
+      const driver = drivers.find((candidate) => candidate.id === driverId);
+      const application = applicationMap.get(driverId);
+      const vehicle = item.vehicleId ? vehicles.find((candidate) => candidate.id === item.vehicleId) : null;
+      return {
+        id: driverId,
+        queueItemId: item.id,
+        vehicleId: item.vehicleId || null,
+        documentId: item.documentId || null,
+        displayName: driver?.displayName || driver?.legalName || application?.legalName || "Driver applicant",
+        city: driver?.city || application?.city || "",
+        status: item.status || "open",
+        priority: item.priority || "normal",
+        title: item.title || item.subject || item.type || "Driver review",
+        detail: vehicle ? [vehicle.year, vehicle.make, vehicle.model, vehicle.registration].filter(Boolean).join(" ") : (item.description || "")
+      };
+    };
     const queues = {
       waitingOnDriver: applicantRows.filter((item) => ["application_started", "information_required"].includes(item.status)),
       waitingOnSpotly: applicantRows.filter((item) => ["application_submitted", "under_review"].includes(item.status)),
       readyForActivation: applicantRows.filter((item) => !["approved", "rejected"].includes(item.status) && item.readyCapabilities.length > 0),
       capabilityActivation: applicantRows.filter((item) => ["approved", "ready", "active"].includes(item.status) && item.activationReady.length > 0),
+      vehicleReviews: queueItems.filter((item) => item.queue === "driver-vehicles").map(queueDriverRow),
+      documentReviews: queueItems.filter((item) => item.queue === "driver-documents").map(queueDriverRow),
+      applicationReviews: queueItems.filter((item) => item.queue === "driver-applications").map(queueDriverRow),
       expiringDocuments: expiringDocumentRows,
       firstWeekDrivers: firstWeekRows
     };
@@ -174,7 +198,10 @@ export async function GET(request) {
         readyForActivation: queues.readyForActivation.length,
         capabilityActivation: queues.capabilityActivation.length,
         expiringDocuments: queues.expiringDocuments.length,
-        firstWeekDrivers: queues.firstWeekDrivers.length
+        firstWeekDrivers: queues.firstWeekDrivers.length,
+        vehicleReviews: queues.vehicleReviews.length,
+        documentReviews: queues.documentReviews.length,
+        applicationReviews: queues.applicationReviews.length
       },
       queues,
       drivers: rows,

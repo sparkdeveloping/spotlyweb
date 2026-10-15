@@ -1,0 +1,71 @@
+SPOTLY DRIVER V8 — ONBOARDING / VEHICLE REVIEW CORRECTIVE RELEASE
+Date: 2026-10-15
+
+PURPOSE
+This release corrects gaps found during hands-on Driver onboarding after the initial Driver V8 implementation.
+It is a complete Next.js project, not a patch.
+
+CORRECTIONS IMPLEMENTED
+1. Driver entry/authentication
+- driver.spotlyafrica.com now welcomes new applicants explicitly.
+- The unauthenticated gate says Start or continue your Driver application.
+- New users are told they can create a Spotly account during sign-in.
+- Driver branding is used on the gate and the public Driver acquisition page remains one click away.
+
+2. Zero-to-active application staging
+- Step 1 identity/contact can save before any vehicle fields exist.
+- Vehicle validation starts only after Work & vehicle has actually been completed.
+- Initial motor vehicle setup now collects ownership, registration, year, make and model.
+- Motorized work requires vehicle make/model and registration before continuing.
+- Driver licence is an explicit onboarding requirement where the selected vehicle/work requires it.
+- Licence, insurance and fitness evidence collect expiry information; reference numbers are supported.
+
+3. Add another vehicle
+- Replaced the old one-step vehicle creator with staged setup:
+  Vehicle & work -> Required evidence -> Review & submit.
+- Driver chooses the exact work capabilities requested for that vehicle.
+- Required evidence is derived from vehicle + work type.
+- Motorized vehicles cannot be submitted with only a registration string.
+- A vehicle stays setup_required until the evidence stage is complete; only final submission creates the Driver Operations review item.
+- A Driver can resume information_required/rejected setup rather than creating a duplicate.
+
+4. Vehicle/document authority
+- Registration, insurance and vehicle-fitness evidence are scoped to the exact vehicle ID.
+- One vehicle's papers cannot approve another vehicle.
+- Admin vehicle approval refuses to proceed until the exact required evidence is approved and current.
+- New vehicle work types merge into the Driver's requested capabilities so required training is not stranded.
+- Active Drivers can complete newly-required capability training from Account health.
+
+5. Admin Driver Operations
+- Admin Driver detail now renders every submitted vehicle, not only vehicles[0].
+- Each vehicle shows requested work, evidence, status and review reason.
+- Admin actions include Approve vehicle, Request setup and Reject vehicle.
+- The live Driver Network now contains Vehicle reviews and Document reviews queues.
+- The Admin Work inbox now surfaces driver-applications, driver-documents and driver-vehicles.
+- Driver queue items deep-link to Mobility with the exact Driver opened.
+- /mobility?driver=<id> now opens the Driver record automatically.
+- Previously-created pending vehicles remain visible; if they were submitted under the old incomplete flow, Ops can Request setup and the Driver resumes that same vehicle.
+
+VALIDATION EXECUTED
+- Complete project tests: 334 / 334 passed.
+- Dedicated Driver/Delivery/Ride/Send suites: 58 / 58 passed.
+- Driver V8 suite: 25 / 25 passed (included in the 58 dedicated tests).
+- JavaScript-only / React hook check: passed.
+- Theme safety: passed for 253 source files / 47 classified route patterns.
+- Launch/security static audit: passed for 108 API routes.
+- V7 full-platform implementation audit: 76 / 76 checks across all 39 themes.
+- Independent TypeScript parser syntax pass: 356 JS/JSX/MJS/CJS files; 0 parse diagnostics.
+
+DEPENDENCY / BUILD LIMITATION
+A fresh npm dependency restore could not complete in this sandbox.
+- npm ci --offline failed because lottie-web@5.12.2 is not cached.
+- online npm ci timed out at the container transport/network layer.
+Therefore ESLint and Next.js production build could not be freshly rerun because clean node_modules could not be restored.
+No partial node_modules or stale .next directory is included in this archive.
+
+REMAINING RELEASE GATE ON A MACHINE WITH NORMAL NPM ACCESS
+npm ci && npm run check
+
+NO DEPLOYMENT / SOURCE CONTROL
+- No GitHub push was performed.
+- No production deployment was performed.
