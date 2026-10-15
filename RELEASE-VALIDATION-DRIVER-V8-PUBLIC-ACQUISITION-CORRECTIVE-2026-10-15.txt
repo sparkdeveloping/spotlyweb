@@ -1,0 +1,75 @@
+SPOTLY DRIVER V8 — PUBLIC ACQUISITION CORRECTIVE RELEASE
+Date: 2026-10-15
+
+PURPOSE
+This release corrects the remaining unauthenticated Driver acquisition gap found during live visual review after the Driver onboarding / vehicle-review corrective release.
+It is a complete Next.js project, not a patch.
+
+WHAT WAS WRONG
+- driver.spotlyafrica.com root still behaved like a workspace authentication wall for signed-out visitors.
+- Spotly Business already sold the product before sign-in, while Driver asked a brand-new applicant to authenticate before explaining why they should drive with Spotly.
+- The separate spotlyafrica.com/drive marketing page and the Driver subdomain root were not the same acquisition experience.
+- The eligibility planner CTA targeted the Driver root, which would become a loop once the Driver root became public marketing.
+
+CORRECTIONS IMPLEMENTED
+1. Driver root is now a public acquisition product
+- Signed-out visitors at driver.spotlyafrica.com root receive a full Spotly Driver marketing homepage.
+- Authenticated Drivers still receive the live Driver workspace on the same root.
+- Protected Driver deep links remain authentication-gated.
+
+2. Business-V8-level acquisition structure
+- Sticky Spotly Driver navigation with Ways to earn, How it works, What you need and What you get.
+- Hero sells the actual Driver proposition before account creation.
+- Primary Start driving / Start my Driver application actions.
+- Existing Drivers retain a clear Sign in path.
+- Interactive sample Driver offer preview shows work type, illustrative pay, pickup distance, work distance, total time and GPS dispatchability.
+- Explicit prepared delivery, Shop & Deliver, Ride and Send work-type explanations.
+- Zero-to-active onboarding explanation from eligibility through activation and going online.
+- Public eligibility planner embedded before account creation.
+- Driver field-work value section for offer transparency, active-job clarity, safety and Driver Money.
+- Strong final conversion CTA and Driver-branded footer.
+
+3. Consistent public entry points
+- spotlyafrica.com/drive now renders the same DriverMarketingPage as the signed-out Driver subdomain root.
+- The public Driver root is indexable and has a canonical driver.spotlyafrica.com URL.
+- Non-root Driver workspace routes remain protected by the existing Driver layout/auth flow.
+
+4. Application handoff correctness
+- The eligibility planner now accepts the actual application/sign-in entry URL.
+- “Start with this plan” enters the Driver authentication/application handoff instead of linking back to the public Driver root.
+- Signed-out protected Driver deep links use a focused sign-in message; the root itself is no longer a login card.
+
+PREVIOUS DRIVER CORRECTIVE WORK RETAINED
+- Vehicle/capability-aware zero-to-active onboarding.
+- Full additional-vehicle evidence workflow.
+- Driver licence and vehicle evidence requirements where applicable.
+- Vehicle-specific document authority.
+- Admin Vehicle reviews / Document reviews / Driver application queues.
+- Exact Driver deep links from Admin Work and Mobility.
+- Existing pending vehicles can be sent back for setup instead of becoming stranded.
+
+VALIDATION EXECUTED — PASSED
+1. npm run check:js
+   JavaScript-only and React-hook import checks passed.
+2. npm run check:theme
+   Theme safety passed for 254 source files and 47 classified route patterns.
+3. npm run audit:launch
+   Launch readiness static audit passed across 108 API routes.
+4. npm run audit:v7-ui
+   76 / 76 implementation checks passed across all 39 audit themes.
+5. npm test
+   334 / 334 complete project tests passed.
+6. Driver V8 production suite
+   25 / 25 passed, including the public Driver-root acquisition contract.
+7. Independent TypeScript parser syntax pass
+   367 JS/JSX/MJS files parsed; 0 syntax diagnostics.
+
+DEPENDENCY / BUILD ENVIRONMENT LIMITATION
+The provided source archive intentionally contains no node_modules or stale .next output. As in the prior corrective release, this sandbox does not have the full npm dependency set restored, so fresh ESLint and Next.js production build are not claimed here.
+
+Required final release gate on a machine with normal npm registry access:
+  npm ci && npm run check
+
+NO DEPLOYMENT / SOURCE CONTROL
+- No GitHub push performed.
+- No production deployment performed.

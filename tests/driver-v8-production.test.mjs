@@ -132,16 +132,20 @@ test("Admin cannot activate a Driver capability without current requirements", a
 });
 
 test("public Driver acquisition includes a personalized eligibility planner and no fake shift promise", async () => {
-  const [page, planner, portals] = await Promise.all([
+  const [page, marketing, planner, portals] = await Promise.all([
     read("app/drive/page.js"),
+    read("components/driver/driver-marketing.js"),
     read("components/driver/eligibility-planner.js"),
     read("data/portals.js"),
   ]);
-  assert.match(page, /DriverEligibilityPlanner/);
+  assert.match(page, /DriverMarketingPage/);
+  assert.match(marketing, /DriverEligibilityPlanner/);
+  assert.match(marketing, /Check before creating an account/);
   assert.match(planner, /City/);
   assert.match(planner, /vehicle/);
   assert.match(planner, /documentRequirementsFor/);
   assert.match(planner, /trainingRequirementsFor/);
+  assert.match(planner, /entryHref/);
   const driverStart = portals.indexOf('id: "driver"');
   const driverBlock = portals.slice(driverStart, driverStart + 2200);
   assert.doesNotMatch(driverBlock, /shifts/i);
@@ -238,12 +242,22 @@ test("precise live Driver network access is limited to operational roles", async
   assert.doesNotMatch(analyticsLine, /mobility/);
 });
 
-test("Driver auth gate welcomes brand-new applicants instead of implying an existing workspace account", async () => {
-  const source = await read("components/auth-gate.js");
-  assert.match(source, /Start or continue your Driver application/);
-  assert.match(source, /create one during sign-in/);
-  assert.match(source, /spotly-driver\.svg/);
-  assert.match(source, /Learn about driving with Spotly/);
+test("Driver root sells the Driver product before asking a brand-new applicant to sign in", async () => {
+  const [auth, marketing, page] = await Promise.all([
+    read("components/auth-gate.js"),
+    read("components/driver/driver-marketing.js"),
+    read("app/driver/page.js"),
+  ]);
+  assert.match(auth, /DriverMarketingPage/);
+  assert.match(auth, /portal === "driver" && isDriverLanding/);
+  assert.match(marketing, /Move Zimbabwe\. Earn on work that fits you\./);
+  assert.match(marketing, /Start my Driver application/);
+  assert.match(marketing, /Ways to earn/);
+  assert.match(marketing, /From curious to active/);
+  assert.match(marketing, /DriverEligibilityPlanner/);
+  assert.match(marketing, /Sample offer · illustrative/);
+  assert.match(page, /robots: \{ index: true, follow: true \}/);
+  assert.match(page, /driver\.spotlyafrica\.com/);
 });
 
 test("zero-to-active onboarding can save identity before vehicle setup and collects full motor vehicle details", async () => {
