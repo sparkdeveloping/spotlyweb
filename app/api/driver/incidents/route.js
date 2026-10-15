@@ -8,7 +8,7 @@ const schema = z.object({
   deliveryJobId: z.string().max(180).optional(),
   rideId: z.string().max(180).optional(),
   parcelJobId: z.string().max(180).optional(),
-  category: z.enum(["safety", "breakdown", "customer_unreachable", "business_problem", "customer_problem", "order_damaged", "address_problem", "other"]),
+  category: z.enum(["safety", "crash", "unsafe_person", "breakdown", "customer_unreachable", "business_problem", "merchant_closed", "customer_problem", "order_damaged", "address_problem", "ride_no_show", "parcel_mismatch", "checkout_problem", "return_required", "other"]),
   description: z.string().min(3).max(2000),
   severity: z.enum(["low", "medium", "high", "critical"]).default("medium")
 }).refine((value) => [value.deliveryJobId, value.rideId, value.parcelJobId].filter(Boolean).length <= 1, { message: "Attach only one active job." });

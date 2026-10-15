@@ -108,16 +108,16 @@ export const portals = {
     accentStrong: "#1D4ED8",
     accentSoft: "#EAF1FF",
     darkAccent: "#60A5FA",
-    description: "Manage offers, active jobs, shifts, and earnings.",
+    description: "Get ready, go online, complete work safely, and understand your earnings.",
     nav: [
       { id: "home", label: "Home", icon: House, href: "/" },
-      { id: "jobs", label: "Jobs", icon: ListChecks, href: "/jobs" },
+      { id: "jobs", label: "Work", icon: ListChecks, href: "/jobs" },
       { id: "active", label: "Active job", icon: MapPinned, href: "/active" },
       { id: "earnings", label: "Earnings", icon: BadgeDollarSign, href: "/earnings" },
-      { id: "history", label: "History", icon: PackageCheck, href: "/history" },
+      { id: "history", label: "Activity", icon: PackageCheck, href: "/history" },
       { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications" },
-      { id: "support", label: "Safety & support", icon: LifeBuoy, href: "/support" },
-      { id: "profile", label: "Profile", icon: CircleUserRound, href: "/profile" }
+      { id: "support", label: "Safety", icon: LifeBuoy, href: "/support" },
+      { id: "profile", label: "Account", icon: CircleUserRound, href: "/profile" }
     ]
   },
   admin: {

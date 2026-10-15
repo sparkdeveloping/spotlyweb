@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { docsData, docData, operationalEligibility, notifyUsers } from "@/lib/driver-delivery-server";
+import { DRIVER_CAPABILITIES, capabilityRequirements, capabilitySummary, normalizeCapabilities } from "@/lib/driver-capabilities";
 import { driverBalanceAccountId, sanitizeDriverBalance } from "@/lib/driver-money-server";
 import { safeText } from "@/lib/server-helpers";
 
@@ -9,21 +10,25 @@ export const runtime = "nodejs";
 const ADMIN_ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager", "driver_operations_coordinator", "risk_compliance_officer", "finance_admin"];
 const schema = z.object({
   driverId: z.string().min(1).max(180),
-  action: z.enum(["approve", "request_information", "reject", "suspend", "reinstate", "compliance_hold", "clear_compliance_hold", "safety_hold", "clear_safety_hold", "approve_document", "reject_document", "approve_vehicle", "verify_payout_account", "reject_payout_account", "end_session"]),
-  reason: z.string().max(1000).optional(), documentId: z.string().max(180).optional(), vehicleId: z.string().max(180).optional()
+  action: z.enum(["approve", "request_information", "reject", "suspend", "reinstate", "compliance_hold", "clear_compliance_hold", "safety_hold", "clear_safety_hold", "approve_document", "reject_document", "approve_vehicle", "verify_payout_account", "reject_payout_account", "end_session", "set_capability"]),
+  reason: z.string().max(1000).optional(), documentId: z.string().max(180).optional(), vehicleId: z.string().max(180).optional(),
+  capabilityId: z.enum(Object.keys(DRIVER_CAPABILITIES)).optional(), capabilityStatus: z.enum(["active", "in_review", "requirements_incomplete", "temporarily_blocked", "removed"]).optional()
 });
 
 async function loadDriverBundle(db, driverId) {
-  const [application, driver, vehicles, documents, presence, jobs, earnings, payouts, incidents, payoutAccount, usdBalance, zwgBalance] = await Promise.all([
+  const [application, driver, vehicles, documents, presence, jobs, rides, parcels, earnings, payouts, incidents, payoutAccount, usdBalance, zwgBalance] = await Promise.all([
     db.collection("driverApplications").doc(driverId).get(), db.collection("drivers").doc(driverId).get(),
     db.collection("driverVehicles").where("driverId", "==", driverId).limit(20).get(), db.collection("driverDocuments").where("driverId", "==", driverId).limit(100).get(),
     db.collection("driverPresence").doc(driverId).get(), db.collection("deliveryJobs").where("assignedDriverId", "==", driverId).limit(100).get(),
+    db.collection("rideTrips").where("assignedDriverId", "==", driverId).limit(100).get(), db.collection("parcelJobs").where("assignedDriverId", "==", driverId).limit(100).get(),
     db.collection("driverEarningsLedger").where("driverId", "==", driverId).limit(250).get(), db.collection("driverPayouts").where("driverId", "==", driverId).limit(100).get(),
     db.collection("driverIncidents").where("driverId", "==", driverId).limit(100).get(),
     db.collection("driverPayoutAccounts").doc(driverId).get(), db.collection("driverBalanceAccounts").doc(driverBalanceAccountId(driverId, "USD")).get(), db.collection("driverBalanceAccounts").doc(driverBalanceAccountId(driverId, "ZWG")).get()
   ]);
-  const bundle = { application: docData(application), driver: docData(driver), vehicles: docsData(vehicles), documents: docsData(documents), presence: docData(presence), jobs: docsData(jobs), earnings: docsData(earnings), payouts: docsData(payouts), incidents: docsData(incidents), payoutAccount: payoutAccount.exists ? { ...docData(payoutAccount), identifierEncrypted: undefined } : null, balances: { USD: usdBalance.exists ? sanitizeDriverBalance(usdBalance.data()) : null, ZWG: zwgBalance.exists ? sanitizeDriverBalance(zwgBalance.data()) : null } };
-  bundle.eligibility = operationalEligibility({ driver: bundle.driver, vehicle: bundle.vehicles.find((item) => item.status === "approved") || bundle.vehicles[0], documents: bundle.documents, presence: bundle.presence });
+  const bundle = { application: docData(application), driver: docData(driver), vehicles: docsData(vehicles), documents: docsData(documents), presence: docData(presence), jobs: docsData(jobs), rides: docsData(rides), parcels: docsData(parcels), earnings: docsData(earnings), payouts: docsData(payouts), incidents: docsData(incidents), payoutAccount: payoutAccount.exists ? { ...docData(payoutAccount), identifierEncrypted: undefined } : null, balances: { USD: usdBalance.exists ? sanitizeDriverBalance(usdBalance.data()) : null, ZWG: zwgBalance.exists ? sanitizeDriverBalance(zwgBalance.data()) : null } };
+  const selectedVehicle = bundle.vehicles.find((item) => item.id === (bundle.presence?.vehicleId || bundle.driver?.selectedVehicleId)) || bundle.vehicles.find((item) => item.status === "approved") || bundle.vehicles[0];
+  bundle.eligibility = operationalEligibility({ driver: bundle.driver, application: bundle.application || {}, vehicle: selectedVehicle, documents: bundle.documents, presence: bundle.presence });
+  bundle.capabilities = capabilitySummary({ driver: bundle.driver || {}, application: bundle.application || {}, vehicle: selectedVehicle, documents: bundle.documents });
   return bundle;
 }
 
@@ -56,6 +61,7 @@ export async function POST(request) {
     if (payoutReview && !fullAdmin && !actorRoles.has("finance_admin") && !actorRoles.has("operations_manager")) throw Object.assign(new Error("Your role cannot review Driver payout destinations."), { status: 403 });
     const reason = safeText(body.reason || "", 1000);
     if (["request_information", "reject", "suspend", "compliance_hold", "safety_hold", "reject_document", "reject_payout_account"].includes(body.action) && reason.length < 3) throw Object.assign(new Error("Add a clear reason for this action."), { status: 400 });
+    if (body.action === "set_capability" && ["temporarily_blocked", "removed"].includes(body.capabilityStatus) && reason.length < 3) throw Object.assign(new Error("Add a reason for blocking or removing this work type."), { status: 400 });
     const { db, messaging, auth } = getAdminServices();
     const appRef = db.collection("driverApplications").doc(body.driverId);
     const driverRef = db.collection("drivers").doc(body.driverId);
@@ -70,13 +76,21 @@ export async function POST(request) {
         db.collection("driverVehicles").where("driverId", "==", body.driverId).limit(10).get(),
         db.collection("driverDocuments").where("driverId", "==", body.driverId).limit(50).get()
       ]);
-      const approvedVehicle = vehicleQuery.docs.some((item) => item.data().status === "approved");
-      const approvedTypes = new Set(docsQuery.docs.filter((item) => item.data().status === "approved").map((item) => item.data().type));
-      if (!approvedVehicle || !approvedTypes.has("identity") || !approvedTypes.has("licence")) throw Object.assign(new Error("Approve the Driver vehicle, identification and licence before approving the application."), { status: 409 });
+      const vehicles = vehicleQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
+      const vehicle = vehicles.find((item) => item.status === "approved") || null;
+      const documents = docsQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
+      if (!vehicle) throw Object.assign(new Error("Approve at least one Driver vehicle before activating work."), { status: 409 });
+      const requested = normalizeCapabilities(app.requestedCapabilities || [], vehicle.type);
+      const capabilityStates = {};
+      for (const capabilityId of requested) {
+        const readiness = capabilityRequirements({ capabilityId, vehicleType: vehicle.type, documents, application: app, phase: "operational" });
+        capabilityStates[capabilityId] = readiness.ready ? { status: "active", activatedAt: new Date().toISOString(), approvedBy: actor.uid } : { status: "requirements_incomplete", approvedBy: actor.uid };
+      }
+      if (!Object.values(capabilityStates).some((value) => value.status === "active")) throw Object.assign(new Error("No requested work type is ready yet. Approve the required documents and training for at least one work type."), { status: 409 });
       updates.status = "approved"; updates.approvedAt = now; updates.reviewedBy = actor.uid;
       const batch = db.batch();
       batch.set(appRef, updates, { merge: true });
-      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", city: app.city || "Harare", zoneIds: app.preferredZones || [], status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
+      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", city: app.city || "Harare", zoneIds: app.preferredZones || [], requestedCapabilities: requested, capabilities: capabilityStates, selectedVehicleId: vehicle.id, status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
       batch.set(db.collection("adminQueueItems").doc(`driver_application_${body.driverId}`), { status: "completed", completedAt: now, completedBy: actor.uid, updatedAt: now }, { merge: true });
       await batch.commit();
     } else if (body.action === "request_information") await appRef.set({ status: "information_required", reviewReason: reason, reviewedBy: actor.uid, updatedAt: now }, { merge: true });
@@ -101,9 +115,31 @@ export async function POST(request) {
       const ref = db.collection("driverVehicles").doc(body.vehicleId); const snap = await ref.get();
       if (!snap.exists || snap.data().driverId !== body.driverId) throw Object.assign(new Error("The Driver vehicle was not found."), { status: 404 });
       await ref.set({ status: "approved", reviewedAt: now, reviewedBy: actor.uid, updatedAt: now }, { merge: true });
-    } else if (body.action === "end_session") await db.collection("driverPresence").doc(body.driverId).set({ online: false, availabilityState: "offline", currentJobId: null, currentLocation: null, updatedAt: now }, { merge: true });
+    } else if (body.action === "set_capability") {
+      if (!body.capabilityId || !body.capabilityStatus) throw Object.assign(new Error("Choose a work type and status."), { status: 400 });
+      const driverSnap = await driverRef.get();
+      if (!driverSnap.exists) throw Object.assign(new Error("Approve the Driver account before changing work types."), { status: 409 });
+      const current = driverSnap.data();
+      if (body.capabilityStatus === "active") {
+        const [vehiclesQuery, docsQuery] = await Promise.all([
+          db.collection("driverVehicles").where("driverId", "==", body.driverId).limit(20).get(),
+          db.collection("driverDocuments").where("driverId", "==", body.driverId).limit(100).get()
+        ]);
+        const vehicles = vehiclesQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
+        const selectedVehicle = vehicles.find((item) => item.id === current.selectedVehicleId && item.status === "approved") || vehicles.find((item) => item.status === "approved") || null;
+        if (!selectedVehicle) throw Object.assign(new Error("Approve a compatible Driver vehicle before activating this work type."), { status: 409 });
+        const documents = docsQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
+        const readiness = capabilityRequirements({ capabilityId: body.capabilityId, vehicleType: selectedVehicle.type, documents, application: app, phase: "operational" });
+        if (!readiness.ready) {
+          const missing = readiness.checks.filter((item) => !item.ok).map((item) => item.label).join(", ");
+          throw Object.assign(new Error(`This work type is not ready yet${missing ? `: ${missing}` : "."}`), { status: 409 });
+        }
+      }
+      const capabilities = { ...(current.capabilities || {}), [body.capabilityId]: { status: body.capabilityStatus, reason: reason || null, updatedBy: actor.uid, updatedAt: new Date().toISOString(), ...(body.capabilityStatus === "active" ? { activatedAt: new Date().toISOString() } : {}) } };
+      await driverRef.set({ capabilities, updatedAt: now }, { merge: true });
+    } else if (body.action === "end_session") await db.collection("driverPresence").doc(body.driverId).set({ online: false, availabilityState: "offline", currentJobId: null, currentWorkType: null, currentLocation: null, updatedAt: now }, { merge: true });
 
-    await auditRef.set({ actorId: actor.uid, action: `driver.${body.action}`, entityType: "driver", entityId: body.driverId, reason, metadata: { documentId: body.documentId || null, vehicleId: body.vehicleId || null }, source: "admin_driver_operations", createdAt: now });
+    await auditRef.set({ actorId: actor.uid, action: `driver.${body.action}`, entityType: "driver", entityId: body.driverId, reason, metadata: { documentId: body.documentId || null, vehicleId: body.vehicleId || null, capabilityId: body.capabilityId || null, capabilityStatus: body.capabilityStatus || null }, source: "admin_driver_operations", createdAt: now });
     const notices = {
       approve: ["You're approved to drive with Spotly", "Your Driver application is approved. Open Spotly Driver to finish setup and go online."],
       request_information: ["Spotly needs more information", reason || "Open your Driver application to see what needs your attention."],

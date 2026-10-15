@@ -1,0 +1,49 @@
+Spotly Driver V8 — Release Validation
+Date: 2026-10-15
+
+SOURCE / RELEASE RULES
+- Full Spotly Next.js project preserved; this is not a patch.
+- No GitHub push performed.
+- No production deployment performed.
+- Existing Customer, Marketplace, Business, Admin, Staff and Careers work retained.
+- Driver V8 audit retained at docs/SPOTLY-DRIVER-V8-FULL-PRODUCTION-AUDIT-2026-10-15.md.
+
+IMPLEMENTED DRIVER V8 RELEASE HIGHLIGHTS
+- Capability-aware Driver lifecycle: prepared delivery, Shop & Deliver, Send, passenger Ride, bulky delivery.
+- Vehicle-aware requirements; bicycle applications no longer inherit motor-vehicle registration/licence requirements.
+- Activation Centre with owner-aware review states and dedicated rejected/suspended/offboarding states.
+- Versioned, capability-specific Driver training with comprehension checks.
+- Session-selected approved vehicle and work-type preferences used by dispatch.
+- Unified capability/document/vehicle eligibility for dispatch and offer acceptance.
+- Merchant delivery pickup-radius control and total-work estimates.
+- Prepared delivery vs Shop & Deliver offer/workflow distinction.
+- Customer-approved Shop & Deliver substitutions and merchant checkout authorization.
+- Structured Ride/Delivery/Send exceptions with wait windows and Admin queueing.
+- GPS/location health visible to Driver.
+- Driver Money includes Send and supports USD/ZWG views plus payout maintenance.
+- Active Driver document renewals and additional vehicle approval without resetting onboarding.
+- Safety toolkit with urgent Spotly escalation, job/location sharing and trusted contact support.
+- Admin live Driver network map, active Ride/Delivery/Send drill-down, activation/compliance queues and capability controls.
+- Precise Driver-network access restricted to operational/risk/admin roles.
+
+EXECUTED VALIDATION — PASSED
+1. npm run check:js
+   JavaScript-only and React-hook import checks passed.
+2. npm run check:theme
+   Theme safety passed for 253 source files and 47 classified route patterns.
+3. npm run audit:launch
+   Launch readiness static audit passed across 108 API routes.
+4. npm run audit:v7-ui
+   76 / 76 implementation checks passed across all 39 audit themes.
+5. npm test
+   328 / 328 project tests passed.
+6. Independent JavaScript/JSX/MJS parser pass
+   366 files parsed; 0 syntax diagnostics.
+
+DEPENDENCY / BUILD ENVIRONMENT LIMITATION
+A clean npm dependency restoration was attempted repeatedly. The sandbox could not resolve registry.npmjs.org and npm returned EAI_AGAIN for package tarballs. Because node_modules could not be restored, fresh `npm run lint` and `npm run build` could not be executed in this environment. They are therefore NOT claimed as passed.
+
+Required final release gate on a machine with npm registry access:
+  npm ci && npm run check
+
+This limitation is environmental, not a substituted or hidden validation result. No stale .next output or partial node_modules is included in the archive.

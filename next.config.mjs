@@ -6,7 +6,7 @@ const cspReportOnly = [
   "img-src 'self' data: blob: https://images.unsplash.com https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://yt3.googleusercontent.com",
   "font-src 'self' data:",
   "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.paynow.co.zw https://paynow.co.zw https://firebaseappcheck.googleapis.com https://www.google.com https://www.recaptcha.net https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com",
-  "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com https://www.recaptcha.net https://*.paynow.co.zw https://paynow.co.zw",
+  "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com https://www.recaptcha.net https://*.paynow.co.zw https://paynow.co.zw https://www.openstreetmap.org",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

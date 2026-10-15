@@ -79,6 +79,11 @@ function lineFromProduct(snapshot, body, quantity) {
       name: safeText(product.name, 160),
       sku: product.sku || "",
       image: product.image || "",
+      brand: safeText(product.brand || "", 120),
+      variant: safeText(product.variant || "", 120),
+      packSize: safeText(product.packSize || "", 120),
+      gtin: safeText(product.gtin || product.barcode || "", 80),
+      unit: safeText(product.unit || "", 40),
       quantity,
       unitPrice,
       lineTotal: Number((unitPrice * quantity).toFixed(2)),
@@ -255,13 +260,22 @@ export async function POST(request) {
         const deliveryDistanceKm = haversineKm({ lat: Number(pickupLocation.lat), lng: Number(pickupLocation.lng) }, { lat: Number(body.delivery.lat), lng: Number(body.delivery.lng) });
         const deliveryRadiusKm = Number(branchData.delivery?.radiusKm || 0);
         if (deliveryRadiusKm > 0 && deliveryDistanceKm > deliveryRadiusKm) throw Object.assign(new Error(`This address is outside this location's ${deliveryRadiusKm} km delivery area.`), { status: 422 });
+        const businessArchetype = safeText(currentBusiness?.businessType || currentBusiness?.archetype || currentBusiness?.category || "", 80);
+        const operatingProfile = {
+          type: driverShopping ? "grocery_shopping" : (businessArchetype.includes("restaurant") || businessArchetype.includes("food") ? "prepared_food" : businessArchetype.includes("grocery") ? "prepared_grocery" : "prepared_retail"),
+          archetype: businessArchetype || null,
+          chilled: Boolean(branchData.delivery?.chilledHandling),
+          fragile: Boolean(branchData.delivery?.fragileHandling),
+          bulky: Boolean(branchData.delivery?.bulkyHandling),
+          pickupPoint: safeText(branchData.delivery?.pickupPoint || "", 160) || null
+        };
         transaction.create(deliveryRef, {
           number: deliveryNumber, orderId: orderRef.id, businessId: body.businessId, branchId: body.branchId, customerId: user.uid, state: "awaiting_dispatch",
           pickup: { lat: Number(pickupLocation?.lat), lng: Number(pickupLocation?.lng), formattedAddress: branchData.address || "", area: branchData.area || branchData.city || "Harare", instructions: safeText(branchData.delivery?.pickupInstructions || branchData.instructions || "", 1000) },
           dropoff: { lat: body.delivery.lat, lng: body.delivery.lng, formattedAddress: safeText(body.delivery.address, 500), suburb: safeText(body.delivery.suburb, 120), landmark: safeText(body.delivery.landmark, 240), instructions: safeText(body.delivery.instructions, 500) },
-          fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared",
+          fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", operatingProfile, deliveryDistanceKm: Number(deliveryDistanceKm.toFixed(1)),
           businessPreparationMinutes: driverShopping ? 0 : Number(branchData.delivery?.preparationMinutes || 20), shoppingMinutes: driverShopping ? Number(branchData.delivery?.preparationMinutes || 30) : 0, requiredVehicleTypes: branchData.delivery?.vehicleTypes || ["motorcycle", "car"],
-          shopping: driverShopping ? { state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), substitutionPreference: normalizedSubstitution, items: lines.map((line) => ({ productId: line.productId, name: line.name, requestedQuantity: line.quantity, estimatedUnitPrice: line.unitPrice, status: "pending", actualQuantity: 0, actualUnitPrice: 0, replacementName: "" })) } : null,
+          shopping: driverShopping ? { state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), substitutionPreference: normalizedSubstitution, items: lines.map((line) => ({ productId: line.productId, name: line.name, image: line.image || "", sku: line.sku || "", brand: line.brand || "", variant: line.variant || "", packSize: line.packSize || "", gtin: line.gtin || "", unit: line.unit || "", requestedQuantity: line.quantity, estimatedUnitPrice: line.unitPrice, substitutionAllowed: line.substitutionAllowed !== false, status: "pending", actualQuantity: 0, actualUnitPrice: 0, replacementName: "" })) } : null,
           quotedDriverPay: Number(Math.max(1, Number(branchData.delivery?.driverPay ?? settings.commerce?.defaultDriverPay ?? Math.max(2.5, deliveryFee * 0.7))).toFixed(2)), currency: body.currency,
           pickupCode, customerPin, bagCount: 1, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
         });
