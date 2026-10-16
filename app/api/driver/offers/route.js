@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { appendAudit, appendDeliveryEvent, deliveryTransitionAllowed, dispatchDelivery, notifyUsers, operationalEligibility, workCapability } from "@/lib/driver-delivery-server";
+import { appendAudit, appendDeliveryEvent, deliveryTransitionAllowed, dispatchDelivery, notifyUsers } from "@/lib/driver-delivery-server";
 
 export const runtime = "nodejs";
 const schema = z.object({ offerId: z.string().min(3).max(180), action: z.enum(["view", "accept", "decline"]) });
@@ -42,22 +42,13 @@ export async function POST(request) {
       if (!deliveryTransitionAllowed(job.state, "driver_assigned") && job.state !== "awaiting_dispatch") throw Object.assign(new Error("This delivery can no longer be assigned."), { status: 409 });
       const presenceRef = db.collection("driverPresence").doc(user.uid);
       const driverRef = db.collection("drivers").doc(user.uid);
-      const applicationRef = db.collection("driverApplications").doc(user.uid);
-      const vehicleRef = offer.vehicleId ? db.collection("driverVehicles").doc(offer.vehicleId) : null;
-      const docsQuery = db.collection("driverDocuments").where("driverId", "==", user.uid).limit(50);
-      const [presenceSnap, driverSnap, applicationSnap, vehicleSnap, docsSnap] = await Promise.all([
-        transaction.get(presenceRef), transaction.get(driverRef), transaction.get(applicationRef), vehicleRef ? transaction.get(vehicleRef) : Promise.resolve(null), transaction.get(docsQuery)
-      ]);
+      const [presenceSnap, driverSnap] = await Promise.all([transaction.get(presenceRef), transaction.get(driverRef)]);
       const currentDriver = driverSnap.exists ? driverSnap.data() : null;
-      const presence = presenceSnap.exists ? presenceSnap.data() : null;
-      const vehicle = vehicleSnap?.exists ? { id: vehicleSnap.id, ...vehicleSnap.data() } : null;
-      const documents = docsSnap.docs.map((item) => ({ id: item.id, ...item.data() }));
-      const capability = workCapability("delivery", job.fulfilmentMode || "merchant_prepared");
-      const eligibility = operationalEligibility({ driver: currentDriver, application: applicationSnap.exists ? applicationSnap.data() : {}, vehicle, documents, presence, capability, requiredVehicleTypes: job.requiredVehicleTypes || [] });
-      if (!presence?.online || !eligibility.eligible) throw Object.assign(new Error("Your Driver account, vehicle or work approval changed before this offer was accepted."), { status: 409, blockers: eligibility.checks.filter((item) => !item.ok) });
+      if (!currentDriver || !["approved", "ready", "active"].includes(currentDriver.status) || currentDriver.complianceHold || currentDriver.safetyHold || currentDriver.suspendedAt) throw Object.assign(new Error("Your Driver account is not currently eligible to accept deliveries."), { status: 409 });
+      if (!presenceSnap.exists || presenceSnap.data().online !== true || presenceSnap.data().currentJobId) throw Object.assign(new Error("You must be online and free to accept this delivery."), { status: 409 });
       transaction.set(offerRef, { state: "accepted", acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       transaction.set(jobRef, { state: "driver_assigned", assignedDriverId: user.uid, assignedAt: FieldValue.serverTimestamp(), acceptedDriverPay: Number(offer.pay ?? job.quotedDriverPay ?? 0), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      transaction.set(presenceRef, { currentJobId: jobId, currentWorkType: job.fulfilmentMode === "driver_shops" ? "shop_and_deliver" : "delivery", availabilityState: job.fulfilmentMode === "driver_shops" ? "shopping" : "on_delivery", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      transaction.set(presenceRef, { currentJobId: jobId, availabilityState: "on_delivery", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await appendDeliveryEvent(transaction, db, { jobId, orderId: job.orderId, type: "offer.accepted", actorType: "driver", actorId: user.uid, previousState: job.state, state: "driver_assigned", metadata: { offerId: body.offerId, pay: Number(offer.pay ?? job.quotedDriverPay ?? 0) } });
       await appendAudit(transaction, db, { actorId: user.uid, action: "delivery.offer.accepted", entityType: "deliveryJob", entityId: jobId, metadata: { offerId: body.offerId } });
       notification = { businessId: job.businessId, customerId: job.customerId, number: job.number };

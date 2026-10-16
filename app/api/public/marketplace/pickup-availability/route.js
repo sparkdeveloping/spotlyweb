@@ -1,10 +1,14 @@
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { pickupAvailability } from "@/lib/pickup-availability";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
-import { marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
 
+function isLiveBusiness(data = {}) {
+  const status = String(data.status || "").toLowerCase();
+  const lifecycle = String(data.lifecycleStatus || "").toLowerCase();
+  return data.public === true && status !== "archived" && !data.canonicalBusinessId && (["active", "paused"].includes(status) || ["live", "paused"].includes(lifecycle));
+}
 
 export async function GET(request) {
   try {
@@ -23,7 +27,7 @@ export async function GET(request) {
       throw Object.assign(new Error("That location is not accepting public orders."), { status: 404 });
     }
     const businessSnapshot = await db.collection("businesses").doc(String(branch.businessId || "")).get();
-    if (!businessSnapshot.exists || !marketplaceTrust(businessSnapshot.data()).commerceVerified) {
+    if (!businessSnapshot.exists || !isLiveBusiness(businessSnapshot.data())) {
       throw Object.assign(new Error("This business is not currently available in the marketplace."), { status: 404 });
     }
 

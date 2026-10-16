@@ -15,7 +15,7 @@ test("workspace settings use explicit valid destinations", () => {
   assert.equal(settingsRouteForWorkspace("business"), "/settings");
   assert.equal(settingsRouteForWorkspace("staff"), "/profile");
   assert.equal(settingsRouteForWorkspace("driver"), "/profile");
-  assert.equal(settingsRouteForWorkspace("admin"), "/system");
+  assert.equal(settingsRouteForWorkspace("admin"), "/platform");
 });
 
 test("plain customers do not receive an Admin workspace and explicit platform permissions do", () => {

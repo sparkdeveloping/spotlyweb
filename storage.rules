@@ -91,10 +91,6 @@ service firebase.storage {
       allow read: if signedIn() && (request.auth.uid == uid || platformAdmin() || hasPermission("drivers.read") || hasPermission("drivers.*") || hasPermission("support.read") || hasPermission("support.*"));
       allow write: if signedIn() && request.auth.uid == uid && safeImage();
     }
-    match /career-applications/{applicationId}/{allPaths=**} {
-      allow read, write: if false;
-    }
-
     match /{allPaths=**} { allow read, write: if false; }
   }
 }

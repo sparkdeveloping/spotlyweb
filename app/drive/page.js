@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Bike, CarFront, CheckCircle2, ChevronRight, MapPin, Package, ShieldCheck, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ServiceArtwork } from "@/components/service-artwork";
-import { DriverEligibilityPlanner } from "@/components/driver/eligibility-planner";
 import { spotlyPortalUrl } from "@/lib/spotly-domains";
 
 export const metadata = { title: "Drive and deliver with Spotly", description: "Apply to drive rides, deliveries and Send jobs with Spotly. See the route and expected earnings before you accept." };
@@ -51,14 +50,12 @@ export default function DrivePage() {
       </div>
     </section>
 
-    <section className="mx-auto max-w-[1320px] px-4 pt-14 sm:px-6 lg:px-8 lg:pt-16"><DriverEligibilityPlanner /></section>
-
     <section id="how-it-works" className="mx-auto max-w-[1320px] px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
       <div className="max-w-2xl"><p className="text-sm font-semibold text-driver">Three kinds of work. One Driver system.</p><h2 className="mt-2 text-3xl font-semibold tracking-[-.045em] sm:text-4xl">Take the work that fits your approval and vehicle.</h2></div>
       <div className="mt-9 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">{work.map(({ icon: Icon, title, text }, index) => <div key={title} className="grid gap-4 py-6 sm:grid-cols-[64px_180px_1fr_auto] sm:items-center"><span className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-[var(--driver-soft)] text-driver"><Icon className="h-5 w-5" /></span><h3 className="text-lg font-semibold">{title}</h3><p className="max-w-2xl text-sm leading-6 text-[var(--text-2)]">{text}</p><span className="text-xs font-semibold text-[var(--text-3)]">0{index + 1}</span></div>)}</div>
 
       <div className="mt-16 grid gap-8 lg:grid-cols-[.85fr_1.15fr] lg:items-start">
-        <div><p className="text-sm font-semibold text-driver">Built for a working shift</p><h2 className="mt-2 text-3xl font-semibold tracking-[-.045em]">The Driver app should answer the questions that decide your day.</h2><div className="mt-7 grid gap-3 text-lg font-semibold"><p>Can I work?</p><p>What is blocking me?</p><p>Which work types are active?</p><p>Is Spotly receiving my location?</p><p>Is there useful work nearby?</p><p>What do I do next?</p><p>Is anything about to stop me working?</p><p>How much have I earned?</p></div></div>
+        <div><p className="text-sm font-semibold text-driver">Built for a working shift</p><h2 className="mt-2 text-3xl font-semibold tracking-[-.045em]">The Driver app should answer four questions immediately.</h2><div className="mt-7 space-y-3 text-lg font-semibold"><p>Am I online?</p><p>Is there work?</p><p>What do I do next?</p><p>How much have I earned?</p></div></div>
         <div className="grid gap-x-8 border-t border-[var(--border-subtle)] sm:grid-cols-2">{benefits.map(([Icon,title,text]) => <div key={title} className="border-b border-[var(--border-subtle)] py-6"><Icon className="h-5 w-5 text-driver" /><h3 className="mt-4 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">{text}</p></div>)}</div>
       </div>
 

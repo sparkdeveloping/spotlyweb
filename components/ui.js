@@ -87,7 +87,7 @@ export function SectionCard({ title, description, action, children, className, v
 
 export function PageHeader({ eyebrow, title, description, actions, compact = false }) {
   return (
-    <div className="page-header flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
       <div className="max-w-3xl">
         {eyebrow && <p className="mb-2 text-xs font-semibold tracking-[0.08em] text-[var(--accent)]">{eyebrow}</p>}
         <h1 className={cn("font-semibold tracking-[-0.025em]", compact ? "text-3xl" : "text-[34px] leading-[1.08]")}>{title}</h1>

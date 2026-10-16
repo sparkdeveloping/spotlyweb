@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { notifyUsers, operationalEligibility } from "@/lib/driver-delivery-server";
+import { notifyUsers } from "@/lib/driver-delivery-server";
 import { appendParcelEvent, dispatchParcel } from "@/lib/parcel-server";
 
 export const runtime = "nodejs";
@@ -20,13 +20,9 @@ export async function POST(request) {
       if (!["offered", "viewed"].includes(offer.state)) throw Object.assign(new Error("This Send offer is no longer available."), { status: 409 });
       if (body.action === "decline") { transaction.set(offerRef, { state: "declined", declinedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); appendParcelEvent(transaction, db, { parcelJobId, type: "offer.declined", actorType: "driver", actorId: user.uid, state: parcel.state }); return; }
       if (parcel.state !== "searching_driver" || parcel.assignedDriverId) throw Object.assign(new Error("Another Driver already accepted this Send request."), { status: 409 });
-      const presenceRef = db.collection("driverPresence").doc(user.uid); const driverRef = db.collection("drivers").doc(user.uid);
-      const applicationRef = db.collection("driverApplications").doc(user.uid); const vehicleRef = offer.vehicleId ? db.collection("driverVehicles").doc(offer.vehicleId) : null; const docsRef = db.collection("driverDocuments").where("driverId", "==", user.uid).limit(50);
-      const [presenceSnap, driverSnap, applicationSnap, vehicleSnap, docsSnap] = await Promise.all([transaction.get(presenceRef), transaction.get(driverRef), transaction.get(applicationRef), vehicleRef ? transaction.get(vehicleRef) : Promise.resolve(null), transaction.get(docsRef)]);
-      const presence = presenceSnap.exists ? presenceSnap.data() : null; const driver = driverSnap.exists ? driverSnap.data() : null; const vehicle = vehicleSnap?.exists ? { id: vehicleSnap.id, ...vehicleSnap.data() } : null; const documents = docsSnap.docs.map((item) => ({ id: item.id, ...item.data() }));
-      if (presence?.online && presence.currentJobId) throw Object.assign(new Error("Your Driver is already handling another job."), { status: 409 });
-      const eligibility = operationalEligibility({ driver, application: applicationSnap.exists ? applicationSnap.data() : {}, vehicle, documents, presence, capability: "send", requiredVehicleTypes: parcel.requiredVehicleTypes || [] });
-      if (!presence?.online || !eligibility.eligible) throw Object.assign(new Error("Your Driver account, vehicle or Send approval changed before this offer was accepted."), { status: 409, blockers: eligibility.checks.filter((item) => !item.ok) });
+      const presenceRef = db.collection("driverPresence").doc(user.uid); const driverRef = db.collection("drivers").doc(user.uid); const [presenceSnap, driverSnap] = await Promise.all([transaction.get(presenceRef), transaction.get(driverRef)]); const presence = presenceSnap.exists ? presenceSnap.data() : null; const driver = driverSnap.exists ? driverSnap.data() : null;
+      if (!driver || !["approved", "ready", "active"].includes(driver.status) || driver.complianceHold || driver.safetyHold || driver.suspendedAt) throw Object.assign(new Error("Your Driver account is not currently eligible to accept Send work."), { status: 409 });
+      if (!presence?.online || presence.currentJobId) throw Object.assign(new Error("You must be online and free to accept this Send request."), { status: 409 });
       const now = FieldValue.serverTimestamp(); transaction.set(offerRef, { state: "accepted", acceptedAt: now, updatedAt: now }, { merge: true });
       transaction.set(parcelRef, { state: "driver_assigned", assignedDriverId: user.uid, assignedVehicleId: offer.vehicleId || null, assignedAt: now, acceptedDriverPay: Number(offer.pay ?? parcel.quote?.driverPay ?? 0), updatedAt: now }, { merge: true });
       if (parcel.orderId) transaction.set(db.collection("orders").doc(parcel.orderId), { assignedDriverId: user.uid, sendStatus: "driver_assigned", status: "accepted", updatedAt: now }, { merge: true });

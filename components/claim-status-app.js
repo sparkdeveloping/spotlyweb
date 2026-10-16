@@ -6,18 +6,17 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/firebase-provider";
 import { Badge, Button, Card, EmptyState, StatusBadge } from "@/components/ui";
 import { subscribeClaim } from "@/lib/firebase-services";
-import { spotlyPortalUrl } from "@/lib/spotly-domains";
 
 function dateLabel(value) { const date=value?.toDate?.()||(value?new Date(value):null);return date&&!Number.isNaN(date.getTime())?date.toLocaleString("en-ZW",{dateStyle:"medium",timeStyle:"short"}):"Not recorded"; }
 
-export function ClaimStatusApp({ claimId, businessJourney = false }) {
+export function ClaimStatusApp({ claimId }) {
   const { user, authReady } = useAuth();
   const [claim, setClaim] = useState(null);
   const [error, setError] = useState("");
   useEffect(()=>claimId?subscribeClaim(claimId,setClaim,()=>setError("This request could not be loaded.")):undefined,[claimId]);
   if(!authReady)return <main className="min-h-screen bg-grouped p-8 text-center text-secondary">Loading request…</main>;
-  if(!user?.uid||user.isAnonymous)return <main className="min-h-screen bg-grouped px-4 py-20"><EmptyState icon={ShieldCheck} title="Sign in to track this request" description="Business requests are visible only to the account that submitted them." action={<Button asChild><Link href={`/login?portal=business&next=${encodeURIComponent(businessJourney ? `/claim-status/${claimId}` : `/claim/status/${claimId}`)}`}>Sign in</Link></Button>} /></main>;
-  if(error)return <main className="min-h-screen bg-grouped px-4 py-20"><EmptyState icon={HelpCircle} title="Request unavailable" description={error} action={<Button asChild><Link href={businessJourney ? spotlyPortalUrl("business", "/support?topic=business-claim") : "/support?topic=business-claim"}>Contact support</Link></Button>} /></main>;
+  if(!user?.uid||user.isAnonymous)return <main className="min-h-screen bg-grouped px-4 py-20"><EmptyState icon={ShieldCheck} title="Sign in to track this request" description="Business requests are visible only to the account that submitted them." action={<Button asChild><Link href={`/login?portal=business&next=${encodeURIComponent(`/claim/status/${claimId}`)}`}>Sign in</Link></Button>} /></main>;
+  if(error)return <main className="min-h-screen bg-grouped px-4 py-20"><EmptyState icon={HelpCircle} title="Request unavailable" description={error} action={<Button asChild><Link href="/support?topic=business-claim">Contact support</Link></Button>} /></main>;
   if(!claim)return <main className="min-h-screen bg-grouped p-8 text-center text-secondary">Loading request…</main>;
   if(claim.applicantId&&claim.applicantId!==user.uid)return <main className="min-h-screen bg-grouped px-4 py-20"><EmptyState icon={ShieldCheck} title="This request belongs to another account" description="Sign in with the account that submitted it or contact support." /></main>;
   const stages=[{label:"Submitted",done:true,date:claim.createdAt},{label:"Spotly review",done:["under_review","needs_information","approved","rejected"].includes(claim.status),date:claim.reviewStartedAt},{label:"Parent approval",done:claim.parentApprovalStatus==="approved"||claim.parentRequired===false,date:claim.parentReviewedAt,optional:!claim.parentRequired},{label:"Decision",done:["approved","rejected"].includes(claim.status),date:claim.reviewedAt}];

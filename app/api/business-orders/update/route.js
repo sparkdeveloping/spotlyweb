@@ -119,9 +119,6 @@ export async function POST(request) {
           body: note || `Your order is now ${String(nextStatus || fresh.status).replaceAll("_", " ")}.`,
           href: `/?view=activity&order=${body.orderId}`,
           category: "order",
-          workspace: "customer",
-          module: "orders",
-          eventType: "order.updated",
           read: false,
           createdAt: FieldValue.serverTimestamp()
         });

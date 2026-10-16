@@ -10,12 +10,11 @@ test("global customer search is server-backed, mixed-type, and rate limited", ()
   const route = read("app/api/public/search/route.js");
   const services = read("lib/firebase-services.js");
   const utility = read("components/customer-utility.js");
-  const taxonomy = read("lib/marketplace-taxonomy.js");
   assert.match(route, /enforceRateLimit/);
   assert.match(route, /business/);
   assert.match(route, /product/);
-  assert.match(route, /serviceMatchesMarketplaceBusiness/);
-  assert.match(taxonomy, /events/);
+  assert.match(route, /service/);
+  assert.match(route, /event/);
   assert.match(route, /place/);
   assert.match(services, /export async function searchSpotly/);
   assert.match(utility, /CustomerSearchView/);

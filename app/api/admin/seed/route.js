@@ -155,7 +155,7 @@ function preparedDirectory() {
           saturday: { open: "08:00", close: "14:00", closed: false },
           sunday: { open: "", close: "", closed: true }
         },
-        pickup: { enabled: false, slotMinutes: 30, slotCapacity: 12, preparationMinutes: 45 },
+        pickup: { enabled: (listing.fulfilment || []).includes("pickup"), slotMinutes: 30, slotCapacity: 12, preparationMinutes: 45 },
         acceptedCurrencies: ["USD", "ZWG"],
         paymentMethods: ["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"],
         source: listing.source,

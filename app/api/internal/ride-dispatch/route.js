@@ -1,19 +1,18 @@
 import { apiError, getAdminServices } from "@/lib/firebase-admin";
 import { dispatchRide } from "@/lib/ride-server";
-import { effectiveSecret } from "@/lib/platform-secrets-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-async function authorized(request) {
-  const secret = await effectiveSecret("scheduler", "secret", ["CRON_SECRET"]);
+function authorized(request) {
+  const secret = process.env.CRON_SECRET;
   if (!secret) return false;
   return request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 export async function GET(request) {
   try {
-    if (!(await authorized(request))) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    if (!authorized(request)) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     const { db, messaging } = getAdminServices();
     const snapshot = await db.collection("rideTrips").where("state", "==", "searching_driver").limit(100).get();
     const results = [];

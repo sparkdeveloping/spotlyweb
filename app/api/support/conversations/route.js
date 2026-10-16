@@ -4,7 +4,6 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { hasPlatformPermission, isPlatformAdmin, requireBusinessPermission } from "@/lib/access-control-server";
 import { safeText } from "@/lib/server-helpers";
-import { notifyUser, notifyRoleAudience } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 
@@ -47,31 +46,14 @@ const schema = z.discriminatedUnion("action", [
     conversationId: z.string().min(3).max(180),
     status: z.enum(["open", "assigned", "waiting_for_spotly", "waiting_for_user", "escalated", "resolved", "closed"]).optional(),
     assignedTo: z.string().max(180).nullable().optional(),
-    assignedToName: z.string().max(160).nullable().optional(),
     priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-    satisfaction: z.number().int().min(1).max(5).optional(),
-    markRead: z.boolean().optional()
+    satisfaction: z.number().int().min(1).max(5).optional()
   })
 ]);
 
-function roles(user) {
-  return Array.isArray(user?.profile?.roles) ? user.profile.roles : [];
-}
-
 function supportStaff(user) {
-  return isPlatformAdmin(user) || hasPlatformPermission(user, "support.read") || hasPlatformPermission(user, "support.respond") || hasPlatformPermission(user, "support.manage") || roles(user).some((role) => ["support_manager", "support_agent"].includes(role));
-}
-
-function supportResponder(user) {
-  return isPlatformAdmin(user) || hasPlatformPermission(user, "support.respond") || hasPlatformPermission(user, "support.manage") || roles(user).some((role) => ["support_manager", "support_agent"].includes(role));
-}
-
-function supportManager(user) {
-  return isPlatformAdmin(user) || hasPlatformPermission(user, "support.manage") || roles(user).some((role) => ["support_manager", "operations_manager", "regional_operations_manager"].includes(role));
-}
-
-function actorName(user) {
-  return safeText(user?.profile?.displayName || user?.name || user?.email || "Spotly Support", 160);
+  const roles = user?.profile?.roles || [];
+  return isPlatformAdmin(user) || hasPlatformPermission(user, "support.read") || hasPlatformPermission(user, "support.respond") || hasPlatformPermission(user, "support.manage") || roles.some((role) => ["support_manager", "support_agent"].includes(role));
 }
 
 async function participant(db, user, conversation) {
@@ -85,23 +67,11 @@ async function participant(db, user, conversation) {
   return { allowed: false, support: false, requester: false, business: false };
 }
 
-async function supportAudit(db, user, conversationId, action, details = {}) {
-  await db.collection("auditLogs").add({
-    action,
-    entityType: "support_conversation",
-    entityId: conversationId,
-    actorId: user.uid,
-    actorEmail: user.email || null,
-    details,
-    createdAt: FieldValue.serverTimestamp()
-  });
-}
-
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
-    const { db, messaging, auth } = getAdminServices();
+    const { db } = getAdminServices();
 
     if (body.action === "create") {
       await enforceRateLimit(request, { key: `support-create:${user.uid}`, limit: 8, windowMs: 30 * 60_000 });
@@ -122,13 +92,8 @@ export async function POST(request) {
           contextId: body.contextId || null,
           context: body.context || null,
           assignedTo: null,
-          assignedToName: null,
-          unreadForSupport: 1,
-          unreadForRequester: 0,
-          lastPublicMessageSender: "requester",
           lastMessage: safeText(body.message, 500),
           lastMessageAt: FieldValue.serverTimestamp(),
-          requesterLastReadAt: FieldValue.serverTimestamp(),
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()
         });
@@ -142,7 +107,6 @@ export async function POST(request) {
           createdAt: FieldValue.serverTimestamp()
         });
       });
-      notifyRoleAudience({ db, messaging, auth, title: "New support conversation", body: safeText(body.subject, 180), href: "/work?view=support", workspace: "admin", module: "support", eventType: "support.conversation.created", entityType: "support_conversation", entityId: conversationRef.id, push: true }, ["support_agent", "support_manager"]).catch(() => null);
       return Response.json({ ok: true, conversationId: conversationRef.id });
     }
 
@@ -155,119 +119,49 @@ export async function POST(request) {
 
     if (body.action === "message") {
       await enforceRateLimit(request, { key: `support-message:${user.uid}`, limit: 50, windowMs: 15 * 60_000 });
-      if (access.support && !supportResponder(user)) throw Object.assign(new Error("Your support access is read-only."), { status: 403 });
       if (body.internal && !access.support) throw Object.assign(new Error("Internal notes are restricted to Spotly support staff."), { status: 403 });
       const messageRef = db.collection("supportMessages").doc();
       await db.runTransaction(async (transaction) => {
-        const now = FieldValue.serverTimestamp();
         transaction.create(messageRef, {
           conversationId: body.conversationId,
           senderId: user.uid,
-          senderName: access.support ? actorName(user) : (user.name || body.senderName || "Customer"),
+          senderName: user.name || body.senderName || (access.support ? "Spotly Support" : "Customer"),
           senderRole: access.support ? "support" : safeText(body.senderRole || "customer", 80),
           body: safeText(body.body, 6000),
           attachments: body.attachments,
           context: body.context || null,
           internal: Boolean(body.internal),
-          createdAt: now
+          createdAt: FieldValue.serverTimestamp()
         });
-
-        const patch = { updatedAt: now };
-        if (body.internal) {
-          patch.lastInternalNoteAt = now;
-        } else {
-          patch.lastMessage = safeText(body.body, 500);
-          patch.lastMessageAt = now;
-          patch.lastPublicMessageSender = access.support ? "support" : "requester";
-          if (access.support) {
-            patch.status = body.status || "waiting_for_user";
-            patch.unreadForRequester = FieldValue.increment(1);
-            patch.unreadForSupport = 0;
-            patch.supportLastReadAt = now;
-          } else {
-            patch.status = body.status || "waiting_for_spotly";
-            patch.unreadForSupport = FieldValue.increment(1);
-            patch.unreadForRequester = 0;
-            patch.requesterLastReadAt = now;
-          }
-        }
-        transaction.set(conversationRef, patch, { merge: true });
+        transaction.set(conversationRef, {
+          lastMessage: body.internal ? "Internal note" : safeText(body.body, 500),
+          lastMessageAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          status: body.status || (access.support ? "waiting_for_user" : "waiting_for_spotly")
+        }, { merge: true });
       });
-
-      if (!body.internal && access.support && conversation.requesterId) {
-        notifyUser({
-          db, messaging, auth,
-          userId: conversation.requesterId,
-          title: "Spotly Support replied",
-          body: safeText(body.body, 240),
-          href: `/support?conversation=${encodeURIComponent(body.conversationId)}`,
-          workspace: "customer",
-          category: "support",
-          module: "support",
-          eventType: "support.reply",
-          entityType: "support_conversation",
-          entityId: body.conversationId,
-          email: false,
-          push: true
-        }).catch(() => null);
-      } else if (!body.internal && !access.support && conversation.assignedTo) {
-        notifyUser({
-          db, messaging, auth,
-          userId: conversation.assignedTo,
-          title: "New support reply",
-          body: safeText(body.body, 240),
-          href: `/work?view=support&conversation=${encodeURIComponent(body.conversationId)}`,
-          workspace: "admin",
-          category: "support",
-          module: "support",
-          eventType: "support.customer_reply",
-          entityType: "support_conversation",
-          entityId: body.conversationId,
-          push: true
-        }).catch(() => null);
-      }
       return Response.json({ ok: true, messageId: messageRef.id });
     }
 
     const patch = { updatedAt: FieldValue.serverTimestamp() };
-    const changes = {};
     if (access.support) {
-      if (body.status !== undefined) {
-        if (!supportResponder(user)) throw Object.assign(new Error("Your support access is read-only."), { status: 403 });
-        patch.status = body.status;
-        changes.status = body.status;
-        if (["resolved", "closed"].includes(body.status)) patch.resolvedAt = FieldValue.serverTimestamp();
-        if (body.status === "open") patch.reopenedAt = FieldValue.serverTimestamp();
-      }
-      if (body.assignedTo !== undefined) {
-        if (body.assignedTo && body.assignedTo !== user.uid && !supportManager(user)) throw Object.assign(new Error("Only support managers can assign conversations to another agent."), { status: 403 });
-        if (!supportResponder(user)) throw Object.assign(new Error("Your support access is read-only."), { status: 403 });
-        patch.assignedTo = body.assignedTo;
-        patch.assignedToName = body.assignedTo ? (body.assignedTo === user.uid ? actorName(user) : safeText(body.assignedToName || "Assigned agent", 160)) : null;
-        if (body.assignedTo && ["open", "waiting_for_spotly"].includes(conversation.status)) patch.status = "assigned";
-        changes.assignedTo = body.assignedTo || null;
-      }
-      if (body.priority !== undefined) {
-        if (!supportResponder(user)) throw Object.assign(new Error("Your support access is read-only."), { status: 403 });
-        patch.priority = body.priority;
-        changes.priority = body.priority;
-      }
-      if (body.markRead) {
-        patch.unreadForSupport = 0;
-        patch.supportLastReadAt = FieldValue.serverTimestamp();
-      }
-    } else {
-      if (body.status === "closed" || body.status === "open") patch.status = body.status;
+      if (body.status !== undefined) patch.status = body.status;
+      if (body.assignedTo !== undefined) patch.assignedTo = body.assignedTo;
+      if (body.priority !== undefined) patch.priority = body.priority;
       if (body.satisfaction !== undefined) patch.satisfaction = body.satisfaction;
-      if (body.markRead) {
-        patch.unreadForRequester = 0;
-        patch.requesterLastReadAt = FieldValue.serverTimestamp();
-      }
+    } else {
+      if (body.assignedTo !== undefined || body.priority !== undefined) throw Object.assign(new Error("Assignment and priority are restricted to Spotly support staff."), { status: 403 });
+      if (body.status !== undefined && !["open", "closed"].includes(body.status)) throw Object.assign(new Error("You can only close or reopen your conversation."), { status: 403 });
+      if (body.status !== undefined) patch.status = body.status;
+      if (body.satisfaction !== undefined) patch.satisfaction = body.satisfaction;
     }
+    if (body.status === "closed") Object.assign(patch, { closedAt: FieldValue.serverTimestamp(), closedBy: user.uid });
+    if (body.status === "open" && conversation.status === "closed") Object.assign(patch, { reopenedAt: FieldValue.serverTimestamp(), reopenedBy: user.uid });
+    if (body.satisfaction !== undefined) Object.assign(patch, { satisfactionAt: FieldValue.serverTimestamp(), satisfactionBy: user.uid });
     await conversationRef.set(patch, { merge: true });
-    if (access.support && Object.keys(changes).length) await supportAudit(db, user, body.conversationId, "support.conversation.updated", changes);
     return Response.json({ ok: true, conversationId: body.conversationId, status: patch.status || conversation.status });
   } catch (error) {
-    return apiError(error, "The support conversation could not be updated.");
+    if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the support details.", details: error.flatten() }, { status: 400 });
+    return apiError(error);
   }
 }

@@ -111,10 +111,6 @@ service cloud.firestore {
         hasRole("business_success_manager") || hasStaffRole("operations_manager") || hasStaffRole("regional_operations_manager") ||
         hasStaffRole("business_success_manager") || hasPermission("people.approve") || hasStaffPermission("people.approve");
     }
-    function managesStaff(userId) {
-      return peopleAdmin() || (staffManager() && userId != null && exists(/databases/$(database)/documents/staffProfiles/$(userId)) &&
-        get(/databases/$(database)/documents/staffProfiles/$(userId)).data.managerId == request.auth.uid);
-    }
     function recruitmentManager() {
       return peopleAdmin() || hasRole("operations_manager") || hasRole("regional_operations_manager") || hasStaffRole("operations_manager") ||
         hasStaffRole("regional_operations_manager") || hasPermission("recruitment.*") || hasStaffPermission("recruitment.*");
@@ -141,8 +137,6 @@ service cloud.firestore {
       allow read: if true;
       allow write: if platformAdmin() || hasPermission("admin.configuration");
     }
-
-    match /platformSecrets/{id} { allow read, write: if false; }
 
     match /businesses/{businessId} {
       allow read: if resource.data.public == true || canViewBusiness(businessId) || hasPermission("businesses.read");
@@ -412,15 +406,15 @@ service cloud.firestore {
 
 
     match /staffProfiles/{userId} {
-      allow read: if self(userId) || peopleAdmin() || (staffManager() && resource.data.managerId == request.auth.uid);
-      // Employment authority (role, permissions, manager and lifecycle) is server-owned.
-      // Employees may update only the narrow self-service fields below.
-      allow create: if false;
-      allow update: if self(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        "displayName", "preferredName", "phone", "emergencyContactName", "emergencyContactPhone", "emergencyContactRelationship", "preferredLocale",
-        "workArrangement", "searchTerms", "updatedAt", "updatedBy"
-      ]);
-      allow delete: if false;
+      allow read: if self(userId) || peopleAdmin() || staffManager();
+      allow create: if peopleAdmin() || (self(userId) && (
+        hasRole("super_admin") || hasRole("admin") || hasRole("platform_admin")
+      ));
+      allow update: if peopleAdmin() || (self(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "displayName", "phone", "emergencyContactName", "emergencyContactPhone", "preferredLocale",
+        "workArrangement", "updatedAt", "updatedBy"
+      ]));
+      allow delete: if peopleAdmin();
     }
 
     match /staffTasks/{taskId} {
@@ -428,18 +422,16 @@ service cloud.firestore {
         resource.data.assigneeId == request.auth.uid || resource.data.createdBy == request.auth.uid
       ));
       allow create: if staffMember() && (
-        request.resource.data.assigneeId == request.auth.uid || (staffManager() && managesStaff(request.resource.data.assigneeId))
+        staffManager() || request.resource.data.assigneeId == request.auth.uid
       );
-      allow update: if (staffManager() && (resource.data.assigneeId == request.auth.uid || managesStaff(resource.data.assigneeId)) &&
-        (request.resource.data.assigneeId == request.auth.uid || managesStaff(request.resource.data.assigneeId))) ||
-        (staffMember() && resource.data.assigneeId == request.auth.uid && request.resource.data.assigneeId == request.auth.uid);
+      allow update: if staffManager() || (staffMember() && resource.data.assigneeId == request.auth.uid);
       allow delete: if peopleAdmin();
     }
 
     match /staffShifts/{shiftId} {
       allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
-      allow create: if managesStaff(request.resource.data.userId);
-      allow update: if managesStaff(resource.data.userId) || (staffMember() && resource.data.userId == request.auth.uid &&
+      allow create: if staffManager() || (staffMember() && request.resource.data.userId == request.auth.uid);
+      allow update: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "status", "clockedInAt", "clockedInBy", "clockedOutAt", "clockedOutBy", "updatedAt", "updatedBy"
         ]));
@@ -449,7 +441,7 @@ service cloud.firestore {
     match /staffLeaveRequests/{requestId} {
       allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
       allow create: if staffMember() && request.resource.data.userId == request.auth.uid;
-      allow update: if managesStaff(resource.data.userId) || (staffMember() && resource.data.userId == request.auth.uid &&
+      allow update: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid &&
         resource.data.status == "pending" && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "type", "startDate", "endDate", "days", "reason", "coverageNote", "status", "updatedAt"
         ]));
@@ -472,8 +464,7 @@ service cloud.firestore {
 
     match /staffPerformance/{recordId} {
       allow read: if staffManager() || (staffMember() && resource.data.userId == request.auth.uid);
-      allow create: if managesStaff(request.resource.data.userId);
-      allow update, delete: if managesStaff(resource.data.userId);
+      allow create, update, delete: if peopleAdmin() || staffManager();
     }
 
     match /staffPayrollRecords/{recordId} {
@@ -484,25 +475,14 @@ service cloud.firestore {
 
     match /staffAssets/{assetId} {
       allow read: if staffManager() || (staffMember() && resource.data.assignedTo == request.auth.uid);
-      allow create, update, delete: if peopleAdmin();
+      allow create, update, delete: if peopleAdmin() || staffManager();
     }
 
     match /workforceRequests/{requestId} {
       allow read: if staffManager();
       allow create: if staffManager() && request.resource.data.requestedBy == request.auth.uid;
-      allow update, delete: if peopleAdmin();
-    }
-
-    match /careerJobs/{jobId} {
-      allow read, write: if false;
-    }
-
-    match /careerApplications/{applicationId} {
-      allow read, write: if false;
-    }
-
-    match /careerApplicationRateLimits/{rateId} {
-      allow read, write: if false;
+      allow update: if staffManager();
+      allow delete: if peopleAdmin();
     }
 
     match /staffCandidates/{candidateId} {

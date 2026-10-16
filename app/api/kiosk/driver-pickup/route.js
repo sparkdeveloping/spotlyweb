@@ -14,14 +14,8 @@ export async function POST(request) {
     if (query.empty) throw Object.assign(new Error("We could not find a Driver pickup for this code."), { status: 404 });
     const job = query.docs[0];
     if (!job.data().assignedDriverId) throw Object.assign(new Error("No Driver is assigned to this delivery yet."), { status: 409 });
-    const value = docData(job);
-    if (value.fulfilmentMode === "driver_shops" && value.state === "shopping_review") {
-      const maxAuthorized = Number(value.shopping?.maxAuthorizedMerchandise || 0);
-      await job.ref.set({ "shopping.checkoutAuthorizedAt": FieldValue.serverTimestamp(), "shopping.checkoutAuthorizedByKioskId": device.id || null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      return Response.json({ ok: true, checkoutAuthorization: { deliveryJobId: value.id, number: value.number, currency: value.currency || "USD", maxAuthorizedMerchandise: maxAuthorized, projectedSubtotal: Number(value.shopping?.projectedSubtotal || 0), state: "authorized" }, delivery: { id: value.id, number: value.number, state: value.state, assignedDriverId: value.assignedDriverId } });
-    }
-    if (!["driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification"].includes(value.state)) throw Object.assign(new Error("This delivery is not at the business pickup or shopping checkout stage."), { status: 409 });
+    if (!["driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification"].includes(job.data().state)) throw Object.assign(new Error("This delivery is not at the business pickup stage."), { status: 409 });
     await job.ref.set({ kioskDriverArrivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return Response.json({ ok: true, delivery: { id: value.id, number: value.number, state: value.state, bagCount: value.bagCount || 1, chilledBagCount: value.chilledBagCount || 0, assignedDriverId: value.assignedDriverId } });
+    const value = docData(job); return Response.json({ ok: true, delivery: { id: value.id, number: value.number, state: value.state, bagCount: value.bagCount || 1, chilledBagCount: value.chilledBagCount || 0, assignedDriverId: value.assignedDriverId } });
   } catch (error) { return apiError(error); }
 }

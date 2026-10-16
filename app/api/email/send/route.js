@@ -3,7 +3,6 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { safeText } from "@/lib/server-helpers";
 import { canonicalSpotlyUrl } from "@/lib/spotly-domains";
-import { effectiveSecret } from "@/lib/platform-secrets-server";
 
 export const runtime = "nodejs";
 
@@ -88,8 +87,8 @@ export async function POST(request) {
       throw Object.assign(new Error("You cannot send this notification."), { status: 403 });
     }
 
-    const apiKey = await effectiveSecret("resend", "apiKey", ["RESEND_API_KEY"]);
-    const from = (await effectiveSecret("resend", "fromEmail", ["RESEND_FROM_EMAIL"])) || "Spotly <onboarding@resend.dev>";
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.RESEND_FROM_EMAIL || "Spotly <onboarding@resend.dev>";
     if (!apiKey) throw Object.assign(new Error("Email delivery is not configured yet."), { status: 503 });
 
     const content = template(body.type, body.data);

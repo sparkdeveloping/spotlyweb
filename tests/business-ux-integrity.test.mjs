@@ -116,7 +116,7 @@ test("shared tabs accept semantic icons and shared cards support intentional con
   assert.match(source, /p-4 sm:p-5/);
 });
 
-test("customer marketplace separates discovery from commerce while keeping claim discovery broader", async () => {
+test("customer marketplace separates live ordering discovery from the broader claim directory", async () => {
   const [services, marketplace, directory] = await Promise.all([
     read("lib/firebase-services.js"),
     read("app/api/public/marketplace/route.js"),
@@ -125,10 +125,8 @@ test("customer marketplace separates discovery from commerce while keeping claim
   assert.match(services, /searchLiveBusinesses/);
   assert.match(services, /api\/public\/marketplace/);
   assert.match(services, /api\/public\/directory/);
-  assert.match(marketplace, /isMarketplaceDiscoverable/);
-  assert.match(marketplace, /queryOpenPlaces/);
-  assert.match(directory, /isMarketplaceDiscoverable/);
-  assert.match(directory, /queryOpenPlaces/);
+  assert.match(marketplace, /isLive/);
+  assert.match(directory, /directoryVisible/);
   assert.doesNotMatch(marketplace, /orderBy\(/);
   assert.doesNotMatch(directory, /orderBy\(/);
 });

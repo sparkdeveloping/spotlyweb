@@ -90,7 +90,7 @@ export const portals = {
       { id: "today", label: "Today", icon: House, href: "/" },
       { id: "work", label: "My work", icon: ListChecks, href: "/work" },
       { id: "schedule", label: "Schedule", icon: CalendarDays, href: "/schedule" },
-      { id: "leave", label: "Time off", icon: Heart, href: "/leave" },
+      { id: "leave", label: "Leave", icon: Heart, href: "/leave" },
       { id: "learning", label: "Learning", icon: BookOpenCheck, href: "/learning" },
       { id: "performance", label: "Performance", icon: Sparkles, href: "/performance" },
       { id: "pay", label: "Pay", icon: WalletCards, href: "/pay" },
@@ -108,16 +108,16 @@ export const portals = {
     accentStrong: "#1D4ED8",
     accentSoft: "#EAF1FF",
     darkAccent: "#60A5FA",
-    description: "Get ready, go online, complete work safely, and understand your earnings.",
+    description: "Manage offers, active jobs, shifts, and earnings.",
     nav: [
       { id: "home", label: "Home", icon: House, href: "/" },
-      { id: "jobs", label: "Work", icon: ListChecks, href: "/jobs" },
+      { id: "jobs", label: "Jobs", icon: ListChecks, href: "/jobs" },
       { id: "active", label: "Active job", icon: MapPinned, href: "/active" },
       { id: "earnings", label: "Earnings", icon: BadgeDollarSign, href: "/earnings" },
-      { id: "history", label: "Activity", icon: PackageCheck, href: "/history" },
+      { id: "history", label: "History", icon: PackageCheck, href: "/history" },
       { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications" },
-      { id: "support", label: "Safety", icon: LifeBuoy, href: "/support" },
-      { id: "profile", label: "Account", icon: CircleUserRound, href: "/profile" }
+      { id: "support", label: "Safety & support", icon: LifeBuoy, href: "/support" },
+      { id: "profile", label: "Profile", icon: CircleUserRound, href: "/profile" }
     ]
   },
   admin: {
@@ -132,14 +132,20 @@ export const portals = {
     darkAccent: "#78A5D8",
     description: "Operate the platform, review risk, and manage access.",
     nav: [
-      { group: "Operate", id: "home", label: "Home", icon: LayoutDashboard, href: "/" },
-      { group: "Operate", id: "work", label: "Work", icon: ListChecks, href: "/work" },
-      { group: "Operate", id: "marketplace", label: "Marketplace", icon: Store, href: "/marketplace" },
-      { group: "Operate", id: "mobility", label: "Mobility", icon: Bike, href: "/mobility" },
-      { group: "Operate", id: "money", label: "Money", icon: CreditCard, href: "/money" },
-      { group: "Build", id: "growth", label: "Growth", icon: Compass, href: "/growth" },
-      { group: "Build", id: "team", label: "Team & access", icon: UsersRound, href: "/team" },
-      { group: "Build", id: "system", label: "System", icon: ShieldCheck, href: "/system" }
+      { group: "Operations", id: "dashboard", label: "Control centre", icon: LayoutDashboard, href: "/" },
+      { group: "Operations", id: "operations", label: "Operations", icon: Truck, href: "/operations" },
+      { group: "Operations", id: "notifications", label: "Notifications", icon: Bell, href: "/notifications" },
+      { group: "Marketplace", id: "organizations", label: "Organizations", icon: Building2, href: "/organizations" },
+      { group: "Marketplace", id: "businesses", label: "Businesses", icon: Store, href: "/businesses" },
+      { group: "People", id: "people", label: "People", icon: UsersRound, href: "/people" },
+      { group: "Operations", id: "drivers", label: "Drivers & delivery", icon: Bike, href: "/drivers" },
+      { group: "Marketplace", id: "customers", label: "Customers", icon: CircleUserRound, href: "/customers" },
+      { group: "Money", id: "finance", label: "Money", icon: CreditCard, href: "/finance" },
+      { group: "Growth", id: "content", label: "Content & growth", icon: Compass, href: "/content" },
+      { group: "Platform", id: "platform-map", label: "Platform map", icon: GitBranch, href: "/platform-map" },
+      { group: "Platform", id: "platform", label: "Configuration", icon: ShieldCheck, href: "/platform" },
+      { group: "Platform", id: "audit", label: "Audit log", icon: ClipboardList, href: "/audit" },
+      { group: "Platform", id: "settings", label: "Settings", icon: Settings, href: "/settings" }
     ]
   }
 };

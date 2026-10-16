@@ -3,7 +3,6 @@
 import { useReducedMotion, useInView } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
-import { bundledLottieAsset } from "@/lib/generated/lottie-assets";
 
 const animationCache = new Map();
 let lottiePromise;
@@ -18,12 +17,16 @@ async function getLottie() {
 async function loadAnimationData(name) {
   if (!name) return null;
   if (animationCache.has(name)) return animationCache.get(name);
-  const animation = bundledLottieAsset(name);
-  const promise = animation
-    ? Promise.resolve(animation)
-    : Promise.reject(new Error(`Animation ${name} is not bundled.`));
+  const promise = fetch(`/lottie/${name}.json`, { cache: "force-cache" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`Animation ${name} could not be loaded.`);
+      return response.json();
+    })
+    .catch((error) => {
+      animationCache.delete(name);
+      throw error;
+    });
   animationCache.set(name, promise);
-  promise.catch(() => animationCache.delete(name));
   return promise;
 }
 
@@ -35,7 +38,7 @@ async function loadAnimationData(name) {
  * hover — a quiet resting frame that replays on pointer/focus.
  * state — replay when playKey changes (add-to-cart, success, notifications, etc.).
  *
- * All assets are first-party bundled data. Reduced-motion users receive a still frame.
+ * All assets are first-party local JSON. Reduced-motion users receive a still frame.
  */
 export function SpotlyLottie({
   name,

@@ -36,7 +36,6 @@ function round(value) {
 }
 
 function itemTotal(item = {}) {
-  if (item.status === "substitution_pending") return round(Math.max(0, Number(item.proposedQuantity || 0)) * Math.max(0, Number(item.proposedUnitPrice || 0)));
   if (!["found", "replaced"].includes(item.status)) return 0;
   return round(Math.max(0, Number(item.actualQuantity || 0)) * Math.max(0, Number(item.actualUnitPrice || 0)));
 }
@@ -72,7 +71,7 @@ export async function POST(request) {
       const orderSnap = await transaction.get(orderRef);
       if (!orderSnap.exists) throw Object.assign(new Error("The customer order was not found."), { status: 404 });
       const order = orderSnap.data();
-      if (!["paid", "test_paid"].includes(order.paymentStatus)) throw Object.assign(new Error("Customer payment is not confirmed yet. Do not buy the items."), { status: 409 });
+      if (order.paymentStatus !== "paid") throw Object.assign(new Error("Customer payment is not confirmed yet. Do not buy the items."), { status: 409 });
 
       const items = Array.isArray(job.shopping?.items) ? job.shopping.items.map((item) => ({ ...item })) : [];
       const maxAuthorized = round(order.shopping?.maxAuthorizedMerchandise ?? job.shopping?.maxAuthorizedMerchandise ?? 0);
@@ -96,30 +95,12 @@ export async function POST(request) {
         const actualUnitPrice = body.status === "unavailable" ? 0 : Number(body.actualUnitPrice ?? current.estimatedUnitPrice ?? 0);
         if (["found", "replaced"].includes(body.status) && (actualQuantity <= 0 || actualUnitPrice < 0)) throw Object.assign(new Error("Add the actual quantity and shelf price for this item."), { status: 422 });
         if (body.status === "replaced" && !String(body.replacementName || "").trim()) throw Object.assign(new Error("Name the replacement so the customer can recognize it."), { status: 422 });
-        const substitutionPreference = job.shopping?.substitutionPreference || order.shopping?.substitutionPreference || "contact_me";
-        if (body.status === "replaced" && substitutionPreference === "no_substitutions") throw Object.assign(new Error("This customer chose no substitutions. Mark the item unavailable instead."), { status: 422 });
-        if (body.status === "replaced" && current.substitutionAllowed === false) throw Object.assign(new Error("This item does not allow substitutions. Mark it unavailable instead."), { status: 422 });
-        const customerApprovalRequired = body.status === "replaced" && substitutionPreference === "contact_me";
-        items[index] = customerApprovalRequired ? {
-          ...current,
-          status: "substitution_pending",
-          proposedReplacementName: safeText(body.replacementName, 180),
-          proposedQuantity: round(actualQuantity),
-          proposedUnitPrice: round(actualUnitPrice),
-          substitutionRequestedAt: new Date().toISOString(),
-          substitutionDecision: "pending",
-          note: safeText(body.note, 500),
-          updatedAt: new Date().toISOString()
-        } : {
+        items[index] = {
           ...current,
           status: body.status,
           actualQuantity: round(actualQuantity),
           actualUnitPrice: round(actualUnitPrice),
           replacementName: body.status === "replaced" ? safeText(body.replacementName, 180) : "",
-          proposedReplacementName: "",
-          proposedQuantity: null,
-          proposedUnitPrice: null,
-          substitutionDecision: body.status === "replaced" ? "best_match" : null,
           note: safeText(body.note, 500),
           updatedAt: new Date().toISOString()
         };
@@ -127,9 +108,8 @@ export async function POST(request) {
         if (projected > maxAuthorized + 0.001) throw Object.assign(new Error(`This change would exceed the customer-funded shopping limit by ${round(projected - maxAuthorized).toFixed(2)}. Choose a cheaper replacement or mark an item unavailable.`), { status: 422 });
         transaction.set(jobRef, { state: "shopping", shopping: { ...job.shopping, state: "shopping", items, projectedSubtotal: projected }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         transaction.set(orderRef, { deliveryStatus: "shopping", "shopping.state": "shopping", "shopping.projectedSubtotal": projected, "shopping.updatedAt": FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        await appendDeliveryEvent(transaction, db, { jobId: body.deliveryJobId, orderId: job.orderId, type: customerApprovalRequired ? "shopping.substitution.requested" : `shopping.item.${body.status}`, actorType: "driver", actorId: user.uid, previousState: job.state, state: "shopping", metadata: { productId: body.productId, projectedSubtotal: projected, replacementName: customerApprovalRequired ? safeText(body.replacementName, 180) : undefined } });
-        response = { state: "shopping", projectedSubtotal: projected, remaining: round(maxAuthorized - projected), items, customerApprovalRequired };
-        if (customerApprovalRequired) notification = { customerId: job.customerId, title: "Replacement needs your approval", body: `${current.name || "An item"} is unavailable. Review the Driver's proposed replacement in Activity.` };
+        await appendDeliveryEvent(transaction, db, { jobId: body.deliveryJobId, orderId: job.orderId, type: `shopping.item.${body.status}`, actorType: "driver", actorId: user.uid, previousState: job.state, state: "shopping", metadata: { productId: body.productId, projectedSubtotal: projected } });
+        response = { state: "shopping", projectedSubtotal: projected, remaining: round(maxAuthorized - projected), items };
         return;
       }
 
@@ -144,11 +124,8 @@ export async function POST(request) {
 
       if (body.action === "review") {
         if (job.state !== "shopping") throw Object.assign(new Error("Shopping is not currently in progress."), { status: 409 });
-        const pending = items.filter((item) => ["pending", "substitution_pending"].includes(item.status));
-        if (pending.length) {
-          const approvals = pending.filter((item) => item.status === "substitution_pending").length;
-          throw Object.assign(new Error(approvals ? `${approvals} substitution request${approvals === 1 ? " is" : "s are"} still waiting for the customer.` : `${pending.length} item${pending.length === 1 ? " still needs" : "s still need"} a found, replacement, or unavailable result.`), { status: 422 });
-        }
+        const pending = items.filter((item) => item.status === "pending");
+        if (pending.length) throw Object.assign(new Error(`${pending.length} item${pending.length === 1 ? " still needs" : "s still need"} a found, replacement, or unavailable result.`), { status: 422 });
         const actualSubtotal = shoppingTotal(items);
         if (actualSubtotal > maxAuthorized + 0.001) throw Object.assign(new Error("The basket is above the funded shopping limit. Adjust the basket before checkout."), { status: 422 });
         transaction.set(jobRef, { state: "shopping_review", "shopping.state": "shopping_review", "shopping.projectedSubtotal": actualSubtotal, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -159,7 +136,6 @@ export async function POST(request) {
       }
 
       validateReceiptPath(body.receiptStoragePath, user.uid, body.deliveryJobId);
-      if (!job.shopping?.checkoutAuthorizedAt) throw Object.assign(new Error("Ask the store to authorize this Spotly checkout using the delivery reference before uploading the receipt."), { status: 409 });
       if (job.state !== "shopping_review") {
         if (["collected", "en_route", "driver_arrived_customer", "handoff_verification", "delivered"].includes(job.state) && order.shopping?.state === "checked_out") {
           response = { state: job.state, idempotent: true, adjustmentId: order.shopping?.adjustmentId || null };
@@ -167,7 +143,7 @@ export async function POST(request) {
         }
         throw Object.assign(new Error("Review the completed basket before checking out."), { status: 409 });
       }
-      if (items.some((item) => ["pending", "substitution_pending"].includes(item.status))) throw Object.assign(new Error("Resolve every shopping item and customer substitution decision before checkout."), { status: 422 });
+      if (items.some((item) => item.status === "pending")) throw Object.assign(new Error("Resolve every shopping item before checkout."), { status: 422 });
       const actualSubtotal = shoppingTotal(items);
       const reconciliation = shoppingReconciliation({ order: { id: orderSnap.id, ...order }, actualSubtotal, actualTax: 0 });
       if (reconciliation.topUpRequired > 0.001) throw Object.assign(new Error("The basket exceeds the customer-funded amount. Reduce the basket before checkout; Spotly will not ask you to pay the difference."), { status: 422 });

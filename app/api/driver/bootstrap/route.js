@@ -3,7 +3,6 @@ import { applicationReadiness, docData, docsData, operationalEligibility, public
 import { driverBalanceAccountId, sanitizeDriverBalance } from "@/lib/driver-money-server";
 import { plainRide, publicRideOffer } from "@/lib/ride-server";
 import { plainParcel, publicParcelOffer } from "@/lib/parcel-server";
-import { capabilitySummary, requirementPlan } from "@/lib/driver-capabilities";
 
 export const runtime = "nodejs";
 
@@ -36,14 +35,8 @@ export async function GET(request) {
     const vehicles = docsData(vehicleQuery);
     const documents = docsData(documentsQuery);
     const presence = docData(presenceSnap);
-    const selectedVehicle = vehicles.find((item) => item.id === (presence?.vehicleId || driver?.selectedVehicleId)) || vehicles.find((item) => item.status === "approved") || vehicles[0] || null;
-    const readiness = applicationReadiness(application || {}, selectedVehicle, documents);
-    const requirements = requirementPlan({ application: application || {}, vehicle: selectedVehicle, documents, phase: driver ? "operational" : "application" });
-    const capabilities = capabilitySummary({ driver: driver || {}, application: application || {}, vehicle: selectedVehicle, documents });
-    const eligibility = operationalEligibility({ driver, application: application || {}, vehicle: selectedVehicle, documents, presence });
-    const locationUpdatedAt = presence?.locationUpdatedAt ? new Date(presence.locationUpdatedAt).getTime() : 0;
-    const locationAgeMs = locationUpdatedAt ? Math.max(0, Date.now() - locationUpdatedAt) : null;
-    const locationHealth = !presence?.online ? "offline" : !presence?.currentLocation ? "missing" : locationAgeMs == null ? "unknown" : locationAgeMs <= 45_000 ? "good" : locationAgeMs <= 120_000 ? "weak" : "stale";
+    const readiness = applicationReadiness(application || {}, vehicles[0] || null, documents);
+    const eligibility = operationalEligibility({ driver, vehicle: vehicles.find((item) => item.status === "approved") || vehicles[0] || null, documents, presence });
 
     const rawJobs = docsData(jobsQuery).sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
     const activeRaw = rawJobs.find((item) => !["delivered", "failed", "cancelled", "returned"].includes(item.state)) || null;
@@ -97,10 +90,7 @@ export async function GET(request) {
       documents,
       presence,
       readiness,
-      requirements,
-      capabilities,
       eligibility,
-      accountHealth: { location: locationHealth, locationAgeMs, dispatchable: Boolean(presence?.online && eligibility.eligible && ["good", "weak"].includes(locationHealth)), payout: payoutAccountSnap.exists ? (payoutAccountSnap.data()?.verificationState || "pending") : "missing", selectedVehicleId: selectedVehicle?.id || null },
       offers,
       rideOffers,
       parcelOffers,

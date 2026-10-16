@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Clock3,
   Heart,
-  Info,
   MapPin,
   Package,
   Search,
@@ -19,10 +18,9 @@ import {
   TimerReset,
   UtensilsCrossed
 } from "lucide-react";
-import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
+import { businessArchetype } from "@/data/business-archetypes";
 import { cn } from "@/lib/cn";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
-import { marketplaceMedia } from "@/lib/marketplace-editorial";
 
 export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
@@ -47,38 +45,35 @@ export function serviceMatchesBusiness(service, business) {
 
 function interestMatchesBusiness(interests = [], business = {}) {
   if (!Array.isArray(interests) || !interests.length) return false;
-  const profile = marketplaceProfile(business);
+  const archetype = businessArchetype(business);
   return interests.some((interest) => {
-    if (interest === "eat") return profile.service === "eat";
-    if (["shop", "groceries"].includes(interest)) return profile.service === "shop";
-    if (interest === "wellness") return profile.service === "book" && profile.vertical !== "stay";
-    if (interest === "activities") return ["book", "events"].includes(profile.service);
-    if (interest === "events") return profile.service === "events";
+    if (interest === "eat") return archetype.id === "restaurant_food";
+    if (["shop", "groceries"].includes(interest)) return archetype.id === "grocery_retail";
+    if (interest === "wellness") return archetype.id === "appointments_services";
+    if (interest === "activities") return ["accommodation_activities", "ticketing_events"].includes(archetype.id);
+    if (interest === "events") return archetype.id === "ticketing_events";
     return false;
   });
 }
 
 function MarketplaceImage({ business, sizes = "(max-width: 768px) 72vw, 292px" }) {
-  const media = marketplaceMedia(business);
-  const profile = marketplaceProfile(business);
-  if (!media.src) return <div className="flex h-full flex-col justify-end bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2)_62%,var(--surface))] p-4"><span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[var(--surface)] text-[var(--accent)] shadow-sm"><Store className="h-5 w-5" /></span><p className="mt-auto pt-7 text-sm font-semibold text-[var(--text)]">{profile.displayCategory}</p></div>;
-  return <><Image src={media.src} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />{media.kind === "editorial" ? <span title="Editorial category image — not supplied by this business" aria-label="Editorial category image" className="absolute bottom-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/45 text-[var(--media-text)] backdrop-blur"><Info className="h-3 w-3" /></span> : null}</>;
+  const image = business.coverImage || business.image || business.logoUrl || business.logo;
+  if (image) return <Image src={image} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />;
+  return <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2))] text-[var(--accent)]"><Store className="h-9 w-9" /></div>;
 }
 
 function MarketplaceRailCard({ item, onOpen }) {
   const { business, distance } = item;
-  const profile = marketplaceProfile(business);
-  const hasImage = Boolean(marketplaceMedia(business).src);
-  const placeSuffix = distance !== null ? ` · ${distance.toFixed(1)} km` : business.area ? ` · ${business.area}` : business.city ? ` · ${business.city}` : "";
+  const archetype = businessArchetype(business);
   return <button type="button" onClick={() => onOpen(business)} className="group w-[244px] shrink-0 text-left sm:w-[286px]">
     <div className="relative aspect-[1.36/1] overflow-hidden rounded-[16px] bg-[var(--surface-2)]">
       <MarketplaceImage business={business} />
-      {hasImage ? <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" /> : null}
-      {profile.cardMode === "commerce" && business.isFeatured ? <span className="absolute left-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text)] shadow-sm backdrop-blur">Featured</span> : null}
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent" />
+      {business.isFeatured ? <span className="absolute left-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text)] shadow-sm backdrop-blur">Featured</span> : null}
     </div>
     <div className="mt-3 flex items-start gap-3">
-      <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3><p className="mt-1 truncate text-xs text-[var(--text-3)]">{profile.displayCategory}{placeSuffix}</p><p className="mt-1 text-[11px] font-medium text-[var(--text-3)]">{profile.cardMode === "commerce" ? "Available on Spotly" : "Directory listing"}</p></div>
-      <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-3)]" />
+      <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3><p className="mt-1 truncate text-xs text-[var(--text-3)]">{archetype.shortLabel}{distance !== null ? ` · ${distance.toFixed(1)} km` : business.area ? ` · ${business.area}` : business.city ? ` · ${business.city}` : ""}</p></div>
+      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-3)] transition group-hover:translate-x-0.5" />
     </div>
   </button>;
 }
@@ -86,7 +81,6 @@ function MarketplaceRailCard({ item, onOpen }) {
 function SectionHeader({ title, description, action, onAction }) {
   return <div className="mb-4 flex items-end justify-between gap-4"><div><h2 className="text-[22px] font-semibold tracking-[-.035em] sm:text-2xl">{title}</h2>{description ? <p className="mt-1 text-sm text-[var(--text-3)]">{description}</p> : null}</div>{action ? <button type="button" onClick={onAction} className="shrink-0 rounded-[10px] px-2 py-1.5 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)]">{action}</button> : null}</div>;
 }
-
 
 function ServiceTile({ service, size = "small", onSelect }) {
   const reduce = useReducedMotion();
@@ -188,8 +182,6 @@ export function MarketplaceHome({
     {recent.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Recently viewed" description="Pick up where you left off" /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{recent.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
     {interestMatches.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Based on your interests" description="Using the interests you chose during Spotly setup" action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{interestMatches.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
-
-    {nearby.length ? <p className="mt-7 max-w-2xl text-xs leading-5 text-[var(--text-3)]">Spotly includes useful city listings alongside verified commerce businesses. Ordering, pickup, booking and payment only appear where the business has enabled them.</p> : null}
 
     {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Near you" : `Popular in ${location.city}`} description={location.coordinates ? "Using the location you shared" : "Based on what is live in your selected city"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 

@@ -80,8 +80,8 @@ function timeLabel(value) {
 }
 
 function NotificationRow({ item, onRead, businessName = "" }) {
-  const notificationKind = notificationModule(item);
-  const meta = moduleMeta[notificationKind] || moduleMeta.general;
+  const module = notificationModule(item);
+  const meta = moduleMeta[module] || moduleMeta.general;
   const Icon = meta.icon;
   const content = <>
     <motion.span
@@ -145,8 +145,8 @@ export function NotificationCenter({
     const result = { all: scoped.length, unread: 0, reviews: 0, orders: 0, bookings: 0, account: 0, locations: 0, money: 0, support: 0 };
     scoped.forEach((item) => {
       if (!item.read) result.unread += 1;
-      const notificationKind = notificationModule(item);
-      if (Object.prototype.hasOwnProperty.call(result, notificationKind)) result[notificationKind] += 1;
+      const module = notificationModule(item);
+      if (Object.prototype.hasOwnProperty.call(result, module)) result[module] += 1;
     });
     return result;
   }, [scoped]);

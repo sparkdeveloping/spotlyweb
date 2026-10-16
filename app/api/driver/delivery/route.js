@@ -61,7 +61,7 @@ export async function POST(request) {
       if (body.action === "verify_pickup" && job.orderId) transaction.set(db.collection("orders").doc(job.orderId), { deliveryStatus: "collected", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       if (body.action === "complete") {
         if (job.orderId) transaction.set(db.collection("orders").doc(job.orderId), { deliveryStatus: "delivered", status: "completed", completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        transaction.set(db.collection("driverPresence").doc(user.uid), { currentJobId: null, currentWorkType: null, availabilityState: "online_current", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        transaction.set(db.collection("driverPresence").doc(user.uid), { currentJobId: null, availabilityState: "online_current", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         await creditDeliveryEarnings(transaction, db, { driverId: user.uid, deliveryJobId: body.deliveryJobId, orderId: job.orderId, amount: job.acceptedDriverPay ?? job.quotedDriverPay ?? 0, currency: job.currency || "USD" });
         await appendAudit(transaction, db, { actorId: user.uid, action: "delivery.completed", entityType: "deliveryJob", entityId: body.deliveryJobId, metadata: { orderId: job.orderId || null } });
       }

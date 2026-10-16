@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -35,12 +34,11 @@ test("Lottie runtime is a pinned production dependency", () => {
   assert.match(lock, /node_modules\/lottie-web/);
 });
 
-test("Spotly bundles first-party Lottie assets in Git-safe JavaScript", async () => {
-  const moduleUrl = `${pathToFileURL(join(root, "lib/generated/lottie-assets.js")).href}?test=${Date.now()}`;
-  const { LOTTIE_ASSETS } = await import(moduleUrl);
+test("Spotly ships first-party local Lottie assets with valid animation structure", () => {
+  const names = new Set(readdirSync(join(root, "public/lottie")).filter((name) => name.endsWith(".json")).map((name) => name.replace(/\.json$/, "")));
   for (const name of requiredAnimations) {
-    const animation = LOTTIE_ASSETS[name];
-    assert.ok(animation, `missing bundled ${name}`);
+    assert.ok(names.has(name), `missing ${name}.json`);
+    const animation = JSON.parse(read(`public/lottie/${name}.json`));
     assert.ok(Number(animation.w) > 0 && Number(animation.h) > 0, `${name} needs a viewport`);
     assert.ok(Number(animation.fr) > 0, `${name} needs a frame rate`);
     assert.ok(Number(animation.op) > Number(animation.ip), `${name} needs a playable frame range`);
@@ -53,10 +51,8 @@ test("Lottie primitive is lazy, viewport-aware and reduced-motion safe", () => {
   const source = read("components/spotly-lottie.js");
   assert.match(source, /import\("lottie-web"\)/);
   assert.match(source, /useReducedMotion/);
-  assert.match(source, /bundledLottieAsset/);
-  assert.doesNotMatch(source, /fetch\(.*\/lottie\//);
   assert.match(source, /useInView/);
-  assert.match(source, /animationCache/);
+  assert.match(source, /cache:\s*"force-cache"/);
   assert.match(source, /instance\.goToAndStop\(0, true\)/);
   assert.match(source, /player\.pause\(\)/);
   assert.doesNotMatch(source, /https?:\/\//);

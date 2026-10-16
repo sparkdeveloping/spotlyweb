@@ -64,7 +64,7 @@ export async function POST(request) {
       if (jobSnap.data().orderId) {
         const orderSnap = await db.collection("orders").doc(jobSnap.data().orderId).get();
         const paymentStatus = orderSnap.data()?.paymentStatus || "";
-        if (orderSnap.exists && !["paid", "test_paid"].includes(paymentStatus)) throw Object.assign(new Error("This delivery cannot be dispatched until payment is confirmed."), { status: 409 });
+        if (orderSnap.exists && paymentStatus !== "paid") throw Object.assign(new Error("This delivery cannot be dispatched until payment is confirmed."), { status: 409 });
       }
       await jobRef.set({ bagCount: body.bagCount, chilledBagCount: body.chilledBagCount, businessReadyAt: FieldValue.serverTimestamp(), state: "awaiting_dispatch", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       if (jobSnap.data().orderId) await db.collection("orders").doc(jobSnap.data().orderId).set({ status: "ready_for_pickup", deliveryStatus: "awaiting_dispatch", updatedAt: FieldValue.serverTimestamp() }, { merge: true });

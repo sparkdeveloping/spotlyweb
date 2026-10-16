@@ -71,14 +71,13 @@ test("public marketplace visibility is enforced by rate-limited server routes wi
   assert.match(services, /loadPublicMarketplaceBusiness/);
   assert.match(marketplaceRoute, /enforceRateLimit/);
   assert.match(marketplaceRoute, /where\("public",\s*"==",\s*true\)/);
-  assert.match(marketplaceRoute, /isMarketplaceDiscoverable/);
-  assert.match(marketplaceRoute, /queryOpenPlaces/);
+  assert.match(marketplaceRoute, /isLive/);
   assert.doesNotMatch(marketplaceRoute, /orderBy\(/);
   assert.match(businessRoute, /enforceRateLimit/);
   assert.match(businessRoute, /where\("businessId",\s*"==",\s*businessId\)/);
-  assert.match(businessRoute, /isMarketplaceDiscoverable/);
-  assert.match(businessRoute, /marketplaceTrust/);
-  assert.match(businessRoute, /trust\.commerceVerified\?productSnapshot/);
+  assert.match(businessRoute, /doc\.data\(\)\?\.public === true/);
+  assert.match(businessRoute, /doc\.data\(\)\?\.published === true/);
+  assert.match(businessRoute, /doc\.data\(\)\?\.active !== false/);
   assert.doesNotMatch(businessRoute, /orderBy\(/);
   assert.match(marketplaceApp, /loadPublicMarketplaceBusiness/);
 });

@@ -180,7 +180,7 @@ export function InsightsView() {
   const offeringLabel = archetype.nouns.items[0].toUpperCase() + archetype.nouns.items.slice(1);
   const locationLabel = archetype.nouns.branch === "venue" ? "Venue" : archetype.nouns.branch === "property" ? "Property" : "Location";
 
-  return <div className="v7-page-enter space-y-6">
+  return <div className="space-y-6">
     <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
       <PageHeader title="Insights" description={`A clear view of real ${model.records}, customer value, and ${archetype.nouns.items} for ${locationName(selectedBranch)}.`} actions={<Button variant="outline" onClick={exportCsv} disabled={!filtered.length}><Download className="h-4 w-4" />Export this view</Button>} />
       <BusinessSwitcher />

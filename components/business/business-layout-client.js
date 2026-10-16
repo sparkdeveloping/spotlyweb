@@ -34,7 +34,5 @@ export function BusinessLayoutClient({ children }) {
   // the Business owner's Firebase session or BusinessDataProvider just because its URL lives
   // under /business. This is what makes a shared tablet genuinely safe and independent.
   if (isBusinessKioskLivePath(pathname)) return children;
-  if (pathname === "/business/get-started" || pathname === "/business/get-started/") return children;
-  if (pathname?.startsWith("/business/claim-status/")) return <AuthGate portal="business" title="Sign in to track your business verification">{children}</AuthGate>;
   return <AuthGate portal="business" title="Sign in to manage your businesses"><BusinessDataProvider><BusinessPortalFrame>{children}</BusinessPortalFrame></BusinessDataProvider></AuthGate>;
 }
