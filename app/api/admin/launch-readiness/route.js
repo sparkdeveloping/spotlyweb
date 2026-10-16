@@ -2,6 +2,7 @@ import { authenticateRequest, apiError, getAdminServices } from "@/lib/firebase-
 import { requirePlatformPermission } from "@/lib/access-control-server";
 import { BUILD_INFO } from "@/lib/build-info";
 import { getSecretBundle, secretVaultReady } from "@/lib/platform-secrets-server";
+import { SPOTLY_FIREBASE_PROJECT_ID, SPOTLY_FIREBASE_WEB_CONFIG } from "@/lib/firebase-project-config";
 
 export const runtime = "nodejs";
 
@@ -44,8 +45,12 @@ export async function GET(request) {
     const rulesVerified = present(process.env.SPOTLY_RULES_VERIFIED_AT) && present(process.env.SPOTLY_STORAGE_RULES_VERIFIED_AT);
     const monitoringConfigured = present(monitoringVault.sentryDsn) || present(monitoringVault.verifiedAt) || present(process.env.SENTRY_DSN) || present(process.env.NEXT_PUBLIC_SENTRY_DSN) || present(process.env.SPOTLY_MONITORING_VERIFIED_AT);
     const backupVerified = present(process.env.SPOTLY_BACKUP_VERIFIED_AT);
-    const firebaseAdminConfigured = (present(process.env.FIREBASE_ADMIN_PROJECT_ID) && present(process.env.FIREBASE_ADMIN_CLIENT_EMAIL) && present(process.env.FIREBASE_ADMIN_PRIVATE_KEY)) || present(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-    const storageConfigured = present(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    const configuredFirebaseProjectId = String(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || SPOTLY_FIREBASE_PROJECT_ID).trim();
+    const configuredAdminProjectId = String(process.env.FIREBASE_ADMIN_PROJECT_ID || configuredFirebaseProjectId).trim();
+    const firebaseProjectAligned = configuredFirebaseProjectId === SPOTLY_FIREBASE_PROJECT_ID && configuredAdminProjectId === SPOTLY_FIREBASE_PROJECT_ID;
+    const firebaseAdminConfigured = firebaseProjectAligned && ((present(process.env.FIREBASE_ADMIN_PROJECT_ID) && present(process.env.FIREBASE_ADMIN_CLIENT_EMAIL) && present(process.env.FIREBASE_ADMIN_PRIVATE_KEY)) || present(process.env.GOOGLE_APPLICATION_CREDENTIALS));
+    const configuredStorageBucket = String(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || SPOTLY_FIREBASE_WEB_CONFIG.storageBucket).trim();
+    const storageConfigured = configuredStorageBucket === SPOTLY_FIREBASE_WEB_CONFIG.storageBucket;
     const productionOrigin = String(process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/$/, "");
     const productionOriginReady = productionOrigin === "https://spotlyafrica.com";
     const marketplaceIndexable = process.env.NEXT_PUBLIC_MARKETPLACE_INDEXABLE === "true";
@@ -78,8 +83,9 @@ export async function GET(request) {
     }
 
     const checks = [
-      item("firebase-admin", "Firebase Admin runtime", firebaseAdminConfigured ? "ready" : "blocked", firebaseAdminConfigured ? "Server-side Firebase credentials are configured." : "Firebase Admin credentials are missing; authenticated server operations cannot run."),
-      item("storage", "Firebase Storage", storageConfigured ? "ready" : "blocked", storageConfigured ? "The production Storage bucket is configured." : "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is missing."),
+      item("firebase-project", "Firebase project identity", firebaseProjectAligned ? "ready" : "blocked", firebaseProjectAligned ? `Client and Admin configuration target ${SPOTLY_FIREBASE_PROJECT_ID}.` : `Firebase client/Admin project IDs must both target ${SPOTLY_FIREBASE_PROJECT_ID}.`),
+      item("firebase-admin", "Firebase Admin runtime", firebaseAdminConfigured ? "ready" : "blocked", firebaseAdminConfigured ? `Server-side Firebase credentials are configured for ${SPOTLY_FIREBASE_PROJECT_ID}.` : `A ${SPOTLY_FIREBASE_PROJECT_ID} Firebase Admin service account is required; old-project credentials must not be reused.`),
+      item("storage", "Firebase Storage", storageConfigured ? "ready" : "blocked", storageConfigured ? `Storage targets ${SPOTLY_FIREBASE_WEB_CONFIG.storageBucket}.` : `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET must be ${SPOTLY_FIREBASE_WEB_CONFIG.storageBucket}.`),
       item("production-origin", "Production origin", productionOriginReady ? "ready" : "blocked", productionOriginReady ? "Canonical customer origin is https://spotlyafrica.com." : `NEXT_PUBLIC_APP_URL must be https://spotlyafrica.com for production; current value is ${productionOrigin || "not configured"}.`),
       item("marketplace-indexing", "Marketplace indexing", marketplaceIndexable ? "ready" : "needs_verification", marketplaceIndexable ? "Public marketplace indexing is enabled." : "NEXT_PUBLIC_MARKETPLACE_INDEXABLE is not true. Keep this off for staging, but enable it for the public launch candidate."),
       item("finance-encryption", "Finance encryption key", financeEncryptionConfigured ? "ready" : "blocked", financeEncryptionConfigured ? "Server-side finance encryption is configured." : "SPOTLY_FINANCE_ENCRYPTION_KEY is missing; protected payout/finance fields must not launch without it."),

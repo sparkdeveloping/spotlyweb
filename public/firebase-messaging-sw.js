@@ -1,15 +1,18 @@
 // @ts-nocheck
 /* global firebase */
-importScripts("https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/12.6.0/firebase-messaging-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging-compat.js");
 
+// Firebase Web App identifiers are intentionally public. Keep this block in
+// sync with lib/firebase-project-config.js. scripts/firebase-project-preflight.mjs
+// verifies the project identity before dev/build/release checks.
 firebase.initializeApp({
-  apiKey: "AIzaSyDVq07eOLK7fLt5200h4m7dFhFM_csQF3o",
-  authDomain: "denzeltinashe-spotly.firebaseapp.com",
-  projectId: "denzeltinashe-spotly",
-  storageBucket: "denzeltinashe-spotly.firebasestorage.app",
-  messagingSenderId: "815870787939",
-  appId: "1:815870787939:web:6154be469fb3f076f5d356"
+  apiKey: "AIzaSyB4RFSXLk4YAR2babx5z3ssP0E4msQ-rPE",
+  authDomain: "spotly-africa.firebaseapp.com",
+  projectId: "spotly-africa",
+  storageBucket: "spotly-africa.firebasestorage.app",
+  messagingSenderId: "14197555543",
+  appId: "1:14197555543:web:189486e7d4a23114c3be12"
 });
 
 const messaging = firebase.messaging();

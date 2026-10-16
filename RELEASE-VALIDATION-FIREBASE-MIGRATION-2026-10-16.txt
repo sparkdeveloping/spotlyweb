@@ -1,0 +1,48 @@
+Spotly Firebase project migration validation — 2026-10-16
+
+Target Firebase project: spotly-africa
+Target auth domain: spotly-africa.firebaseapp.com
+Target Storage bucket: spotly-africa.firebasestorage.app
+Target sender ID: 14197555543
+Target Web App ID: 1:14197555543:web:189486e7d4a23114c3be12
+Target Analytics measurement ID: G-4FPTS9GNG9
+
+Code migration:
+- canonical Firebase project config: updated
+- Firebase browser SDK fallback config: updated
+- Firebase Messaging service worker: updated
+- Firebase Admin cross-project guard: added
+- Firebase CLI default project: spotly-africa
+- seed script fallback: updated
+- .env.example: updated
+- Admin launch-readiness project/bucket checks: updated
+- Firebase preflight script: added to dev/build/full check
+- regression tests: added
+- stale .next output: removed
+- old local Firebase Admin credential: removed from working migration env
+
+Production external actions still required:
+- new spotly-africa Firebase Admin service account
+- Firestore creation/location confirmation
+- deploy Firestore indexes/rules + Storage rules
+- enable/configure Auth providers + authorized domains
+- new Web Push VAPID key
+- new App Check key/configuration if enforced
+- Vercel environment update
+- deliberate Auth/Firestore/Storage migration decision and execution if existing production data must carry forward
+
+See FIREBASE-PROJECT-MIGRATION-AUDIT-2026-10-16.md for the complete cutover checklist.
+
+Executed source validation:
+- Firebase project preflight: PASS (spotly-africa)
+- legacy Firebase identity scan in active source/config: PASS
+- JavaScript-only / React hook check: PASS
+- complete project tests: 346/346 PASS
+- Firebase migration tests: 5/5 PASS
+- theme safety: PASS (257 source files / 47 route patterns)
+- launch/security static audit: PASS (111 API routes)
+- V7 full implementation audit: PASS (76/76 across 39 themes)
+- git diff --check: PASS
+
+Build/lint note:
+A clean npm dependency restore was attempted, but the container transport timed out before npm ci completed. The partial node_modules tree was removed. Therefore ESLint and the Next.js production build were not claimed as freshly executed in this environment. Run `npm ci && npm run check` on the release machine after the NEW Firebase/Vercel environment variables are configured.

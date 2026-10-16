@@ -87,7 +87,7 @@ The user's theme preference is also mirrored to a safe `.spotlyafrica.com` prefe
 
 ## Firebase production-domain configuration
 
-Firebase Authentication must authorize every hostname that can render an authentication flow:
+Firebase project: `spotly-africa`. Firebase Authentication must authorize every hostname that can render an authentication flow:
 
 ```text
 spotlyafrica.com
@@ -96,9 +96,15 @@ business.spotlyafrica.com
 admin.spotlyafrica.com
 driver.spotlyafrica.com
 staff.spotlyafrica.com
+careers.spotlyafrica.com
+localhost
 ```
 
-If Firebase App Check with reCAPTCHA Enterprise is enabled, the corresponding reCAPTCHA key/domain configuration must also permit the production hostnames. Phone authentication and OAuth providers must be tested from each product hostname after deployment.
+The Firebase Web App config is pinned in `lib/firebase-project-config.js`; `.env` values may repeat it but must not point Spotly at another project. `npm run firebase:preflight`, `npm run dev`, and `npm run build` fail early if an old/mismatched Firebase project is detected.
+
+The Firebase Admin SDK needs a **new `spotly-africa` service account**. Do not reuse the service account/private key from the former project. Web Push also needs a VAPID key created in the new project, and App Check needs a reCAPTCHA Enterprise site key registered to this project and these domains.
+
+If Firebase App Check with reCAPTCHA Enterprise is enabled, the corresponding reCAPTCHA key/domain configuration must permit the production hostnames. Phone authentication and OAuth providers must be enabled and tested from each product hostname after deployment.
 
 ## Vercel domain configuration
 

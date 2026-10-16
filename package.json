@@ -7,12 +7,15 @@
     "npm": ">=10.9.0"
   },
   "scripts": {
+    "predev": "node scripts/firebase-project-preflight.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/firebase-project-preflight.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "check:js": "node scripts/check-javascript.mjs",
-    "check": "npm run check:js && npm run check:theme && npm run audit:launch && npm test && npm run lint && npm run build",
+    "firebase:preflight": "node scripts/firebase-project-preflight.mjs",
+    "check": "npm run check:js && npm run firebase:preflight && npm run check:theme && npm run audit:launch && npm test && npm run lint && npm run build",
     "seed": "node scripts/seed-firestore.mjs",
     "firebase:emulators": "npx firebase-tools emulators:start",
     "firebase:deploy:indexes": "npx firebase-tools deploy --only firestore:indexes",
