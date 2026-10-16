@@ -24,8 +24,9 @@ export async function POST(request) {
     const tokenDocs = tokenSnapshots.flatMap((snapshot) => snapshot.docs);
     const tokenEntries = new Map();
     tokenDocs.forEach((item) => {
-      const token = item.data().token;
-      if (token && !tokenEntries.has(token)) tokenEntries.set(token, item);
+      const data = item.data();
+      const token = data.token;
+      if (token && data.workspace === body.workspace && !tokenEntries.has(token)) tokenEntries.set(token, item);
     });
     const tokens = [...tokenEntries.keys()];
 
@@ -37,6 +38,9 @@ export async function POST(request) {
         body: body.body,
         href: body.href,
         category: body.category,
+        workspace: body.workspace,
+        module: body.category,
+        eventType: body.category,
         read: false,
         createdBy: actor.uid,
         createdAt: FieldValue.serverTimestamp()

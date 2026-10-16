@@ -28,10 +28,18 @@ const acceptSchema = z.object({
   action: z.literal("submit_onboarding"),
   token: z.string().min(24).max(300),
   fullName: z.string().min(2).max(160),
+  preferredName: z.string().max(120).optional().default(""),
   phone: z.string().min(5).max(40),
   emergencyContactName: z.string().min(2).max(160),
   emergencyContactPhone: z.string().min(5).max(40),
+  emergencyContactRelationship: z.string().max(80).optional().default(""),
   workArrangement: z.enum(["office", "hybrid", "remote", "field"]).default("office"),
+  firstDayNotes: z.string().max(1200).optional().default(""),
+  policyAcknowledgements: z.object({
+    codeOfConduct: z.literal(true),
+    dataProtection: z.literal(true),
+    acceptableUse: z.literal(true)
+  }),
   acknowledgement: z.literal(true)
 });
 
@@ -75,6 +83,43 @@ export async function GET(request) {
   try {
     const user = await authenticateRequest(request);
     const { db } = getAdminServices();
+    const url = new URL(request.url);
+    const token = url.searchParams.get("token") || "";
+
+    if (token) {
+      const snapshot = await db.collection("staffInvitations").where("tokenHash", "==", tokenHash(token)).limit(1).get();
+      if (snapshot.empty) throw Object.assign(new Error("This onboarding link is invalid or no longer available."), { status: 404 });
+      const doc = snapshot.docs[0];
+      const invitation = doc.data();
+      const signedInEmail = String(user.email || user.profile?.email || "").trim().toLowerCase();
+      if (!signedInEmail || signedInEmail !== String(invitation.email || "").toLowerCase()) {
+        throw Object.assign(new Error(`Sign in with ${invitation.email} to complete this onboarding.`), { status: 403 });
+      }
+      if (Date.parse(invitation.expiresAt || 0) < Date.now() && ["pending", "changes_requested"].includes(invitation.status)) {
+        throw Object.assign(new Error("This onboarding link has expired. Ask People Operations for a new link."), { status: 410 });
+      }
+      const pack = STAFF_ROLE_PACKS[invitation.rolePackId] || null;
+      return Response.json({
+        ok: true,
+        invitation: {
+          id: doc.id,
+          email: invitation.email,
+          fullName: invitation.fullName,
+          rolePackId: invitation.rolePackId,
+          roleTitle: invitation.roleTitle || pack?.name || "Spotly staff member",
+          department: invitation.department || pack?.department || "Spotly",
+          employmentType: invitation.employmentType || "Permanent",
+          managerName: invitation.managerName || "To be confirmed",
+          startDate: invitation.startDate || "",
+          status: invitation.status,
+          reviewNote: invitation.reviewNote || "",
+          equipment: pack?.equipment || [],
+          training: pack?.training || [],
+          onboarding: invitation.onboarding || null
+        }
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     await peoplePermission(db, user, "people.read");
     const snapshot = await db.collection("staffInvitations").orderBy("createdAt", "desc").limit(150).get();
     return Response.json({ ok: true, invitations: snapshot.docs.map(inviteView) });
@@ -108,10 +153,14 @@ export async function POST(request) {
         submittedAt: FieldValue.serverTimestamp(),
         onboarding: {
           fullName: safeText(body.fullName, 160),
+          preferredName: safeText(body.preferredName, 120),
           phone: safeText(body.phone, 40),
           emergencyContactName: safeText(body.emergencyContactName, 160),
           emergencyContactPhone: safeText(body.emergencyContactPhone, 40),
+          emergencyContactRelationship: safeText(body.emergencyContactRelationship, 80),
           workArrangement: body.workArrangement,
+          firstDayNotes: safeText(body.firstDayNotes, 1200),
+          policyAcknowledgements: body.policyAcknowledgements,
           acknowledgement: true
         },
         updatedAt: FieldValue.serverTimestamp()
@@ -180,12 +229,29 @@ export async function POST(request) {
     await db.runTransaction(async (transaction) => {
       transaction.set(profileRef, {
         userId: staffUserId,
-        displayName: safeText(onboarding.fullName || invitation.fullName, 160),
+        displayName: safeText(onboarding.preferredName || onboarding.fullName || invitation.fullName, 160),
+        legalName: safeText(onboarding.fullName || invitation.fullName, 160),
+        preferredName: safeText(onboarding.preferredName, 120),
         email: invitation.email,
         phone: safeText(onboarding.phone, 40),
         emergencyContactName: safeText(onboarding.emergencyContactName, 160),
         emergencyContactPhone: safeText(onboarding.emergencyContactPhone, 40),
+        emergencyContactRelationship: safeText(onboarding.emergencyContactRelationship, 80),
         workArrangement: onboarding.workArrangement || "office",
+        policyAcknowledgements: onboarding.policyAcknowledgements || {},
+        firstDayNotes: safeText(onboarding.firstDayNotes, 1200),
+        onboardingChecklist: {
+          account: true,
+          personalDetails: true,
+          emergencyContact: true,
+          workArrangement: true,
+          policies: true,
+          roleAssigned: true,
+          managerAssigned: Boolean(invitation.managerId),
+          equipmentPlanned: (pack.equipment || []).length > 0,
+          requiredLearningAssigned: (pack.training || []).length > 0,
+          firstDayReady: false
+        },
         rolePackId: invitation.rolePackId,
         roleTitle: pack.name,
         department: invitation.department || pack.department,

@@ -62,8 +62,8 @@ test("pre-live navigation is lifecycle-gated instead of setup-complete gated", (
   const nav = read("data/business-archetypes.js");
   const workspace = read("components/business/business-workspace.js");
   assert.match(nav, /navigationMode/);
-  assert.match(nav, /Launch checklist/);
-  assert.match(nav, /Business details/);
+  assert.match(nav, /Get live/);
+  assert.match(nav, /Business setup/);
   assert.match(workspace, /navigationMode === "basics"/);
   // recoverable null lifecycle must not crash workspace navigation while lifecycle loads/fails
   assert.match(workspace, /if \(!lifecycle\) return/);
@@ -151,7 +151,7 @@ test("suspended businesses stay out of onboarding and restrict operational works
 
 test("platform launch controls block submission without changing merchant progress ownership", () => {
   const lifecycle = read("lib/business-lifecycle.js");
-  const admin = read("components/admin-app.js");
+  const admin = read("components/admin-legacy-sections.js");
   assert.match(lifecycle, /businessLaunchEnabled/);
   assert.match(lifecycle, /businessLaunchReviewEnabled/);
   assert.match(lifecycle, /id !== "platform_launch"/);
@@ -193,7 +193,7 @@ test("launch-critical edits invalidate pre-live review but keep live businesses 
 
 test("trusted Admin lifecycle controls suspend/resume without reopening onboarding", () => {
   const route = read("app/api/admin/business-lifecycle/route.js");
-  const admin = read("components/admin-app.js");
+  const admin = read("components/admin-legacy-sections.js");
   assert.match(route, /action: z\.enum\(\["suspend", "resume"\]\)/);
   assert.match(route, /previousStatus/);
   assert.match(route, /business_suspended/);

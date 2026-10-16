@@ -7,6 +7,7 @@ import { haversineKm, makeCode, makeDeliveryNumber } from "@/lib/driver-delivery
 import { buildOrderTotals, shoppingReserveAmount } from "@/lib/order-money";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
+import { marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,7 @@ const schema = z.object({
   items: z.array(itemSchema).min(1).max(60),
   currency: z.enum(["USD", "ZWG"]).default("USD"),
   promoCode: z.string().max(40).optional(),
-  paymentMethod: z.enum(["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"]),
+  paymentMethod: z.enum(["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer", "superadmin_test"]),
   fulfilment: z.enum(["pickup", "delivery"]).default("pickup"),
   delivery: z.object({
     contactName: z.string().min(2).max(120),
@@ -78,6 +79,11 @@ function lineFromProduct(snapshot, body, quantity) {
       name: safeText(product.name, 160),
       sku: product.sku || "",
       image: product.image || "",
+      brand: safeText(product.brand || "", 120),
+      variant: safeText(product.variant || "", 120),
+      packSize: safeText(product.packSize || "", 120),
+      gtin: safeText(product.gtin || product.barcode || "", 80),
+      unit: safeText(product.unit || "", 40),
       quantity,
       unitPrice,
       lineTotal: Number((unitPrice * quantity).toFixed(2)),
@@ -114,12 +120,14 @@ export async function POST(request) {
     const businessData = businessSnapshot.exists ? businessSnapshot.data() : null;
     const businessLive = Boolean(businessData?.public) && (businessData?.status === "active" || businessData?.lifecycleStatus === "live");
     if (!businessLive) throw Object.assign(new Error("This business is not accepting customer orders yet."), { status: 404 });
+    if (!marketplaceTrust(businessData).commerceVerified) throw Object.assign(new Error("This listing is not commerce verified yet. You can explore or claim it, but it cannot accept Spotly orders."), { status: 409 });
     if (!branchSnapshot.exists || branchSnapshot.data().businessId !== body.businessId) throw Object.assign(new Error("Choose a valid business location."), { status: 422 });
     if (body.fulfilment === "delivery" && !body.delivery) throw Object.assign(new Error("Add a delivery address and map location."), { status: 422 });
     if (body.fulfilment === "pickup" && !body.pickup) throw Object.assign(new Error("Choose a pickup time."), { status: 422 });
 
     const settings = settingsSnapshot.data() || {};
     const roles = user.profile?.roles || [];
+    const isSuperAdmin = roles.includes("super_admin");
     const elevatedPreview = roles.some((role) => ["super_admin", "platform_admin", "operations_manager", "support_manager"].includes(role));
     const marketplaceOpen = settings.launch?.marketplaceEnabled === true;
     const privatePreview = settings.launch?.privateBetaEnabled !== false && (user.profile?.privateBeta === true || elevatedPreview);
@@ -138,7 +146,9 @@ export async function POST(request) {
     const businessMethods = finance.paymentMethods || platformMethods;
     const branchMethods = branch.paymentMethods || businessMethods;
     const allowedMethods = platformMethods.filter((method) => businessMethods.includes(method) && branchMethods.includes(method));
-    if (!allowedMethods.includes(body.paymentMethod)) throw Object.assign(new Error("That payment method is not currently available for this branch."), { status: 422 });
+    const superAdminTestPayment = body.paymentMethod === "superadmin_test";
+    if (superAdminTestPayment && !isSuperAdmin) throw Object.assign(new Error("Super Admin test payment is restricted to Super Admin accounts."), { status: 403 });
+    if (!superAdminTestPayment && !allowedMethods.includes(body.paymentMethod)) throw Object.assign(new Error("That payment method is not currently available for this branch."), { status: 422 });
 
     const platformCurrencies = settings.commerce?.currencies || ["USD", "ZWG"];
     const businessCurrencies = finance.acceptedCurrencies || platformCurrencies;
@@ -158,7 +168,7 @@ export async function POST(request) {
     const notificationRef = db.collection("notifications").doc();
     const businessRef = db.collection("businesses").doc(body.businessId);
     const branchRef = db.collection("branches").doc(body.branchId);
-    const paymentMethodRequiresCapture = body.paymentMethod !== "cash" && body.paymentMethod !== "bank_transfer";
+    const paymentMethodRequiresCapture = !["cash", "bank_transfer", "superadmin_test"].includes(body.paymentMethod);
     if (body.fulfilment === "delivery" && ["cash", "bank_transfer"].includes(body.paymentMethod)) throw Object.assign(new Error("Delivery requires an instantly confirmable digital payment method."), { status: 422 });
     const number = orderNumber();
     const serviceFee = Number(Math.max(0, Number(settings.commerce?.customerServiceFee || 0)).toFixed(2));
@@ -193,7 +203,7 @@ export async function POST(request) {
       const driverShopping = body.fulfilment === "delivery" && branchData.delivery?.fulfilmentMode === "driver_shops";
       const reservePercent = driverShopping ? Number(branchData.delivery?.shoppingReservePercent ?? settings.commerce?.driverShoppingReservePercent ?? 12) : 0;
       const shoppingReserve = driverShopping ? shoppingReserveAmount(subtotal, reservePercent) : 0;
-      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta });
+      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta: privatePreview });
       if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
       const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
       const commissionPercent = Number(finance.commissionPercent ?? settings.commerce?.commissionPercent ?? 0);
@@ -225,7 +235,8 @@ export async function POST(request) {
         pickup: body.fulfilment === "pickup" ? { ...body.pickup, substitutionPreference: normalizedSubstitution, notes: safeText(body.pickup.notes, 500), reservedSlotId: slot.id } : null,
         delivery: body.fulfilment === "delivery" ? { ...body.delivery, substitutionPreference: normalizedSubstitution, instructions: safeText(body.delivery.instructions, 500) } : null,
         paymentMethod: body.paymentMethod,
-        paymentStatus: paymentRequired ? "unpaid" : body.paymentMethod === "cash" ? "due_at_pickup" : "awaiting_transfer",
+        paymentStatus: superAdminTestPayment ? "test_paid" : paymentRequired ? "unpaid" : body.paymentMethod === "cash" ? "due_at_pickup" : "awaiting_transfer",
+        ...(superAdminTestPayment ? { isTestOrder: true, testPaymentMode: "super_admin", merchantSettlementStatus: "test_excluded" } : {}),
         status: paymentRequired ? "awaiting_payment" : "submitted",
         inventoryReservationStatus: "reserved",
         timeline: [{ status: paymentRequired ? "awaiting_payment" : "submitted", at: new Date().toISOString(), actorId: user.uid }],
@@ -249,20 +260,29 @@ export async function POST(request) {
         const deliveryDistanceKm = haversineKm({ lat: Number(pickupLocation.lat), lng: Number(pickupLocation.lng) }, { lat: Number(body.delivery.lat), lng: Number(body.delivery.lng) });
         const deliveryRadiusKm = Number(branchData.delivery?.radiusKm || 0);
         if (deliveryRadiusKm > 0 && deliveryDistanceKm > deliveryRadiusKm) throw Object.assign(new Error(`This address is outside this location's ${deliveryRadiusKm} km delivery area.`), { status: 422 });
+        const businessArchetype = safeText(currentBusiness?.businessType || currentBusiness?.archetype || currentBusiness?.category || "", 80);
+        const operatingProfile = {
+          type: driverShopping ? "grocery_shopping" : (businessArchetype.includes("restaurant") || businessArchetype.includes("food") ? "prepared_food" : businessArchetype.includes("grocery") ? "prepared_grocery" : "prepared_retail"),
+          archetype: businessArchetype || null,
+          chilled: Boolean(branchData.delivery?.chilledHandling),
+          fragile: Boolean(branchData.delivery?.fragileHandling),
+          bulky: Boolean(branchData.delivery?.bulkyHandling),
+          pickupPoint: safeText(branchData.delivery?.pickupPoint || "", 160) || null
+        };
         transaction.create(deliveryRef, {
           number: deliveryNumber, orderId: orderRef.id, businessId: body.businessId, branchId: body.branchId, customerId: user.uid, state: "awaiting_dispatch",
           pickup: { lat: Number(pickupLocation?.lat), lng: Number(pickupLocation?.lng), formattedAddress: branchData.address || "", area: branchData.area || branchData.city || "Harare", instructions: safeText(branchData.delivery?.pickupInstructions || branchData.instructions || "", 1000) },
           dropoff: { lat: body.delivery.lat, lng: body.delivery.lng, formattedAddress: safeText(body.delivery.address, 500), suburb: safeText(body.delivery.suburb, 120), landmark: safeText(body.delivery.landmark, 240), instructions: safeText(body.delivery.instructions, 500) },
-          fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared",
+          fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", operatingProfile, deliveryDistanceKm: Number(deliveryDistanceKm.toFixed(1)),
           businessPreparationMinutes: driverShopping ? 0 : Number(branchData.delivery?.preparationMinutes || 20), shoppingMinutes: driverShopping ? Number(branchData.delivery?.preparationMinutes || 30) : 0, requiredVehicleTypes: branchData.delivery?.vehicleTypes || ["motorcycle", "car"],
-          shopping: driverShopping ? { state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), substitutionPreference: normalizedSubstitution, items: lines.map((line) => ({ productId: line.productId, name: line.name, requestedQuantity: line.quantity, estimatedUnitPrice: line.unitPrice, status: "pending", actualQuantity: 0, actualUnitPrice: 0, replacementName: "" })) } : null,
+          shopping: driverShopping ? { state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), substitutionPreference: normalizedSubstitution, items: lines.map((line) => ({ productId: line.productId, name: line.name, image: line.image || "", sku: line.sku || "", brand: line.brand || "", variant: line.variant || "", packSize: line.packSize || "", gtin: line.gtin || "", unit: line.unit || "", requestedQuantity: line.quantity, estimatedUnitPrice: line.unitPrice, substitutionAllowed: line.substitutionAllowed !== false, status: "pending", actualQuantity: 0, actualUnitPrice: 0, replacementName: "" })) } : null,
           quotedDriverPay: Number(Math.max(1, Number(branchData.delivery?.driverPay ?? settings.commerce?.defaultDriverPay ?? Math.max(2.5, deliveryFee * 0.7))).toFixed(2)), currency: body.currency,
           pickupCode, customerPin, bagCount: 1, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
         });
         transaction.set(orderRef, { deliveryJobId: deliveryRef.id, deliveryNumber, deliveryStatus: driverShopping ? (paymentRequired ? "awaiting_payment" : "awaiting_dispatch") : "business_preparing" }, { merge: true });
       }
       transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", previousStatus: null, status: order.status, actorType: "customer", actorId: user.uid, source: "checkout", metadata: { number, paymentMethod: body.paymentMethod, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", slotId: slot?.id || null, promotionId: promotionResult?.quote?.eligible ? promotionResult.promotion.id : null, discount: promotionDiscount }, createdAt: FieldValue.serverTimestamp() });
-      transaction.create(notificationRef, { userId: user.uid, title: "Order created", body: `${number} was sent to ${businessSnapshot.data().name}.`, href: `/marketplace?order=${orderRef.id}`, category: "order", read: false, createdAt: FieldValue.serverTimestamp() });
+      transaction.create(notificationRef, { userId: user.uid, title: "Order created", body: `${number} was sent to ${businessSnapshot.data().name}.`, href: `/marketplace?order=${orderRef.id}`, category: "order", workspace: "customer", module: "orders", eventType: "order.created", read: false, createdAt: FieldValue.serverTimestamp() });
       if (bookedSlots) transaction.update(branchRef, { "pickup.bookedSlots": bookedSlots, updatedAt: FieldValue.serverTimestamp() });
       currentProducts.forEach(({ product, line }, index) => {
         const stock = Number(product.stockQuantity);

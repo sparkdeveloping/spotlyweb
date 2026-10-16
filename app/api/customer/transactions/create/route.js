@@ -6,6 +6,7 @@ import { safeText } from "@/lib/server-helpers";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
 import { appointmentReservationSpecs, bookingReservationSpecs, reservationCanFit } from "@/lib/availability-reservations";
+import { marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ const schema = z.object({
   quantity: z.number().int().min(1).max(20).default(1),
   currency: z.enum(["USD", "ZWG"]).default("USD"),
   promoCode: z.string().max(40).optional(),
-  paymentMethod: z.enum(["paynow", "ecocash", "onemoney", "card", "bank_transfer", "pay_later"]).default("pay_later"),
+  paymentMethod: z.enum(["paynow", "ecocash", "onemoney", "card", "bank_transfer", "pay_later", "superadmin_test"]).default("pay_later"),
   contactName: z.string().min(2).max(120),
   contactPhone: z.string().min(7).max(40),
   notes: z.string().max(600).optional(),
@@ -98,6 +99,7 @@ export async function POST(request) {
       throw Object.assign(new Error("Sign in with email, Google or Apple before continuing."), { status: 409 });
     }
     if (!businessSnapshot.exists) throw Object.assign(new Error("This business is no longer available."), { status: 404 });
+    if (!marketplaceTrust(businessSnapshot.data() || {}).commerceVerified) throw Object.assign(new Error("This listing is not commerce verified yet and cannot accept bookings or tickets."), { status: 409 });
     if (!branchSnapshot.exists) throw Object.assign(new Error("Choose a valid location."), { status: 422 });
     if (!productSnapshot.exists) throw Object.assign(new Error("This offering is no longer available."), { status: 404 });
 
@@ -122,10 +124,13 @@ export async function POST(request) {
 
     const settings = settingsSnapshot.data() || {};
     const roles = user.profile?.roles || [];
+    const isSuperAdmin = roles.includes("super_admin");
     const elevatedPreview = roles.some((role) => ["super_admin", "platform_admin", "operations_manager", "support_manager"].includes(role));
     const marketplaceOpen = settings.launch?.marketplaceEnabled === true;
     const privatePreview = settings.launch?.privateBetaEnabled !== false && (user.profile?.privateBeta === true || elevatedPreview);
     if (!marketplaceOpen && !privatePreview) throw Object.assign(new Error("This customer service is currently limited to approved preview accounts."), { status: 403 });
+    const superAdminTestPayment = body.paymentMethod === "superadmin_test";
+    if (superAdminTestPayment && !isSuperAdmin) throw Object.assign(new Error("Super Admin test payment is restricted to Super Admin accounts."), { status: 403 });
 
     if (kind === "appointment" && !body.appointment) throw Object.assign(new Error("Choose an appointment date and time."), { status: 422 });
     if (kind === "booking" && !body.booking) throw Object.assign(new Error("Choose booking dates."), { status: 422 });
@@ -228,7 +233,7 @@ export async function POST(request) {
         ticketType: kind === "ticket" ? safeText(latestProduct.variant || latestProduct.name || "Standard", 120) : "",
         durationLabel: kind === "appointment" ? `${Number(latestProduct.durationMinutes || 30)} min` : ""
       };
-      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines: [line], code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta });
+      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines: [line], code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta: privatePreview });
       if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
       const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
       const latestTotals = buildOrderTotals({
@@ -237,7 +242,7 @@ export async function POST(request) {
         serviceFee: Number(finance.customerServiceFee || settings.commerce?.bookingServiceFee || 0),
         commissionPercent: Number(finance.commissionPercent ?? settings.commerce?.defaultCommissionPercent ?? 0)
       });
-      const paymentRequired = body.paymentMethod !== "pay_later" && latestTotals.total > 0;
+      const paymentRequired = !["pay_later", "superadmin_test"].includes(body.paymentMethod) && latestTotals.total > 0;
 
 
       const base = {
@@ -262,7 +267,8 @@ export async function POST(request) {
         total: latestTotals.total,
         promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         paymentMethod: body.paymentMethod,
-        paymentStatus: paymentRequired ? "unpaid" : latestTotals.total <= 0 ? "not_required" : "pay_later",
+        paymentStatus: superAdminTestPayment ? "test_paid" : paymentRequired ? "unpaid" : latestTotals.total <= 0 ? "not_required" : "pay_later",
+        ...(superAdminTestPayment ? { isTestOrder: true, testPaymentMode: "super_admin", merchantSettlementStatus: "test_excluded" } : {}),
         status: paymentRequired && kind === "ticket" ? "awaiting_payment" : kind === "ticket" ? "submitted" : "requested",
         notes: safeText(body.notes, 600),
         inventoryReservationStatus: kind === "ticket" || availabilitySpecs.length ? "reserved" : "not_applicable",

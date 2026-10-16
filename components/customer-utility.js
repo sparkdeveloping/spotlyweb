@@ -22,6 +22,7 @@ import { Badge, Button, EmptyState, SearchField } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { ServiceGlyph } from "@/components/service-artwork";
+import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 
 const typeMeta = {
   business: { label: "Businesses", icon: Store },
@@ -54,8 +55,8 @@ function SearchResult({ result, onOpen, saved, onSave }) {
         {result.image ? <Image src={result.image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.03]" sizes="72px" /> : <Icon className="h-6 w-6" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold tracking-[-.02em]">{result.title || result.name}</span><Badge tone="neutral">{meta.label.slice(0, -1)}</Badge></span>
-        {result.subtitle ? <span className="mt-1 block truncate text-xs text-[var(--text-3)]">{result.subtitle}</span> : null}
+        <span className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold tracking-[-.02em]">{result.title || result.name}</span>{result.type === "business" ? <MarketplaceTrustBadge business={result} compact /> : result.catalogReference ? <Badge tone="info">Product reference</Badge> : <Badge tone="neutral">{meta.label.slice(0, -1)}</Badge>}</span>
+        {result.subtitle ? <span className="mt-1 block truncate text-xs text-[var(--text-3)]">{result.subtitle}</span> : null}{result.catalogReference ? <span className="mt-1 block text-xs font-medium text-[var(--accent)]">Catalogue identity · store stock and price not confirmed</span> : null}
         {result.description ? <span className="mt-2 line-clamp-2 block text-sm leading-6 text-[var(--text-2)]">{result.description}</span> : null}
         <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-3)]">{money(result) ? <strong className="text-[var(--text)]">{money(result)}</strong> : null}{result.city || result.area ? <span>{[result.area, result.city].filter(Boolean).join(" · ")}</span> : null}{result.startsAt ? <span>{new Date(result.startsAt).toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Harare" })}</span> : null}</span>
       </span>
@@ -114,12 +115,10 @@ export function CustomerSearchView({
   </section>;
 }
 
-function savedIcon(type) {
-  return type === "event" ? Ticket : type === "service" ? Sparkles : type === "product" ? ShoppingBag : type === "place" ? MapPin : Store;
-}
+const savedIcons = { event: Ticket, service: Sparkles, product: ShoppingBag, place: MapPin, business: Store };
 
 function SavedRow({ item, business, onOpen, onRemove }) {
-  const Icon = savedIcon(item.type);
+  const Icon = savedIcons[item.type] || Store;
   return <article className="group border-b border-[var(--border-subtle)] last:border-0"><div className="flex items-center gap-3 py-3.5"><button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left"><span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[var(--surface-2)] text-[var(--accent)]">{item.image || item.coverImage || item.logoUrl ? <Image src={item.image || item.coverImage || item.logoUrl} alt="" fill className="object-cover" sizes="56px" /> : <Icon className="h-5 w-5" />}</span><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{item.title || item.name || "Saved item"}</span><span className="mt-1 block line-clamp-1 text-xs text-[var(--text-3)]">{item.subtitle || item.description || [item.area, item.city].filter(Boolean).join(" · ") || typeMeta[item.type]?.label}</span></span><ArrowRight className="h-4 w-4 text-[var(--text-3)]" /></button><button type="button" onClick={onRemove} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-[var(--text-3)] opacity-70 transition hover:bg-[var(--surface-hover)] hover:text-[var(--danger)] group-hover:opacity-100" aria-label="Remove from Saved"><Trash2 className="h-4 w-4" /></button></div></article>;
 }
 
@@ -140,6 +139,6 @@ export function CustomerSavedView({ user, businessEntries = [], savedItems = [],
 
     <div className="no-scrollbar mt-6 flex gap-2 overflow-x-auto pb-1"><button type="button" onClick={() => setFilter("all")} className={cn("rounded-full border px-3 py-2 text-sm font-semibold", filter === "all" ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--border-subtle)] bg-[var(--surface)]")}>All{combined.length ? ` ${combined.length}` : ""}</button>{sections.map((section) => { const Icon = section.icon; return <button key={section.key} type="button" onClick={() => setFilter(section.key)} className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold", filter === section.key ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--border-subtle)] bg-[var(--surface)]")}><Icon className="h-4 w-4" />{section.label}{section.count ? ` ${section.count}` : ""}</button>; })}</div>
 
-    {visible.length ? <div className="mt-7 grid gap-x-8 lg:grid-cols-2">{visible.map((item) => { const business = item.type === "business"; return <SavedRow key={`${item.type}-${item.entityId || item.id}`} item={item} business={business} onOpen={() => business ? onOpenBusiness(item) : onOpenSavedItem(item)} onRemove={() => business ? onRemoveBusiness(item.id) : onRemoveItem(item)} />; })}</div> : <div className="mt-8 rounded-[24px] bg-[var(--surface-2)]"><EmptyState icon={Heart} title={filter === "all" ? "Save the city you want to come back to" : `No saved ${typeMeta[filter]?.label.toLowerCase() || "items"}`} description={filter === "all" ? "Tap the heart on restaurants, shops, services, events and products and Spotly will keep them here." : "Browse Spotly and save something in this category when you find it."} action={<Button onClick={onExplore}>Find something nearby</Button>} /></div>}
+    {visible.length ? <div className="mt-7 grid gap-x-8 lg:grid-cols-2">{visible.map((item) => { const business = item.type === "business"; return <SavedRow key={`${item.type}-${item.entityId || item.id}`} item={item} business={business} onOpen={() => business ? onOpenBusiness(item) : onOpenSavedItem(item)} onRemove={() => business ? onRemoveBusiness(item.id) : onRemoveItem(item)} />; })}</div> : <div className="mt-8 rounded-[24px] bg-[var(--surface-2)]"><EmptyState icon={Heart} title={filter === "all" ? "Save the city you want to come back to" : `Nothing saved in ${typeMeta[filter]?.label.toLowerCase() || "this category"}`} description={filter === "all" ? "Tap the heart on restaurants, shops, services, events and products and Spotly will keep them here." : "Browse Spotly and save something in this category when you find it."} action={<Button onClick={onExplore}>Find something nearby</Button>} /></div>}
   </section>;
 }

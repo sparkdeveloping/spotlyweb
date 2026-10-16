@@ -63,14 +63,14 @@ test("Firestore explicitly protects new Driver Delivery Money and Kiosk collecti
   assert.match(rules, /match \/deliveryJobs\/\{jobId\} \{ allow read, write: if false; \}/);
 });
 
-test("Admin Driver approval validates evidence before writing approval state", async () => {
+test("Admin Driver approval validates capability-specific evidence before writing approval state", async () => {
   const source = await read("app/api/admin/drivers/route.js");
   const start = source.indexOf('if (body.action === "approve")');
   const end = source.indexOf('} else if (body.action === "request_information")', start);
   const block = source.slice(start, end);
-  assert.ok(block.indexOf("approvedVehicle") < block.indexOf("batch.set(appRef"));
-  assert.ok(block.indexOf('approvedTypes.has("identity")') < block.indexOf("batch.set(appRef"));
-  assert.ok(block.indexOf('approvedTypes.has("licence")') < block.indexOf("batch.set(appRef"));
+  assert.ok(block.indexOf('item.status === "approved"') < block.indexOf("batch.set(appRef"));
+  assert.ok(block.indexOf("capabilityRequirements") < block.indexOf("batch.set(appRef"));
+  assert.ok(block.indexOf("No requested work type is ready yet") < block.indexOf("batch.set(appRef"));
 });
 
 test("Business delivery is visible in live commerce navigation and branchless kiosk/delivery refuse fake Main location", async () => {

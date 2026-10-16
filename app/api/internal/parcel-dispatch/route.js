@@ -1,12 +1,13 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { apiError, getAdminServices } from "@/lib/firebase-admin";
 import { dispatchParcel } from "@/lib/parcel-server";
+import { effectiveSecret } from "@/lib/platform-secrets-server";
 
 export const runtime = "nodejs";
 
 export async function GET(request) {
   try {
-    const secret = process.env.CRON_SECRET; const authorization = request.headers.get("authorization") || "";
+    const secret = await effectiveSecret("scheduler", "secret", ["CRON_SECRET"]); const authorization = request.headers.get("authorization") || "";
     if (!secret || authorization !== `Bearer ${secret}`) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     const { db, messaging } = getAdminServices();
     const scheduled = await db.collection("parcelJobs").where("state", "==", "scheduled").limit(100).get();

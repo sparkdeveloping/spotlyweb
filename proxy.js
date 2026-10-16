@@ -5,14 +5,16 @@ const PORTALS = {
   "business.spotlyafrica.com": "/business",
   "admin.spotlyafrica.com": "/admin",
   "driver.spotlyafrica.com": "/driver",
-  "staff.spotlyafrica.com": "/staff"
+  "staff.spotlyafrica.com": "/staff",
+  "careers.spotlyafrica.com": "/careers"
 };
 
 const PATH_TO_HOST = {
   business: "business.spotlyafrica.com",
   admin: "admin.spotlyafrica.com",
   driver: "driver.spotlyafrica.com",
-  staff: "staff.spotlyafrica.com"
+  staff: "staff.spotlyafrica.com",
+  careers: "careers.spotlyafrica.com"
 };
 
 // Clean product-domain paths are intentionally allowed to use words that are also
@@ -147,7 +149,11 @@ export function proxy(request) {
     return NextResponse.redirect(productionUrl(request, "spotlyafrica.com", pathname), 308);
   }
 
-  if (matchesPrefix(pathname, CUSTOMER_HOST_PREFIXES)) {
+  // Some clean workspace sections intentionally share names with customer routes.
+  // A section explicitly owned by the current product (for example Admin /marketplace)
+  // must stay on that product host; only non-local customer destinations canonicalize
+  // back to the customer origin.
+  if (matchesPrefix(pathname, CUSTOMER_HOST_PREFIXES) && !localSection(host, pathname)) {
     return NextResponse.redirect(productionUrl(request, "spotlyafrica.com", pathname), 308);
   }
 

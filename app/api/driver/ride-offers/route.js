@@ -31,17 +31,20 @@ export async function POST(request) {
       if (!["offered", "viewed"].includes(offer.state)) throw Object.assign(new Error("This ride offer is no longer available."), { status: 409 });
       if (body.action === "decline") { transaction.set(offerRef, { state: "declined", declinedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); await appendRideEvent(transaction, db, { rideId, type: "offer.declined", actorType: "driver", actorId: user.uid, state: ride.state }); return; }
       if (!rideTransitionAllowed(ride.state, "driver_assigned") || ride.assignedDriverId) throw Object.assign(new Error("Another Driver already accepted this ride."), { status: 409 });
-      const [presenceSnap, driverSnap, vehicleQuery, docsQuery] = await Promise.all([
-        transaction.get(db.collection("driverPresence").doc(user.uid)),
-        transaction.get(db.collection("drivers").doc(user.uid)),
-        db.collection("driverVehicles").where("driverId", "==", user.uid).limit(10).get(),
-        db.collection("driverDocuments").where("driverId", "==", user.uid).limit(30).get()
+      const presenceRef = db.collection("driverPresence").doc(user.uid);
+      const driverRef = db.collection("drivers").doc(user.uid);
+      const applicationRef = db.collection("driverApplications").doc(user.uid);
+      const vehicleRef = offer.vehicleId ? db.collection("driverVehicles").doc(offer.vehicleId) : null;
+      const docsRef = db.collection("driverDocuments").where("driverId", "==", user.uid).limit(50);
+      const [presenceSnap, driverSnap, applicationSnap, vehicleSnap, docsSnap] = await Promise.all([
+        transaction.get(presenceRef), transaction.get(driverRef), transaction.get(applicationRef), vehicleRef ? transaction.get(vehicleRef) : Promise.resolve(null), transaction.get(docsRef)
       ]);
       const presence = presenceSnap.exists ? presenceSnap.data() : null; const driver = driverSnap.exists ? driverSnap.data() : null;
-      const vehicle = vehicleQuery.docs.map((item) => ({ id: item.id, ...item.data() })).find((item) => item.status === "approved") || null;
-      const documents = docsQuery.docs.map((item) => item.data()); const eligibility = operationalEligibility({ driver, vehicle, documents, presence });
-      if (!presence?.online || presence.currentJobId || !eligibility.eligible) throw Object.assign(new Error("You must be online, free and operationally eligible to accept this ride."), { status: 409 });
-      if (ride.requiredVehicleTypes?.length && !ride.requiredVehicleTypes.includes(vehicle?.type)) throw Object.assign(new Error("Your approved vehicle is not suitable for this ride."), { status: 409 });
+      const vehicle = vehicleSnap?.exists ? { id: vehicleSnap.id, ...vehicleSnap.data() } : null;
+      const documents = docsSnap.docs.map((item) => ({ id: item.id, ...item.data() }));
+      if (presence?.online && presence.currentJobId) throw Object.assign(new Error("Your Driver is already handling another job."), { status: 409 });
+      const eligibility = operationalEligibility({ driver, application: applicationSnap.exists ? applicationSnap.data() : {}, vehicle, documents, presence, capability: "ride_passenger", requiredVehicleTypes: ride.requiredVehicleTypes || ["car", "van"] });
+      if (!presence?.online || !eligibility.eligible) throw Object.assign(new Error("Your Driver account, vehicle or Ride approval changed before this offer was accepted."), { status: 409, blockers: eligibility.checks.filter((item) => !item.ok) });
       const now = FieldValue.serverTimestamp();
       transaction.set(offerRef, { state: "accepted", acceptedAt: now, updatedAt: now }, { merge: true });
       transaction.set(rideRef, { state: "driver_assigned", assignedDriverId: user.uid, assignedVehicleId: vehicle?.id || null, acceptedDriverPay: Number(offer.pay ?? ride.quote?.driverPay ?? 0), assignedAt: now, updatedAt: now }, { merge: true });

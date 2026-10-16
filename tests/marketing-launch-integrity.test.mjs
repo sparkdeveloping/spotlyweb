@@ -20,7 +20,7 @@ test("root domain is controlled by platform launch mode instead of hardwired com
 });
 
 test("Admin exposes an intentional root-domain launch switch", () => {
-  const admin = read("components/admin-app.js");
+  const admin = read("components/admin-legacy-sections.js");
   assert.match(admin, /Launch marketing page/);
   assert.match(admin, /updatePublicMode/);
   assert.match(admin, /Preview root/);

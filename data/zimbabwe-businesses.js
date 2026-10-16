@@ -173,7 +173,7 @@ function makeRecord([baseId, name, category, cities, sourceUrl], city, index) {
     website: sourceUrl.startsWith("http") ? sourceUrl : "",
     address: "",
     currency: "USD",
-    fulfilment: category === "Groceries" || category === "Restaurants" ? ["pickup"] : [],
+    fulfilment: [],
     provisionalMedia: true,
     source: {
       type: "public_web_research",
