@@ -282,7 +282,7 @@ export async function POST(request) {
         transaction.set(orderRef, { deliveryJobId: deliveryRef.id, deliveryNumber, deliveryStatus: driverShopping ? (paymentRequired ? "awaiting_payment" : "awaiting_dispatch") : "business_preparing" }, { merge: true });
       }
       transaction.create(eventRef, { orderId: orderRef.id, type: "order_created", previousStatus: null, status: order.status, actorType: "customer", actorId: user.uid, source: "checkout", metadata: { number, paymentMethod: body.paymentMethod, fulfilment: body.fulfilment, fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", slotId: slot?.id || null, promotionId: promotionResult?.quote?.eligible ? promotionResult.promotion.id : null, discount: promotionDiscount }, createdAt: FieldValue.serverTimestamp() });
-      transaction.create(notificationRef, { userId: user.uid, title: "Order created", body: `${number} was sent to ${businessSnapshot.data().name}.`, href: `/marketplace?order=${orderRef.id}`, category: "order", read: false, createdAt: FieldValue.serverTimestamp() });
+      transaction.create(notificationRef, { userId: user.uid, title: "Order created", body: `${number} was sent to ${businessSnapshot.data().name}.`, href: `/marketplace?order=${orderRef.id}`, category: "order", workspace: "customer", module: "orders", eventType: "order.created", read: false, createdAt: FieldValue.serverTimestamp() });
       if (bookedSlots) transaction.update(branchRef, { "pickup.bookedSlots": bookedSlots, updatedAt: FieldValue.serverTimestamp() });
       currentProducts.forEach(({ product, line }, index) => {
         const stock = Number(product.stockQuantity);

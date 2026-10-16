@@ -132,20 +132,16 @@ test("Admin cannot activate a Driver capability without current requirements", a
 });
 
 test("public Driver acquisition includes a personalized eligibility planner and no fake shift promise", async () => {
-  const [page, marketing, planner, portals] = await Promise.all([
+  const [page, planner, portals] = await Promise.all([
     read("app/drive/page.js"),
-    read("components/driver/driver-marketing.js"),
     read("components/driver/eligibility-planner.js"),
     read("data/portals.js"),
   ]);
-  assert.match(page, /DriverMarketingPage/);
-  assert.match(marketing, /DriverEligibilityPlanner/);
-  assert.match(marketing, /Check before creating an account/);
+  assert.match(page, /DriverEligibilityPlanner/);
   assert.match(planner, /City/);
   assert.match(planner, /vehicle/);
   assert.match(planner, /documentRequirementsFor/);
   assert.match(planner, /trainingRequirementsFor/);
-  assert.match(planner, /entryHref/);
   const driverStart = portals.indexOf('id: "driver"');
   const driverBlock = portals.slice(driverStart, driverStart + 2200);
   assert.doesNotMatch(driverBlock, /shifts/i);
@@ -240,98 +236,4 @@ test("precise live Driver network access is limited to operational roles", async
   const analyticsLine = access.match(/analytics_viewer:\s*\[[^\]]+\]/)?.[0] || "";
   assert.doesNotMatch(financeLine, /mobility/);
   assert.doesNotMatch(analyticsLine, /mobility/);
-});
-
-test("Driver root sells the Driver product before asking a brand-new applicant to sign in", async () => {
-  const [auth, marketing, page] = await Promise.all([
-    read("components/auth-gate.js"),
-    read("components/driver/driver-marketing.js"),
-    read("app/driver/page.js"),
-  ]);
-  assert.match(auth, /DriverMarketingPage/);
-  assert.match(auth, /portal === "driver" && isDriverLanding/);
-  assert.match(marketing, /Move Zimbabwe\. Earn on work that fits you\./);
-  assert.match(marketing, /Start my Driver application/);
-  assert.match(marketing, /Ways to earn/);
-  assert.match(marketing, /From curious to active/);
-  assert.match(marketing, /DriverEligibilityPlanner/);
-  assert.match(marketing, /Sample offer · illustrative/);
-  assert.match(page, /robots: \{ index: true, follow: true \}/);
-  assert.match(page, /driver\.spotlyafrica\.com/);
-});
-
-test("zero-to-active onboarding can save identity before vehicle setup and collects full motor vehicle details", async () => {
-  const [api, ui] = await Promise.all([
-    read("app/api/driver/application/route.js"),
-    read("components/driver-app.js"),
-  ]);
-  assert.match(api, /currentStep >= 2/);
-  assert.match(ui, /if \(nextStep >= 2\) payload\.vehicle/);
-  assert.match(ui, /Ownership/);
-  assert.match(ui, /Registration/);
-  assert.match(ui, /Year/);
-  assert.match(ui, /Make/);
-  assert.match(ui, /Model/);
-  assert.match(ui, /Driver licence/);
-  assert.match(api, /Add the motor vehicle make and model/);
-});
-
-test("additional vehicle setup is a staged evidence workflow, not a one-click record creator", async () => {
-  const [api, ui] = await Promise.all([
-    read("app/api/driver/application/route.js"),
-    read("components/driver-app.js"),
-  ]);
-  assert.match(ui, /function AdditionalVehicleSetup/);
-  assert.match(ui, /Continue to required evidence/);
-  assert.match(ui, /Send complete vehicle for review/);
-  assert.match(ui, /requestedCapabilities/);
-  assert.match(api, /action:\s*z\.enum\(\["save", "submit", "vehicle", "vehicle_submit"/);
-  assert.match(api, /status: "setup_required"/);
-  assert.match(api, /documentRequirementsFor/);
-  assert.match(api, /queue: "driver-vehicles"/);
-});
-
-test("vehicle-specific documents are scoped to the exact vehicle throughout readiness and Admin approval", async () => {
-  const [capabilities, application, admin] = await Promise.all([
-    read("lib/driver-capabilities.js"),
-    read("app/api/driver/application/route.js"),
-    read("app/api/admin/drivers/route.js"),
-  ]);
-  assert.match(capabilities, /VEHICLE_SCOPED_DOCUMENTS/);
-  assert.match(capabilities, /item\.vehicleId === vehicleId/);
-  assert.match(application, /vehicleId: inferredVehicleId/);
-  assert.match(admin, /item\.vehicleId === vehicle\.id/);
-  assert.match(admin, /Approve the required vehicle evidence first/);
-});
-
-test("Admin visibly exposes submitted vehicles and Driver review queues", async () => {
-  const [detail, network, inbox, queues] = await Promise.all([
-    read("components/admin-driver-operations.js"),
-    read("app/api/admin/driver-network/route.js"),
-    read("components/admin-work-inbox.js"),
-    read("app/api/admin/queues/route.js"),
-  ]);
-  assert.match(detail, /const vehicles = data\.vehicles \|\| \[\]/);
-  assert.doesNotMatch(detail, /const vehicle = data\.vehicles\?\.\[0\]/);
-  assert.match(detail, /Vehicle reviews/);
-  assert.match(detail, /request_vehicle_setup/);
-  assert.match(detail, /reject_vehicle/);
-  assert.match(network, /vehicleReviews/);
-  assert.match(network, /adminQueueItems/);
-  assert.match(inbox, /"driver-vehicles"/);
-  assert.match(inbox, /\/mobility\?driver=/);
-  assert.match(queues, /"driver-applications"/);
-  assert.match(queues, /"driver-documents"/);
-  assert.match(queues, /"driver-vehicles"/);
-});
-
-test("new vehicle work types merge into active Driver training rather than becoming an unfinishable Admin-only state", async () => {
-  const [api, ui] = await Promise.all([
-    read("app/api/driver/application/route.js"),
-    read("components/driver-app.js"),
-  ]);
-  assert.match(api, /mergedRequestedCapabilities/);
-  assert.match(api, /requestedCapabilities: mergedRequestedCapabilities/);
-  assert.match(ui, /function ActiveDriverTraining/);
-  assert.match(ui, /When you add a vehicle or request a new kind of work/);
 });

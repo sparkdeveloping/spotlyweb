@@ -13,10 +13,7 @@ const QUEUES = {
   "payment-exceptions": { collection: "paymentReconciliationIssues", permission: "finance.read", roles: ["finance_admin"], sort: "createdAt" },
   "publication-review": { collection: "adminTasks", permission: "businesses.read", roles: ["business_success_manager", "operations_manager"], sort: "createdAt" },
   "staff-approvals": { collection: "adminTasks", permission: "people.approve", roles: ["operations_manager", "regional_operations_manager", "people_admin", "people_operations_admin"], sort: "createdAt" },
-  incidents: { collection: "adminTasks", permission: "operations.read", roles: ["operations_manager", "regional_operations_manager"], sort: "createdAt" },
-  "driver-applications": { collection: "adminQueueItems", permission: "drivers.read", roles: ["driver_operations_coordinator", "operations_manager", "regional_operations_manager", "risk_compliance_officer"], sort: "createdAt" },
-  "driver-documents": { collection: "adminQueueItems", permission: "drivers.read", roles: ["driver_operations_coordinator", "operations_manager", "regional_operations_manager", "risk_compliance_officer"], sort: "createdAt" },
-  "driver-vehicles": { collection: "adminQueueItems", permission: "drivers.read", roles: ["driver_operations_coordinator", "operations_manager", "regional_operations_manager", "risk_compliance_officer"], sort: "createdAt" }
+  incidents: { collection: "adminTasks", permission: "operations.read", roles: ["operations_manager", "regional_operations_manager"], sort: "createdAt" }
 };
 
 const querySchema = z.object({
@@ -69,7 +66,6 @@ function decodeCursor(value) {
 }
 
 function queueSpecific(queue, item) {
-  if (["driver-applications", "driver-documents", "driver-vehicles"].includes(queue)) return item.queue === queue;
   if (queue === "publication-review") return ["business_publication_review", "business_launch_review", "business_location_review"].includes(item.type);
   if (queue === "staff-approvals") return String(item.type || "").includes("staff") || String(item.type || "").includes("leave") || String(item.type || "").includes("people");
   if (queue === "incidents") return ["failed", "urgent", "escalated"].includes(String(item.status || "")) || item.priority === "urgent";
@@ -152,10 +148,7 @@ const DECISIONS = {
   "payment-exceptions": new Set(["assigned", "investigating", "resolved", "escalated"]),
   "publication-review": new Set(["assigned", "in_progress", "completed", "escalated"]),
   "staff-approvals": new Set(["assigned", "in_progress", "completed", "escalated"]),
-  incidents: new Set(["assigned", "in_progress", "completed", "escalated"]),
-  "driver-applications": new Set(["assigned", "in_progress", "completed", "escalated"]),
-  "driver-documents": new Set(["assigned", "in_progress", "completed", "escalated"]),
-  "driver-vehicles": new Set(["assigned", "in_progress", "completed", "escalated"])
+  incidents: new Set(["assigned", "in_progress", "completed", "escalated"])
 };
 
 export async function PATCH(request) {

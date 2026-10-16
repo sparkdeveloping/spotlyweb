@@ -5,7 +5,7 @@ import { promotionWindowActive, publicPromotionRecord } from "@/lib/customer-gro
 import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
-import { serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
+import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
 
 export const runtime = "nodejs";
 
@@ -307,7 +307,7 @@ export async function GET(request) {
     const businesses = eligibleBusinesses.filter((business) => matchesQuery(business, query) || matchingBusinessIds.has(business.id));
 
     const categories = [...new Set([
-      ...businesses.flatMap((business) => [business.category, ...(business.categories || [])]),
+      ...businesses.map((business) => marketplaceProfile(business).displayCategory),
       ...itemsAll.map((item) => item.category)
     ].filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "en", { sensitivity: "base" }));
 

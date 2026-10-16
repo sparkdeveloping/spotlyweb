@@ -121,6 +121,9 @@ export async function POST(request) {
           body: notificationBody,
           href: businessHref("/business/launch", { businessId: body.businessId }),
           category: "business_lifecycle",
+          workspace: "business",
+          module: "account",
+          eventType: `business.lifecycle.${body.action}`,
           read: false,
           createdAt: FieldValue.serverTimestamp()
         });
