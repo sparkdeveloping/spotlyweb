@@ -69,14 +69,23 @@ if (!effective.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY) {
 
 const sourceChecks = [
   ["lib/firebase-project-config.js", 'SPOTLY_FIREBASE_PROJECT_ID = "spotly-africa"'],
-  ["public/firebase-messaging-sw.js", 'projectId: "spotly-africa"'],
-  [".firebaserc", '"default": "spotly-africa"']
+  ["public/firebase-messaging-sw.js", 'projectId: "spotly-africa"']
 ];
 for (const [file, marker] of sourceChecks) {
   const absolute = path.join(root, file);
   if (!fs.existsSync(absolute) || !fs.readFileSync(absolute, "utf8").includes(marker)) {
     failures.push(`${file} is not pinned to the spotly-africa Firebase project.`);
   }
+}
+
+// .firebaserc is required for Firebase CLI deploys, but not for the Vercel/Next.js
+// runtime itself. A missing dotfile should not take the customer-facing web app
+// offline. If it exists and points at another project, that is still a hard fail.
+const firebaseRcPath = path.join(root, ".firebaserc");
+if (!fs.existsSync(firebaseRcPath)) {
+  warnings.push(".firebaserc is missing. Vercel can continue because runtime Firebase identity is pinned elsewhere, but restore .firebaserc before any Firebase CLI deploy.");
+} else if (!fs.readFileSync(firebaseRcPath, "utf8").includes('"default": "spotly-africa"')) {
+  failures.push(".firebaserc points at a different Firebase project; expected spotly-africa.");
 }
 
 const oldIdentityPatterns = [
