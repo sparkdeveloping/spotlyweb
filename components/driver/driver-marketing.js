@@ -26,8 +26,9 @@ import {
   Wifi,
 } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useAuth } from "@/components/firebase-provider";
 import { DriverEligibilityPlanner } from "@/components/driver/eligibility-planner";
-import { spotlyPortalUrl } from "@/lib/spotly-domains";
+import { spotlyLoginUrl, spotlyPortalUrl } from "@/lib/spotly-domains";
 
 const WORK_TYPES = [
   {
@@ -148,15 +149,19 @@ function DriverPreview({ type }) {
 
 export function DriverMarketingPage({ loginHref }) {
   const [activeType, setActiveType] = useState("prepared");
+  const { user, authReady } = useAuth();
   const type = WORK_TYPES.find((item) => item.id === activeType) || WORK_TYPES[0];
-  const entryHref = loginHref || spotlyPortalUrl("driver", "/login?portal=driver&next=%2F");
+  const signInHref = loginHref || spotlyLoginUrl("driver", { next: "/", mode: "signin" });
+  const applyHref = authReady && user && !user.isAnonymous
+    ? spotlyPortalUrl("driver")
+    : spotlyLoginUrl("driver", { next: "/", mode: "signup" });
 
   return <main data-workspace="driver" className="min-h-screen bg-[var(--background)] text-[var(--text)]">
     <header className="sticky top-0 z-40 border-b bg-[color-mix(in_srgb,var(--background)_92%,transparent)] backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-4 px-4 sm:px-6">
         <Link href={spotlyPortalUrl("driver")} className="flex items-center gap-3" aria-label="Spotly Driver home"><Image src="/brand/spotly-driver.svg" alt="" width={40} height={40} className="h-10 w-10" /><span className="font-bold tracking-tight">Spotly Driver</span></Link>
         <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Driver marketing"><a href="#work" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">Ways to earn</a><a href="#how-it-works" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">How it works</a><a href="#eligibility" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">What you need</a><a href="#driver-value" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">What you get</a></nav>
-        <div className="ml-auto flex items-center gap-2 md:ml-3"><Button asChild variant="ghost" className="hidden sm:inline-flex"><Link href={entryHref}>Sign in</Link></Button><Button asChild><Link href={entryHref}>Start driving<ArrowRight className="h-4 w-4" /></Link></Button></div>
+        <div className="ml-auto flex items-center gap-2 md:ml-3"><Button asChild variant="ghost" className="hidden sm:inline-flex"><Link href={signInHref}>Sign in</Link></Button><Button asChild><Link href={applyHref}>Start driving<ArrowRight className="h-4 w-4" /></Link></Button></div>
       </div>
     </header>
 
@@ -166,9 +171,9 @@ export function DriverMarketingPage({ loginHref }) {
           <div className="inline-flex items-center gap-2 rounded-full border border-driver/20 bg-driver-soft px-3 py-1.5 text-xs font-bold text-driver"><Sparkles className="h-4 w-4" />Built for earning on Spotly</div>
           <h1 className="mt-6 text-4xl font-bold tracking-[-.045em] sm:text-5xl lg:text-6xl">Move Zimbabwe. Earn on work that fits you.</h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-secondary sm:text-lg">Drive riders, deliver prepared orders, shop for customers or move parcels — based on your city, vehicle and approvals. See the work and expected Driver pay before you accept.</p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row"><Button asChild size="lg"><Link href={entryHref}>Start my Driver application<ArrowRight className="h-5 w-5" /></Link></Button><Button asChild size="lg" variant="outline"><a href="#eligibility">Check what I can do</a></Button></div>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row"><Button asChild size="lg"><Link href={applyHref}>Start my Driver application<ArrowRight className="h-5 w-5" /></Link></Button><Button asChild size="lg" variant="outline"><a href="#eligibility">Check what I can do</a></Button></div>
           <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-secondary"><span className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Requirements match your vehicle</span><span className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Work types activate separately</span><span className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Know the offer before accepting</span></div>
-          <p className="mt-7 text-sm text-secondary">Already drive with Spotly? <Link href={entryHref} className="font-bold text-driver hover:underline">Sign in to Driver</Link></p>
+          <p className="mt-7 text-sm text-secondary">Already drive with Spotly? <Link href={signInHref} className="font-bold text-driver hover:underline">Sign in to Driver</Link></p>
         </div>
         <DriverPreview type={type} />
       </div>
@@ -190,7 +195,7 @@ export function DriverMarketingPage({ loginHref }) {
 
     <section id="eligibility" className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6 lg:py-20">
       <div className="mb-8 max-w-2xl"><p className="text-sm font-bold text-driver">Check before creating an account</p><h2 className="mt-2 text-3xl font-bold tracking-[-.035em] sm:text-4xl">See the likely path for your city, vehicle and work.</h2><p className="mt-4 leading-7 text-secondary">This is a planner, not a promise of approval. It is here so you can understand what Spotly is likely to ask for before starting.</p></div>
-      <DriverEligibilityPlanner entryHref={entryHref} />
+      <DriverEligibilityPlanner entryHref={applyHref} />
     </section>
 
     <section id="driver-value" className="border-y bg-[var(--surface-2)]">
@@ -202,7 +207,7 @@ export function DriverMarketingPage({ loginHref }) {
     </section>
 
     <section className="border-t bg-[var(--inverse-surface)] text-[var(--inverse-text)]">
-      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:py-16"><div className="max-w-2xl"><p className="text-sm font-bold text-driver">See your path before your first job.</p><h2 className="mt-2 text-3xl font-bold tracking-[-.035em]">Start with the work you can actually qualify for.</h2><p className="mt-4 leading-7 text-[var(--inverse-text-muted)]">Create or use your Spotly account, finish the requirements that apply to you, follow the review timeline and activate work types as they become ready.</p></div><div className="flex flex-col gap-3 sm:flex-row"><Button asChild size="lg" className="bg-driver text-[var(--on-accent)] hover:bg-driver-strong"><Link href={entryHref}>Start driving<ArrowRight className="h-5 w-5" /></Link></Button><Button asChild size="lg" variant="outline" className="border-[var(--inverse-text-muted)]/30 bg-[var(--surface)]/5 text-[var(--inverse-text)] hover:bg-[var(--surface)]/10"><Link href={entryHref}>Sign in</Link></Button></div></div>
+      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:py-16"><div className="max-w-2xl"><p className="text-sm font-bold text-driver">See your path before your first job.</p><h2 className="mt-2 text-3xl font-bold tracking-[-.035em]">Start with the work you can actually qualify for.</h2><p className="mt-4 leading-7 text-[var(--inverse-text-muted)]">Create or use your Spotly account, finish the requirements that apply to you, follow the review timeline and activate work types as they become ready.</p></div><div className="flex flex-col gap-3 sm:flex-row"><Button asChild size="lg" className="bg-driver text-[var(--on-accent)] hover:bg-driver-strong"><Link href={applyHref}>Start driving<ArrowRight className="h-5 w-5" /></Link></Button><Button asChild size="lg" variant="outline" className="border-[var(--inverse-text-muted)]/30 bg-[var(--surface)]/5 text-[var(--inverse-text)] hover:bg-[var(--surface)]/10"><Link href={signInHref}>Sign in</Link></Button></div></div>
     </section>
 
     <footer className="border-t bg-[var(--surface)]"><div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-4 py-8 text-sm text-secondary sm:px-6 md:flex-row md:items-center"><div className="flex items-center gap-2"><Image src="/brand/spotly-driver.svg" alt="" width={28} height={28} /><span className="font-semibold text-[var(--text)]">Spotly Driver</span><span>· Move what matters.</span></div><div className="flex flex-wrap gap-x-5 gap-y-2 md:ml-auto"><Link href={spotlyPortalUrl("customer")} className="hover:text-[var(--text)]">Spotly</Link><Link href={spotlyPortalUrl("customer", "/support?topic=driver")} className="hover:text-[var(--text)]">Help</Link><Link href={spotlyPortalUrl("customer", "/privacy")} className="hover:text-[var(--text)]">Privacy</Link><Link href={spotlyPortalUrl("customer", "/terms")} className="hover:text-[var(--text)]">Terms</Link></div></div></footer>

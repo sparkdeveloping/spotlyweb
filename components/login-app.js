@@ -24,8 +24,8 @@ function Field({ label, icon: Icon, children }) {
   return <label className="block"><span className="mb-2 block text-sm font-semibold">{label}</span><div className="flex h-[52px] items-center gap-3 rounded-[12px] border border-[var(--control-border)] bg-[var(--control-bg)] px-4 transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]"><Icon className="h-5 w-5 text-tertiary" />{children}</div></label>;
 }
 
-export function LoginApp({ initialPortal = "customer" }) {
-  const [mode, setMode] = useState("signin");
+export function LoginApp({ initialPortal = "customer", initialMode = "signin" }) {
+  const [mode, setMode] = useState(initialMode === "signup" ? "signup" : "signin");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,11 +41,11 @@ export function LoginApp({ initialPortal = "customer" }) {
   const next = safeSpotlyDestination(searchParams.get("next"), destinations[portal]);
 
   useEffect(() => {
-    if (authReady && user && !user.isAnonymous && mode !== "link") {
+    if (!loading && authReady && user && !user.isAnonymous && mode !== "link") {
       if (/^https?:/i.test(next)) window.location.replace(next);
       else router.replace(next);
     }
-  }, [authReady, user, mode, next, router]);
+  }, [authReady, loading, user, mode, next, router]);
 
   async function submit(event) {
     event.preventDefault();
@@ -64,8 +64,8 @@ export function LoginApp({ initialPortal = "customer" }) {
         await signIn({ email, password });
         toast("You are securely signed in.", { title: "Welcome back" });
       }
-      if (/^https?:/i.test(next)) window.location.assign(next);
-      else router.push(next);
+      if (/^https?:/i.test(next)) window.location.replace(next);
+      else router.replace(next);
     } catch (error) {
       toast(error.message, { type: "error", title: "Sign-in issue" });
     } finally {
@@ -73,8 +73,24 @@ export function LoginApp({ initialPortal = "customer" }) {
     }
   }
 
-  const title = mode === "signup" ? "Create your Spotly account" : mode === "reset" ? "Reset your password" : "Sign in to Spotly";
-  const description = mode === "signup" ? "Create one account for orders, pickup updates, and any workspaces you are later invited to use." : mode === "reset" ? "Enter the email used for your Spotly account." : portal === "business" ? "Sign in to continue managing your business and locations." : portal === "staff" ? "Sign in to open your assigned work." : portal === "driver" ? "Sign in to continue your driver shift." : portal === "admin" ? "Sign in to open authorized platform operations." : "Sign in to see saved businesses, baskets, and pickup updates.";
+  const title = mode === "signup" ? (portal === "driver" ? "Create your account to start driving" : portal === "business" ? "Create your Spotly account" : "Create your Spotly account") : mode === "reset" ? "Reset your password" : "Sign in to Spotly";
+  const description = mode === "signup"
+    ? portal === "driver"
+      ? "Create one Spotly account, then continue directly into your Driver application."
+      : portal === "business"
+        ? "Create one Spotly account, then continue the business claim or setup you started."
+        : "Create one account for orders, pickup updates, and any workspaces you are later invited to use."
+    : mode === "reset"
+      ? "Enter the email used for your Spotly account."
+      : portal === "business"
+        ? "Sign in to continue managing your business and locations."
+        : portal === "staff"
+          ? "Sign in to open your assigned work."
+          : portal === "driver"
+            ? "Sign in to continue your Driver application or active work."
+            : portal === "admin"
+              ? "Sign in to open authorized platform operations."
+              : "Sign in to see saved businesses, baskets, and pickup updates.";
 
   const portalLabel = portal === "business" ? "Spotly Business" : portal === "staff" ? "Spotly Staff" : portal === "driver" ? "Spotly Driver" : portal === "admin" ? "Spotly Admin" : "Spotly";
   const portalIntro = portal === "business" ? "Run today’s work, catalogue, team and locations from one clear workspace." : portal === "staff" ? "See your assigned work, priorities and support without digging through an admin system." : portal === "driver" ? "Know whether you are online, what work is available, what comes next and what you have earned." : portal === "admin" ? "Open the queues, exceptions and operating controls that need attention." : "Your saved places, orders, bookings, rides and activity stay connected to one account.";

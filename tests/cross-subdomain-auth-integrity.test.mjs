@@ -63,3 +63,17 @@ test("global sign out cannot be resurrected by a stale sibling Firebase session"
   assert.match(provider, /setInterval\(reconcileSharedSession, 5 \* 60 \* 1000\)/);
   assert.match(provider, /sharedBrowserSessionState/);
 });
+
+
+test("explicit sign-in cannot be cancelled by a stale cross-domain sign-out tombstone", () => {
+  assert.match(provider, /interactiveAuthRef/);
+  assert.match(provider, /if \(interactiveAuthRef\.current\)/);
+  assert.match(provider, /persistSharedBrowserSession\(result\.user, \{ required: true \}\)/);
+});
+
+test("interactive sign-in verifies the shared parent-domain session before navigation can continue", () => {
+  assert.match(provider, /SHARED_SESSION_RETRY_DELAYS/);
+  assert.match(provider, /credentials: "include"/);
+  assert.match(provider, /shared\.ok && shared\.uid === firebaseUser\.uid/);
+  assert.match(provider, /getIdToken\(attempt > 0\)/);
+});

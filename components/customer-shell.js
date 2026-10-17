@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { NotificationBell } from "@/components/notification-center";
 import { cn } from "@/lib/cn";
+import { spotlyPortalUrl } from "@/lib/spotly-domains";
 
 const navItems = [
   { id: "home", label: "Home", icon: Home, href: "/" },
@@ -110,7 +111,7 @@ export function CustomerShell({
     {footer ? <footer className="border-t border-[var(--border-subtle)] bg-[var(--surface)] pb-24 lg:pb-0">
       <div className="mx-auto flex max-w-[1320px] flex-col gap-4 px-4 py-8 text-sm text-[var(--text-3)] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center gap-2"><Image src="/brand/spotly.svg" alt="" width={26} height={26} /><span>Spotly · Your city, in one place.</span></div>
-        <div className="flex flex-wrap gap-x-5 gap-y-2"><Link href="/claim">For businesses</Link><Link href="/drive">Drive & deliver</Link><Link href="/support">Help</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
+        <div className="flex flex-wrap gap-x-5 gap-y-2"><Link href={spotlyPortalUrl("business")}>For businesses</Link><Link href="/drive">Drive & deliver</Link><Link href="/support">Help</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
       </div>
     </footer> : null}
 

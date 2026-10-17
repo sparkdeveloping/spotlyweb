@@ -120,7 +120,7 @@ test("auth gates preserve the exact clean portal route through sign-in", () => {
   assert.match(authGate, /usePathname/);
   assert.match(authGate, /useSearchParams/);
   assert.match(authGate, /normalizePortalPath/);
-  assert.match(authGate, /next=\$\{encodeURIComponent\(next\)\}/);
+  assert.match(authGate, /spotlyLoginUrl\(portal, \{ next, mode: "signin" \}\)/);
 });
 
 

@@ -53,26 +53,54 @@ function friendlyAuthError(error) {
   return messages[code] || error?.message || "Authentication could not be completed.";
 }
 
-async function persistSharedBrowserSession(firebaseUser) {
-  if (!firebaseUser || firebaseUser.isAnonymous) return false;
-  const idToken = await firebaseUser.getIdToken();
-  const response = await fetch("/api/auth/session", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { Authorization: `Bearer ${idToken}` }
-  });
-  return response.ok;
+const SHARED_SESSION_RETRY_DELAYS = [0, 180, 450];
+
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-
 async function sharedBrowserSessionState() {
-  const response = await fetch("/api/auth/session", { method: "GET", credentials: "same-origin", cache: "no-store" });
+  const response = await fetch("/api/auth/session", { method: "GET", credentials: "include", cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   return { ok: response.ok && payload.ok !== false, status: response.status, ...payload };
 }
 
+async function persistSharedBrowserSession(firebaseUser, { required = false } = {}) {
+  if (!firebaseUser || firebaseUser.isAnonymous) return false;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < SHARED_SESSION_RETRY_DELAYS.length; attempt += 1) {
+    const delay = SHARED_SESSION_RETRY_DELAYS[attempt];
+    if (delay) await wait(delay);
+    try {
+      const idToken = await firebaseUser.getIdToken(attempt > 0);
+      const response = await fetch("/api/auth/session", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        lastError = new Error(payload.error || "Spotly could not create the shared sign-in session.");
+        continue;
+      }
+      const shared = await sharedBrowserSessionState();
+      if (shared.ok && shared.uid === firebaseUser.uid) return true;
+      lastError = new Error("Spotly could not verify the shared sign-in session.");
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (required) {
+    throw new Error(lastError?.message || "Spotly signed you in here but could not finish cross-workspace sign-in. Try again.");
+  }
+  return false;
+}
+
 async function bootstrapSharedBrowserSession(auth) {
-  const response = await fetch("/api/auth/session/bootstrap", { method: "POST", credentials: "same-origin", cache: "no-store" });
+  const response = await fetch("/api/auth/session/bootstrap", { method: "POST", credentials: "include", cache: "no-store" });
   if (!response.ok) return null;
   const payload = await response.json().catch(() => ({}));
   if (!payload.customToken) return null;
@@ -80,7 +108,7 @@ async function bootstrapSharedBrowserSession(auth) {
 }
 
 async function clearSharedBrowserSession() {
-  await fetch("/api/auth/session", { method: "DELETE", credentials: "same-origin" }).catch(() => null);
+  await fetch("/api/auth/session", { method: "DELETE", credentials: "include", cache: "no-store" }).catch(() => null);
 }
 
 export function FirebaseProvider({ children }) {
@@ -95,6 +123,7 @@ export function FirebaseProvider({ children }) {
   const recaptchaRef = useRef(null);
   const sharedBootstrapAttemptedRef = useRef(false);
   const initialAuthResolvedRef = useRef(false);
+  const interactiveAuthRef = useRef(false);
 
   useEffect(() => {
     const client = getFirebaseClient();
@@ -108,19 +137,25 @@ export function FirebaseProvider({ children }) {
       initialAuthResolvedRef.current = true;
 
       if (initialEvent && nextUser && !nextUser.isAnonymous) {
-        try {
-          const shared = await sharedBrowserSessionState();
-          if (shared.ok && shared.uid && shared.uid !== nextUser.uid) {
-            const restoredUser = await bootstrapSharedBrowserSession(client.auth);
-            if (restoredUser) return;
+        if (interactiveAuthRef.current) {
+          // An explicit sign-in is authoritative. Do not let a stale global-sign-out tombstone
+          // immediately sign the user back out before the new shared session can be created.
+          sharedBootstrapAttemptedRef.current = true;
+        } else {
+          try {
+            const shared = await sharedBrowserSessionState();
+            if (shared.ok && shared.uid && shared.uid !== nextUser.uid) {
+              const restoredUser = await bootstrapSharedBrowserSession(client.auth);
+              if (restoredUser) return;
+            }
+            if (!shared.ok && ["signed_out", "expired"].includes(shared.reason)) {
+              await signOut(client.auth);
+              return;
+            }
+            if (!shared.ok && shared.reason === "missing") await persistSharedBrowserSession(nextUser).catch(() => false);
+          } catch {
+            // Existing Firebase sessions remain usable when the shared-session endpoint is temporarily unavailable.
           }
-          if (!shared.ok && ["signed_out", "expired"].includes(shared.reason)) {
-            await signOut(client.auth);
-            return;
-          }
-          if (!shared.ok && shared.reason === "missing") await persistSharedBrowserSession(nextUser).catch(() => false);
-        } catch {
-          // Existing Firebase sessions remain usable when the shared-session endpoint is temporarily unavailable.
         }
       }
 
@@ -238,6 +273,7 @@ export function FirebaseProvider({ children }) {
   const createAccount = useCallback(async ({ email, password, displayName }) => {
     const client = getFirebaseClient();
     if (!client) throw new Error("Firebase is not configured.");
+    interactiveAuthRef.current = true;
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const activeUser = client.auth.currentUser;
@@ -246,26 +282,31 @@ export function FirebaseProvider({ children }) {
         : await createUserWithEmailAndPassword(client.auth, normalizedEmail, password);
       if (displayName) await updateProfile(result.user, { displayName });
       await ensureUserProfile(result.user, { displayName });
-      await persistSharedBrowserSession(result.user).catch(() => false);
+      await persistSharedBrowserSession(result.user, { required: true });
       await sendEmailVerification(result.user, { url: spotlyPortalUrl("customer", "/account") }).catch(() => {});
       await track("sign_up", { method: "password" });
       return result.user;
     } catch (error) {
       throw new Error(friendlyAuthError(error));
+    } finally {
+      interactiveAuthRef.current = false;
     }
   }, []);
 
   const signIn = useCallback(async ({ email, password }) => {
     const client = getFirebaseClient();
     if (!client) throw new Error("Firebase is not configured.");
+    interactiveAuthRef.current = true;
     try {
       const result = await signInWithEmailAndPassword(client.auth, email.trim().toLowerCase(), password);
       await ensureUserProfile(result.user);
-      await persistSharedBrowserSession(result.user).catch(() => false);
+      await persistSharedBrowserSession(result.user, { required: true });
       await track("login", { method: "password" });
       return result.user;
     } catch (error) {
       throw new Error(friendlyAuthError(error));
+    } finally {
+      interactiveAuthRef.current = false;
     }
   }, []);
 

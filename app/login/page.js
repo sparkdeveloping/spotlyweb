@@ -6,5 +6,5 @@ export const metadata = { title: "Sign in", description: "Sign in to your Spotly
 
 export default async function LoginPage({ searchParams }) {
   const params = await searchParams;
-  return <Suspense fallback={<CustomerPageSkeleton compact />}><LoginApp initialPortal={params?.portal || "customer"} /></Suspense>;
+  return <Suspense fallback={<CustomerPageSkeleton compact />}><LoginApp initialPortal={params?.portal || "customer"} initialMode={params?.mode || "signin"} /></Suspense>;
 }

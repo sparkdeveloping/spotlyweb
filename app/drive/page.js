@@ -1,5 +1,5 @@
 import { DriverMarketingPage } from "@/components/driver/driver-marketing";
-import { spotlyPortalUrl } from "@/lib/spotly-domains";
+import { spotlyLoginUrl } from "@/lib/spotly-domains";
 
 export const metadata = {
   title: "Drive and earn with Spotly",
@@ -9,6 +9,6 @@ export const metadata = {
 };
 
 export default function DrivePage() {
-  const loginHref = spotlyPortalUrl("driver", "/login?portal=driver&next=%2F");
+  const loginHref = spotlyLoginUrl("driver", { next: "/", mode: "signin" });
   return <DriverMarketingPage loginHref={loginHref} />;
 }

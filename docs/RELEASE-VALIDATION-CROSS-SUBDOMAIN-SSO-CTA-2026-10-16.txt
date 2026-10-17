@@ -1,0 +1,64 @@
+Spotly Cross-Subdomain SSO + Acquisition CTA Corrective Release
+Date: 2026-10-16
+Release line: Spotly Web Platform 7.0.0
+
+WHAT THIS CORRECTS
+
+1. Cross-subdomain sign-in reliability
+- Spotly already had a parent-domain HttpOnly session-cookie architecture, but an interactive Firebase sign-in could race against the global sign-out tombstone and be cancelled.
+- Explicit sign-in/sign-up is now protected from that stale-tombstone race.
+- Interactive sign-in now waits for the shared Spotly browser session to be created and verified before navigation is allowed.
+- Shared-session persistence uses credentials: include, retries transient failures, refreshes the Firebase ID token on retry, and verifies that the session endpoint returns the same UID.
+- Sibling subdomains can then bootstrap their own Firebase client with a custom token without asking the user for credentials again.
+- Sign-out continues to clear the parent-domain shared session and prevent stale sibling sessions from silently restoring access.
+
+2. Button intent / acquisition journeys
+- Added a central spotlyLoginUrl() helper for portal-aware, safe return-to URLs.
+- Driver "Sign in" is now a sign-in action; "Start driving" / "Start my Driver application" are application/sign-up actions.
+- A user who is already authenticated and chooses to start driving is sent directly into Driver instead of through another sign-in screen.
+- Driver eligibility planner starts the application path instead of a generic login path.
+- Login pages support explicit signup mode and portal-specific copy.
+- Protected portal pages preserve the exact requested destination and use a clear product-home back action rather than a vague Learn more loop.
+- Generic "For businesses" navigation opens the Spotly Business product landing page; explicit claim/add-business buttons remain claim actions.
+- Spotly Business sign-in links use the Business hostname and return to Business.
+- Business claim flow asks for an account only at the identity/evidence boundary and describes the continuation accurately.
+
+3. Adjacent UX cleanup
+- Authentication navigation uses replace semantics after successful login so Back does not unnecessarily return a user to the login step.
+- Driver sign-in copy no longer assumes an active shift; it works for applicants and active Drivers.
+- Business marketing has a canonical portal-aware sign-in fallback.
+
+VALIDATION COMPLETED
+
+PASS - npm run check:js
+       JavaScript-only and React-hook import checks passed.
+
+PASS - npm run firebase:preflight
+       Firebase project preflight passed for spotly-africa.
+
+PASS - npm run check:theme
+       257 source files / 47 classified route patterns.
+
+PASS - npm run audit:launch
+       111 API routes audited / release 7.0.0.
+
+PASS - npm test
+       354 / 354 tests passed.
+       Includes cross-subdomain auth integrity and acquisition/auth journey integrity tests.
+
+PASS - npm run audit:v7-ui
+       76 / 76 implementation checks across all 39 audit themes.
+
+PASS - release secret scan
+       No Firebase Admin private-key material is included in this source package.
+
+NOT CLAIMED
+
+A fresh ESLint / Next.js production build was not run in this packaging environment because node_modules is intentionally excluded and dependency installation was not repeated for this corrective package. Run the normal release-machine gate after extraction:
+
+  npm ci
+  npm run check
+
+DEPLOYMENT NOTE
+
+This ZIP is a complete project source package, not a patch. Runtime Firebase Admin secrets, VAPID keys, App Check keys, finance secrets, mail keys, and other deployment credentials belong in the deployment environment and are not bundled here.

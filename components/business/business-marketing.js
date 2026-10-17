@@ -29,7 +29,7 @@ import {
   WalletCards
 } from "lucide-react";
 import { Button } from "@/components/ui";
-import { spotlyPortalUrl } from "@/lib/spotly-domains";
+import { spotlyLoginUrl, spotlyPortalUrl } from "@/lib/spotly-domains";
 
 const TYPES = [
   {
@@ -151,6 +151,7 @@ function ProductPreview({ type }) {
 export function BusinessMarketingPage({ loginHref }) {
   const [activeType, setActiveType] = useState("shop");
   const type = TYPES.find((item) => item.id === activeType) || TYPES[0];
+  const signInHref = loginHref || spotlyLoginUrl("business", { next: "/", mode: "signin" });
   const claimHref = spotlyPortalUrl("business", "/get-started");
   const addHref = spotlyPortalUrl("business", "/get-started?new=1");
   return <main data-workspace="business" className="min-h-screen bg-[var(--background)] text-[var(--text)]">
@@ -158,7 +159,7 @@ export function BusinessMarketingPage({ loginHref }) {
       <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-4 px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-3" aria-label="Spotly Business home"><Image src="/brand/spotly-business.svg" alt="" width={40} height={40} className="h-10 w-10" /><span className="font-bold tracking-tight">Spotly Business</span></Link>
         <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Business marketing"><a href="#business-types" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">For your business</a><a href="#how-it-works" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">How it works</a><a href="#features" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">What you get</a></nav>
-        <div className="ml-auto flex items-center gap-2 md:ml-3"><Button asChild variant="ghost" className="hidden sm:inline-flex"><Link href={loginHref}>Sign in</Link></Button><Button asChild><Link href={claimHref}>Find my business<ArrowRight className="h-4 w-4" /></Link></Button></div>
+        <div className="ml-auto flex items-center gap-2 md:ml-3"><Button asChild variant="ghost" className="hidden sm:inline-flex"><Link href={signInHref}>Sign in</Link></Button><Button asChild><Link href={claimHref}>Find my business<ArrowRight className="h-4 w-4" /></Link></Button></div>
       </div>
     </header>
 
@@ -170,7 +171,7 @@ export function BusinessMarketingPage({ loginHref }) {
           <p className="mt-6 max-w-xl text-base leading-7 text-secondary sm:text-lg">Sell products. Take food orders. Accept bookings. Sell tickets. Manage locations, delivery, money and your team — in a workspace that changes to fit your business.</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row"><Button asChild size="lg"><Link href={claimHref}><Search className="h-5 w-5" />Find or claim my business</Link></Button><Button asChild size="lg" variant="outline"><Link href={addHref}>Add a new business</Link></Button></div>
           <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-secondary"><span className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Search before starting from zero</span><span className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Prepare while verification runs</span><span className="flex items-center gap-2"><Check className="h-4 w-4 text-success" />Use the same Spotly account</span></div>
-          <p className="mt-7 text-sm text-secondary">Already use Spotly Business? <Link href={loginHref} className="font-bold text-business hover:underline">Sign in to your workspace</Link></p>
+          <p className="mt-7 text-sm text-secondary">Already use Spotly Business? <Link href={signInHref} className="font-bold text-business hover:underline">Sign in to your workspace</Link></p>
         </div>
         <ProductPreview type={type} />
       </div>
@@ -197,7 +198,7 @@ export function BusinessMarketingPage({ loginHref }) {
     </section>
 
     <section className="border-t bg-[var(--inverse-surface)] text-[var(--inverse-text)]">
-      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:py-16"><div className="max-w-2xl"><p className="text-sm font-bold text-business">Your business may already be on Spotly.</p><h2 className="mt-2 text-3xl font-bold tracking-[-.035em]">Find it before you build it again.</h2><p className="mt-4 leading-7 text-[var(--inverse-text-muted)]">Claim an existing listing, add one that is missing, or sign in if your team already invited you.</p></div><div className="flex flex-col gap-3 sm:flex-row"><Button asChild size="lg" className="bg-business text-[var(--on-accent)] hover:bg-business-strong"><Link href={claimHref}>Find my business<Search className="h-5 w-5" /></Link></Button><Button asChild size="lg" variant="outline" className="border-[var(--inverse-text-muted)]/30 bg-[var(--surface)]/5 text-[var(--inverse-text)] hover:bg-[var(--surface)]/10"><Link href={loginHref}>Sign in</Link></Button></div></div>
+      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:py-16"><div className="max-w-2xl"><p className="text-sm font-bold text-business">Your business may already be on Spotly.</p><h2 className="mt-2 text-3xl font-bold tracking-[-.035em]">Find it before you build it again.</h2><p className="mt-4 leading-7 text-[var(--inverse-text-muted)]">Claim an existing listing, add one that is missing, or sign in if your team already invited you.</p></div><div className="flex flex-col gap-3 sm:flex-row"><Button asChild size="lg" className="bg-business text-[var(--on-accent)] hover:bg-business-strong"><Link href={claimHref}>Find my business<Search className="h-5 w-5" /></Link></Button><Button asChild size="lg" variant="outline" className="border-[var(--inverse-text-muted)]/30 bg-[var(--surface)]/5 text-[var(--inverse-text)] hover:bg-[var(--surface)]/10"><Link href={signInHref}>Sign in</Link></Button></div></div>
     </section>
 
     <footer className="border-t bg-[var(--surface)]"><div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-4 py-8 text-sm text-secondary sm:px-6 md:flex-row md:items-center"><div className="flex items-center gap-2"><Image src="/brand/spotly-business.svg" alt="" width={28} height={28} /><span className="font-semibold text-[var(--text)]">Spotly Business</span><span>· Run what customers discover.</span></div><div className="flex flex-wrap gap-x-5 gap-y-2 md:ml-auto"><Link href={spotlyPortalUrl("customer")} className="hover:text-[var(--text)]">Spotly</Link><Link href={spotlyPortalUrl("customer", "/help")} className="hover:text-[var(--text)]">Help</Link><Link href={spotlyPortalUrl("customer", "/privacy")} className="hover:text-[var(--text)]">Privacy</Link><Link href={spotlyPortalUrl("customer", "/terms")} className="hover:text-[var(--text)]">Terms</Link></div></div></footer>

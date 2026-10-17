@@ -6,7 +6,7 @@ import { Button, Card } from "@/components/ui";
 import { zimbabweCities } from "@/data/business-config";
 import { DRIVER_CAPABILITIES, capabilitySupportsVehicle, documentRequirementsFor, trainingRequirementsFor } from "@/lib/driver-capabilities";
 import { cn } from "@/lib/cn";
-import { spotlyPortalUrl } from "@/lib/spotly-domains";
+import { spotlyLoginUrl } from "@/lib/spotly-domains";
 import Link from "next/link";
 
 const vehicles = [
@@ -43,7 +43,7 @@ export function DriverEligibilityPlanner({ entryHref }) {
       <div className="bg-[var(--surface-2)] p-5 sm:p-7"><p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--text-3)]">Your likely path in {city}</p><h3 className="mt-2 text-xl font-semibold">{capabilities.length ? `${capabilities.length} work type${capabilities.length === 1 ? "" : "s"} selected` : "Choose at least one work type"}</h3>
         <div className="mt-5 space-y-3">{capabilities.map((id) => <div key={id} className="rounded-xl bg-[var(--surface)] p-4"><p className="font-semibold">{DRIVER_CAPABILITIES[id].label}</p><p className="mt-1 text-xs text-[var(--text-2)]">Can use: {DRIVER_CAPABILITIES[id].vehicleTypes.join(", ")}</p></div>)}</div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2"><div><p className="text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">Prepare these documents</p><ul className="mt-3 space-y-2 text-sm">{documents.map((type) => <li key={type} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-driver"/>{documentLabels[type] || type}</li>)}</ul></div><div><p className="text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">Short training</p><p className="mt-3 text-sm leading-6 text-[var(--text-2)]">{training.length} operating module{training.length === 1 ? "" : "s"}, based on the work you selected.</p>{vehicleType === "bicycle" ? <p className="mt-3 rounded-lg bg-[var(--success-soft)] p-3 text-xs font-medium text-success">Bicycle applications do not inherit motor-vehicle registration or Driver-licence requirements.</p> : null}</div></div>
-        <Button asChild className="mt-7 w-full"><Link href={entryHref || spotlyPortalUrl("driver", "/login?portal=driver&next=%2F")}>Start with this plan</Link></Button>
+        <Button asChild className="mt-7 w-full"><Link href={entryHref || spotlyLoginUrl("driver", { next: "/", mode: "signup" })}>Start with this plan</Link></Button>
       </div>
     </div>
   </Card>;
