@@ -7,6 +7,9 @@ const loginApp = fs.readFileSync(new URL("../components/login-app.js", import.me
 const loginPage = fs.readFileSync(new URL("../app/login/page.js", import.meta.url), "utf8");
 const authGate = fs.readFileSync(new URL("../components/auth-gate.js", import.meta.url), "utf8");
 const customerShell = fs.readFileSync(new URL("../components/customer-shell.js", import.meta.url), "utf8");
+const businessLayout = fs.readFileSync(new URL("../components/business/business-layout-client.js", import.meta.url), "utf8");
+const customerMarketing = fs.readFileSync(new URL("../components/coming-soon-app.js", import.meta.url), "utf8");
+const claimApp = fs.readFileSync(new URL("../components/claim-app.js", import.meta.url), "utf8");
 
 test("portal login URLs preserve explicit sign-in versus create-account intent", async () => {
   const { spotlyLoginUrl } = await import("../lib/spotly-domains.js");
@@ -56,4 +59,24 @@ test("interactive login cannot navigate away before the cross-domain session han
   assert.match(loginApp, /if \(!loading && authReady && user/);
   assert.match(loginApp, /window\.location\.replace\(next\)/);
   assert.match(loginApp, /router\.replace\(next\)/);
+});
+
+
+test("Business get-started stays public on the clean business subdomain URL", () => {
+  assert.match(businessLayout, /normalizePortalPath\("business", pathname \|\| "\/"\)/);
+  assert.match(businessLayout, /cleanPathname === "\/get-started"/);
+  assert.match(businessLayout, /cleanPathname\?\.startsWith\("\/claim-status\/"\)/);
+});
+
+test("customer marketing sends generic Business discovery to Spotly Business and explicit claim actions to Business get-started", () => {
+  assert.match(customerMarketing, /href=\{spotlyPortalUrl\("business"\)\} action="Explore Spotly Business"/);
+  assert.match(customerMarketing, /spotlyPortalUrl\("business", "\/get-started"\)/);
+  assert.match(customerMarketing, /spotlyPortalUrl\("business", "\/get-started\?new=1"\)/);
+  assert.match(customerMarketing, /spotlyPortalUrl\("business", `\/get-started\?business=/);
+  assert.doesNotMatch(customerMarketing, /href="\/claim" action="Find my business" tone="business"/);
+});
+
+test("Business get-started keeps saved-request navigation inside the Business product", () => {
+  assert.match(claimApp, /businessJourney \? spotlyPortalUrl\("business", "\/claims"\) : "\/claim\/drafts"/);
+  assert.match(claimApp, /Continue to secure account/);
 });

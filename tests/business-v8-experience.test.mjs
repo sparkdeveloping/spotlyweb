@@ -24,8 +24,9 @@ test("Business acquisition stays on the Business domain", () => {
   const domains = read("lib/spotly-domains.js");
   const claim = read("components/claim-app.js");
   assert.match(marketing, /spotlyPortalUrl\("business", "\/get-started"\)/);
-  assert.match(layout, /\/business\/get-started/);
-  assert.match(layout, /startsWith\(\"\/business\/claim-status\/\"\)/);
+  assert.match(layout, /normalizePortalPath\("business", pathname \|\| "\/"\)/);
+  assert.match(layout, /cleanPathname === "\/get-started"/);
+  assert.match(layout, /cleanPathname\?\.startsWith\("\/claim-status\/"\)/);
   assert.match(domains, /"get-started"/);
   assert.match(domains, /"claim-status"/);
   assert.match(claim, /businessJourney/);

@@ -8,6 +8,7 @@ import { BusinessDataProvider, useBusinessWorkspace } from "@/components/busines
 import { businessAccountNavigation } from "@/components/business/business-account";
 import { businessNavigation } from "@/data/business-archetypes";
 import { businessSectionFromPath, isBusinessAccountSection, isBusinessKioskLivePath } from "@/lib/business-routing";
+import { normalizePortalPath } from "@/lib/spotly-domains";
 
 function BusinessPortalFrame({ children }) {
   const pathname = usePathname();
@@ -30,11 +31,15 @@ function BusinessPortalFrame({ children }) {
 
 export function BusinessLayoutClient({ children }) {
   const pathname = usePathname();
+  const cleanPathname = normalizePortalPath("business", pathname || "/");
   // The live kiosk authenticates with its own revocable device credential. It must not inherit
   // the Business owner's Firebase session or BusinessDataProvider just because its URL lives
   // under /business. This is what makes a shared tablet genuinely safe and independent.
-  if (isBusinessKioskLivePath(pathname)) return children;
-  if (pathname === "/business/get-started" || pathname === "/business/get-started/") return children;
-  if (pathname?.startsWith("/business/claim-status/")) return <AuthGate portal="business" title="Sign in to track your business verification">{children}</AuthGate>;
+  if (isBusinessKioskLivePath(cleanPathname)) return children;
+  // On business.spotlyafrica.com, usePathname() exposes the clean public URL (/get-started),
+  // while legacy/internal routes may still include /business. Normalize once so the acquisition
+  // journey is never mistaken for a protected workspace page.
+  if (cleanPathname === "/get-started" || cleanPathname === "/get-started/") return children;
+  if (cleanPathname?.startsWith("/claim-status/")) return <AuthGate portal="business" title="Sign in to track your business verification">{children}</AuthGate>;
   return <AuthGate portal="business" title="Sign in to manage your businesses"><BusinessDataProvider><BusinessPortalFrame>{children}</BusinessPortalFrame></BusinessDataProvider></AuthGate>;
 }

@@ -1,0 +1,21 @@
+Spotly Business CTA + public onboarding corrective release
+Date: 2026-10-16
+
+User-visible corrections
+- business.spotlyafrica.com/get-started is now treated as a public acquisition/onboarding route on the clean subdomain URL instead of being mistaken for a protected workspace route.
+- Business claim-status routing uses the same normalized clean-path handling.
+- The main Spotly marketing site's generic Business participation CTA opens the Spotly Business landing page instead of dropping directly into legacy /claim.
+- Main-site Business search results, Find my business, Add a business, and keyboard selection now continue into business.spotlyafrica.com/get-started.
+- Business get-started saved-request navigation remains inside Spotly Business.
+
+Validation
+- JavaScript-only / React hook check: PASS
+- Firebase project preflight: PASS (spotly-africa)
+- Theme safety: PASS (257 source files / 47 classified route patterns)
+- Launch readiness audit: PASS (111 API routes)
+- Full Node test suite: PASS (357/357)
+- V7 UI audit: PASS (76/76 across 39 themes)
+
+Notes
+- No deployment was performed as part of this ZIP creation.
+- No Firebase Admin private key or runtime secrets are bundled.
