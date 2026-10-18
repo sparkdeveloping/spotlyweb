@@ -20,6 +20,17 @@ test('V7 onboarding is progressive and skippable', () => {
   assert.match(source, /Work/);
 });
 
+test('V7 welcome modal uses a light-scoped backdrop without changing other dialog overlays', () => {
+  const onboarding = read('components/customer-onboarding.js');
+  const ui = read('components/ui.js');
+  const styles = read('app/globals.css');
+  assert.match(onboarding, /bg-\[var\(--onboarding-backdrop\)\]/);
+  assert.doesNotMatch(onboarding, /bg-\[var\(--overlay\)\]/);
+  assert.match(styles, /--onboarding-backdrop: rgba\(249, 250, 255, 0\.66\)/);
+  assert.match(styles, /--onboarding-backdrop: rgba\(8, 11, 20, 0\.40\)/);
+  assert.match(ui, /bg-\[var\(--overlay\)\]/);
+});
+
 test('V7 Home only claims repeat behavior from real completed history', () => {
   const source = read('components/marketplace-home.js');
   assert.match(source, /const completedStatuses = new Set/);

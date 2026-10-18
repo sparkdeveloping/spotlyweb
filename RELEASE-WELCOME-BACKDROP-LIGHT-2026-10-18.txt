@@ -1,0 +1,24 @@
+Spotly Web — Bright Welcome Backdrop Update (2026-10-18)
+=======================================================
+
+This is the previous Business Onboarding Launch Fix project with a targeted
+visual correction for the consumer welcome/onboarding popup.
+
+Changes:
+- Customer onboarding now uses a light, translucent, 2px-blurred scrim in
+  light mode instead of inheriting the heavy 52% slate dialog overlay.
+- Dark mode keeps a theme-specific 40% neutral scrim.
+- The onboarding card has a refined border and shadow for contrast.
+- Artwork embellishments use semantic theme colors.
+- Other confirmation, security and business dialogs retain their existing
+  shared overlay; no backend/business logic has been changed.
+
+Validation: 365 Node tests passed; JavaScript check, theme-safety check,
+Firebase preflight and 111-route static audit passed. ESLint and a full Next
+build were not verified because the local dependency install is incomplete.
+
+Deploy this project in the same way as the preceding project. No Firebase
+rules changes are needed for the visual update alone. The preceding claim
+workflow's Firebase rules still need to be deployed if not already deployed.
+
+To apply the small patch ZIP instead, overlay its 3 files at the project root.

@@ -44,6 +44,7 @@
   --surface-hover: #f7f8fa;
   --surface-selected: #f0eeff;
   --overlay: rgba(15, 23, 42, 0.52);
+  --onboarding-backdrop: rgba(249, 250, 255, 0.66);
 
   --text: #111827;
   --text-2: #4b5563;
@@ -144,6 +145,7 @@ html.dark {
   --surface-hover: #222936;
   --surface-selected: #292448;
   --overlay: rgba(0, 0, 0, 0.70);
+  --onboarding-backdrop: rgba(8, 11, 20, 0.40);
 
   --text: #f4f6f8;
   --text-2: #c1c7d0;
