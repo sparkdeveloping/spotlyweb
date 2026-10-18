@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { safeText } from "@/lib/server-helpers";
 import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
+import { openPlaceById } from "@/lib/open-marketplace-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,8 @@ const evidenceSchema = z.object({
   name: z.string().min(1).max(180),
   type: z.string().max(120).default(""),
   url: z.string().url(),
-  size: z.number().int().min(0).max(20 * 1024 * 1024)
+  path: z.string().min(10).max(800),
+  size: z.number().int().min(1).max(10 * 1024 * 1024)
 });
 
 const provisionalSchema = z.object({
@@ -60,7 +62,7 @@ const schema = z.object({
     "other"
   ]),
   notes: z.string().max(2000).optional(),
-  evidence: z.array(evidenceSchema).max(20).default([]),
+  evidence: z.array(evidenceSchema).min(1).max(20),
   provisionalBusiness: provisionalSchema.nullable().optional()
 });
 
@@ -116,7 +118,7 @@ export async function POST(request) {
     if (!actor.email) throw Object.assign(new Error("A primary email-and-password account is required."), { status: 409 });
 
     const input = schema.parse(await request.json());
-    const { auth, db, messaging } = getAdminServices();
+    const { auth, db, messaging, storage } = getAdminServices();
     const authUser = await auth.getUser(actor.uid);
     if (!authUser.providerData.some((provider) => provider.providerId === "password")) {
       throw Object.assign(new Error("Create or link an email-and-password credential before claiming a business."), { status: 409 });
@@ -126,6 +128,42 @@ export async function POST(request) {
     const platformSettings = settingsSnapshot.exists ? settingsSnapshot.data() : {};
     if (platformSettings.launch?.businessClaimsEnabled === false) {
       throw Object.assign(new Error("Business claiming is temporarily unavailable."), { status: 503 });
+    }
+
+    // Never trust an uploaded filename/URL supplied by the browser: verify every
+    // attachment is stored inside this user's private claim-evidence namespace.
+    // Prevent another applicant's document or an arbitrary public URL being used.
+    const bucket = storage.bucket();
+    await Promise.all(input.evidence.map(async (file) => {
+      if (!file.path.startsWith(`claim-evidence/${actor.uid}/`) ||
+          file.path.includes("..") ||
+          !file.url.startsWith("https://firebasestorage.googleapis.com/")) {
+        throw Object.assign(new Error("An evidence document is not attached to this account. Upload it again."), { status: 400 });
+      }
+      try {
+        const [metadata] = await bucket.file(file.path).getMetadata();
+        if (Number(metadata.size) !== file.size) throw new Error("Evidence size mismatch");
+      } catch {
+        throw Object.assign(new Error(`We couldn't verify ${file.name}. Return to the verification step and upload it again.`), { status: 409 });
+      }
+    }));
+
+    // A curated directory search can return a place without a Firestore business
+    // document. Reconcile against the server-owned dataset; never accept client-
+    // asserted OpenStreetMap rights or invented place IDs.
+    if (input.provisionalBusiness?.source?.type === "openstreetmap") {
+      const curated = openPlaceById(input.businessId);
+      if (!curated || curated.source?.rightsStatus !== "open_odbl") {
+        throw Object.assign(new Error("The selected public listing needs another lookup. Search for it again."), { status: 409 });
+      }
+      input.provisionalBusiness = {
+        ...input.provisionalBusiness,
+        name: curated.name || input.provisionalBusiness.name,
+        brandName: curated.brandName || curated.name || input.provisionalBusiness.brandName,
+        address: curated.address || input.provisionalBusiness.address,
+        city: curated.city || input.provisionalBusiness.city,
+        source: curated.source
+      };
     }
 
     const selectedBranchIds = [...new Set(input.branchIds)];
@@ -189,7 +227,8 @@ export async function POST(request) {
         transaction.create(organizationRef, {
           name: safeText(provisional.organizationName || provisional.brandName || provisional.name, 180),
           legalName: safeText(provisional.legalName || "", 180),
-          ownerIds: [actor.uid],
+          // Approval is required before an applicant becomes an organization owner.
+          ownerIds: [],
           businessIds: [input.businessId],
           branchIds: [resolvedBranchId],
           status: "pending_verification",
@@ -228,7 +267,9 @@ export async function POST(request) {
           displayName: safeText(input.applicantName || actor.name || actor.email, 160),
           role: "organization_owner",
           permissions: permissionsForClaim("owner"),
-          status: "active",
+          // An application is not an authorization. The reviewer activates this
+          // membership only after verification.
+          status: "pending_verification",
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()
         });
@@ -262,7 +303,7 @@ export async function POST(request) {
           fulfilment: [],
           paymentMethods: [],
           onboardingStatus: "not_started",
-          ownerIds: [actor.uid],
+          ownerIds: [],
           branchIds: [resolvedBranchId],
           branchCount: 1,
           searchTerms: searchTerms(provisional.name, provisional.brandName, provisional.category, provisional.city),
@@ -274,12 +315,13 @@ export async function POST(request) {
         resolvedOrganizationId = input.organizationId || existingBusiness.organizationId || null;
         const availableBranchIds = existingBusiness.branchIds || [];
         resolvedBranchIds = selectedBranchIds.length ? selectedBranchIds : availableBranchIds.slice(0, 1);
-        if (!resolvedBranchIds.length) {
-          throw Object.assign(new Error("This business has no selectable location yet. Ask Spotly Support to repair the listing."), { status: 409 });
-        }
+        // Older imported listings may lack branch records. Do not block an
+        // ownership application on directory data quality. Verification staff
+        // can reconcile locations before activating operational access.
 
         autoApproved = autoApprovalEnabled
           && riskScore <= autoApprovalThreshold
+          && resolvedBranchIds.length > 0
           && input.evidence.length > 0
           && ["owner", "franchisee"].includes(input.roleAtBusiness)
           && existingOwners.length === 0
@@ -322,6 +364,7 @@ export async function POST(request) {
         branchId: resolvedBranchIds[0] || null,
         branchIds: resolvedBranchIds,
         applicantId: actor.uid,
+        businessName: safeText(input.provisionalBusiness?.name || businessSnapshot.data()?.brandName || businessSnapshot.data()?.name || input.businessId, 180),
         applicantEmail: actor.email,
         applicantName: safeText(input.applicantName || actor.name || "", 160),
         phone: safeText(input.phone || actor.phone_number || "", 40),

@@ -54,8 +54,7 @@ export async function POST(request) {
       let memberSnapshot = null;
       let organizationId = null;
       if (body.decision === "approve") {
-        organizationId = claim.organizationId || business.organizationId;
-        if (!organizationId) throw Object.assign(new Error("The approved claim must be linked to an organization."), { status: 409 });
+        organizationId = claim.organizationId || business.organizationId || `org_${claim.businessId}`;
         memberRef = db.collection("memberships").doc(`${organizationId}_${claim.applicantId}`);
         memberSnapshot = await transaction.get(memberRef);
       }
@@ -90,7 +89,23 @@ export async function POST(request) {
           ...(memberSnapshot?.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
+        if (!business.organizationId && !claim.organizationId) {
+          transaction.set(db.collection("organizations").doc(organizationId), {
+            name: business.brandName || business.name || claim.businessName || "Business",
+            businessIds: FieldValue.arrayUnion(claim.businessId),
+            ownerIds: grant.role === "organization_owner" ? FieldValue.arrayUnion(claim.applicantId) : [],
+            status: "active",
+            country: business.country || "ZW",
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+        } else if (grant.role === "organization_owner") {
+          transaction.set(db.collection("organizations").doc(organizationId), {
+            ownerIds: FieldValue.arrayUnion(claim.applicantId),
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
         transaction.set(businessRef, {
+          organizationId,
           claimStatus: "claimed",
           verificationStatus: "approved",
           ownerIds: grant.role.includes("owner") ? FieldValue.arrayUnion(claim.applicantId) : business.ownerIds || [],

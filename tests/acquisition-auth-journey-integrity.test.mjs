@@ -78,5 +78,6 @@ test("customer marketing sends generic Business discovery to Spotly Business and
 
 test("Business get-started keeps saved-request navigation inside the Business product", () => {
   assert.match(claimApp, /businessJourney \? spotlyPortalUrl\("business", "\/claims"\) : "\/claim\/drafts"/);
-  assert.match(claimApp, /Continue to secure account/);
+  assert.match(claimApp, /Secure account & keep my application/);
+  assert.match(claimApp, /goToRequests/);
 });

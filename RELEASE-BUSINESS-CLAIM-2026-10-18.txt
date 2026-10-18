@@ -1,0 +1,18 @@
+Spotly Web — Business Claim Launch Fix (2026-10-18)
+=====================================================
+
+Full Next.js source project in this archive, with updated onboarding and
+Business claims experience. See BUSINESS-CLAIM-LAUNCH-AUDIT-2026-10-18.md
+for change details and deployment QA checklist.
+
+The distributed project deliberately contains no .env.local or Firebase
+Admin private keys. Reconfigure verified spotly-africa environment variables
+in your deployment host. The safe .env.example and .firebaserc are included.
+
+Validation: 364 node:test cases passed; JS/hooks preflight passed;
+Firebase project preflight passed; 111 API routes passed the launch static audit.
+
+Important: Deploy updated Firebase Storage rules separately. Real Firebase
+uploads, account signup, and claim reviewer actions need a browser smoke test
+before the first merchant goes live. A Next production build could not be
+verified here because sandbox npm dependency installation failed.

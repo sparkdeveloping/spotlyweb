@@ -38,7 +38,7 @@ test("claim flow presents four human phases instead of ten bureaucratic stages",
   const claim = read("components/claim-app.js");
   for (const phase of ["Business", "You", "Details", "Verify"]) assert.match(claim, new RegExp(`label: "${phase}"`));
   assert.match(claim, /PHASES/);
-  assert.match(claim, /Find your business/);
+  assert.match(claim, /Is your business already on Spotly\?/);
   assert.match(claim, /Help us confirm/);
 });
 

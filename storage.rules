@@ -70,9 +70,14 @@ service firebase.storage {
       allow write: if signedIn() && request.auth.uid == uid && request.resource.size < 10 * 1024 * 1024 &&
         request.resource.contentType.matches('(application/pdf|image/jpeg|image/png|text/plain)');
     }
+    // Business ownership evidence also accepts Office files, as advertised in the wizard.
+    // The general safeDocument() helper remains restrictive for other surfaces.
     match /claim-evidence/{uid}/{draftId}/{fileName} {
       allow read: if signedIn() && (request.auth.uid == uid || claimsStaff());
-      allow write: if signedIn() && request.auth.uid == uid && safeDocument();
+      allow create, update: if activeAccount() && request.auth.uid == uid &&
+        request.resource.size > 0 && request.resource.size <= 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('(application/pdf|image/jpeg|image/png|application/msword|application/vnd.openxmlformats-officedocument.wordprocessingml.document)');
+      allow delete: if activeAccount() && request.auth.uid == uid;
     }
     match /staff/{uid}/{category}/{fileName} {
       allow read: if signedIn() && (request.auth.uid == uid || peopleAdmin());
