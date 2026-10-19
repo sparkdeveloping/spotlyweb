@@ -159,7 +159,7 @@ export async function POST(request) {
       }
 
       validateReceiptPath(body.receiptStoragePath, user.uid, body.deliveryJobId);
-      if (!job.shopping?.checkoutAuthorizedAt) throw Object.assign(new Error("Ask the store to authorize this Spotly checkout using the delivery reference before uploading the receipt."), { status: 409 });
+      if (!job.shopping?.checkoutAuthorizedAt) throw Object.assign(new Error(job.assistMode === "independent_shopping" ? "Ask Spotly operations to authorize the prepaid counter purchase before checking out." : "Ask the store to authorize this Spotly checkout using the delivery reference before uploading the receipt."), { status: 409 });
       if (job.state !== "shopping_review") {
         if (["collected", "en_route", "driver_arrived_customer", "handoff_verification", "delivered"].includes(job.state) && order.shopping?.state === "checked_out") {
           response = { state: job.state, idempotent: true, adjustmentId: order.shopping?.adjustmentId || null };
@@ -178,7 +178,9 @@ export async function POST(request) {
         shopping: { ...order.shopping, state: "checked_out", actualSubtotal: reconciliation.subtotal, actualTax: reconciliation.tax },
         totals: { ...order.totals, finalSubtotal: reconciliation.subtotal, finalTax: reconciliation.tax, finalTotal: reconciliation.finalTotal, platformCommission: reconciliation.platformCommission, merchantGross: reconciliation.merchantGross, merchantNet: reconciliation.merchantNet }
       };
-      postPaymentCapturedLedger(transaction, db, finalizedOrder, order.paymentIntentReference || `order:${orderSnap.id}`, "driver_shopping_receipt");
+      if (order.transactionType !== "assist_shopping") {
+        postPaymentCapturedLedger(transaction, db, finalizedOrder, order.paymentIntentReference || `order:${orderSnap.id}`, "driver_shopping_receipt");
+      }
 
       const adjustmentId = reconciliation.unusedReserve > 0.009 ? `shopping_${orderSnap.id}` : null;
       if (adjustmentId) {
@@ -205,7 +207,7 @@ export async function POST(request) {
       }, { merge: true });
       transaction.set(orderRef, {
         deliveryStatus: "collected",
-        merchantSettlementStatus: "pending",
+        merchantSettlementStatus: order.transactionType === "assist_shopping" ? "not_applicable" : "pending",
         merchantSettlementUpdatedAt: FieldValue.serverTimestamp(),
         totals: finalizedOrder.totals,
         shopping: { ...order.shopping, state: "checked_out", actualSubtotal: reconciliation.subtotal, actualTax: reconciliation.tax, finalTotal: reconciliation.finalTotal, unusedReserve: reconciliation.unusedReserve, topUpRequired: 0, receiptStoragePath: body.receiptStoragePath, receiptReference: safeText(body.receiptReference, 180), adjustmentId, refundStatus: adjustmentId ? "refund_required" : "not_required", checkedOutAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
