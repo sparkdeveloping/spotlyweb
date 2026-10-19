@@ -105,7 +105,7 @@ export async function POST(request){
         createdAt:now,updatedAt:now
       });
       tx.create(jobRef,{
-        number:makeDeliveryNumber(),orderId:orderRef.id,
+        number:makeDeliveryNumber(),orderId:orderRef.id,assistRequestId:requestRef.id,
         businessId:record.sourceBusinessId||storeSnap.data().directoryBusinessId||null,
         branchId:null,customerId:user.uid,assistMode:"independent_shopping",
         fulfilmentMode:"driver_shops",state:"awaiting_payment",currency:"USD",
