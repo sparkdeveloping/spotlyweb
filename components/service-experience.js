@@ -272,7 +272,7 @@ export function ServiceDiscoveryView({
       setLoading(true);
       setError("");
       try {
-        const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, limit: 24 });
+        const result = await loadServiceFeed(service, { city: location.city, country: location.country || "ZW", area: location.area, query, limit: 24 });
         if (!active) return;
         setFeed(result);
         if (query.trim().length >= 2) track(result.totalItems || result.totalBusinesses ? "service_search_results" : "service_search_zero_results", { service, query_length: query.trim().length, item_count: Number(result.totalItems || 0), business_count: Number(result.totalBusinesses || 0), city: location.city || "" });
@@ -284,7 +284,7 @@ export function ServiceDiscoveryView({
       }
     }, query ? 220 : 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [service, location.city, location.area, query, config.label]);
+  }, [service, location.city, location.country, location.area, query, config.label]);
 
   async function loadMore() {
     if (feed.nextOffset == null || loadingMore) return;
