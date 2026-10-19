@@ -42,6 +42,7 @@ export async function POST(request){
       db.collection("independentShoppingStores").doc(record.storeId).get()
     ]);
     const settings=settingsSnap.data()||{};
+    if (settings.independentShopping?.paidCheckoutEnabled !== true || settings.independentShopping?.shopperPurchaseFundingReady !== true) throw Object.assign(new Error("Shopping price requests are available, but funded purchases are not yet open in this area. No payment has been taken."), { status: 503 });
     const store=storeSnap.exists?independentPublicStore(storeSnap.id,storeSnap.data()):null;
     if(!store||!assistLocationEnabled(storeSnap.data(),settings))throw Object.assign(new Error("Independent shopping at this location has been paused."),{status:409});
     if(settings.integrations?.paynowEnabled!==true||!(settings.commerce?.paymentMethods||[]).includes("paynow"))
