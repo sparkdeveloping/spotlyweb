@@ -108,9 +108,16 @@ export async function POST(request) {
           organizationId,
           claimStatus: "claimed",
           verificationStatus: "approved",
+          // The owner takes control of the canonical profile; unaffiliated purchases must pause
+          // until ownership, catalogue rights and open Spotly Assist cases are reconciled.
+          ...(business.assistStoreId ? { assistEnabled: false, assistHandoverState: "review_required" } : {}),
           ownerIds: grant.role.includes("owner") ? FieldValue.arrayUnion(claim.applicantId) : business.ownerIds || [],
           status: claim.claimType === "new_business" ? "draft" : (business.status || "active"),
           updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        if (business.assistStoreId) transaction.set(db.collection("independentShoppingStores").doc(business.assistStoreId), {
+          status: "paused", handoverStatus: "owner_claim_approved",
+          handoverClaimId: body.claimId, updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
       } else {
         transaction.set(businessRef, {

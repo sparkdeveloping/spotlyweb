@@ -1,0 +1,28 @@
+name: Spotly V9 Assist safety checks
+on:
+  push:
+    branches: [feature/spotly-v9-assist-unified]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  assist-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Validate JavaScript syntax
+        run: npm run check:js
+      - name: Run Assist regression tests
+        run: node --test tests/spotly-assist-v9.test.mjs tests/independent-shopping.test.mjs
+      - name: Lint V9 changed application files
+        run: npx eslint lib/spotly-assist.js lib/africa-geo.js lib/independent-shopping.js components/assist-booking-app.js components/assist-activity-app.js components/admin-assist-app.js components/admin-assist-import-app.js app/api/admin/assist app/api/customer/assist app/api/public/assist

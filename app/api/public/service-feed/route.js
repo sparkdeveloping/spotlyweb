@@ -6,6 +6,8 @@ import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketpla
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
+import { assistModeForBusiness, assistLocationEnabled, canAssistBook } from "@/lib/spotly-assist";
+import { independentPublicStore } from "@/lib/independent-shopping";
 
 export const runtime = "nodejs";
 
@@ -241,6 +243,7 @@ export async function GET(request) {
     const service = text(url.searchParams.get("service"));
     if (!SERVICES.has(service)) throw Object.assign(new Error("Choose Eat, Shop, Book or Events."), { status: 422 });
     const city = text(url.searchParams.get("city"));
+    const country = String(url.searchParams.get("country") || "").trim().toUpperCase();
     const area = text(url.searchParams.get("area"));
     const query = String(url.searchParams.get("q") || "").trim();
     const requestedOffset = Number(url.searchParams.get("offset") || 0);
@@ -249,9 +252,21 @@ export async function GET(request) {
     const itemLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 8), 48) : 24;
     const { db } = getAdminServices();
 
-    const [businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot] = await publicSeed(db);
+    const [[businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot], settingsSnap, assistSnap] = await Promise.all([
+      publicSeed(db),
+      db.collection("platformSettings").doc("global").get(),
+      service === "eat" || service === "shop" ? db.collection("independentShoppingStores").where("status", "==", "published").limit(250).get() : Promise.resolve({ docs: [] })
+    ]);
+    const settings = settingsSnap.data() || {};
+    const independentByBusiness = new Map();
+    for (const doc of assistSnap.docs) {
+      const record = doc.data() || {};
+      const publicStore = independentPublicStore(doc.id, record);
+      if (publicStore && record.directoryBusinessId && record.assistEnabled !== false) independentByBusiness.set(record.directoryBusinessId, publicStore);
+    }
 
     const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data())).map(businessRecord);
+    const firestoreBusinessIds = new Set(firestoreBusinesses.map((business) => business.id));
     const curatedBusinesses = queryOpenPlaces({ city, service, limit: 2500 }).records.map((item) => publicBusinessRecord(item.id, item));
     const allBusinesses = mergeCuratedWithFirestore(curatedBusinesses, firestoreBusinesses);
     const branchMap = new Map();
@@ -286,9 +301,17 @@ export async function GET(request) {
 
     const eligibleBusinesses = allBusinesses
       .filter((business) => matchesService(service, business))
+      .filter((business) => !country || String(business.country || "ZW").toUpperCase() === country)
       .filter((business) => !city || !text(business.city) || text(business.city) === city || (branchMap.get(business.id) || []).some((branch) => text(branch.city) === city))
       .filter((business) => matchesArea(business, branchMap.get(business.id) || [], area))
-      .map((business) => ({ ...business, operational: operationalSummary(branchMap.get(business.id) || []), promotion: (promotionMap.get(business.id) || [])[0] || null }));
+      .map((business) => {
+        const assistMode = assistModeForBusiness(business, settings);
+        const shopStore = assistMode === "shopping" && firestoreBusinessIds.has(business.id) ? independentByBusiness.get(business.id) : null;
+        const bookable = assistMode === "booking" && firestoreBusinessIds.has(business.id) && canAssistBook(business, settings);
+        const assist = shopStore ? { mode: "shopping", storeId: shopStore.id, itemsCount: shopStore.items.length, preview: shopStore.items.slice(0, 3).map((item) => ({ name: item.name, price: item.priceEstimate, currency: item.currency })) }
+          : bookable ? { mode: "booking", businessId: business.id } : null;
+        return { ...business, assist, operational: operationalSummary(branchMap.get(business.id) || []), promotion: (promotionMap.get(business.id) || [])[0] || null };
+      });
 
     const eligibleBusinessMap = new Map(eligibleBusinesses.map((business) => [business.id, business]));
     const itemsAll = productSnapshot.docs
@@ -304,7 +327,7 @@ export async function GET(request) {
       .sort((a, b) => sortItems(service, a, b));
 
     const matchingBusinessIds = new Set(itemsAll.map((item) => item.businessId));
-    const businesses = eligibleBusinesses.filter((business) => matchesQuery(business, query) || matchingBusinessIds.has(business.id));
+    const businesses = eligibleBusinesses.filter((business) => matchesQuery(business, query) || matchingBusinessIds.has(business.id) || (business.assist?.preview || []).some((item) => text(item.name).includes(text(query))));
 
     const categories = [...new Set([
       ...businesses.map((business) => marketplaceProfile(business).displayCategory),

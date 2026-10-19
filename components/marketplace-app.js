@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, BadgeCheck, BadgePercent, CalendarDays, CarFront, ChevronRight, CreditCard, Heart, LocateFixed, MapPin, Minus, Package, PackageCheck, Plus, RefreshCw, Search, ShieldCheck, ShoppingBag, ShoppingBasket, Star, Store, Ticket, Truck, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, BadgePercent, CalendarDays, CarFront, ChevronRight, CreditCard, Heart, Info, LocateFixed, MapPin, Minus, Package, PackageCheck, Plus, RefreshCw, Search, ShieldCheck, ShoppingBag, ShoppingBasket, Star, Store, Ticket, Truck, X } from "lucide-react";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Badge, Button, Card, EmptyState, EntityPicker, Modal, Overlay, SearchField, StatusBadge } from "@/components/ui";
@@ -78,9 +78,11 @@ function MarketplaceLoading() {
   return <div className="min-h-screen bg-[var(--background)]" aria-busy="true" aria-label="Loading Spotly"><div className="border-b border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto flex h-[72px] max-w-[1320px] items-center gap-4 px-4 sm:px-6 lg:px-8"><div className="v7-skeleton h-9 w-24 rounded-[12px]" /><div className="v7-skeleton hidden h-11 w-[300px] rounded-[12px] lg:block" /><div className="ml-auto flex gap-2"><div className="v7-skeleton hidden h-10 w-24 rounded-[12px] sm:block" /><div className="v7-skeleton h-10 w-10 rounded-[12px]" /><div className="v7-skeleton h-10 w-10 rounded-[12px]" /></div></div></div><main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8"><div className="v7-skeleton h-4 w-32 rounded-full" /><div className="v7-skeleton mt-4 h-12 w-[60%] max-w-xl rounded-[12px]" /><div className="mt-7 grid gap-3 lg:grid-cols-[1.15fr_.85fr]"><div className="v7-skeleton min-h-[292px] rounded-[24px]" /><div className="grid grid-cols-2 gap-3">{[0,1,2,3].map((item) => <div key={item} className="v7-skeleton min-h-[132px] rounded-[24px]" />)}</div></div></main></div>;
 }
 
-function LocationControl({ value, cities, supportedAreas, onChange, onLocate, locating }) {
+function LocationControl({ value, cities, countryCities = {}, supportedCountries = ["ZW", "MW"], supportedAreas, onChange, onLocate, locating }) {
+  const countryCode = value.country || "ZW";
+  const availableCities = countryCities[countryCode] || cities;
   const areas = supportedAreas?.[value.city] || [];
-  return <div className="space-y-5"><div><p className="text-sm font-semibold">City</p><EntityPicker value={value.city} onChange={(city) => onChange({ ...value, city, area: "", coordinates: null })} options={cities.map((city) => ({ value: city, label: city, description: "Spotly city" }))} title="Choose your city" searchPlaceholder="Search cities" allowClear={false} className="mt-2" /></div><div><p className="text-sm font-semibold">Area or suburb</p>{areas.length ? <EntityPicker value={value.area} onChange={(area) => onChange({ ...value, area })} options={[{ value: "", label: `All areas in ${value.city}`, description: "Show the whole city" }, ...areas.map((area) => ({ value: area, label: area, description: value.city }))]} title={`Choose an area in ${value.city}`} searchPlaceholder="Search areas" allowClear={false} className="mt-2" /> : <input className="field-control mt-2 h-12 w-full" value={value.area} onChange={(event) => onChange({ ...value, area: event.target.value })} placeholder={`Area or suburb in ${value.city}`} />}</div><div className="border-t border-[var(--border-subtle)] pt-4"><Button variant="outline" onClick={onLocate} loading={locating}><LocateFixed className="h-4 w-4" />Use my current location</Button><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Precise location lets Spotly say “near you” honestly. Otherwise discovery stays city-level.</p></div></div>;
+  return <div className="space-y-5"><div><label htmlFor="spotly-country" className="text-sm font-semibold">Country</label><select id="spotly-country" className="field-control mt-2 h-12 w-full" value={countryCode} onChange={(event) => { const next = event.target.value; onChange({ ...value, country: next, city: (countryCities[next] || cities)[0] || "", area: "", coordinates: null }); }}>{supportedCountries.map((code) => <option key={code} value={code}>{({ ZW: "Zimbabwe", MW: "Malawi" })[code] || code}</option>)}</select></div><div><p className="text-sm font-semibold">City</p><EntityPicker value={value.city} onChange={(city) => onChange({ ...value, city, area: "", coordinates: null })} options={availableCities.map((city) => ({ value: city, label: city, description: countryCode }))} title="Choose your city" searchPlaceholder="Search cities" allowClear={false} className="mt-2" /></div><div><p className="text-sm font-semibold">Area or suburb</p>{areas.length ? <EntityPicker value={value.area} onChange={(area) => onChange({ ...value, area })} options={[{ value: "", label: `All areas in ${value.city}`, description: "Show the whole city" }, ...areas.map((area) => ({ value: area, label: area, description: value.city }))]} title={`Choose an area in ${value.city}`} searchPlaceholder="Search areas" allowClear={false} className="mt-2" /> : <input className="field-control mt-2 h-12 w-full" value={value.area} onChange={(event) => onChange({ ...value, area: event.target.value })} placeholder={`Area or suburb in ${value.city}`} />}</div><div className="border-t border-[var(--border-subtle)] pt-4"><Button variant="outline" onClick={onLocate} loading={locating}><LocateFixed className="h-4 w-4" />Use my current location</Button><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Precise location lets Spotly say “near you” honestly. Otherwise discovery stays city-level.</p></div></div>;
 }
 
 function BusinessVisual({ business }) {
@@ -91,12 +93,16 @@ function BusinessVisual({ business }) {
 }
 
 function BusinessCard({ business, favorite, onFavorite, onOpen, distance }) {
+  const [assistInfoOpen, setAssistInfoOpen] = useState(false);
   const profile = marketplaceProfile(business);
+  const assistHref = business.assist?.mode === "booking" ? `/assist/book?business=${encodeURIComponent(business.id)}` : business.assist?.mode === "shopping" ? `/shop-for-me?store=${encodeURIComponent(business.assist.storeId)}` : null;
   const locationCount = Number(business.branchCount || business.locationCount || 0);
-  const cta = marketplaceActionLabel(business);
+  const cta = business.assist ? business.assist.mode === "booking" ? "Request booking" : "Browse & request" : marketplaceActionLabel(business);
   const location = distance !== null ? `${distance.toFixed(1)} km away` : business.area || business.city || "";
   return <article className="relative overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] transition hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] hover:shadow-card">
-    <button onClick={() => onOpen(business)} className="block w-full text-left"><div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} />{marketplaceMedia(business).src ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" /> : null}{profile.cardMode === "commerce" ? <div className="absolute bottom-3 left-3"><MarketplaceTrustBadge business={business} compact /></div> : null}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-semibold">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{location ? ` · ${location}` : ""}</p></div><ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-3)]" /></div><div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{profile.cardMode === "commerce" ? (locationCount ? `${locationCount} ${locationCount === 1 ? "location" : "locations"}` : "Available on Spotly") : "Directory listing"}</span><span className="font-semibold text-[var(--accent)]">{cta}</span></div></div></button>
+    <button onClick={() => assistHref ? window.location.assign(assistHref) : onOpen(business)} className="block w-full text-left"><div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} />{marketplaceMedia(business).src ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" /> : null}{profile.cardMode === "commerce" ? <div className="absolute bottom-3 left-3"><MarketplaceTrustBadge business={business} compact /></div> : business.assist ? <span className="absolute bottom-3 left-3 rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">Spotly Assist</span> : null}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-semibold">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{location ? ` · ${location}` : ""}</p></div><ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-3)]" /></div><div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{profile.cardMode === "commerce" ? (locationCount ? `${locationCount} ${locationCount === 1 ? "location" : "locations"}` : "Available on Spotly")  : business.assist ? "Independent request · subject to confirmation" : "Directory listing"}</span><span className="font-semibold text-[var(--accent)]">{cta}</span></div></div></button>
+    {business.assist ? <button type="button" aria-label="How Spotly Assist works" onClick={() => setAssistInfoOpen(true)} className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full border bg-[var(--surface)] text-[var(--accent)] shadow-sm"><Info className="h-4 w-4"/></button> : null}
+    {assistInfoOpen && <div role="dialog" aria-modal="true" aria-label="Spotly Assist explained" className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 p-3 sm:items-center" onClick={() => setAssistInfoOpen(false)}><div className="w-full max-w-md rounded-[24px] bg-[var(--surface)] p-6 text-left shadow-2xl" onClick={(event) => event.stopPropagation()}><span className="inline-flex rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)]">Spotly Assist</span><h2 className="mt-4 text-xl font-semibold">We help arrange it for you.</h2><p className="mt-3 text-sm leading-6 text-[var(--text-2)]">This business is not necessarily partnered with Spotly. We contact or visit the location on your behalf. Prices, availability and appointments must be confirmed before a purchase or booking. A request is not a guarantee.</p><div className="mt-5 flex gap-2"><button type="button" onClick={() => setAssistInfoOpen(false)} className="flex-1 rounded-xl border px-4 py-3 text-sm font-semibold">Got it</button><button type="button" onClick={() => window.location.assign(assistHref)} className="flex-1 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white">Explore</button></div></div></div>}
     <button type="button" onClick={() => onFavorite(business)} aria-label={favorite ? "Remove from saved" : "Save business"} className={cn("absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-black/35 text-[var(--media-text)] backdrop-blur", favorite && "bg-[var(--surface)] text-[var(--danger)]")}><Heart className={cn("h-4 w-4", favorite && "fill-current")} /></button>
   </article>;
 }
@@ -571,7 +577,9 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const requestedOffer = searchParams.get("offer") || initialOfferId;
   const requestedService = searchParams.get("service");
   const launchCities = settings.launch?.launchCities?.length ? settings.launch.launchCities : ["Harare"];
-  const defaultLocation = { city: initialCity && launchCities.includes(initialCity) ? initialCity : settings.launch?.primaryCity || launchCities[0], area: "", radiusKm: 20, coordinates: null };
+  const countryCities = settings.launch?.countryCities || { ZW: launchCities, MW: ["Lilongwe", "Blantyre", "Mzuzu", "Zomba"] };
+  const initialCountry = Object.entries(countryCities).find(([, cities]) => initialCity && cities.includes(initialCity))?.[0] || "ZW";
+  const defaultLocation = { country: initialCountry, city: initialCity && countryCities[initialCountry]?.includes(initialCity) ? initialCity : (countryCities[initialCountry] || launchCities)[0], area: "", radiusKm: 20, coordinates: null };
 
   const [location, setLocation] = useState(defaultLocation);
   const [locating, setLocating] = useState(false);
@@ -762,7 +770,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setLoadError("");
     const timer = window.setTimeout(async () => {
       try {
-        const result = await searchLiveBusinesses(query, 100, { city: location.city });
+        const result = await searchLiveBusinesses(query, 100, { city: location.city, country: location.country || "ZW" });
         if (active) {
           setBusinesses(result);
           setLoadError("");
@@ -774,7 +782,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       }
     }, query ? 250 : 0);
     return () => { active = false; clearTimeout(timer); };
-  }, [location.city, query, reloadKey]);
+  }, [location.city, location.country, query, reloadKey]);
 
   useEffect(() => {
     let active = true;
@@ -1203,7 +1211,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     onSaved={() => updateUrl("saved", { business: null, order: null, service: null })}
     onLocation={() => setLocationOpen((value) => !value)}
     activityCount={activityGroups.problem.length + activityGroups.active.length + activityGroups.upcoming.length}
-    locationPanel={locationOpen ? <div className="border-t border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8"><LocationControl value={location} cities={launchCities} supportedAreas={settings.launch?.supportedAreas} onChange={setLocation} onLocate={locate} locating={locating} /></div></div> : null}
+    locationPanel={locationOpen ? <div className="border-t border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8"><LocationControl value={location} cities={launchCities} countryCities={countryCities} supportedCountries={[...new Set(["ZW", "MW", ...(settings.launch?.supportedCountries || [])])]} supportedAreas={settings.launch?.supportedAreas} onChange={setLocation} onLocate={locate} locating={locating} /></div></div> : null}
   >
 
     <div className="v7-page-enter">
