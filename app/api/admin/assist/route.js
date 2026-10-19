@@ -91,14 +91,15 @@ export async function PATCH(request) {
       if (body.action === "offer_alternative" && (!body.proposedDate || !body.proposedTime)) {
         throw Object.assign(new Error("Choose the alternative date and time agreed with the business."), { status: 422 });
       }
-      if (body.action === "assign" && !body.assigneeId) throw Object.assign(new Error("Choose a staff member to assign."), { status: 422 });
+      // Assign-to-me is the default; explicit reassignment needs a valid staff identifier.
+      if (body.action === "assign" && body.assigneeId && body.assigneeId.length < 3) throw Object.assign(new Error("Choose a valid staff member."), { status: 422 });
       if (proposed && !canTransitionAssist(current, proposed) && !(isShopping && current === "pending_manual_quote" && ["contact", "decline", "cancel"].includes(body.action))) {
         throw Object.assign(new Error("This request cannot move to that state."), { status: 409 });
       }
       const next = proposed || current;
       const patch = { updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.uid };
       if (proposed) patch.state = next;
-      if (body.action === "assign") patch.assignedTo = body.assigneeId;
+      if (body.action === "assign") patch.assignedTo = body.assigneeId || actor.uid;
       if (body.action === "contact") { patch.attempts = FieldValue.increment(1); patch.lastContactAt = FieldValue.serverTimestamp(); }
       if (body.action === "offer_alternative") {
         patch.proposedDate = body.proposedDate; patch.proposedTime = body.proposedTime; patch.customerAcceptedAt = null;
