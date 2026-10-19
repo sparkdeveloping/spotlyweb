@@ -205,6 +205,12 @@ export async function POST(request) {
         shopping: { ...job.shopping, state: "checked_out", items, actualSubtotal: reconciliation.subtotal, finalTotal: reconciliation.finalTotal, unusedReserve: reconciliation.unusedReserve, receiptStoragePath: body.receiptStoragePath, receiptReference: safeText(body.receiptReference, 180), checkedOutAt: new Date().toISOString() },
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
+      if (order.transactionType === "assist_shopping" && order.assistRequestId) transaction.set(db.collection("independentShoppingRequests").doc(order.assistRequestId), {
+        state: "in_progress", paymentStatus: "paid", actualMerchandiseCost: reconciliation.subtotal,
+        finalCustomerTotal: reconciliation.finalTotal, refundPendingAmount: reconciliation.unusedReserve,
+        receiptStoragePath: body.receiptStoragePath, checkoutCompletedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
       transaction.set(orderRef, {
         deliveryStatus: "collected",
         merchantSettlementStatus: order.transactionType === "assist_shopping" ? "not_applicable" : "pending",
