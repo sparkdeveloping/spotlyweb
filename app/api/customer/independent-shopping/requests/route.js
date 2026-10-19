@@ -20,7 +20,12 @@ export async function GET(request) {
   try {
     const user = await authenticateRequest(request);
     const { db } = getAdminServices();
-    const snapshot = await db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(30).get();
+    const [snapshot, settingsSnap] = await Promise.all([
+      db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(30).get(),
+      db.collection("platformSettings").doc("global").get()
+    ]);
+    const settings = settingsSnap.data() || {};
+    const paidCheckoutAvailable = settings.independentShopping?.paidCheckoutEnabled === true && settings.independentShopping?.shopperPurchaseFundingReady === true && settings.integrations?.paynowEnabled === true;
     const requests = snapshot.docs.map((doc) => ({
       id: doc.id, storeName: doc.data().storeName, state: doc.data().state,
       country: doc.data().country || "ZW", city: doc.data().city || "",
@@ -30,7 +35,7 @@ export async function GET(request) {
       estimate: doc.data().estimate,
       createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null
     })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    return Response.json({ ok: true, requests }, { headers: { "Cache-Control": "private, no-store" } });
+    return Response.json({ ok: true, requests, paidCheckoutAvailable }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return apiError(error);
   }
