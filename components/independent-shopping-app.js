@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Check, Clock3, MapPin, Minus, Plus, Search, Shie
 import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { spotlyLoginUrl } from "@/lib/spotly-domains";
 
-const format = (value) => new Intl.NumberFormat("en-ZW", { style: "currency", currency: "USD" }).format(Number(value || 0));
+const format = (value, currency = "USD") => new Intl.NumberFormat("en-ZW", { style: "currency", currency }).format(Number(value || 0));
 const disclosure = "Independent shopping service. Spotly is not affiliated with or endorsed by the shops listed here. A shopper would purchase your requested items in person. Prices and availability must be confirmed before any payment.";
 
 export function IndependentShoppingApp() {
@@ -25,7 +25,7 @@ export function IndependentShoppingApp() {
   useEffect(() => {
     let active = true;
     publicApiFetch("/api/public/independent-shopping")
-      .then((data) => { if (active) setResult(data); })
+      .then((data) => { if (active) { setResult(data); const id = new URLSearchParams(window.location.search).get("store"); if (id && (data.stores || []).some((store) => store.id === id)) setSelected(id); } })
       .catch((error) => { if (active) setLoadError(error.message || "Could not load independent shopping."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -85,7 +85,7 @@ export function IndependentShoppingApp() {
           <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Check className="h-6 w-6"/></span>
           <h2 className="mt-5 text-2xl font-semibold">Your price-check request was received</h2>
           <p className="mt-3 text-sm leading-6 text-[var(--text-2)]">You requested items from {receipt.storeName}. Spotly has not purchased anything, charged you, or dispatched a Driver. This is not yet a confirmed order.</p>
-          <p className="mt-4 rounded-xl bg-[var(--surface-2)] px-4 py-3 text-sm">Indicative total: <strong>{format(receipt.estimate?.totalEstimate)}</strong> · Final price to be confirmed</p>
+          <p className="mt-4 rounded-xl bg-[var(--surface-2)] px-4 py-3 text-sm">Indicative total: <strong>{format(receipt.estimate?.totalEstimate, receipt.estimate?.currency || "USD")}</strong> · Final price to be confirmed</p>
           <button type="button" onClick={() => { setReceipt(null); setSelected(""); setQuantities({}); requestId.current = null; }} className="mt-5 text-sm font-semibold text-[var(--accent)]">Explore other locations</button>
         </section>
         : <div className="mt-10 grid gap-7 lg:grid-cols-[.88fr_1.12fr]">
@@ -107,11 +107,11 @@ export function IndependentShoppingApp() {
               <p className="mt-2 text-xs text-[var(--text-3)]">Prices are estimates and may change at the counter. Store not affiliated with Spotly.</p>
               <div className="mt-6 divide-y border-y border-[var(--border-subtle)]">
                 {store.items.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 py-4">
-                  <div className="min-w-0"><p className="font-medium">{item.name}</p><p className="mt-1 text-sm text-[var(--text-2)]">{format(item.priceEstimate)}{item.unit ? ` / ${item.unit}` : ""}</p><p className="mt-1 text-[11px] text-[var(--text-3)]">Price checked {new Date(item.priceCheckedAt).toLocaleDateString("en-ZW")}</p></div>
+                  <div className="min-w-0"><p className="font-medium">{item.name}</p><p className="mt-1 text-sm text-[var(--text-2)]">{format(item.priceEstimate, item.currency || (store.country === "MW" ? "MWK" : "USD"))}{item.unit ? ` / ${item.unit}` : ""}</p><p className="mt-1 text-[11px] text-[var(--text-3)]">Price checked {new Date(item.priceCheckedAt).toLocaleDateString("en-ZW")}</p></div>
                   <div className="flex shrink-0 items-center gap-2"><button aria-label={`Remove one ${item.name}`} type="button" onClick={() => setQuantity(item.id, -1)} disabled={!quantities[item.id]} className="flex h-9 w-9 items-center justify-center rounded-full border disabled:opacity-35"><Minus className="h-4 w-4"/></button><span className="w-5 text-center text-sm tabular-nums">{quantities[item.id] || 0}</span><button aria-label={`Add one ${item.name}`} type="button" onClick={() => setQuantity(item.id, 1)} disabled={quantities[item.id] >= 10} className="flex h-9 w-9 items-center justify-center rounded-full border disabled:opacity-35"><Plus className="h-4 w-4"/></button></div>
                 </div>)}
               </div>
-              {items.length > 0 && <div className="mt-5 rounded-xl bg-[var(--surface-2)] p-4"><div className="flex justify-between text-sm"><span>{items.reduce((n, i) => n + i.quantity, 0)} requested items</span><strong>{format(subtotal)}</strong></div><p className="mt-2 text-xs leading-5 text-[var(--text-2)]">Merchandise estimate only. Shopping and delivery fees, if any, are confirmed before payment.</p></div>}
+              {items.length > 0 && <div className="mt-5 rounded-xl bg-[var(--surface-2)] p-4"><div className="flex justify-between text-sm"><span>{items.reduce((n, i) => n + i.quantity, 0)} requested items</span><strong>{format(subtotal, store.country === "MW" ? "MWK" : "USD")}</strong></div><p className="mt-2 text-xs leading-5 text-[var(--text-2)]">Merchandise estimate only. Shopping and delivery fees, if any, are confirmed before payment.</p></div>}
               {!result.requestEnabled ? <p className="mt-5 rounded-xl border p-4 text-sm leading-6 text-[var(--text-2)]">Price browsing is available, but quote requests have not opened in this pilot. No orders can be placed yet.</p> :
                 <form onSubmit={submit} className="mt-6 space-y-3">
                   <h3 className="font-semibold">Request a price check</h3>
