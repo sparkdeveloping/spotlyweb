@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
+import { notifyUser } from "@/lib/notification-server";
 export const runtime = "nodejs";
 const roles = ["super_admin","platform_admin","operations_manager"];
 const schema = z.object({
@@ -17,7 +18,7 @@ export async function POST(request) {
  try {
    const actor = await authenticateRequest(request, { roles });
    const body = schema.parse(await request.json());
-   const { db } = getAdminServices();
+   const { db, messaging, auth } = getAdminServices();
    const ref = db.collection("independentShoppingRequests").doc(body.id);
    let state;
    await db.runTransaction(async tx => {
@@ -60,6 +61,17 @@ export async function POST(request) {
        createdAt:FieldValue.serverTimestamp()
      });
    });
+   const stored=await ref.get();
+   if(["offer_quote","cannot_fulfil","cancel"].includes(body.action)){
+     const record=stored.data();
+     await notifyUser({db,messaging,auth,userId:record?.customerId,
+       title:body.action==="offer_quote"?"Your final shopping quote is ready":"Spotly shopping request update",
+       body:record?.customerMessage||"Open Spotly to review your shopping request.",
+       workspace:"customer",href:"/shop-for-me?store="+encodeURIComponent(record?.storeId||""),
+       category:"assist_shopping",module:"spotly_assist",
+       eventType:"assist.shopping."+body.action,entityType:"independentShoppingRequest",entityId:body.id
+     }).catch(()=>{});
+   }
    return Response.json({ok:true,state});
  } catch(error){
    if(error instanceof z.ZodError) return Response.json({ok:false,error:"Review the shopping request and quote amounts."},{status:422});
