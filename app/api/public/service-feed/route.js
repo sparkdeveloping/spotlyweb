@@ -6,7 +6,7 @@ import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketpla
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
-import { assistModeForBusiness, canAssistBook } from "@/lib/spotly-assist";
+import { assistModeForBusiness, assistLocationEnabled, canAssistBook } from "@/lib/spotly-assist";
 import { independentPublicStore } from "@/lib/independent-shopping";
 
 export const runtime = "nodejs";
@@ -266,6 +266,7 @@ export async function GET(request) {
     }
 
     const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data())).map(businessRecord);
+    const firestoreBusinessIds = new Set(firestoreBusinesses.map((business) => business.id));
     const curatedBusinesses = queryOpenPlaces({ city, service, limit: 2500 }).records.map((item) => publicBusinessRecord(item.id, item));
     const allBusinesses = mergeCuratedWithFirestore(curatedBusinesses, firestoreBusinesses);
     const branchMap = new Map();
@@ -305,8 +306,8 @@ export async function GET(request) {
       .filter((business) => matchesArea(business, branchMap.get(business.id) || [], area))
       .map((business) => {
         const assistMode = assistModeForBusiness(business, settings);
-        const shopStore = assistMode === "shopping" ? independentByBusiness.get(business.id) : null;
-        const bookable = assistMode === "booking" && canAssistBook(business, settings);
+        const shopStore = assistMode === "shopping" && firestoreBusinessIds.has(business.id) ? independentByBusiness.get(business.id) : null;
+        const bookable = assistMode === "booking" && firestoreBusinessIds.has(business.id) && canAssistBook(business, settings);
         const assist = shopStore ? { mode: "shopping", storeId: shopStore.id, itemsCount: shopStore.items.length, preview: shopStore.items.slice(0, 3).map((item) => ({ name: item.name, price: item.priceEstimate, currency: item.currency })) }
           : bookable ? { mode: "booking", businessId: business.id } : null;
         return { ...business, assist, operational: operationalSummary(branchMap.get(business.id) || []), promotion: (promotionMap.get(business.id) || [])[0] || null };
