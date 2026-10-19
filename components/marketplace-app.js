@@ -770,7 +770,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setLoadError("");
     const timer = window.setTimeout(async () => {
       try {
-        const result = await searchLiveBusinesses(query, 100, { city: location.city });
+        const result = await searchLiveBusinesses(query, 100, { city: location.city, country: location.country || "ZW" });
         if (active) {
           setBusinesses(result);
           setLoadError("");
@@ -782,7 +782,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       }
     }, query ? 250 : 0);
     return () => { active = false; clearTimeout(timer); };
-  }, [location.city, query, reloadKey]);
+  }, [location.city, location.country, query, reloadKey]);
 
   useEffect(() => {
     let active = true;
@@ -1211,7 +1211,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     onSaved={() => updateUrl("saved", { business: null, order: null, service: null })}
     onLocation={() => setLocationOpen((value) => !value)}
     activityCount={activityGroups.problem.length + activityGroups.active.length + activityGroups.upcoming.length}
-    locationPanel={locationOpen ? <div className="border-t border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8"><LocationControl value={location} cities={launchCities} countryCities={countryCities} supportedCountries={settings.launch?.supportedCountries || ["ZW", "MW"]} supportedAreas={settings.launch?.supportedAreas} onChange={setLocation} onLocate={locate} locating={locating} /></div></div> : null}
+    locationPanel={locationOpen ? <div className="border-t border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8"><LocationControl value={location} cities={launchCities} countryCities={countryCities} supportedCountries={[...new Set(["ZW", "MW", ...(settings.launch?.supportedCountries || [])])]} supportedAreas={settings.launch?.supportedAreas} onChange={setLocation} onLocate={locate} locating={locating} /></div></div> : null}
   >
 
     <div className="v7-page-enter">
