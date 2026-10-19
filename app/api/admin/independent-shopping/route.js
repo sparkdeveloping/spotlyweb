@@ -24,6 +24,7 @@ const writeSchema = z.object({
   directoryBusinessId: z.string().trim().max(150).default(""),
   status: z.enum(["draft", "published", "paused", "archived"]).default("draft"),
   priceCheckMethod: z.enum(["in_person", "phone", "business_authorized"]),
+  country: z.enum(["ZW", "MW"]).default("ZW"),\n  assistAccepting: z.boolean().default(true),
   items: z.array(itemSchema).max(120)
 }).strict();
 
@@ -66,7 +67,7 @@ export async function POST(request) {
       category: input.category, directoryBusinessId: input.directoryBusinessId,
       status: input.status, priceCheckMethod: input.priceCheckMethod,
       affiliation: "unaffiliated", sourcingModel: "independent_in_person",
-      items: input.items, country: "ZW", currency: "USD",
+      items: input.items, country: input.country, currency: input.country === "MW" ? "MWK" : "USD", assistAccepting: input.assistAccepting,
       updatedBy: actor.uid, updatedAt: now
     };
     if (!old.exists) { payload.createdBy = actor.uid; payload.createdAt = now; }
