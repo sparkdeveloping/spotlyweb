@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { independentPublicStore, independentQuote, independentShoppingFlags } from "@/lib/independent-shopping";
+import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 
 export const runtime = "nodejs";
 const selectionSchema = z.object({ itemId: z.string().min(2).max(80), quantity: z.number().int().min(1).max(10) }).strict();
@@ -52,6 +53,7 @@ export async function POST(request) {
     if (!independentShoppingFlags(settings).requestEnabled) throw Object.assign(new Error("Independent shopping requests are not open yet."), { status: 503 });
     const store = storeSnap.exists ? independentPublicStore(storeSnap.id, storeSnap.data()) : null;
     if (!store) throw Object.assign(new Error("This independent shopping location is not accepting requests."), { status: 409 });
+    if (!regionalServicePolicy(settings.assistCoverage || {}, store, "eat").available) throw Object.assign(new Error("Spotly Assist is unavailable in this area."), { status: 409 });
     const estimate = independentQuote(store, input.items, {
       shoppingFee: settings.independentShopping?.shoppingFeeEstimate ?? 0,
       deliveryFee: settings.independentShopping?.deliveryFeeEstimate ?? 0
