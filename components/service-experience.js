@@ -152,11 +152,11 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
   const profile = marketplaceProfile(business);
   const [assistExplained, setAssistExplained] = useState(false);
   const assisted = Boolean(business.assistStoreId);
-  const assistedBooking = service === "book" && !commerce && business.assistAccepting !== false;
   const media = assignedMedia || mediaForBusiness(business);
   const image = assisted ? "" : media.src;
   const operation = business.operational || {};
   const commerce = profile.cardMode === "commerce";
+  const assistedBooking = service === "book" && !commerce && business.assistAccepting !== false;
   const action = marketplaceActionLabel(business, service);
   return <article className={cn("group relative overflow-hidden rounded-[var(--radius-card)] border bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card", commerce ? "border-[var(--border-subtle)]" : "border-[color-mix(in_srgb,var(--border-subtle)_80%,transparent)]")}>
     <button type="button" onClick={() => assisted ? window.location.assign("/shop-for-me?store=" + encodeURIComponent(business.assistStoreId)) : assistedBooking ? window.location.assign("/assist/book?business=" + encodeURIComponent(business.id)) : onOpen(business)} className="block w-full text-left">
