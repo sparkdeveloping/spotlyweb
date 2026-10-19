@@ -6,6 +6,8 @@ import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketpla
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
+import { independentPublicStore, independentShoppingFlags } from "@/lib/independent-shopping";
+import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 
 export const runtime = "nodejs";
 
@@ -250,6 +252,15 @@ export async function GET(request) {
     const { db } = getAdminServices();
 
     const [businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot] = await publicSeed(db);
+    const assistSettings = (service === "eat" || service === "shop") ? (await db.collection("platformSettings").doc("global").get()).data() || {} : {};
+    const assistedSnapshot = (service === "eat" || service === "shop") && independentShoppingFlags(assistSettings).browseEnabled
+      ? await db.collection("independentShoppingStores").where("status", "==", "published").limit(160).get()
+      : { docs: [] };
+    const independentStores = assistedSnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
+      .filter((raw) => regionalServicePolicy(assistSettings.assistCoverage || {}, raw, service).available)
+      .map((raw) => ({ source: raw, public: independentPublicStore(raw.id, raw) })).filter((entry) => entry.public)
+      .filter(({ source }) => service === "eat" ? /restaurant|food|cafe|bakery|takeaway|chicken|pizza/i.test(source.category || "") : !/restaurant|food|cafe|bakery|takeaway|chicken|pizza/i.test(source.category || ""));
+
 
     const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data())).map(businessRecord);
     const curatedBusinesses = queryOpenPlaces({ city, service, limit: 2500 }).records.map((item) => publicBusinessRecord(item.id, item));
@@ -284,6 +295,18 @@ export async function GET(request) {
       promotionMap.set(business.id, [...(promotionMap.get(business.id) || []), ...applicable]);
     }
 
+    const independentCards = independentStores.map(({ source, public: store }) => ({
+      id: "assist_" + store.id, name: store.name, category: store.category,
+      country: store.country, city: store.city, area: store.area, address: store.address,
+      public: true, status: "provisional", source: { type: "spotly_assist", rightsStatus: "spotly_created" },
+      businessType: service === "eat" ? "restaurant_food" : "grocery_retail",
+      claimStatus: "unclaimed", verificationStatus: "unverified",
+      commerceVerified: false, commerceEnabled: false, assistStoreId: store.id,
+      assistModel: "spotly_assist", assistPricesEstimated: true,
+      independentItems: store.items.length,
+      operational: { pickupAvailable: false, deliveryAvailable: false, openNow: false },
+      isFeatured: false
+    }));
     const eligibleBusinesses = allBusinesses
       .filter((business) => matchesService(service, business))
       .filter((business) => !city || !text(business.city) || text(business.city) === city || (branchMap.get(business.id) || []).some((branch) => text(branch.city) === city))
@@ -304,7 +327,17 @@ export async function GET(request) {
       .sort((a, b) => sortItems(service, a, b));
 
     const matchingBusinessIds = new Set(itemsAll.map((item) => item.businessId));
-    const businesses = eligibleBusinesses.filter((business) => matchesQuery(business, query) || matchingBusinessIds.has(business.id));
+    const selectedAssist = independentCards.filter((business) =>
+      (!city || text(business.city) === city) &&
+      (!area || !text(business.area) || text(business.area) === area) &&
+      (matchesQuery(business, query) || independentStores.some(({ public: store }) =>
+        store.id === business.assistStoreId && store.items.some((item) => matchesQuery(item, query))))
+    );
+    const businesses = [
+      ...eligibleBusinesses.filter((business) => matchesQuery(business, query) || matchingBusinessIds.has(business.id)),
+      ...selectedAssist.filter((business) => !eligibleBusinesses.some((existing) => existing.id ===
+        independentStores.find(({ public: store }) => store.id === business.assistStoreId)?.source?.directoryBusinessId))
+    ];
 
     const categories = [...new Set([
       ...businesses.map((business) => marketplaceProfile(business).displayCategory),
