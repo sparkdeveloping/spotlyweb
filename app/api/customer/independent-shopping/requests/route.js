@@ -23,6 +23,10 @@ export async function GET(request) {
     const snapshot = await db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(30).get();
     const requests = snapshot.docs.map((doc) => ({
       id: doc.id, storeName: doc.data().storeName, state: doc.data().state,
+      country: doc.data().country || "ZW", city: doc.data().city || "",
+      confirmedQuote: doc.data().confirmedQuote || null,
+      orderId: doc.data().orderId || null, deliveryJobId: doc.data().deliveryJobId || null,
+      paymentStatus: doc.data().paymentStatus || "not_initiated",
       estimate: doc.data().estimate,
       createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null
     })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
