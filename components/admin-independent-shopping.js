@@ -11,7 +11,7 @@ import { authenticatedFetch } from "@/lib/api-client";
 import { canAccessAdminSection } from "@/lib/admin-access";
 
 const initial = {
-  id: "", name: "", city: "Harare", area: "", address: "",
+  id: "", name: "", country: "ZW", phone: "", city: "Harare", area: "", address: "",
   category: "Restaurant", directoryBusinessId: "", status: "draft", priceCheckMethod: "in_person"
 };
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-offset-2 focus:outline-[var(--accent)]";
@@ -43,7 +43,7 @@ function Editor() {
   useEffect(() => { refresh(); }, []);
   function select(record) {
     setForm({
-      id: record.id, name: record.name || "", city: record.city || "Harare",
+      id: record.id, name: record.name || "", country: record.country || "ZW", phone: record.phone || "", city: record.city || "Harare",
       area: record.area || "", address: record.address || "",
       category: record.category || "Restaurant", directoryBusinessId: record.directoryBusinessId || "",
       status: record.status || "draft", priceCheckMethod: record.priceCheckMethod || "in_person"
@@ -68,7 +68,7 @@ function Editor() {
       }
       const amount = Number(parts[1]);
       if (!Number.isFinite(amount) || amount < 0 || amount > 100000) {
-        setError(`Menu line ${index + 1} has an invalid USD price.`);
+        setError(`Menu line ${index + 1} has an invalid price.`);
         return;
       }
       const slug = parts[0].toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
@@ -108,6 +108,7 @@ function Editor() {
         <h2 className="mt-4 text-xl font-semibold">{form.id ? "Edit independent location" : "Research a location"}</h2>
         <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Use only original factual menu information you independently obtained. Do not paste menus, photographs, logos, creative descriptions or website-scraped content.</p>
         <form onSubmit={save} className="mt-6 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2"><label className="block text-xs font-semibold">Country<select className={field} value={form.country} onChange={(e) => setForm((v) => ({ ...v, country: e.target.value, city: e.target.value === "MW" ? "Lilongwe" : "Harare" }))}><option value="ZW">Zimbabwe · USD</option><option value="MW">Malawi · MWK</option></select></label><label className="block text-xs font-semibold">Contact phone<input className={field} value={form.phone} onChange={(e) => setForm((v) => ({ ...v, phone: e.target.value }))} placeholder="+263 / +265"/></label></div>
           <div className="grid gap-4 sm:grid-cols-2">
             {[["name","Store name"],["city","City"],["area","Area"],["address","Street address"],["category","Category"],["directoryBusinessId","Existing directory ID (optional)"]].map(([key,label]) => <label key={key} className="block text-xs font-semibold">{label}<input required={["name","city","address"].includes(key)} value={form[key]} onChange={(e) => setForm((v) => ({ ...v, [key]: e.target.value }))} className={field}/></label>)}
           </div>
@@ -116,7 +117,7 @@ function Editor() {
             <label className="block text-xs font-semibold">How did you check prices?<select value={form.priceCheckMethod} onChange={(e) => setForm((v) => ({ ...v, priceCheckMethod: e.target.value }))} className={field}><option value="in_person">In person</option><option value="phone">By phone</option><option value="business_authorized">Business-authorized information</option></select></label>
           </div>
           <label className="block text-xs font-semibold">Items and independently confirmed prices<textarea value={menu} onChange={(e) => setMenu(e.target.value)} rows={9} className={field + " font-mono"} placeholder={"Chicken meal | 8.50 | regular\nChicken meal | 12.00 | large"}/></label>
-          <p className="text-xs leading-5 text-[var(--text-2)]">One item per line: <strong>Item name | USD price | optional size</strong>. Up to 120 items; each price expires after 14 days.</p>
+          <p className="text-xs leading-5 text-[var(--text-2)]">One item per line: <strong>Item name | {form.country === "MW" ? "MWK" : "USD"} price | optional size</strong>. Up to 120 items; each price expires after 14 days.</p>
           <label className="flex items-start gap-3 rounded-xl border bg-[var(--surface-2)] p-4 text-sm"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-1 h-4 w-4"/>I personally verified these prices today using the method selected. This listing will show an explicit no-affiliation disclosure.</label>
           {error && <p role="alert" className="text-sm font-medium text-[var(--danger)]">{error}</p>}
           {success && <p role="status" className="text-sm font-medium text-[var(--success)]">{success}</p>}
