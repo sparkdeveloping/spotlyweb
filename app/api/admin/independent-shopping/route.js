@@ -17,7 +17,7 @@ const itemSchema = z.object({
 const writeSchema = z.object({
   id: z.string().trim().regex(/^[a-zA-Z0-9_-]{3,100}$/).optional(),
   name: z.string().trim().min(2).max(160),
-  country: z.enum(["ZW", "MW"]).default("ZW"),
+  country: z.string().regex(/^[A-Z]{2}$/).default("ZW"),
   phone: z.string().trim().max(40).default(""),
   city: z.string().trim().min(2).max(100),
   area: z.string().trim().max(100).default(""),
@@ -90,7 +90,7 @@ export async function POST(request) {
     if (!businessSnap) {
       batch.create(businessRef, {
         name: input.name, brandName: input.name, category: input.category,
-        categories: [input.category], businessType: "restaurant_food", country: input.country,
+        categories: [input.category], businessType: /restaurant|cafe|bakery|food/i.test(input.category) ? "restaurant_food" : "grocery_retail", country: input.country,
         city: input.city, area: input.area, address: input.address, phone: input.phone,
         public: true, status: "provisional", lifecycleStatus: "listed",
         claimStatus: "unclaimed", verificationStatus: "unverified",
