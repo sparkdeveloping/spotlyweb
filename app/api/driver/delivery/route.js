@@ -63,8 +63,7 @@ export async function POST(request) {
         if (job.orderId) {
           transaction.set(db.collection("orders").doc(job.orderId), { deliveryStatus: "delivered", status: "completed", completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
           if (job.assistMode === "independent_shopping") {
-            const associated = await transaction.get(db.collection("orders").doc(job.orderId));
-            if (associated.exists && associated.data().assistRequestId) transaction.set(db.collection("independentShoppingRequests").doc(associated.data().assistRequestId), { state: "completed", dispatchStatus: "delivered", completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            if (job.assistRequestId) transaction.set(db.collection("independentShoppingRequests").doc(job.assistRequestId), { state: "completed", dispatchStatus: "delivered", completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
           }
         }
         transaction.set(db.collection("driverPresence").doc(user.uid), { currentJobId: null, currentWorkType: null, availabilityState: "online_current", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
