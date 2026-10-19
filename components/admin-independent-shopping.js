@@ -11,7 +11,7 @@ import { authenticatedFetch } from "@/lib/api-client";
 import { canAccessAdminSection } from "@/lib/admin-access";
 
 const initial = {
-  id: "", name: "", country: "ZW", phone: "", city: "Harare", area: "", address: "",
+  id: "", name: "", country: "ZW", phone: "", city: "Harare", area: "", address: "", pickupLat: "", pickupLng: "",
   category: "Restaurant", directoryBusinessId: "", status: "draft", priceCheckMethod: "in_person"
 };
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-offset-2 focus:outline-[var(--accent)]";
@@ -43,7 +43,7 @@ function Editor() {
   useEffect(() => { refresh(); }, []);
   function select(record) {
     setForm({
-      id: record.id, name: record.name || "", country: record.country || "ZW", phone: record.phone || "", city: record.city || "Harare",
+      id: record.id, name: record.name || "", country: record.country || "ZW", phone: record.phone || "", city: record.city || "Harare", pickupLat: record.pickupCoordinates?.lat == null ? "" : String(record.pickupCoordinates.lat), pickupLng: record.pickupCoordinates?.lng == null ? "" : String(record.pickupCoordinates.lng),
       area: record.area || "", address: record.address || "",
       category: record.category || "Restaurant", directoryBusinessId: record.directoryBusinessId || "",
       status: record.status || "draft", priceCheckMethod: record.priceCheckMethod || "in_person"
@@ -63,7 +63,7 @@ function Editor() {
     for (let index = 0; index < lines.length; index += 1) {
       const parts = lines[index].split("|").map((value) => value.trim());
       if (parts.length < 2 || parts.length > 3 || !parts[0] || !parts[1]) {
-        setError(`Menu line ${index + 1} must be: Item name | USD price | optional unit`);
+        setError(`Menu line ${index + 1} must be: Item name | price | optional unit`);
         return;
       }
       const amount = Number(parts[1]);
@@ -79,8 +79,11 @@ function Editor() {
     }
     setSaving(true);
     try {
+      if ((form.pickupLat !== "" || form.pickupLng !== "") && (![form.pickupLat, form.pickupLng].every((value) => value !== "" && Number.isFinite(Number(value))))) throw new Error("Enter both valid pickup coordinates or leave both blank.");
+      const { pickupLat, pickupLng, ...record } = form;
+      const pickupCoordinates = pickupLat !== "" && pickupLng !== "" ? { lat: Number(pickupLat), lng: Number(pickupLng) } : undefined;
       const result = await authenticatedFetch("/api/admin/independent-shopping", {
-        method: "POST", body: JSON.stringify({ ...form, items })
+        method: "POST", body: JSON.stringify({ ...record, items, ...(pickupCoordinates ? { pickupCoordinates } : {}) })
       });
       setSuccess(`Saved ${form.name} as ${result.status}. ${result.itemCount} prices recorded. This has not created an official merchant account.`);
       setForm((current) => ({ ...current, id: result.id }));
@@ -112,6 +115,7 @@ function Editor() {
           <div className="grid gap-4 sm:grid-cols-2">
             {[["name","Store name"],["city","City"],["area","Area"],["address","Street address"],["category","Category"],["directoryBusinessId","Existing directory ID (optional)"]].map(([key,label]) => <label key={key} className="block text-xs font-semibold">{label}<input required={["name","city","address"].includes(key)} value={form[key]} onChange={(e) => setForm((v) => ({ ...v, [key]: e.target.value }))} className={field}/></label>)}
           </div>
+          <div className="grid gap-4 sm:grid-cols-2"><label className="block text-xs font-semibold">Verified pickup latitude<input className={field} inputMode="decimal" value={form.pickupLat} onChange={(e) => setForm((v) => ({ ...v, pickupLat: e.target.value }))} placeholder="e.g. -17.825"/></label><label className="block text-xs font-semibold">Verified pickup longitude<input className={field} inputMode="decimal" value={form.pickupLng} onChange={(e) => setForm((v) => ({ ...v, pickupLng: e.target.value }))} placeholder="e.g. 31.053"/></label></div><p className="text-xs leading-5 text-[var(--text-2)]">A confirmed geographic pickup pin is required before a paid independent purchase can be quoted or assigned to a shopper. Never guess coordinates.</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-xs font-semibold">Listing status<select value={form.status} onChange={(e) => setForm((v) => ({ ...v, status: e.target.value }))} className={field}><option value="draft">Draft (hidden)</option><option value="published">Published (visible only if pilot enabled)</option><option value="paused">Paused (hidden)</option><option value="archived">Archived (hidden)</option></select></label>
             <label className="block text-xs font-semibold">How did you check prices?<select value={form.priceCheckMethod} onChange={(e) => setForm((v) => ({ ...v, priceCheckMethod: e.target.value }))} className={field}><option value="in_person">In person</option><option value="phone">By phone</option><option value="business_authorized">Business-authorized information</option></select></label>
