@@ -12,6 +12,7 @@ export function AssistOperations(){
  const [tab,setTab]=useState("bookings"),[bookings,setBookings]=useState([]),[stores,setStores]=useState([]),[requests,setRequests]=useState([]),[busy,setBusy]=useState(""),[error,setError]=useState(""),[status,setStatus]=useState("");
  const [time,setTime]=useState(""),[note,setNote]=useState("");
  const [businessId,setBusinessId]=useState(""),[accepting,setAccepting]=useState(true);
+ const [businessSearch,setBusinessSearch]=useState(""),[businessOptions,setBusinessOptions]=useState([]),[searching,setSearching]=useState(false);
  async function load(){
   setError("");
   try{
@@ -31,6 +32,14 @@ export function AssistOperations(){
    await authenticatedFetch("/api/admin/assist-bookings",{method:"POST",body:JSON.stringify({bookingId:id,action,alternativeAt,operatorNote:note})});
    setStatus("Booking action saved.");setTime("");setNote("");await load();
   }catch(e){setError(e.message);}finally{setBusy("");}
+ }
+ async function findBusinesses(){
+   setSearching(true);setError("");
+   try{
+      const q=encodeURIComponent(businessSearch.trim());
+      const response=await authenticatedFetch("/api/admin/assist-availability?q="+q);
+      setBusinessOptions(response.businesses||[]);
+   }catch(err){setError(err.message);}finally{setSearching(false);}
  }
  async function setAvailability(){
    setBusy("availability");setError("");setStatus("");
@@ -55,7 +64,7 @@ export function AssistOperations(){
    </article>)}</section>}
    {tab==="shopping"&&<section className="mt-6 space-y-3"><p className="text-sm text-[var(--text-2)]">Shopping requests are price-check enquiries. Payment and shopper dispatch are not activated.</p>{requests.map(r=><div key={r.id} className="rounded-xl border bg-[var(--surface)] p-5"><p className="font-semibold">{r.storeName} · {r.contactName}</p><p className="mt-1 text-sm text-[var(--text-2)]">{r.state} · {r.contactPhone} · {r.deliveryAddress}</p><p className="mt-2 text-sm">Estimate: USD {Number(r.estimate?.totalEstimate||0).toFixed(2)}</p></div>)}</section>}
    {tab==="locations"&&<section className="mt-6 rounded-2xl border bg-[var(--surface)] p-6"><p className="font-semibold">Independent listings</p><p className="mt-2 text-sm text-[var(--text-2)]">Maintain independently checked prices in the dedicated curator. Each listing remains separate from verified merchant finances.</p><Link href="/independent-shopping" className="mt-4 inline-block rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white">Open listing curator</Link></section>}
-   {tab==="availability"&&<section className="mt-6 max-w-2xl rounded-2xl border bg-[var(--surface)] p-6"><Power className="h-6 w-6 text-[var(--accent)]"/><h2 className="mt-4 text-xl font-semibold">Can this location accept Assist requests?</h2><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Yes by default. Turn it off when the business asks to opt out, is unavailable, or cannot be served. This doesn't bypass actual booking, payment or Driver capacity checks.</p><label className="mt-5 block text-xs font-semibold">Existing business ID<input value={businessId} onChange={e=>setBusinessId(e.target.value)} placeholder="Firestore business ID" className="mt-2 w-full rounded-xl border bg-transparent px-3 py-2"/></label><label className="mt-4 flex items-center gap-3 text-sm"><input type="checkbox" checked={accepting} onChange={e=>setAccepting(e.target.checked)}/> Accept assisted requests</label><button type="button" disabled={!businessId.trim()||!!busy} onClick={setAvailability} className="mt-5 rounded-xl bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Save location availability</button></section>}
+   {tab==="availability"&&<section className="mt-6 max-w-2xl rounded-2xl border bg-[var(--surface)] p-6"><Power className="h-6 w-6 text-[var(--accent)]"/><h2 className="mt-4 text-xl font-semibold">Can this location accept Assist requests?</h2><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Yes by default. Turn it off when the business asks to opt out, is unavailable, or cannot be served. This doesn't bypass actual booking, payment or Driver capacity checks.</p><label className="mt-5 block text-xs font-semibold">Find business by name or city<input value={businessSearch} onChange={e=>setBusinessSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();findBusinesses();}}} placeholder="Search business names or cities" className="mt-2 w-full rounded-xl border bg-transparent px-3 py-2"/></label><button type="button" onClick={findBusinesses} disabled={searching} className="mt-2 rounded-xl border px-4 py-2 text-sm font-semibold">{searching?"Searching…":"Find businesses"}</button><div className="mt-3 max-h-72 space-y-2 overflow-y-auto">{businessOptions.map(b=><button key={b.id} type="button" onClick={()=>{setBusinessId(b.id);setAccepting(b.accepting);}} className={`w-full rounded-xl border p-3 text-left text-sm ${businessId===b.id?"border-[var(--accent)] bg-[var(--accent-soft)]":"bg-[var(--surface)]"}`}><span className="block font-semibold">{b.name}</span><span className="mt-1 block text-xs text-[var(--text-2)]">{b.city} · {b.country} · {b.accepting?"Accepting requests":"Paused"}</span></button>)}</div><label className="mt-4 flex items-center gap-3 text-sm"><input type="checkbox" disabled={!businessId} checked={accepting} onChange={e=>setAccepting(e.target.checked)}/> Accept assisted requests</label><button type="button" disabled={!businessId.trim()||!!busy} onClick={setAvailability} className="mt-5 rounded-xl bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Save location availability</button><p className="mt-3 text-xs text-[var(--text-3)]">{businessId?"Selected business: "+businessId:"Select a business above to modify its availability."}</p></section>}
   </main>
  </PortalShell></AdminAccess></AuthGate>;
 }
