@@ -97,6 +97,7 @@ function Queue() {
             </div>}
             <label className="mt-4 block text-xs font-semibold">Customer update / internal reason<textarea rows={3} className={"mt-1 "+inputStyle} value={message} onChange={(e)=>setMessage(e.target.value)} placeholder="Explain next steps or the alternative offered"/></label>
             <div className="mt-4 flex flex-wrap gap-2">
+              <button disabled={busy} onClick={()=>action("assign")} className="rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Assign to me</button>
               <button disabled={busy} onClick={()=>action("contact")} className="rounded-xl bg-[var(--accent)] px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-40">Contacted business</button>
               {item.kind==="booking" && <>
                 <button disabled={busy} onClick={()=>action("offer_alternative")} className="rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Offer alternative</button>
