@@ -3,6 +3,20 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 export const runtime="nodejs";
 const schema=z.object({businessId:z.string().min(2).max(180),accepting:z.boolean()}).strict();
+export async function GET(request) {
+  try {
+    await authenticateRequest(request, { roles: ["super_admin", "platform_admin", "operations_manager", "regional_operations_manager"] });
+    const { db } = getAdminServices();
+    const url = new URL(request.url);
+    const q = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 120);
+    const country = String(url.searchParams.get("country") || "").trim().toUpperCase();
+    const snapshot = await db.collection("businesses").where("public", "==", true).limit(250).get();
+    const businesses = snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name || "", city: doc.data().city || "", area: doc.data().area || "", country: doc.data().country || "ZW", accepting: doc.data().assistAccepting !== false }))
+      .filter(x => (!country || x.country === country) && (!q || [x.name,x.city,x.area,x.id].join(" ").toLowerCase().includes(q)))
+      .sort((a,b) => a.name.localeCompare(b.name)).slice(0, 60);
+    return Response.json({ ok: true, businesses }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch(error) { return apiError(error); }
+}
 export async function POST(request){
   try{
     const actor=await authenticateRequest(request,{roles:["super_admin","platform_admin","operations_manager","regional_operations_manager"]});
