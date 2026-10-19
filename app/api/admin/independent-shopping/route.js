@@ -19,6 +19,7 @@ const writeSchema = z.object({
   name: z.string().trim().min(2).max(160),
   country: z.string().regex(/^[A-Z]{2}$/).default("ZW"),
   phone: z.string().trim().max(40).default(""),
+  pickupCoordinates: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).optional(),
   city: z.string().trim().min(2).max(100),
   area: z.string().trim().max(100).default(""),
   address: z.string().trim().min(6).max(350),
@@ -78,6 +79,7 @@ export async function POST(request) {
     const payload = {
       name: input.name, city: input.city, area: input.area, address: input.address,
       phone: input.phone,
+      ...(input.pickupCoordinates ? { pickupCoordinates: input.pickupCoordinates } : {}),
       category: input.category, directoryBusinessId: businessId,
       status: input.status, priceCheckMethod: input.priceCheckMethod,
       affiliation: "unaffiliated", sourcingModel: "independent_in_person",
