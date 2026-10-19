@@ -26,10 +26,10 @@ const eligible = {
   ]
 };
 
-test("independent shopping is off by default and requests require browsing", () => {
-  assert.deepEqual(independentShoppingFlags({}), { browseEnabled: false, requestEnabled: false });
-  assert.deepEqual(independentShoppingFlags({ independentShopping: { requestEnabled: true } }), { browseEnabled: false, requestEnabled: false });
-  assert.deepEqual(independentShoppingFlags({ independentShopping: { browseEnabled: true } }), { browseEnabled: true, requestEnabled: false });
+test("qualifying assisted request intake defaults on, and Admin can disable it", () => {
+  assert.deepEqual(independentShoppingFlags({}), { browseEnabled: true, requestEnabled: true });
+  assert.deepEqual(independentShoppingFlags({ independentShopping: { browseEnabled: false } }), { browseEnabled: false, requestEnabled: false });
+  assert.deepEqual(independentShoppingFlags({ independentShopping: { requestEnabled: false } }), { browseEnabled: true, requestEnabled: false });
 });
 
 test("only unpartnered, independently sourced published stores become visible", () => {
