@@ -1,6 +1,8 @@
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { independentPublicStore, independentShoppingFlags } from "@/lib/independent-shopping";
+import { assistLocationEnabled } from "@/lib/spotly-assist";
+import { marketplaceTrust } from "@/lib/marketplace-trust";
 
 export const runtime = "nodejs";
 
@@ -17,7 +19,15 @@ export async function GET(request) {
     const city = String(url.searchParams.get("city") || "").trim().toLowerCase().slice(0, 100);
     const search = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 120);
     const storesSnap = await db.collection("independentShoppingStores").where("status", "==", "published").limit(100).get();
-    const stores = storesSnap.docs.map((snap) => independentPublicStore(snap.id, snap.data())).filter(Boolean)
+    const possible = storesSnap.docs.filter((doc) => Boolean(doc.data()?.directoryBusinessId));
+    const ids = [...new Set(possible.map((doc) => doc.data().directoryBusinessId))];
+    const businessSnapshots = ids.length ? await db.getAll(...ids.map((id) => db.collection("businesses").doc(id))) : [];
+    const byId = new Map(businessSnapshots.filter((snap) => snap.exists).map((snap) => [snap.id, snap.data()]));
+    const stores = possible.filter((doc) => {
+      const owner = byId.get(doc.data().directoryBusinessId);
+      return owner?.public === true && assistLocationEnabled(owner, config.data() || {}) &&
+        assistLocationEnabled(doc.data(), config.data() || {}) && !marketplaceTrust(owner).commerceVerified;
+    }).map((snap) => independentPublicStore(snap.id, snap.data())).filter(Boolean)
       .filter((store) => (!city || store.city.toLowerCase() === city) &&
         (!search || [store.name, store.city, store.area, store.category, ...store.items.map((i) => i.name)]
           .join(" ").toLowerCase().includes(search)))
