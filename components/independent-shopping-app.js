@@ -25,7 +25,7 @@ export function IndependentShoppingApp() {
   useEffect(() => {
     let active = true;
     publicApiFetch("/api/public/independent-shopping")
-      .then((data) => { if (active) setResult(data); })
+      .then((data) => { if (active) { setResult(data); const initial = new URLSearchParams(window.location.search).get("store"); if (initial && data.stores?.some((store) => store.id === initial)) setSelected(initial); } })
       .catch((error) => { if (active) setLoadError(error.message || "Could not load independent shopping."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
