@@ -58,7 +58,7 @@ export async function POST(request) {
     });
     const requestRecord = {
       customerId: user.uid, customerEmail: user.email || "",
-      storeId: store.id, storeName: store.name, model: "independent_shopping",
+      storeId: store.id, storeName: store.name, country: store.country || "ZW", city: store.city || "", model: "independent_shopping",
       affiliation: "unaffiliated", state: "pending_manual_quote",
       sourceBusinessId: storeSnap.data()?.directoryBusinessId || null,
       items: estimate.items, estimate,
