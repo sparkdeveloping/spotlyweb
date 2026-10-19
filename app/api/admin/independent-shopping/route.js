@@ -24,7 +24,7 @@ const writeSchema = z.object({
   directoryBusinessId: z.string().trim().max(150).default(""),
   status: z.enum(["draft", "published", "paused", "archived"]).default("draft"),
   priceCheckMethod: z.enum(["in_person", "phone", "business_authorized"]),
-  country: z.enum(["ZW", "MW"]).default("ZW"),
+  country: z.string().trim().regex(/^[A-Z]{2}$/).default("ZW"),
   assistAccepting: z.boolean().default(true),
   items: z.array(itemSchema).max(120)
 }).strict();
