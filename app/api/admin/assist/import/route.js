@@ -64,7 +64,7 @@ export async function POST(request) {
       if (current && (current.claimStatus==="claimed" || (current.ownerIds||[]).length || current.commerceVerified===true)) verdict="protected_skip";
       else if (current && current.source?.sourceId!==body.sourceId) verdict="source_conflict_skip";
       else if (fingerprintMatch) verdict="possible_duplicate_skip";
-      else if (current) verdict="update_import";
+      else if (current) verdict="existing_import_skip";
       if (row.items.length && !row.priceCheckMethod) verdict="missing_price_check";
       const freshItems = row.items.filter((item) => {
         const at = Date.parse(item.checkedAt);
@@ -78,7 +78,9 @@ export async function POST(request) {
     });
     if (body.mode==="preview") return Response.json({ ok:true, mode:"preview", report, inserted:0,
       warning:"Preview only. Review duplicates and source rights before importing." });
-    const accepted = report.filter((row)=>["create","update_import"].includes(row.verdict));
+    // Never update existing canonical business documents via a bulk import.
+    // Operators must use the audited business/editor workflow to reconcile changes.
+    const accepted = report.filter((row)=>row.verdict==="create");
     const batchRef = db.collection("importBatches").doc();
     let committed = 0;
     const now = FieldValue.serverTimestamp();
@@ -113,7 +115,7 @@ export async function POST(request) {
           },{merge:true});
           data.assistStoreId=storeRef.id;
         }
-        batch.set(businessRef,data,{merge:true});
+        batch.create(businessRef,data);
       }
       await batch.commit();committed+=Math.min(20,accepted.length-offset);
     }
