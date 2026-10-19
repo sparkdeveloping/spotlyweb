@@ -20,6 +20,8 @@ export function IndependentShoppingApp() {
   const [busy, setBusy] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [receipt, setReceipt] = useState(null);
+  const [myRequests, setMyRequests] = useState([]);
+  const [requestNotice, setRequestNotice] = useState("");
   const requestId = useRef(null);
 
   useEffect(() => {
@@ -43,6 +45,25 @@ export function IndependentShoppingApp() {
     setReceipt(null); setRequestError(""); requestId.current = null;
     setQuantities((current) => ({ ...current, [id]: Math.max(0, Math.min(10, Number(current[id] || 0) + change)) }));
   };
+  async function refreshRequests() {
+    try {
+      const response = await authenticatedFetch("/api/customer/independent-shopping/requests");
+      setMyRequests(response.requests || []);
+    } catch { /* Anonymous users can still browse safely. */ }
+  }
+  useEffect(() => { refreshRequests(); }, []);
+  async function respondToQuote(id, decision) {
+    setBusy(true); setRequestError("");setRequestNotice("");
+    try {
+      await authenticatedFetch("/api/customer/independent-shopping/requests/respond", {
+        method:"POST",body:JSON.stringify({id,decision})
+      });
+      setRequestNotice(decision==="accept_quote"
+        ? "Your quote is accepted. No money has been collected; purchasing and delivery will not start until payment is separately confirmed."
+        : "Your response was saved.");
+      await refreshRequests();
+    } catch (error) { setRequestError(error.message); } finally { setBusy(false); }
+  }
   async function submit(event) {
     event.preventDefault();
     if (!store || !items.length || !result.requestEnabled) return;
@@ -58,6 +79,7 @@ export function IndependentShoppingApp() {
         })
       });
       setReceipt({ ...response, storeName: store.name });
+      await refreshRequests();
     } catch (error) {
       setRequestError(error.message || "Your quote request could not be saved.");
     } finally { setBusy(false); }
@@ -126,6 +148,19 @@ export function IndependentShoppingApp() {
             </>}
           </section>
         </div>}
+      <section className="mt-12 border-t border-[var(--border-subtle)] pt-9">
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Spotly Activity</p><h2 className="mt-1 text-2xl font-semibold">My assisted shopping requests</h2><p className="mt-1 text-sm text-[var(--text-2)]">Review confirmed prices and reply to Spotly when a quote is ready.</p></div><button type="button" onClick={refreshRequests} className="rounded-xl border px-4 py-2 text-xs font-semibold">Refresh requests</button></div>
+        {requestNotice&&<p role="status" className="mt-4 rounded-xl border p-4 text-sm text-[var(--success)]">{requestNotice}</p>}
+        {requestError&&<p role="alert" className="mt-4 rounded-xl border p-4 text-sm text-[var(--danger)]">{requestError}</p>}
+        <div className="mt-5 space-y-3">{myRequests.map((entry)=><article key={entry.id} className="rounded-xl border bg-[var(--surface)] p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{entry.storeName}</h3><span className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold">{entry.state.replaceAll("_"," ")}</span></div>
+          <p className="mt-2 text-sm text-[var(--text-2)]">Initial estimate {format(entry.estimate?.totalEstimate, entry.estimate?.currency)}</p>
+          {entry.customerMessage&&<p className="mt-2 text-sm text-[var(--text-2)]">{entry.customerMessage}</p>}
+          {entry.finalQuote&&<div className="mt-4 rounded-xl bg-[var(--surface-2)] p-4"><p className="font-semibold">Confirmed total: {format(entry.finalQuote.total, entry.finalQuote.currency)}</p><div className="mt-2 space-y-1 text-xs text-[var(--text-2)]"><p>Merchandise {format(entry.finalQuote.merchandiseTotal,entry.finalQuote.currency)} · Shopping {format(entry.finalQuote.shoppingFee,entry.finalQuote.currency)} · Delivery {format(entry.finalQuote.deliveryFee,entry.finalQuote.currency)}</p><p>Quote expires {new Date(entry.finalQuote.expiresAt).toLocaleString("en-ZW")}</p></div>
+            {entry.state==="quote_offered"&&<div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={()=>respondToQuote(entry.id,"accept_quote")} className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Accept quote</button><button type="button" disabled={busy} onClick={()=>respondToQuote(entry.id,"decline_quote")} className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50">No thanks</button></div>}
+          </div>}
+        </article>)}{!myRequests.length&&<p className="rounded-xl border p-6 text-sm text-[var(--text-2)]">No assisted shopping requests to show. Sign in to view your requests.</p>}</div>
+      </section>
     </div>
   </main>;
 }
