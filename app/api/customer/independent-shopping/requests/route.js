@@ -3,6 +3,8 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { independentPublicStore, independentQuote, independentShoppingFlags } from "@/lib/independent-shopping";
+import { marketplaceTrust } from "@/lib/marketplace-trust";
+import { assistLocationEnabled } from "@/lib/spotly-assist";
 
 export const runtime = "nodejs";
 const selectionSchema = z.object({ itemId: z.string().min(2).max(80), quantity: z.number().int().min(1).max(10) }).strict();
@@ -60,7 +62,10 @@ export async function POST(request) {
     const settings = settingsSnap.data() || {};
     if (!independentShoppingFlags(settings).requestEnabled) throw Object.assign(new Error("Independent shopping requests are not open yet."), { status: 503 });
     const store = storeSnap.exists ? independentPublicStore(storeSnap.id, storeSnap.data()) : null;
-    if (!store) throw Object.assign(new Error("This independent shopping location is not accepting requests."), { status: 409 });
+    const businessId = storeSnap.data()?.directoryBusinessId || "";
+    const businessSnap = businessId ? await db.collection("businesses").doc(businessId).get() : null;
+    const business = businessSnap?.exists ? businessSnap.data() : null;
+    if (!store || !business?.public || marketplaceTrust(business).commerceVerified || !assistLocationEnabled(business, settings) || !assistLocationEnabled(storeSnap.data(), settings)) throw Object.assign(new Error("This location is no longer accepting independent shopping requests. You can still browse the business directory."), { status: 409 });
     const estimate = independentQuote(store, input.items, {
       shoppingFee: settings.independentShopping?.shoppingFeeEstimate ?? 0,
       deliveryFee: settings.independentShopping?.deliveryFeeEstimate ?? 0
