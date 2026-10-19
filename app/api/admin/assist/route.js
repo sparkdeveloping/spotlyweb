@@ -35,6 +35,9 @@ const publicShopping = (snap) => {
     contactName: data.contactName, contactPhone: data.contactPhone,
     deliveryAddress: data.deliveryAddress, notes: data.notes, estimate: data.estimate,
     assignedTo: data.assignedTo, customerMessage: data.customerMessage,
+    confirmedQuote: data.confirmedQuote || null,
+    orderId: data.orderId || null, deliveryJobId: data.deliveryJobId || null,
+    paymentStatus: data.paymentStatus || "not_initiated",
     createdAt: data.createdAt?.toDate?.()?.toISOString?.() || null };
 };
 export async function GET(request) {
