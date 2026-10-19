@@ -121,13 +121,16 @@ function Coverage() {
   const [error,setError] = useState("");
   const [city,setCity] = useState("");
   const [country,setCountry] = useState("ZW");
+  const [markets,setMarkets] = useState({countries:[],supportedCountries:["ZW","MW"],countryCities:{}});
+  const [cityNames,setCityNames] = useState("");
   async function refresh() {
     try {
-      const [res, data] = await Promise.all([
+      const [res, data, geo] = await Promise.all([
         authenticatedFetch("/api/admin/assist/coverage"),
-        authenticatedFetch("/api/admin/independent-shopping")
+        authenticatedFetch("/api/admin/independent-shopping"),
+        authenticatedFetch("/api/admin/assist/geography")
       ]);
-      setCoverage(res.coverage || {});setStores(data.stores || []);
+      setCoverage(res.coverage || {});setStores(data.stores || []);setMarkets(geo);
     } catch(err){setError(err.message||"Could not load availability.");}
   }
   useEffect(()=>{refresh();},[]);
@@ -140,12 +143,21 @@ function Coverage() {
     finally{setBusy("");}
   }
   const isCountryOn=(code)=>coverage.countries?.[code]?.enabled!==false && coverage.globalEnabled!==false;
+  async function saveMarket(enabled){
+    setBusy("market");setError("");
+    try{
+      const cities=cityNames.trim()?cityNames.split(",").map((name)=>name.trim()).filter(Boolean):(markets.countryCities?.[country]||[]);
+      await authenticatedFetch("/api/admin/assist/geography",{method:"PATCH",body:JSON.stringify({country,enabled,cities})});
+      await refresh();
+    }catch(err){setError(err.message||"Could not update this country.");}finally{setBusy("");}
+  }
   return <div className="space-y-5">
     <div className="rounded-2xl border bg-[var(--surface)] p-5 sm:p-6"><div className="flex items-start gap-3"><Globe2 className="h-6 w-6 text-[var(--accent)]"/><div><h3 className="text-xl font-semibold">Where Spotly Assist can help</h3><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Available by default for eligible locations. Turn off any country, city or individual listing with one action. A request is not a confirmed order; paid fulfilment has additional checks.</p></div></div>
       <div className="mt-5 flex items-center justify-between rounded-xl bg-[var(--surface-2)] p-4"><div><p className="font-semibold">Across Africa</p><p className="text-xs text-[var(--text-2)]">Master Assist request switch</p></div><button disabled={!!busy} onClick={()=>toggle("global",{},coverage.globalEnabled===false)} className={`rounded-full px-4 py-2 text-xs font-semibold ${coverage.globalEnabled===false?"bg-[var(--text)] text-[var(--background)]":"bg-[var(--success-soft)] text-[var(--on-success-soft)]"}`}>{coverage.globalEnabled===false?"Disabled · turn on":"Available · turn off"}</button></div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">{[["ZW","Zimbabwe"],["MW","Malawi"]].map(([code,label])=><div key={code} className="flex items-center justify-between gap-2 rounded-xl border p-4"><div><p className="font-semibold">{label}</p><p className="text-xs text-[var(--text-2)]">{code} · inherited area rules</p></div><button disabled={!!busy} onClick={()=>toggle("country",{country:code},!isCountryOn(code))} className="rounded-full bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold">{isCountryOn(code)?"Available · disable":"Disabled · enable"}</button></div>)}</div>
-      <div className="mt-6 grid items-end gap-3 sm:grid-cols-[110px_1fr_auto_auto]"><label className="text-xs font-semibold">Country<select className={"mt-1 "+inputStyle} value={country} onChange={(e)=>setCountry(e.target.value)}><option value="ZW">Zimbabwe</option><option value="MW">Malawi</option></select></label><label className="text-xs font-semibold">City<input className={"mt-1 "+inputStyle} value={city} onChange={(e)=>setCity(e.target.value)} placeholder="Harare, Lilongwe…"/></label><button disabled={!city.trim()||!!busy} onClick={()=>toggle("city",{country,city},true)} className="rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Enable city</button><button disabled={!city.trim()||!!busy} onClick={()=>toggle("city",{country,city},false)} className="rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Disable city</button></div>
-      {error&&<p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
+      <div className="mt-6 grid items-end gap-3 sm:grid-cols-[110px_1fr_auto_auto]"><label className="text-xs font-semibold">Country<select className={"mt-1 "+inputStyle} value={country} onChange={(e)=>setCountry(e.target.value)}>{(markets.countries||[{code:"ZW",name:"Zimbabwe"},{code:"MW",name:"Malawi"}]).map((entry)=><option key={entry.code} value={entry.code}>{entry.name}</option>)}</select></label><label className="text-xs font-semibold">City<input className={"mt-1 "+inputStyle} value={city} onChange={(e)=>setCity(e.target.value)} placeholder="Harare, Lilongwe…"/></label><button disabled={!city.trim()||!!busy} onClick={()=>toggle("city",{country,city},true)} className="rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Enable city</button><button disabled={!city.trim()||!!busy} onClick={()=>toggle("city",{country,city},false)} className="rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Disable city</button></div>
+      <div className="mt-5 rounded-xl border p-4"><div className="flex items-start gap-3"><Globe2 className="mt-0.5 h-5 w-5 text-[var(--accent)]"/><div><p className="text-sm font-semibold">Expand to another African country</p><p className="mt-1 text-xs leading-5 text-[var(--text-2)]">Choose any African market, add a comma-separated list of launch cities, then activate location selection. Payments and real fulfilment remain separately controlled.</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr]"><select className={inputStyle} value={country} onChange={(e)=>{setCountry(e.target.value);setCityNames((markets.countryCities?.[e.target.value]||[]).join(", "));}}>{(markets.countries||[]).map((entry)=><option key={entry.code} value={entry.code}>{entry.name}</option>)}</select><input className={inputStyle} placeholder="Lilongwe, Blantyre, Mzuzu…" value={cityNames} onChange={(e)=>setCityNames(e.target.value)}/></div><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={!!busy} onClick={()=>saveMarket(true)} className="rounded-xl bg-[var(--accent)] px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-40">Save and enable country</button><button type="button" disabled={!!busy} onClick={()=>saveMarket(false)} className="rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Disable country</button></div><p className="mt-3 text-xs text-[var(--text-3)]">Currently available for selection: {(markets.supportedCountries||[]).join(", ") || "none"}</p></div>
+      {error&&<p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p>
     </div>
     <div className="rounded-2xl border bg-[var(--surface)] p-5 sm:p-6"><div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-xl font-semibold">Individual locations</h3><p className="mt-2 text-sm text-[var(--text-2)]">Switch off a specific independently managed listing without hiding other businesses.</p></div><Link href="/independent-shopping" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]">Manage menus<ArrowRight className="h-4 w-4"/></Link></div>
       <div className="mt-5 space-y-2">{stores.map((store)=><div key={store.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><p className="font-semibold">{store.name}</p><p className="mt-1 text-xs text-[var(--text-2)]">{store.city} · {store.country||"ZW"} · {store.status}</p></div><div className="flex gap-2"><button disabled={!!busy||!store.directoryBusinessId} onClick={()=>toggle("business",{businessId:store.directoryBusinessId},false)} className="rounded-xl border px-3 py-2 text-xs font-semibold disabled:opacity-40">Disable requests</button><button disabled={!!busy||!store.directoryBusinessId} onClick={()=>toggle("business",{businessId:store.directoryBusinessId},true)} className="rounded-xl bg-[var(--accent-soft)] px-3 py-2 text-xs font-semibold text-[var(--accent-strong)] disabled:opacity-40">Enable</button></div></div>)}
