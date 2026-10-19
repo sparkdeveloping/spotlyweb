@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { independentPublicStore, independentQuote, independentShoppingFlags } from "@/lib/independent-shopping";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
+import { notifyRoleAudience } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 const selectionSchema = z.object({ itemId: z.string().min(2).max(80), quantity: z.number().int().min(1).max(10) }).strict();
@@ -38,7 +39,7 @@ export async function POST(request) {
     const user = await authenticateRequest(request);
     const input = schema.parse(await request.json());
     const rate = await enforceRateLimit(request, { key: "independent-shopping-request", limit: 12, windowMs: 60 * 60_000, identity: user.uid });
-    const { db } = getAdminServices();
+    const { db, messaging, auth } = getAdminServices();
     const ref = db.collection("independentShoppingRequests").doc(`${user.uid}_${input.requestId}`);
     const original = await ref.get();
     if (original.exists) {
@@ -77,6 +78,12 @@ export async function POST(request) {
       const existing = await ref.get();
       return Response.json({ ok: true, id: ref.id, state: existing.data()?.state || "pending_manual_quote", estimate: existing.data()?.estimate || estimate, idempotent: true });
     }
+    await notifyRoleAudience({db,messaging,auth,
+      title:"Independent shopping request",
+      body:store.name+" · "+input.contactName+" · "+input.deliveryAddress,
+      workspace:"admin",href:"/assist",category:"assist_shopping",
+      module:"spotly_assist",eventType:"assist.shopping.requested"
+    },["operations_manager","support_manager"]).catch(()=>{});
     return Response.json({
       ok: true, id: ref.id, state: "pending_manual_quote", estimate, paymentCollected: false,
       message: "Request received for price confirmation. Nothing has been purchased or dispatched."
