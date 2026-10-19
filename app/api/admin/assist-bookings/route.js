@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
+import { notifyUser } from "@/lib/notification-server";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 export const runtime="nodejs";
 const roles=["super_admin","platform_admin","operations_manager","regional_operations_manager","support_manager"];
@@ -30,7 +31,7 @@ export async function GET(request){
 export async function POST(request){
   try{
     const actor=await authenticateRequest(request,{roles}),input=schema.parse(await request.json());
-    const {db}=getAdminServices(),ref=db.collection("assistedBookings").doc(input.bookingId);
+    const {db,messaging,auth}=getAdminServices(),ref=db.collection("assistedBookings").doc(input.bookingId);
     let result;
     await db.runTransaction(async tx=>{
       const snap=await tx.get(ref);if(!snap.exists)throw Object.assign(new Error("Booking request not found."),{status:404});
@@ -50,6 +51,17 @@ export async function POST(request){
       tx.create(db.collection("assistedBookingEvents").doc(),{bookingId:ref.id,actorId:actor.uid,actorType:"admin",type:input.action,previousState:entry.state,state,note:input.operatorNote,createdAt:FieldValue.serverTimestamp()});
       result={id:ref.id,state};
     });
+    const updated=await ref.get();
+    if(["offer_alternative","confirm","decline","cancel"].includes(input.action)){
+      const customer=updated.data();
+      await notifyUser({db,messaging,auth,userId:customer?.customerId,
+        title:input.action==="offer_alternative"?"A new booking time is available":input.action==="confirm"?"Your appointment is confirmed":input.action==="decline"?"Booking update":"Booking request updated",
+        body:customer?.customerMessage||"Open Spotly to review your booking.",
+        workspace:"customer",href:"/assist/book?business="+encodeURIComponent(customer?.businessId||""),
+        category:"assist_booking",module:"spotly_assist",
+        eventType:"assist.booking."+input.action,entityType:"assistedBooking",entityId:input.bookingId
+      }).catch(()=>{});
+    }
     return Response.json({ok:true,...result});
   }catch(error){
     if(error instanceof z.ZodError)return Response.json({ok:false,error:"Review this booking action."},{status:422});
