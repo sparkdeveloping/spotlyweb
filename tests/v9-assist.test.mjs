@@ -17,6 +17,10 @@ test("regional eligibility is on unless explicitly paused",()=>{
  assert.equal(regionalServicePolicy(settings,{...place,area:"Borrowdale"},"eat").available,true);
  assert.equal(regionalServicePolicy({countries:{MW:{enabled:false}}},{country:"MW",city:"Lilongwe"},"eat").available,false);
  assert.equal(regionalServicePolicy({},place,"events").available,false);
+ assert.equal(regionalServicePolicy({}, {country:"MW",city:"Lilongwe"},"eat").available,false);
+ assert.equal(regionalServicePolicy({}, {country:"MW",city:"Blantyre"},"shop").available,false);
+ assert.equal(regionalServicePolicy({}, {country:"MW",city:"Blantyre"},"book").available,false);
+ assert.equal(regionalServicePolicy({countries:{MW:{services:{eat:true}}}},{country:"MW",city:"Lilongwe"},"eat").available,true);
 });
 test("location pause never overrides required publication and operational review",()=>{
  assert.equal(locationCanAccept({status:"published",operationalReviewed:true}),true);
