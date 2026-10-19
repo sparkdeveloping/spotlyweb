@@ -12,7 +12,7 @@ import { canAccessAdminSection } from "@/lib/admin-access";
 
 const initial = {
   id: "", name: "", city: "Harare", area: "", address: "",
-  category: "Restaurant", directoryBusinessId: "", status: "draft", priceCheckMethod: "in_person"
+  category: "Restaurant", directoryBusinessId: "", status: "draft", priceCheckMethod: "in_person", country: "ZW", assistAccepting: true
 };
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-offset-2 focus:outline-[var(--accent)]";
 const money = (value) => new Intl.NumberFormat("en-ZW", { style: "currency", currency: "USD" }).format(Number(value || 0));
@@ -46,7 +46,7 @@ function Editor() {
       id: record.id, name: record.name || "", city: record.city || "Harare",
       area: record.area || "", address: record.address || "",
       category: record.category || "Restaurant", directoryBusinessId: record.directoryBusinessId || "",
-      status: record.status || "draft", priceCheckMethod: record.priceCheckMethod || "in_person"
+      status: record.status || "draft", priceCheckMethod: record.priceCheckMethod || "in_person", country: record.country || "ZW", assistAccepting: record.assistAccepting !== false
     });
     setMenu((record.items || []).map((item) => [item.name, item.priceEstimate, item.unit || ""].join(" | ")).join("\n"));
     setChecked(false); setError(""); setSuccess("");
@@ -112,10 +112,12 @@ function Editor() {
             {[["name","Store name"],["city","City"],["area","Area"],["address","Street address"],["category","Category"],["directoryBusinessId","Existing directory ID (optional)"]].map(([key,label]) => <label key={key} className="block text-xs font-semibold">{label}<input required={["name","city","address"].includes(key)} value={form[key]} onChange={(e) => setForm((v) => ({ ...v, [key]: e.target.value }))} className={field}/></label>)}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-xs font-semibold">Country (ISO-2)<input maxLength={2} value={form.country} onChange={e=>setForm(v=>({...v,country:e.target.value.toUpperCase()}))} className={field}/></label>
             <label className="block text-xs font-semibold">Listing status<select value={form.status} onChange={(e) => setForm((v) => ({ ...v, status: e.target.value }))} className={field}><option value="draft">Draft (hidden)</option><option value="published">Published (visible only if pilot enabled)</option><option value="paused">Paused (hidden)</option><option value="archived">Archived (hidden)</option></select></label>
             <label className="block text-xs font-semibold">How did you check prices?<select value={form.priceCheckMethod} onChange={(e) => setForm((v) => ({ ...v, priceCheckMethod: e.target.value }))} className={field}><option value="in_person">In person</option><option value="phone">By phone</option><option value="business_authorized">Business-authorized information</option></select></label>
           </div>
-          <label className="block text-xs font-semibold">Items and independently confirmed prices<textarea value={menu} onChange={(e) => setMenu(e.target.value)} rows={9} className={field + " font-mono"} placeholder={"Chicken meal | 8.50 | regular\nChicken meal | 12.00 | large"}/></label>
+          <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={form.assistAccepting} onChange={e=>setForm(v=>({...v,assistAccepting:e.target.checked}))}/>Allow Spotly Assist requests at this location</label>
+          <label className="block text-xs font-semibold">Items and independently confirmed prices ({form.country === "MW" ? "MWK" : "USD"})<textarea value={menu} onChange={(e) => setMenu(e.target.value)} rows={9} className={field + " font-mono"} placeholder={"Chicken meal | 8.50 | regular\nChicken meal | 12.00 | large"}/></label>
           <p className="text-xs leading-5 text-[var(--text-2)]">One item per line: <strong>Item name | USD price | optional size</strong>. Up to 120 items; each price expires after 14 days.</p>
           <label className="flex items-start gap-3 rounded-xl border bg-[var(--surface-2)] p-4 text-sm"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-1 h-4 w-4"/>I personally verified these prices today using the method selected. This listing will show an explicit no-affiliation disclosure.</label>
           {error && <p role="alert" className="text-sm font-medium text-[var(--danger)]">{error}</p>}
