@@ -243,6 +243,7 @@ export async function GET(request) {
     const service = text(url.searchParams.get("service"));
     if (!SERVICES.has(service)) throw Object.assign(new Error("Choose Eat, Shop, Book or Events."), { status: 422 });
     const city = text(url.searchParams.get("city"));
+    const country = String(url.searchParams.get("country") || "").trim().toUpperCase();
     const area = text(url.searchParams.get("area"));
     const query = String(url.searchParams.get("q") || "").trim();
     const requestedOffset = Number(url.searchParams.get("offset") || 0);
@@ -299,6 +300,7 @@ export async function GET(request) {
 
     const eligibleBusinesses = allBusinesses
       .filter((business) => matchesService(service, business))
+      .filter((business) => !country || String(business.country || "ZW").toUpperCase() === country)
       .filter((business) => !city || !text(business.city) || text(business.city) === city || (branchMap.get(business.id) || []).some((branch) => text(branch.city) === city))
       .filter((business) => matchesArea(business, branchMap.get(business.id) || [], area))
       .map((business) => {
