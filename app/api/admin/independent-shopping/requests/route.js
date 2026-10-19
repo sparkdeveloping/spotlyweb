@@ -18,7 +18,7 @@ export async function GET(request) {
           state: entry.state,
           contactName: entry.contactName, contactPhone: entry.contactPhone,
           deliveryAddress: entry.deliveryAddress, notes: entry.notes,
-          estimate: entry.estimate,
+          estimate: entry.estimate, finalQuote: entry.finalQuote || null, customerMessage: entry.customerMessage || "",
           createdAt: entry.createdAt?.toDate?.()?.toISOString?.() || null,
           paymentStatus: entry.paymentStatus, dispatchStatus: entry.dispatchStatus
         };
