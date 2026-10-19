@@ -23,6 +23,8 @@ function Queue() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [priceEdits, setPriceEdits] = useState({});
+  const [feeEdits, setFeeEdits] = useState({ shoppingFee: "1.50", deliveryFee: "3.50", reservePercent: "12" });
   const [proposal, setProposal] = useState({ proposedDate: "", proposedTime: "14:00", confirmationReference: "", assigneeId: "" });
   async function refresh() {
     setError("");
@@ -45,6 +47,23 @@ function Queue() {
     } catch (err) { setError(err.message || "Could not update this request."); }
     finally { setBusy(false); }
   }
+  async function quoteShopping(){
+    if(!item||item.kind!=="shopping"||!item.estimate?.items?.length)return;
+    setBusy(true);setError("");
+    try {
+      const prices = item.estimate.items.map((line)=>({itemId:line.itemId,unitPrice:Number(priceEdits[`${item.id}:${line.itemId}`] ?? line.unitPriceEstimate)}));
+      await authenticatedFetch("/api/admin/assist/shopping",{method:"POST",body:JSON.stringify({action:"quote",requestId:item.id,prices,shoppingFee:Number(feeEdits.shoppingFee),deliveryFee:Number(feeEdits.deliveryFee),reservePercent:Number(feeEdits.reservePercent),validMinutes:30})});
+      await refresh();
+    }catch(err){setError(err.message||"Could not confirm this price quote.");}finally{setBusy(false);}
+  }
+  async function authorizeCheckout(){
+    if(!item?.deliveryJobId)return;
+    setBusy(true);setError("");
+    try{
+      await authenticatedFetch("/api/admin/assist/shopping",{method:"POST",body:JSON.stringify({action:"authorize_checkout",deliveryJobId:item.deliveryJobId})});
+      await refresh();
+    }catch(err){setError(err.message||"The shopper may not be ready to check out.");}finally{setBusy(false);}
+  }
   return <div className="space-y-5">
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {[["Open cases",requests.filter((r)=>!ended.has(r.state)).length,ClipboardList],["Appointments",requests.filter((r)=>r.kind==="booking").length,CalendarDays],["Shopping checks",requests.filter((r)=>r.kind==="shopping").length,ShoppingBasket],["Needs customer",requests.filter((r)=>r.state==="awaiting_customer").length,PhoneCall]].map(([label,value,Icon])=><div key={label} className="rounded-xl border bg-[var(--surface)] p-4"><Icon className="h-5 w-5 text-[var(--accent)]"/><p className="mt-3 text-2xl font-semibold">{value}</p><p className="mt-1 text-xs text-[var(--text-2)]">{label}</p></div>)}
@@ -65,6 +84,8 @@ function Queue() {
             ["Preferred alternatives",item.flexibility || "—"],["Assigned to",item.assignedTo || "Unassigned"]
           ].map(([label,value])=><div key={label}><dt className="text-xs text-[var(--text-3)]">{label}</dt><dd className="mt-1 break-words font-medium">{value || "—"}</dd></div>)}</dl>
           {item.estimate && <div className="mt-4 rounded-xl bg-[var(--surface-2)] p-3 text-sm">Estimated total: <strong>{new Intl.NumberFormat("en", { style: "currency", currency: item.estimate?.currency || "USD" }).format(item.estimate?.totalEstimate || 0)}</strong><p className="mt-1 text-xs text-[var(--text-2)]">Not paid. No Driver dispatched. Requires a separate funded purchase flow.</p></div>}
+          {item.kind==="shopping" && item.estimate?.items?.length && !item.orderId && <div className="mt-5 space-y-3 rounded-xl border p-4"><h4 className="font-semibold">Verify current shelf or menu prices</h4><p className="text-xs leading-5 text-[var(--text-2)]">Prices must be reconfirmed with an actual store visit or phone check. This sends a timed quote to the customer, not a paid order.</p>{item.estimate.items.map((line)=><div key={line.itemId} className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-xs font-semibold">{line.quantity} × {line.name}</p><p className="text-xs text-[var(--text-3)]">Estimated unit price: {line.unitPriceEstimate}</p></div><input className="w-24 rounded-xl border p-2 text-sm" type="number" min="0" step="0.01" aria-label={`Confirmed unit price for ${line.name}`} defaultValue={line.unitPriceEstimate} onChange={(e)=>setPriceEdits((prev)=>({...prev,[`${item.id}:${line.itemId}`]:e.target.value}))}/></div>)}<div className="grid grid-cols-3 gap-2">{[["shoppingFee","Shopping fee"],["deliveryFee","Delivery fee"],["reservePercent","Reserve %"]].map(([name,label])=><label key={name} className="text-[11px] font-semibold">{label}<input type="number" min="0" step="0.01" className="mt-1 w-full rounded-xl border p-2 text-sm" value={feeEdits[name]} onChange={(e)=>setFeeEdits((prev)=>({...prev,[name]:e.target.value}))}/></label>)}</div><button disabled={busy} onClick={quoteShopping} type="button" className="w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">Send verified quote to customer</button><p className="text-xs text-[var(--text-3)]">A verified GPS pickup pin and currently published menu are required before quoting. Set those in the menu manager.</p></div>}
+          {item.kind==="shopping" && item.confirmedQuote && <div className="mt-4 rounded-xl border p-4 text-sm"><p className="font-semibold">Customer-authorized maximum: {new Intl.NumberFormat("en",{style:"currency",currency:item.confirmedQuote.currency||"USD"}).format(item.confirmedQuote.totalAuthorized||0)}</p><p className="mt-1 text-xs text-[var(--text-2)]">Quote expires: {new Date(item.confirmedQuote.expiresAt).toLocaleString()}</p><p className="mt-2 text-xs text-[var(--text-2)]">Payment: {item.paymentStatus || "not started"} · Order: {item.orderId || "awaiting customer acceptance"}</p>{item.deliveryJobId && item.paymentStatus==="paid" && <button type="button" disabled={busy} onClick={authorizeCheckout} className="mt-3 rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40">Authorize shopper checkout after basket review</button>}</div>}
           {item.proposedDate && <p className="mt-4 text-sm font-semibold">Proposed: {item.proposedDate} at {item.proposedTime}</p>}
           {item.customerMessage && <p className="mt-4 rounded-xl bg-[var(--surface-2)] p-4 text-sm text-[var(--text-2)]">{item.customerMessage}</p>}
           {!ended.has(item.state) ? <>
