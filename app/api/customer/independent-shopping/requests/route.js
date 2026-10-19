@@ -24,7 +24,7 @@ export async function GET(request) {
     const snapshot = await db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(30).get();
     const requests = snapshot.docs.map((doc) => ({
       id: doc.id, storeName: doc.data().storeName, state: doc.data().state,
-      estimate: doc.data().estimate,
+      estimate: doc.data().estimate, finalQuote: doc.data().finalQuote || null, customerMessage: doc.data().customerMessage || "",
       createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null
     })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     return Response.json({ ok: true, requests }, { headers: { "Cache-Control": "private, no-store" } });
