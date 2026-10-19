@@ -18,7 +18,7 @@ export function AssistCoverageManager(){
  const known=data.countries.find(c=>c.code===country),coverage=data.coverage||{};
  const entries=(coverage.regions||[]).filter(r=>r.country===country);
  const globalEnabled=coverage.countries?.[country]?.enabled!==false;
- const availability=s=>coverage.countries?.[country]?.services?.[s]!==false;
+ const availability=s=>coverage.countries?.[country]?.services?.[s] === true || (country==="ZW" && coverage.countries?.[country]?.services?.[s]!==false);
  async function update(payload){
   setBusy(true);setError("");setMessage("");
   try{
@@ -28,7 +28,7 @@ export function AssistCoverageManager(){
  }
  return <AuthGate portal="admin" title="Sign in to Spotly Admin"><AdminAccess><PortalShell portalId="admin" activeSection="marketplace"><main className="mx-auto max-w-[1150px] px-5 py-9">
  <Link href="/assist" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)]"><ArrowLeft className="h-4 w-4"/>Assist Operations</Link>
- <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><div><div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]"><Globe2 className="h-4 w-4"/>Spotly Africa</div><h1 className="mt-2 text-3xl font-semibold tracking-tight">Country & service coverage</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">An unset switch means eligible by default. Only independently reviewed, serviceable locations can actually fulfill requests; no checkout or dispatch is unlocked here.</p></div><button type="button" onClick={load} className="rounded-xl border p-3" aria-label="Refresh"><RefreshCw className="h-4 w-4"/></button></div>
+ <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><div><div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]"><Globe2 className="h-4 w-4"/>Spotly Africa</div><h1 className="mt-2 text-3xl font-semibold tracking-tight">Country & service coverage</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">An unset switch is eligible by default in Zimbabwe. Malawi begins with Ride only; Assist, Eat, Shop and Book must be explicitly enabled there. Only independently reviewed, serviceable locations can actually fulfill requests; no checkout or dispatch is unlocked here.</p></div><button type="button" onClick={load} className="rounded-xl border p-3" aria-label="Refresh"><RefreshCw className="h-4 w-4"/></button></div>
  {error&&<p role="alert" className="mt-5 rounded-xl border p-4 text-sm text-[var(--danger)]">{error}</p>}
  {message&&<p role="status" className="mt-5 rounded-xl border p-4 text-sm text-[var(--success)]">{message}</p>}
  <section className="mt-7 grid gap-5 lg:grid-cols-[.75fr_1.25fr]">
