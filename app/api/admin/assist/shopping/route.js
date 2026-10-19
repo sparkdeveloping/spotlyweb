@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { requirePlatformPermission } from "@/lib/access-control-server";
 import { assistLocationEnabled } from "@/lib/spotly-assist";
 import { independentPublicStore } from "@/lib/independent-shopping";
+import { notifyUser } from "@/lib/notification-server";
 
 export const runtime = "nodejs";
 const price = z.object({ itemId: z.string().min(2).max(80), unitPrice: z.number().finite().min(0).max(100000) }).strict();
@@ -62,7 +63,7 @@ export async function POST(request) {
     if(!store||!assistLocationEnabled(storeSnap.data(),settings))throw Object.assign(new Error("This location is not currently eligible for assisted shopping."),{status:409});
     const coords=storeSnap.data()?.pickupCoordinates;
     if(!coords||!Number.isFinite(Number(coords.lat))||!Number.isFinite(Number(coords.lng)))throw Object.assign(new Error("Set a verified pickup pin for this business before requesting a funded purchase."),{status:422});
-    if(entry.country!=="ZW"&&store.country!=="ZW")throw Object.assign(new Error("Funded assisted checkout is not yet configured for this country's payment provider."),{status:503});
+    if(entry.country!=="ZW"||store.country!=="ZW")throw Object.assign(new Error("Funded assisted checkout is not yet configured for this country's payment provider."),{status:503});
     const priced=new Map(input.prices.map((item)=>[item.itemId,item.unitPrice]));
     if(priced.size!==input.prices.length||priced.size!==(entry.items||[]).length)throw Object.assign(new Error("Confirm a price for each distinct requested item."),{status:422});
     const allowed=new Map(store.items.map((item)=>[item.id,item]));
@@ -94,6 +95,11 @@ export async function POST(request) {
       tx.create(db.collection("assistEvents").doc(),{entityId:requestRef.id,kind:"shopping",action:"quote_confirmed",actorId:actor.uid,
         nextState:"awaiting_customer",amount:confirmedQuote.totalAuthorized,currency:confirmedQuote.currency,createdAt:FieldValue.serverTimestamp()});
     });
+    const { messaging, auth } = getAdminServices();
+    await notifyUser({ db, messaging, auth, userId: entry.customerId,
+      title: "Your Spotly Assist prices are ready",
+      body: "We have checked the prices for your independent purchase. Review the confirmed total, fees and spending limit before choosing whether to proceed.",
+      href: "/assist/activity", category: "order", workspace: "customer", module: "assist", eventType: "assist.quote_ready", importance: "normal" }).catch(() => null);
     return Response.json({ok:true,state:"awaiting_customer",confirmedQuote});
   } catch(error) {
     if(error instanceof z.ZodError)return Response.json({ok:false,error:"Review every confirmed price and the shopping and delivery fees.",details:error.flatten()},{status:422});
