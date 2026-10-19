@@ -290,7 +290,7 @@ export function ServiceDiscoveryView({
     if (feed.nextOffset == null || loadingMore) return;
     setLoadingMore(true);
     try {
-      const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, limit: 24, offset: feed.nextOffset });
+      const result = await loadServiceFeed(service, { city: location.city, country: location.country || "ZW", area: location.area, query, limit: 24, offset: feed.nextOffset });
       setFeed((current) => ({ ...result, items: [...current.items, ...(result.items || [])] }));
     } catch (reason) {
       setError(reason.message || "More results could not be loaded.");
