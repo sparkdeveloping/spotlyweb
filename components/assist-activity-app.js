@@ -7,7 +7,7 @@ const complete = new Set(["completed", "cancelled", "declined", "expired"]);
 
 const formatMoney = (value, currency = "USD") => new Intl.NumberFormat("en", { style: "currency", currency }).format(Number(value || 0));
 
-function ShoppingCheckoutCard({ request, onUpdated }) {
+function ShoppingCheckoutCard({ request, onUpdated, paidCheckoutAvailable }) {
   const quote = request.confirmedQuote;
   const [address, setAddress] = useState(request.deliveryAddress || "");
   const [suburb, setSuburb] = useState("");
@@ -79,7 +79,8 @@ function ShoppingCheckoutCard({ request, onUpdated }) {
             <p className="text-xs leading-5 text-[var(--text-2)]">The coordinates must be your actual delivery point. Use your phone's location, or a precisely confirmed map pin.</p>
             <label className="block text-xs font-semibold">If something is unavailable<select className="mt-1 w-full rounded-xl border bg-[var(--surface)] p-3 text-sm" value={preference} onChange={(e)=>setPreference(e.target.value)}><option value="contact_me">Ask me before replacing it</option><option value="no_substitutions">Remove unavailable items</option><option value="best_match">Allow a similar replacement within my spending limit</option></select></label>
             <label className="flex items-start gap-2 text-xs leading-5"><input type="checkbox" className="mt-1" checked={approved} onChange={(e)=>setApproved(e.target.checked)}/>I agree to the stated maximum payment. Spotly will return unused funds under its refund process; no shopper may exceed the authorized amount.</label>
-            <button type="button" disabled={!approved||busy||quote.currency!=="USD"} onClick={checkout} className="w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">{busy?"Preparing checkout…":"Approve quote & pay securely"}</button>
+            {!paidCheckoutAvailable && <p className="rounded-xl border bg-[var(--surface)] p-3 text-xs leading-5 text-[var(--text-2)]">Your price request is available, but paid purchases are not yet active in this area. Spotly is preparing a secure way to fund shoppers before collecting money.</p>}
+            <button type="button" disabled={!paidCheckoutAvailable||!approved||busy||quote.currency!=="USD"} onClick={checkout} className="w-full rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">{busy?"Preparing checkout…":"Approve quote & pay securely"}</button>
             {quote.currency!=="USD" && <p className="text-xs text-[var(--text-2)]">Digital payment for this currency is not yet enabled. Spotly won't charge you.</p>}
           </div>}
         {notice&&<p role="status" className="mt-3 text-sm">{notice}</p>}
@@ -91,6 +92,7 @@ function ShoppingCheckoutCard({ request, onUpdated }) {
 export function AssistActivityApp() {
   const [bookings, setBookings] = useState([]);
   const [shopping, setShopping] = useState([]);
+  const [paidCheckoutAvailable, setPaidCheckoutAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -101,7 +103,7 @@ export function AssistActivityApp() {
         authenticatedFetch("/api/customer/assist/bookings"),
         authenticatedFetch("/api/customer/independent-shopping/requests")
       ]);
-      setBookings(b.bookings || []); setShopping(s.requests || []);
+      setBookings(b.bookings || []); setShopping(s.requests || []); setPaidCheckoutAvailable(s.paidCheckoutAvailable === true);
     } catch (err) { setError(err.message || "Could not load your requests."); }
     finally { setLoading(false); }
   }
@@ -135,7 +137,7 @@ export function AssistActivityApp() {
         </article>)}
         {shopping.map((request) => <article key={request.id} className="rounded-2xl border bg-[var(--surface)] p-5">
           <div className="flex flex-wrap items-start justify-between gap-4"><div className="flex gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><ShoppingBasket className="h-5 w-5"/></span><div><h2 className="font-semibold">{request.storeName}</h2><p className="mt-1 text-xs text-[var(--text-2)]">Independent shopping price check</p></div></div><span className="rounded-full bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold">{String(request.state || "").replaceAll("_"," ")}</span></div>
-          <p className="mt-4 text-sm text-[var(--text-2)]">Initial estimated total: <strong>{formatMoney(request.estimate?.totalEstimate,request.estimate?.currency || "USD")}</strong>.</p><ShoppingCheckoutCard request={request} onUpdated={refresh}/>
+          <p className="mt-4 text-sm text-[var(--text-2)]">Initial estimated total: <strong>{formatMoney(request.estimate?.totalEstimate,request.estimate?.currency || "USD")}</strong>.</p><ShoppingCheckoutCard request={request} onUpdated={refresh} paidCheckoutAvailable={paidCheckoutAvailable}/>
         </article>)}
         {!loading && !bookings.length && !shopping.length && <div className="rounded-2xl border bg-[var(--surface)] px-6 py-14 text-center"><h2 className="text-lg font-semibold">No assisted requests yet</h2><p className="mt-2 text-sm text-[var(--text-2)]">Requests for independent purchases or bookings will appear here.</p><Link href="/shop" className="mt-5 inline-block text-sm font-semibold text-[var(--accent)]">Explore Spotly</Link></div>}
       </div>
