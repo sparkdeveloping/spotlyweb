@@ -108,6 +108,9 @@ export async function POST(request) {
           organizationId,
           claimStatus: "claimed",
           verificationStatus: "approved",
+          // Pause unaffiliated assistance while the verified owner reviews the transition.
+          // Merchant capabilities still depend on the normal launch review.
+          assistAccepting: false,
           ownerIds: grant.role.includes("owner") ? FieldValue.arrayUnion(claim.applicantId) : business.ownerIds || [],
           status: claim.claimType === "new_business" ? "draft" : (business.status || "active"),
           updatedAt: FieldValue.serverTimestamp()
@@ -129,6 +132,42 @@ export async function POST(request) {
         createdAt: FieldValue.serverTimestamp()
       });
     });
+
+    // An approved ownership claim must never leave an independent duplicate active.
+    // Do not rewrite open requests or copy independent price estimates into merchant products.
+    if (body.decision === "approve" && reviewedClaim?.businessId) {
+      try {
+        const independent = await db.collection("independentShoppingStores")
+          .where("directoryBusinessId", "==", reviewedClaim.businessId).limit(50).get();
+        if (!independent.empty) {
+          const handover = db.batch();
+          independent.docs.forEach((doc) => handover.update(doc.ref, {
+            status: "paused", assistAccepting: false,
+            handoverClaimId: body.claimId,
+            updatedAt: FieldValue.serverTimestamp()
+          }));
+          handover.create(db.collection("auditLogs").doc(), {
+            action: "assist.owner_handover.paused",
+            actorId: user.uid,
+            entityType: "business",
+            entityId: reviewedClaim.businessId,
+            metadata: { claimId: body.claimId, pausedListings: independent.docs.map((doc) => doc.id) },
+            createdAt: FieldValue.serverTimestamp()
+          });
+          await handover.commit();
+        }
+      } catch (handoverError) {
+        // The claim has already committed; preserve its approval and route the
+        // exceptional duplicate-listing cleanup to Admin instead of hiding it.
+        await db.collection("adminTasks").add({
+          type: "assist_handover_review", priority: "high", status: "open",
+          businessId: reviewedClaim.businessId, claimId: body.claimId,
+          title: "Review independent listing handover",
+          description: "A verified business claim succeeded, but Spotly Assist listings need a manual pause.",
+          createdAt: FieldValue.serverTimestamp()
+        });
+      }
+    }
 
     if (reviewedClaim?.applicantId) {
       const decisionTitle = body.decision === "approve" ? "Business access approved" : body.decision === "request" ? "Spotly needs more information" : "Business claim not approved";
