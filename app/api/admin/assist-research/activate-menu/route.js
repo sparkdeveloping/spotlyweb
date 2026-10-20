@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { brandCompatible, canonicalStoreId, claimSafeUnpartnered, verifiedResearchPrice } from "@/lib/assist-research-menu";
+import { brandCompatible, canonicalStoreId, claimSafeUnpartnered, verifiedLocationPrice } from "@/lib/assist-research-menu";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 
 export const runtime = "nodejs";
@@ -18,19 +18,20 @@ const schema = z.object({
 async function loadSource(db, input) {
   const root = db.collection("assistResearchBatches").doc(input.batchId);
   const loc = root.collection("locations").doc(input.locationId);
-  const [rootSnap,locSnap,prices] = await Promise.all([
-    root.get(),loc.get(),root.collection("prices").limit(301).get()
+  const [rootSnap,locSnap,prices,approvals] = await Promise.all([
+    root.get(),loc.get(),root.collection("prices").limit(301).get(),loc.collection("menuApprovals").limit(121).get()
   ]);
   if (!rootSnap.exists || rootSnap.data()?.country!=="ZW" || !locSnap.exists) {
     throw Object.assign(new Error("The researched Zimbabwe restaurant could not be found."),{status:404});
   }
-  if (prices.size > 300) throw Object.assign(new Error("Split this research batch before menu activation."),{status:409});
+  if (prices.size > 300 || approvals.size > 120) throw Object.assign(new Error("Split this research batch before menu activation."),{status:409});
   const raw=locSnap.data();
   if(raw.publicationState!=="published" || !raw.linkedBusinessId || !raw.linkedBranchId) {
     throw Object.assign(new Error("First publish and verify this specific restaurant location in Spotly Admin."),{status:409});
   }
   const compatible = prices.docs.filter(doc=>brandCompatible(raw.brandName || raw.name,doc.data().brand));
-  return {root,loc,raw,compatible};
+  const approvalMap = new Map(approvals.docs.map(doc=>[doc.id,doc.data()]));
+  return {root,loc,raw,compatible,approvalMap};
 }
 
 export async function GET(request) {
@@ -53,7 +54,7 @@ export async function GET(request) {
         linkedBusinessId:doc.data().linkedBusinessId||null
       })),count:locations.size},{headers:{"Cache-Control":"private, no-store"}});
     }
-    const {raw,compatible}=await loadSource(db,{batchId,locationId});
+    const {raw,compatible,approvalMap}=await loadSource(db,{batchId,locationId});
     const [biz,branch,store]=await Promise.all([
       db.collection("businesses").doc(raw.linkedBusinessId).get(),
       db.collection("branches").doc(raw.linkedBranchId).get(),
@@ -72,9 +73,9 @@ export async function GET(request) {
       prices:compatible.map(doc=>({
         id:doc.id,name:doc.data().itemName,
         referencePrice:doc.data().onlineReferencePrice,currency:doc.data().currency,
-        verifiedPrice:doc.data().priceReview?.verifiedPrice??null,
-        verified:verifiedResearchPrice(doc.data(),raw.brandName||raw.name),
-        checkedAt:doc.data().priceCheckedAt?.toDate?.()?.toISOString?.()||null,
+        verifiedPrice:approvalMap.get(doc.id)?.verifiedPrice??null,
+        verified:verifiedLocationPrice({id:doc.id,...doc.data()},approvalMap.get(doc.id),raw.brandName||raw.name,locationId),
+        checkedAt:approvalMap.get(doc.id)?.checkedAt?.toDate?.()?.toISOString?.()||null,
         sourceUrl:doc.data().priceSourceUrl
       }))
     },{headers:{"Cache-Control":"private, no-store"}});
@@ -86,11 +87,12 @@ export async function POST(request) {
     const actor=await authenticateRequest(request,{roles});
     const input=schema.parse(await request.json());
     const {db}=getAdminServices();
-    const {raw,compatible}=await loadSource(db,input);
+    const {raw,compatible,approvalMap}=await loadSource(db,input);
     const selected=new Map(compatible.map(doc=>[doc.id,doc]));
     if(input.action==="preview") {
-      return Response.json({ok:true,eligible:input.priceIds.filter(id=>selected.has(id) && verifiedResearchPrice(selected.get(id).data(),raw.brandName||raw.name)).length,selected:input.priceIds.length});
+      return Response.json({ok:true,eligible:input.priceIds.filter(id=>selected.has(id) && verifiedLocationPrice({id,...selected.get(id).data()},approvalMap.get(id),raw.brandName||raw.name,input.locationId)).length,selected:input.priceIds.length});
     }
+    const locRef=db.collection("assistResearchBatches").doc(input.batchId).collection("locations").doc(input.locationId);
     const bRef=db.collection("businesses").doc(raw.linkedBusinessId);
     const brRef=db.collection("branches").doc(raw.linkedBranchId);
     const storeRef=db.collection("independentShoppingStores").doc(canonicalStoreId(raw.linkedBusinessId));
@@ -139,18 +141,19 @@ export async function POST(request) {
         // Prices are independently verified in the Admin research workflow, not scraped.
         const refs=input.priceIds.map(id=>selected.get(id));
         if(refs.some(x=>!x))throw Object.assign(new Error("A selected item belongs to another business or source batch."),{status:409});
-        // Re-read every item within transaction to avoid stale verification records.
+        // Re-read both source and exact-location approvals transactionally. Brand-wide online references cannot authorize branch menus.
         const snaps=await Promise.all(refs.map(doc=>tx.get(doc.ref)));
+        const locationApprovals=await Promise.all(refs.map(doc=>tx.get(locRef.collection("menuApprovals").doc(doc.id))));
         const prices=snaps.map((snap,i)=>{
-          if(!snap.exists||!verifiedResearchPrice(snap.data(),raw.brandName||raw.name)) {
-            throw Object.assign(new Error("A selected item price has expired or has not been independently verified."),{status:409});
+          if(!snap.exists||!locationApprovals[i].exists||!verifiedLocationPrice({id:snap.id,...snap.data()},locationApprovals[i].data(),raw.brandName||raw.name,input.locationId)) {
+            throw Object.assign(new Error("This exact branch does not have a current independent price verification for a selected item."),{status:409});
           }
           return {
             id:"research_"+snap.id,
             name:snap.data().itemName,
             category:"Food",unit:"",
-            priceEstimate:snap.data().priceReview.verifiedPrice,
-            priceCheckedAt:snap.data().priceCheckedAt.toDate().toISOString(),
+            priceEstimate:locationApprovals[i].data().verifiedPrice,
+            priceCheckedAt:locationApprovals[i].data().checkedAt.toDate().toISOString(),
             sourceResearchPriceId:snap.id,
             status:"available"
           };
