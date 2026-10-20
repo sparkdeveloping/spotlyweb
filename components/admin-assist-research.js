@@ -6,6 +6,7 @@ import { AuthGate } from "@/components/auth-gate";
 import { PortalShell } from "@/components/portal-shell";
 import { AdminAccess } from "@/components/admin-legacy-sections";
 import { authenticatedFetch } from "@/lib/api-client";
+import { AssistResearchPublication } from "@/components/admin-assist-research-publication";
 
 export function AssistResearchImport() {
   const [manifest, setManifest] = useState(null);
@@ -15,6 +16,7 @@ export function AssistResearchImport() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [publicationBatch, setPublicationBatch] = useState("");
   const [review, setReview] = useState(null);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewError, setReviewError] = useState("");
@@ -101,9 +103,10 @@ export function AssistResearchImport() {
         <section className="mt-8 rounded-2xl border bg-[var(--surface)] p-6">
           <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Private research batches</h2><button type="button" onClick={refresh} className="rounded-xl border p-2" aria-label="Refresh batches"><RefreshCw className="h-4 w-4"/></button></div>
           <div className="mt-4 space-y-3">{batches.map(b=><article key={b.id} className="rounded-xl bg-[var(--surface-2)] p-4 text-sm">
-            <p className="font-semibold">{b.id}</p><p className="mt-1 text-xs text-[var(--text-2)]">{b.locationCount} locations · {b.priceCount} prices · {b.status} · {b.createdAt ? new Date(b.createdAt).toLocaleDateString("en-ZW"):""}</p><button type="button" disabled={reviewBusy} onClick={()=>reconcileBatch(b.id)} className="mt-3 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-40">{reviewBusy ? "Comparing…" : "Check existing businesses & branches"}</button>
+            <p className="font-semibold">{b.id}</p><p className="mt-1 text-xs text-[var(--text-2)]">{b.locationCount} locations · {b.priceCount} prices · {b.status} · {b.createdAt ? new Date(b.createdAt).toLocaleDateString("en-ZW"):""}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={reviewBusy} onClick={()=>reconcileBatch(b.id)} className="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-40">{reviewBusy ? "Comparing…" : "Check existing businesses & branches"}</button><button type="button" onClick={()=>{setPublicationBatch(b.id);setReview(null);}} className="rounded-lg border border-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--accent)]">Review & publish</button></div>
           </article>)}{!batches.length&&<p className="text-sm text-[var(--text-2)]">No staged research batches yet.</p>}</div>
         </section>
+        {publicationBatch && <AssistResearchPublication key={publicationBatch} batchId={publicationBatch}/>}
         {reviewError && <p role="alert" className="mt-5 rounded-xl border p-4 text-sm text-[var(--danger)]">{reviewError}</p>}
         {review && <section className="mt-6 rounded-2xl border bg-[var(--surface)] p-6">
           <h2 className="text-xl font-semibold">Possible business duplicates</h2>
