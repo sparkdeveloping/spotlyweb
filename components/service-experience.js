@@ -32,7 +32,7 @@ import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-ta
 
 const SERVICE_CONFIG = {
   eat: {
-    label: "Eat",
+    label: "SpotlyBite",
     eyebrow: "Food around you",
     title: "What are you craving?",
     description: "Discover food businesses around you. Menus, ordering, pickup and delivery only appear where the merchant has enabled them.",
@@ -42,7 +42,7 @@ const SERVICE_CONFIG = {
     suggestions: ["Chicken", "Pizza", "Coffee", "Lunch", "Dessert"]
   },
   shop: {
-    label: "Shop",
+    label: "SpotlyShopper",
     eyebrow: "Stores and essentials",
     title: "Find what you need nearby",
     description: "Discover local shops and grocery products. Price, stock, pickup and delivery only appear where a merchant has published a verified offer.",
@@ -52,7 +52,7 @@ const SERVICE_CONFIG = {
     suggestions: ["Groceries", "Pharmacy", "Home", "Fashion", "Gifts"]
   },
   book: {
-    label: "Book",
+    label: "SpotlyBook",
     eyebrow: "Services, stays and activities",
     title: "Make time for something",
     description: "Discover services and experiences with real businesses, then request a time and keep the plan in Activity.",
@@ -62,7 +62,7 @@ const SERVICE_CONFIG = {
     suggestions: ["Massage", "Salon", "Fitness", "Activities", "Stay"]
   },
   events: {
-    label: "Events",
+    label: "SpotlyLive",
     eyebrow: "What’s happening",
     title: "Make plans in your city",
     description: "Find upcoming events, venues and ticket options published by live Spotly businesses.",
@@ -150,13 +150,16 @@ function ServiceSkeleton() {
 
 function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, onOpen, service, currency }) {
   const profile = marketplaceProfile(business);
+  const [assistExplained, setAssistExplained] = useState(false);
+  const assisted = Boolean(business.assistStoreId);
   const media = assignedMedia || mediaForBusiness(business);
-  const image = media.src;
+  const image = assisted ? "" : media.src;
   const operation = business.operational || {};
   const commerce = profile.cardMode === "commerce";
+  const assistedBooking = service === "book" && !commerce && business.assistAccepting !== false;
   const action = marketplaceActionLabel(business, service);
   return <article className={cn("group relative overflow-hidden rounded-[var(--radius-card)] border bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card", commerce ? "border-[var(--border-subtle)]" : "border-[color-mix(in_srgb,var(--border-subtle)_80%,transparent)]")}>
-    <button type="button" onClick={() => onOpen(business)} className="block w-full text-left">
+    <button type="button" onClick={() => assisted ? window.location.assign("/shop-for-me?store=" + encodeURIComponent(business.assistStoreId)) : assistedBooking ? window.location.assign("/assist/book?business=" + encodeURIComponent(business.id)) : onOpen(business)} className="block w-full text-left">
       <div className={cn("relative overflow-hidden", commerce ? "aspect-[16/10] bg-[var(--surface-2)]" : "aspect-[16/9] bg-[var(--surface-2)]")}>
         {image ? <Image src={image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 768px) 100vw, 33vw" /> : <div className="flex h-full flex-col justify-end bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2)_62%,var(--surface))] p-5"><span className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] bg-[var(--surface)] text-[var(--accent)] shadow-sm"><Store className="h-5 w-5" /></span><p className="mt-8 max-w-[80%] text-lg font-semibold tracking-[-.025em] text-[var(--text)]">{profile.displayCategory}</p><p className="mt-1 text-xs text-[var(--text-3)]">Spotly directory</p></div>}
         {image ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" /> : null}
@@ -165,14 +168,18 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
       </div>
       <div className={cn("p-4", !commerce && "pb-3")}>
         <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="truncate text-[17px] font-semibold tracking-[-.025em]">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{business.area || business.city ? ` · ${business.area || business.city}` : ""}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div>
+        {assistedBooking ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Ask Spotly to check your preferred time</div> : null}
+        {assisted ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Menu prices estimated · Spotly confirms before payment</div> : null}
         {commerce ? <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-[var(--text-2)]">
           {operation.deliveryAvailable ? <span className="inline-flex items-center gap-1.5"><Truck className="h-3.5 w-3.5" />Delivery{operation.deliveryFeeFrom > 0 ? ` from ${formatCurrency(operation.deliveryFeeFrom, currency || "USD")}` : ""}</span> : null}
           {operation.pickupAvailable ? <span className="inline-flex items-center gap-1.5"><PackageCheck className="h-3.5 w-3.5" />{pickupTimeLabel(operation.earliestPickup) || "Pickup"}</span> : null}
           {operation.locationCount ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{operation.locationCount} {operation.locationCount === 1 ? "location" : "locations"}</span> : null}
-        </div> : <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">Directory listing · commerce not enabled</span><span className="font-semibold text-[var(--accent)]">{action} <span aria-hidden="true">→</span></span></div>}
+        </div> : <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{assisted ? "Assisted purchase · not a partner" : assistedBooking ? "Booking request · subject to confirmation" : "Directory listing · commerce not enabled"}</span><span className="font-semibold text-[var(--accent)]">{assisted ? "Request items" : assistedBooking ? "Request time" : action} <span aria-hidden="true">→</span></span></div>}
         {commerce ? <div className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)]">{action}<ArrowRight className="h-3.5 w-3.5" /></div> : null}
       </div>
     </button>
+    {(assisted || assistedBooking) ? <div className="absolute left-3 top-3 flex items-center gap-2"><span className="rounded-full border border-white/30 bg-[var(--surface)]/95 px-3 py-1.5 text-xs font-semibold text-[var(--text)]">Spotly Assist</span><button type="button" onClick={() => setAssistExplained(true)} aria-label="How Spotly Assist works" className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--text)] shadow-sm"><Info className="h-4 w-4"/></button></div> : null}
+    {(assisted || assistedBooking) && assistExplained ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-4" onClick={() => setAssistExplained(false)}><div role="dialog" aria-modal="true" aria-label="About Spotly Assist" className="max-w-sm rounded-2xl bg-[var(--surface)] p-5 text-[var(--text)] shadow-xl" onClick={(event) => event.stopPropagation()}><h4 className="text-lg font-semibold">Spotly helps arrange it</h4><p className="mt-3 text-sm leading-6 text-[var(--text-2)]">This store is not necessarily partnered with Spotly. We independently collect basic item information and check prices and availability before an authorized shopper buys on your behalf. A request isn't a paid order or guaranteed delivery.</p><button type="button" onClick={() => setAssistExplained(false)} className="mt-5 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">Got it</button></div></div> : null}
     <button type="button" onClick={() => onFavorite(business.id)} aria-label={favorite ? "Remove from saved" : "Save business"} className={cn("absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/35 text-[var(--media-text)] backdrop-blur transition hover:bg-black/50", favorite && "bg-[var(--surface)] text-[var(--danger)]")}><Heart className={cn("h-4 w-4", favorite && "fill-current")} /></button>
   </article>;
 }

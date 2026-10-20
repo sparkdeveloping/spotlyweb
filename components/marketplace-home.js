@@ -26,10 +26,10 @@ import { marketplaceMedia } from "@/lib/marketplace-editorial";
 
 export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
-  { key: "eat", label: "Eat", subtitle: "Food around you", icon: UtensilsCrossed, tone: "eat" },
-  { key: "shop", label: "Shop", subtitle: "Find what you need", icon: ShoppingBag, tone: "shop" },
+  { key: "eat", label: "Bite", subtitle: "Food around you", icon: UtensilsCrossed, tone: "eat" },
+  { key: "shop", label: "Shopper", subtitle: "Find what you need", icon: ShoppingBag, tone: "shop" },
   { key: "book", label: "Book", subtitle: "Services & places", icon: Sparkles, tone: "book" },
-  { key: "events", label: "Events", subtitle: "What’s happening", icon: CalendarDays, tone: "events" },
+  { key: "events", label: "Live", subtitle: "What’s happening", icon: CalendarDays, tone: "events" },
   { key: "send", label: "Send", subtitle: "Move a package", icon: Package, tone: "send" }
 ];
 
@@ -193,7 +193,7 @@ export function MarketplaceHome({
 
     {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Near you" : `Popular in ${location.city}`} description={location.coordinates ? "Using the location you shared" : "Based on what is live in your selected city"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
-    {food.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={trulyNew ? "Start with food" : "Eat nearby"} action="Explore Eat" onAction={() => onSelectService("eat")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{food.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+    {food.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={trulyNew ? "Start with food" : "Bite nearby"} action="Explore Bite" onAction={() => onSelectService("eat")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{food.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
     {(events.length || bookable.length) ? <section className="mt-10 grid gap-9 border-t border-[var(--border-subtle)] pt-7 lg:grid-cols-2">
       {bookable.length ? <div className="min-w-0"><SectionHeader title="Book something" action="Explore" onAction={() => onSelectService("book")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{bookable.slice(0,4).map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></div> : null}

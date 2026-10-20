@@ -12,6 +12,7 @@ import { Badge, Button, Card, EmptyState, EntityPicker, Modal, Overlay, SearchFi
 import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { deleteSavedItem, loadPublicMarketplaceBusiness, saveFavorite, saveSavedItem, saveUserPreferences, searchLiveBusinesses, searchSpotly, subscribeCustomerOrders, subscribeFavorites, subscribeSavedItems, track } from "@/lib/firebase-services";
 import { cn } from "@/lib/cn";
+import {publicProductRoute} from "@/lib/spotly-products";
 import { formatCurrency } from "@/lib/format";
 import { businessArchetype } from "@/data/business-archetypes";
 import { migrateLegacyState, readState, removeState, writeState } from "@/lib/browser-state";
@@ -21,6 +22,7 @@ import { resolveProductForBranch } from "@/lib/product-offers";
 import { MARKETPLACE_SERVICE_KEYS, MarketplaceHome, ServiceModeHeader, serviceMatchesBusiness } from "@/components/marketplace-home";
 import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "@/components/customer-conversion";
 import { MarketplaceTrustBadge, MarketplaceTrustNotice } from "@/components/marketplace-trust-ui";
+import { AssistActivitySection } from "@/components/assist-activity-section";
 import { marketplaceMedia } from "@/lib/marketplace-editorial";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
@@ -35,7 +37,7 @@ const LOCATION_KEY = "spotly-marketplace-location";
 const RECENT_SEARCH_KEY = "spotly-recent-searches";
 const RECENT_BUSINESS_KEY = "spotly-recent-businesses";
 const MARKETPLACE_TABS_ID = "marketplace-sections";
-const SERVICE_PATHS = new Set(["/ride", "/eat", "/shop", "/book", "/events", "/send"]);
+const SERVICE_PATHS=new Set(["/ride","/eat","/bite","/shop","/shopper","/book","/events","/live","/send"]);
 
 function timestamp(value) {
   if (!value) return null;
@@ -601,6 +603,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [recentSearches, setRecentSearches] = useState([]);
   const [recentBusinessIds, setRecentBusinessIds] = useState([]);
   const [activityFilter, setActivityFilter] = useState("all");
+  const [assistActivityCount,setAssistActivityCount] = useState(0);
   const [activityDetail, setActivityDetail] = useState(null);
   const [reviewTarget, setReviewTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -717,7 +720,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setTransactionOffer(null);
     setQuery("");
     if (MARKETPLACE_SERVICE_KEYS.has(nextService) || nextService === "ride" || nextService === "send") {
-      router.push(`/${nextService}`);
+      router.push(publicProductRoute(nextService));
       return;
     }
     updateUrl("home", { business: null, order: null, service: nextService, offer: null });
@@ -933,6 +936,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
   const activityOrders = useMemo(() => orders.filter((order) => {
     if (activityFilter === "all") return true;
+    if (activityFilter === "assist") return false;
     const kind = order.transactionType || (order.fulfilment === "appointment" ? "appointment" : order.fulfilment === "booking" ? "booking" : order.fulfilment === "ticketing" ? "ticket" : "order");
     if (activityFilter === "orders") return kind === "order";
     if (activityFilter === "bookings") return ["appointment", "booking"].includes(kind);
@@ -1248,15 +1252,16 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
             <div><p className="text-sm font-semibold text-[var(--accent)]">Activity</p><h1 className="mt-2 text-[34px] font-semibold tracking-[-.05em] sm:text-[44px]">Your life through Spotly.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">What is happening now, what is coming up, and what you have already done—all in one timeline.</p></div>
             <div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/support?topic=orders">Get help</Link></Button><Button variant="outline" onClick={openHome}>Back to Home</Button></div>
           </div>
-          {user && !user.isAnonymous && orders.length ? <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">{[
-            ["all", "All"], ["orders", "Orders"], ["deliveries", "Deliveries"], ["bookings", "Bookings"], ["tickets", "Tickets"]
+          {user && !user.isAnonymous ? <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">{[
+            ["all", "All"], ["orders", "Orders"], ["deliveries", "Deliveries"], ["bookings", "Bookings"], ["tickets", "Tickets"], ["assist", "Spotly Assist"]
           ].map(([value,label]) => <button key={value} type="button" onClick={() => setActivityFilter(value)} className={cn("shrink-0 rounded-full border px-3 py-2 text-sm font-semibold", activityFilter === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "bg-[var(--surface)]")}>{label}</button>)}</div> : null}
+          {user && !user.isAnonymous ? <AssistActivitySection filter={activityFilter} onCountChange={setAssistActivityCount}/> : null}
           {!user || user.isAnonymous ? <EmptyState className="mt-6" icon={PackageCheck} title="Sign in to see your activity" description="Your orders, bookings, tickets and delivery progress stay tied to your Spotly account." action={<Button asChild><Link href={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=activity`)}`}>Sign in</Link></Button>} /> : activityOrders.length ? <div className="mt-7 space-y-8">{[
             ["problem", "Needs attention", "Payment, fulfilment or another issue needs your attention."],
             ["active", "Active now", "Orders and deliveries currently moving."],
             ["upcoming", "Upcoming", "Bookings, appointments and tickets scheduled ahead."],
             ["past", "Past", "Completed, cancelled and resolved activity."]
-          ].map(([bucket, title, description]) => activityGroups[bucket].length ? <section key={bucket}><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className={cn("text-lg font-semibold", bucket === "problem" && "text-[var(--danger)]")}>{title}</h2><p className="mt-1 text-xs text-[var(--text-3)]">{description}</p></div><span className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-3)]">{activityGroups[bucket].length}</span></div><div className="grid gap-4 lg:grid-cols-2">{activityGroups[bucket].map((order) => <OrderCard key={order.id} order={order} onPay={payOrder} onCancel={(record) => { setCancelTarget(record); setCancelReason(""); }} onOpen={(record) => { setActivityDetail(record); updateUrl("activity", { order: record.id, business: null, service: null, offer: null }); }} highlighted={order.id === requestedOrder} innerRef={(node) => { orderRefs.current[order.id] = node; }} />)}</div></section> : null)}</div> : <EmptyState className="mt-6" icon={PackageCheck} title={orders.length ? "Nothing in this filter" : "Your Spotly activity will live here"} description={orders.length ? "Choose another Activity filter." : "Orders, bookings, rides, tickets and deliveries stay together so you always know what is happening."} action={<Button onClick={orders.length ? () => setActivityFilter("all") : openHome}>{orders.length ? "Show all Activity" : "Explore Spotly"}</Button>} />}
+          ].map(([bucket, title, description]) => activityGroups[bucket].length ? <section key={bucket}><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className={cn("text-lg font-semibold", bucket === "problem" && "text-[var(--danger)]")}>{title}</h2><p className="mt-1 text-xs text-[var(--text-3)]">{description}</p></div><span className="rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-3)]">{activityGroups[bucket].length}</span></div><div className="grid gap-4 lg:grid-cols-2">{activityGroups[bucket].map((order) => <OrderCard key={order.id} order={order} onPay={payOrder} onCancel={(record) => { setCancelTarget(record); setCancelReason(""); }} onOpen={(record) => { setActivityDetail(record); updateUrl("activity", { order: record.id, business: null, service: null, offer: null }); }} highlighted={order.id === requestedOrder} innerRef={(node) => { orderRefs.current[order.id] = node; }} />)}</div></section> : null)}</div> : assistActivityCount ? null : <EmptyState className="mt-6" icon={PackageCheck} title={orders.length ? "Nothing in this filter" : "Your Spotly activity will live here"} description={orders.length ? "Choose another Activity filter." : "Orders, bookings, rides, tickets and deliveries stay together so you always know what is happening."} action={<Button onClick={orders.length ? () => setActivityFilter("all") : openHome}>{orders.length ? "Show all Activity" : "Explore Spotly"}</Button>} />}
         </section>
       ) : view === "search" ? (
         <CustomerSearchView

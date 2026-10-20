@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { createPaynow, paynowChargeLines } from "@/lib/paynow-server";
 import { appUrl, normalizeZimbabwePhone } from "@/lib/server-helpers";
 import { hasPlatformPermission, isPlatformAdmin } from "@/lib/access-control-server";
+import {trustedPaynowUrl} from "@/lib/assist-payment-url";
 
 export const runtime = "nodejs";
 
@@ -36,6 +37,11 @@ export async function POST(request) {
       const order = orderSnapshot.data();
       const allowed = order.customerId === user.uid || isPlatformAdmin(user) || hasPlatformPermission(user, "finance.payments") || user.profile?.roles?.includes("finance_admin");
       if (!allowed) throw Object.assign(new Error("You cannot pay for this order."), { status: 403 });
+      if(order.transactionType==="send"&&
+        (order.sendStatus!=="awaiting_payment"||order.paymentReviewRequired===true))
+        throw Object.assign(new Error("Paynow Send payment is allowed only before dispatch on an undisputed request."),{status:409});
+      if(order.transactionType==="ride"&&(order.rideStatus!=="completed"||order.paymentReviewRequired===true))
+         throw Object.assign(new Error("Paynow Ride payments open only after a completed trip without an active payment dispute."),{status:409});
       if (["paid", "refund_pending", "refunded"].includes(order.paymentStatus)) throw Object.assign(new Error("This order no longer requires payment."), { status: 409 });
 
       if (order.paymentIntentReference && livePending(order.paymentStatus)) {
@@ -102,6 +108,9 @@ export async function POST(request) {
       : await paynow.sendMobile(payment, normalizeZimbabwePhone(body.phone), body.channel);
     if (!response?.success) throw Object.assign(new Error(response?.error || "Paynow declined the payment request."), { status: 502 });
     providerAccepted = true;
+    if(!trustedPaynowUrl(response.pollUrl)||
+       (body.channel==="web"&&!trustedPaynowUrl(response.redirectUrl,{kind:"redirect"})))
+      throw Object.assign(new Error("Untrusted Paynow payment URL; Finance reconciliation is required."),{status:502});
 
     const intentRef = db.collection("paymentIntents").doc(prepared.reference);
     await db.runTransaction(async (transaction) => {

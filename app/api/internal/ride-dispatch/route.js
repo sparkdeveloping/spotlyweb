@@ -1,6 +1,7 @@
 import { apiError, getAdminServices } from "@/lib/firebase-admin";
 import { dispatchRide } from "@/lib/ride-server";
 import { effectiveSecret } from "@/lib/platform-secrets-server";
+import {recordDispatchHeartbeat} from "@/lib/mobility-scheduler-health";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,6 +26,8 @@ export async function GET(request) {
         results.push({ rideId: doc.id, ok: false, error: String(error?.message || "Dispatch failed").slice(0, 300) });
       }
     }
-    return Response.json({ ok: true, checked: snapshot.size, results });
+    const failed=results.filter(x=>!x.ok).length;
+    await recordDispatchHeartbeat(db,"ride",{checked:snapshot.size,failed});
+    return Response.json({ ok:true, checked:snapshot.size,failed, results });
   } catch (error) { return apiError(error); }
 }

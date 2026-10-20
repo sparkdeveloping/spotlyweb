@@ -2,10 +2,12 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { estimateRide, normalizeRidePoint, rideAvailability } from "@/lib/ride-server";
+import {validateRideTerritory} from "@/lib/ride-geography";
+import {getVerifiedRideRoute} from "@/lib/ride-routing";
 
 export const runtime = "nodejs";
 
-const point = z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional(), label: z.string().max(160).optional(), formattedAddress: z.string().max(500).optional(), area: z.string().max(120).optional(), city: z.string().max(120).optional() });
+const point = z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional(), country:z.enum(["ZW","MW"]), label: z.string().max(160).optional(), formattedAddress: z.string().max(500).optional(), area: z.string().max(120).optional(), city: z.string().max(120).optional() });
 const schema = z.object({ pickup: point, dropoff: point, serviceType: z.enum(["economy", "comfort", "xl"]).default("economy") });
 
 export async function POST(request) {
@@ -20,7 +22,9 @@ export async function POST(request) {
     const settings = settingsSnap.exists ? settingsSnap.data() : {};
     const availability = rideAvailability(settings, pickup);
     if (!availability.enabled) throw Object.assign(new Error(availability.reason), { status: 409 });
-    const quote = estimateRide({ pickup, dropoff, serviceType: body.serviceType, settings });
+    validateRideTerritory(pickup,dropoff,settings.mobility||{});
+    const route=await getVerifiedRideRoute(pickup,dropoff);
+    const quote = estimateRide({ pickup, dropoff, serviceType: body.serviceType, settings,route });
     return Response.json({ ok: true, quote, serviceTypes: availability.config.pricing.serviceTypes, paymentMethods: availability.config.paymentMethods });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the pickup and destination." }, { status: 400 });

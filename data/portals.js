@@ -40,7 +40,7 @@ export const portals = {
     accentStrong: "#4E3FBF",
     accentSoft: "#F0EEFF",
     darkAccent: "#9B8CFF",
-    description: "Ride, eat, shop, book, discover, and manage activity across your city.",
+    description: "Discover SpotlyBite, SpotlyShopper, SpotlyBook, SpotlyLive, SpotlyRide and SpotlySend in one place.",
     nav: [
       { id: "home", label: "Home", icon: House, href: "/" },
       { id: "search", label: "Search", icon: Search, href: "/?view=search" },
@@ -135,7 +135,7 @@ export const portals = {
       { group: "Operate", id: "home", label: "Home", icon: LayoutDashboard, href: "/" },
       { group: "Operate", id: "work", label: "Work", icon: ListChecks, href: "/work" },
       { group: "Operate", id: "marketplace", label: "Marketplace", icon: Store, href: "/marketplace" },
-      { group: "Operate", id: "mobility", label: "Mobility", icon: Bike, href: "/mobility" },
+      { group: "Operate", id: "mobility", label: "Ride & Send Launch", icon: Bike, href: "/mobility" },
       { group: "Operate", id: "money", label: "Money", icon: CreditCard, href: "/money" },
       { group: "Build", id: "growth", label: "Growth", icon: Compass, href: "/growth" },
       { group: "Build", id: "team", label: "Team & access", icon: UsersRound, href: "/team" },
