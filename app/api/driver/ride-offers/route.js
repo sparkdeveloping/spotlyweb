@@ -13,15 +13,17 @@ export async function POST(request) {
     const body = schema.parse(await request.json());
     const { db, messaging } = getAdminServices();
     const offerRef = db.collection("rideOffers").doc(body.offerId);
-    let rideId = ""; let notification = null;
+    let rideId = ""; let notification = null; let expiredOffer=false;
     await db.runTransaction(async (transaction) => {
       const offerSnap = await transaction.get(offerRef);
       if (!offerSnap.exists) throw Object.assign(new Error("This ride offer is no longer available."), { status: 404 });
       const offer = offerSnap.data();
       if (offer.driverId !== user.uid) throw Object.assign(new Error("This ride offer is not assigned to your Driver account."), { status: 403 });
       if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now()) {
-        transaction.set(offerRef, { state: "expired", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        throw Object.assign(new Error("This ride offer expired."), { status: 409 });
+        if(["offered","viewed"].includes(offer.state))
+          transaction.set(offerRef,{state:"expired",updatedAt:FieldValue.serverTimestamp()},{merge:true});
+        expiredOffer=true;
+        return;
       }
       rideId = offer.rideId;
       const rideRef = db.collection("rideTrips").doc(rideId); const rideSnap = await transaction.get(rideRef);
@@ -54,6 +56,7 @@ export async function POST(request) {
       transaction.create(db.collection("auditLogs").doc(), { actorId: user.uid, action: "ride.offer.accepted", entityType: "rideTrip", entityId: rideId, metadata: { offerId: body.offerId }, source: "ride_network", createdAt: now });
       notification = { customerId: ride.customerId, number: ride.number };
     });
+    if(expiredOffer)throw Object.assign(new Error("This ride offer expired. Refresh your work queue."),{status:409});
     if (body.action === "accept" && notification) {
       const siblings = await db.collection("rideOffers").where("rideId", "==", rideId).limit(100).get(); const batch = db.batch(); let changed = false;
       siblings.docs.forEach((item) => { if (item.id !== body.offerId && ["offered", "viewed"].includes(item.data().state)) { batch.set(item.ref, { state: "withdrawn", withdrawnAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); changed = true; } }); if (changed) await batch.commit();

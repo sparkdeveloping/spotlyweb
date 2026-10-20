@@ -18,7 +18,8 @@ on:
       - "app/api/admin/assist-finance-close/**"
       - "tests/v9-assist-finance-close.test.mjs"
       - "app/api/admin/assist-refunds/**"
-      - "tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs"
+      - "tests/v9-assist-refunds.test.mjs"
+      - "tests/v9-assist-finance-close.test.mjs"
       - "components/driver-assist-shopping.js"
       - "lib/assist-fulfillment.js"
       - "app/api/admin/assist-fulfillment/**"
@@ -40,6 +41,25 @@ on:
       - "app/api/public/independent-shopping/**"
       - "app/api/public/service-feed/**"
       - "tests/v9-assist-research-menu.test.mjs"
+      - "lib/ride-*.js"
+      - "app/api/customer/rides/**"
+      - "app/api/driver/rides/**"
+      - "app/api/driver/ride-offers/**"
+      - "app/api/driver/location/**"
+      - "app/api/driver/incidents/**"
+      - "app/api/driver/payout/**"
+      - "app/api/admin/rides/**"
+      - "app/api/admin/refunds/**"
+      - "app/api/admin/driver-money/**"
+      - "app/api/admin/launch-readiness/**"
+      - "app/api/payments/**"
+      - "app/api/public/geocode/**"
+      - "app/api/public/reverse-geocode/**"
+      - "components/ride-*.js"
+      - "components/driver-app.js"
+      - "components/admin-driver-operations.js"
+      - "tests/rides-*.test.mjs"
+      - "docs/SPOTLY-V9-RIDE-RELEASE.md"
       - ".github/workflows/assist-safety.yml"
   workflow_dispatch:
 
@@ -61,7 +81,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify independent menu safeguards
-        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs
+        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs tests/rides-production.test.mjs tests/rides-v9-integrity.test.mjs
 
   compile-admin:
     name: Verify Next.js Admin screens compile

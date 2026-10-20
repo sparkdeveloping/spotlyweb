@@ -50,7 +50,14 @@ export async function POST(request) {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
     });
-    if (["high", "critical"].includes(body.severity)) await db.collection("drivers").doc(user.uid).set({ safetyHold: true, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (["high", "critical"].includes(body.severity)){
+      await db.collection("drivers").doc(user.uid).set({safetyHold:true,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      if(body.rideId&&ride&&!["completed","cancelled","failed"].includes(ride.state)){
+        await db.collection("rideTrips").doc(body.rideId).set({safetyReviewHold:true,
+          safetyIncidentId:ref.id,exceptionCode:"safety_review",
+          updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      }
+    }
     await db.collection("adminQueueItems").doc(`driver_incident_${ref.id}`).set({
       queue: "driver-incidents", type: "driver_incident", entityId: ref.id, driverId: user.uid,
       deliveryJobId: body.deliveryJobId || null, rideId: body.rideId || null, parcelJobId: body.parcelJobId || null,

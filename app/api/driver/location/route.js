@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { normalizeLocation } from "@/lib/driver-delivery-server";
+import {enforceRateLimit} from "@/lib/rate-limit-server";
 
 export const runtime = "nodejs";
 const schema = z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional() });
@@ -17,6 +18,7 @@ function availabilityState(presence) {
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
+    await enforceRateLimit(request,{key:"driver-gps",limit:10,windowMs:60000,identity:user.uid});
     const location = normalizeLocation(schema.parse(await request.json()));
     if (!location) throw Object.assign(new Error("The location coordinates are invalid."), { status: 400 });
     const { db } = getAdminServices();

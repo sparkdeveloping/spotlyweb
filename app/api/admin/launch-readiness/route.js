@@ -63,7 +63,12 @@ export async function GET(request) {
     const sendEnabled = send.enabled === true || settings.launch?.sendEnabled === true;
     const sendCities = Array.isArray(send.enabledCities) ? send.enabledCities.filter(Boolean) : [];
     const mobilityNeedsCron = ridesEnabled || sendEnabled;
-    const rideRolloutReady = !ridesEnabled || (rideCities.length > 0 && cronSecretConfigured);
+    const rideCountryReady=Array.isArray(mobility.enabledCountries)&&mobility.enabledCountries.length>0;
+    const rideTechReady=mobility.routingVerified===true&&mobility.dispatchSchedulerVerified===true&&
+      present(process.env.SPOTLY_ROUTING_URL)&&present(process.env.SPOTLY_GEOCODING_URL)&&
+      present(process.env.SPOTLY_REVERSE_GEOCODING_URL)&&
+      String(process.env.SPOTLY_RIDE_PIN_KEY||"").length>=32;
+    const rideRolloutReady=!ridesEnabled||(rideCities.length>0&&rideCountryReady&&cronSecretConfigured&&rideTechReady);
     const sendRolloutReady = !sendEnabled || (sendCities.length > 0 && cronSecretConfigured);
 
     let marketplaceCheck;
@@ -89,8 +94,9 @@ export async function GET(request) {
       item("production-origin", "Production origin", productionOriginReady ? "ready" : "blocked", productionOriginReady ? "Canonical customer origin is https://spotlyafrica.com." : `NEXT_PUBLIC_APP_URL must be https://spotlyafrica.com for production; current value is ${productionOrigin || "not configured"}.`),
       item("marketplace-indexing", "Marketplace indexing", marketplaceIndexable ? "ready" : "needs_verification", marketplaceIndexable ? "Public marketplace indexing is enabled." : "NEXT_PUBLIC_MARKETPLACE_INDEXABLE is not true. Keep this off for staging, but enable it for the public launch candidate."),
       item("finance-encryption", "Finance encryption key", financeEncryptionConfigured ? "ready" : "blocked", financeEncryptionConfigured ? "Server-side finance encryption is configured." : "SPOTLY_FINANCE_ENCRYPTION_KEY is missing; protected payout/finance fields must not launch without it."),
-      item("dispatch-cron", "Ride & Send dispatch scheduler", !mobilityNeedsCron ? "not_configured" : cronSecretConfigured ? "ready" : "blocked", !mobilityNeedsCron ? "Ride and Send are not enabled, so the dispatcher is not currently launch-critical." : cronSecretConfigured ? "A sufficiently long CRON_SECRET is configured for dispatch maintenance." : "Ride or Send is enabled but CRON_SECRET is missing or too short."),
-      item("ride-rollout", "Ride launch geography", rideRolloutReady ? (ridesEnabled ? "ready" : "not_configured") : "blocked", !ridesEnabled ? "Ride is disabled." : rideCities.length ? `${rideCities.length} Ride launch cit${rideCities.length === 1 ? "y is" : "ies are"} configured and dispatch authentication is ready.` : "Ride is enabled without an explicit launch city."),
+      item("dispatch-cron", "Ride & Send dispatch scheduler", !mobilityNeedsCron ? "not_configured" : cronSecretConfigured&&(!ridesEnabled||mobility.dispatchSchedulerVerified===true)?"ready":"blocked",
+      !mobilityNeedsCron?"Ride and Send dispatchers are not active.":!cronSecretConfigured?"Missing protected scheduler secret.":ridesEnabled&&mobility.dispatchSchedulerVerified!==true?"An actually running external Ride scheduler has not been verified. A secret alone is not a schedule.":"Scheduler credentials and required Ride verification are recorded; monitor actual executions."),
+      item("ride-rollout", "Ride launch geography", rideRolloutReady ? (ridesEnabled ? "ready" : "not_configured") : "blocked", !ridesEnabled ? "Ride is disabled." : rideRolloutReady?`${rideCities.length} approved Ride cities, geography, routing, PIN, geocoding and scheduler prerequisites recorded.`:"Ride requires explicit approved countries/cities, licensed geocoding/reverse, road routing, PIN key and a verified live dispatch scheduler."),
       item("send-rollout", "Send launch geography", sendRolloutReady ? (sendEnabled ? "ready" : "not_configured") : "blocked", !sendEnabled ? "Send is disabled." : sendCities.length ? `${sendCities.length} Send launch cit${sendCities.length === 1 ? "y is" : "ies are"} configured and dispatch authentication is ready.` : "Send is enabled without an explicit launch city."),
       item("bootstrap-admin", "Administrator bootstrap lock-down", bootstrapAllowlistPresent ? "needs_verification" : "ready", bootstrapAllowlistPresent ? "BOOTSTRAP_ADMIN_EMAILS is still configured. Remove the bootstrap allowlist after the initial super administrator is established." : "No administrator bootstrap allowlist is present in the production environment."),
       item("firestore-rules", "Firestore & Storage security tests", rulesVerified ? "ready" : "needs_verification", rulesVerified ? "Verification markers are configured for this environment." : "Run the Firebase Emulator rules matrix, then set the verification timestamps for the deployed environment."),

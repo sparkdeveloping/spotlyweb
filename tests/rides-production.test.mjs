@@ -52,7 +52,7 @@ test("Ride trip state changes require assignment and pickup PIN verification", a
   const [source, rideServer] = await Promise.all([read("app/api/driver/rides/route.js"), read("lib/ride-server.js")]);
   assert.match(source, /ride\.assignedDriverId !== user\.uid/);
   assert.match(source, /ride\.state !== requiredState/);
-  assert.match(source, /pickupPin/);
+  assert.match(source, /matchesRidePin/);
   assert.match(source, /verify_pickup/);
   assert.match(rideServer, /driver_arrived_dropoff/);
   assert.match(source, /ride\.completed/);

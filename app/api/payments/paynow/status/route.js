@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { createPaynow, normalizePaynowStatus } from "@/lib/paynow-server";
 import { applyProviderPaymentUpdate } from "@/lib/payment-processor-server";
+import {trustedPaynowUrl} from "@/lib/assist-payment-url";
 import { hasPlatformPermission, isPlatformAdmin } from "@/lib/access-control-server";
 
 export const runtime = "nodejs";
@@ -26,6 +27,7 @@ export async function POST(request) {
     const intent = intentSnapshot.data();
     if (!intent.pollUrl) return Response.json({ ok: true, orderId: body.orderId, state: intent.status || order.paymentStatus || "initiated", providerStatus: intent.providerStatus || "", ...activity });
 
+    if(!trustedPaynowUrl(intent.pollUrl))throw Object.assign(new Error("Payment polling URL requires Finance review."),{status:409});
     const paynow = await createPaynow(intent.currency);
     const providerStatus = await paynow.pollTransaction(intent.pollUrl);
     const normalized = normalizePaynowStatus(providerStatus);
