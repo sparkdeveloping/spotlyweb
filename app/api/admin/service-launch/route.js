@@ -3,6 +3,8 @@ import {z} from "zod";
 import {apiError,authenticateRequest,getAdminServices} from "@/lib/firebase-admin";
 import {rideSettings} from "@/lib/ride-server";
 import {parcelSettings} from "@/lib/parcel-server";
+import {dispatchHealth} from "@/lib/mobility-scheduler-health";
+import {licensedMapStyle} from "@/lib/mobility-map-provider";
 
 export const runtime="nodejs";
 const READ_ROLES=["super_admin","admin","platform_admin","operations_manager","regional_operations_manager","driver_operations_coordinator","dispatcher","support_manager"];
@@ -11,14 +13,17 @@ const schema=z.object({
  service:z.enum(["ride","send"]),action:z.enum(["enable","disable"]),
  confirmation:z.string().max(70).optional()
 }).strict();
-function prerequisites(settings,service){
+function prerequisites(settings,service,heartbeat=null){
  const missing=[];
  const mobility=settings.mobility||{},config=service==="ride"?rideSettings(settings):parcelSettings(settings);
  const cities=config.enabledCities||[];
  if(!cities.length)missing.push("Approve at least one pickup city");
  if(!config.paymentMethods?.length)missing.push("Approve an available payment method");
  if(config.dispatchSchedulerVerified!==true)missing.push("Verify a real external dispatch scheduler");
+ const scheduler=dispatchHealth(heartbeat||{});
+ if(!scheduler.ready)missing.push("Prove at least 3 recent authenticated scheduler ticks with no dispatch failures (last within 3.5 minutes)");
  if(config.routingVerified!==true||!process.env.SPOTLY_ROUTING_URL)missing.push("Configure and verify HTTPS road routing");
+ if(!licensedMapStyle())missing.push("Configure licensed MapLibre street tiles (SPOTLY_MAP_STYLE_URL)");
  if(!process.env.SPOTLY_GEOCODING_URL||!process.env.SPOTLY_REVERSE_GEOCODING_URL)
   missing.push("Configure licensed forward and reverse geocoding");
  if(!process.env.CRON_SECRET||process.env.CRON_SECRET.length<32)
@@ -35,14 +40,21 @@ function prerequisites(settings,service){
  }
  return {service,enabled:service==="ride"?mobility.ridesEnabled===true:mobility.send?.enabled===true,
   ready:missing.length===0,missing,cityCount:cities.length,geoFenceCount:Object.keys(fences).length,
-  schedulerVerified:config.dispatchSchedulerVerified===true};
+  schedulerVerified:config.dispatchSchedulerVerified===true,scheduler};
 }
 export async function GET(request){
  try{
   await authenticateRequest(request,{roles:READ_ROLES});
-  const {db}=getAdminServices(),doc=await db.collection("platformSettings").doc("global").get();
+  const {db}=getAdminServices();
+  const [doc,rideHealth,sendHealth]=await Promise.all([
+    db.collection("platformSettings").doc("global").get(),
+    db.collection("mobilityDispatchHealth").doc("ride").get(),
+    db.collection("mobilityDispatchHealth").doc("send").get()
+  ]);
   const settings=doc.exists?doc.data():{};
-  return Response.json({ok:true,services:[prerequisites(settings,"ride"),prerequisites(settings,"send")]},
+  return Response.json({ok:true,services:[
+    prerequisites(settings,"ride",rideHealth.data()),
+    prerequisites(settings,"send",sendHealth.data())]},
    {headers:{"Cache-Control":"private, no-store"}});
  }catch(error){return apiError(error);}
 }
@@ -56,8 +68,10 @@ export async function POST(request){
   const ref=db.collection("platformSettings").doc("global");
   let after;
   await db.runTransaction(async tx=>{
-   const doc=await tx.get(ref),current=doc.exists?doc.data():{},mobility=current.mobility||{};
-   const prereq=prerequisites(current,data.service);
+   const doc=await tx.get(ref);
+   const healthDoc=await tx.get(db.collection("mobilityDispatchHealth").doc(data.service));
+   const current=doc.exists?doc.data():{},mobility=current.mobility||{};
+   const prereq=prerequisites(current,data.service,healthDoc.data());
    if(data.action==="enable"&&!prereq.ready)
     throw Object.assign(new Error("Cannot enable "+data.service+": "+prereq.missing.join("; ")),{status:409});
    if(data.service==="ride"){

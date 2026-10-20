@@ -85,6 +85,16 @@ on:
       - "tests/send-*.test.mjs"
       - "tests/spotly-products-v9.test.mjs"
       - "docs/SPOTLY-V9-SEND-AND-BRANDS.md"
+      - "app/api/public/map-config/**"
+      - "app/api/public/geocode/**"
+      - "app/api/driver/location/**"
+      - "app/api/internal/ride-dispatch/**"
+      - "app/api/internal/parcel-dispatch/**"
+      - "lib/mobility-*.js"
+      - "components/mobility-map.js"
+      - "components/admin-mobility-launch.js"
+      - "tests/mobility-*.test.mjs"
+      - "docs/SPOTLY-V9-MAPS-GPS-DISPATCH-PAYMENTS.md"
       - ".github/workflows/assist-safety.yml"
   workflow_dispatch:
 
@@ -106,7 +116,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify independent menu safeguards
-        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs tests/rides-production.test.mjs tests/rides-v9-integrity.test.mjs tests/send-production.test.mjs tests/send-v9-integrity.test.mjs tests/spotly-products-v9.test.mjs tests/rides-v9-finance.test.mjs
+        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs tests/rides-production.test.mjs tests/rides-v9-integrity.test.mjs tests/send-production.test.mjs tests/send-v9-integrity.test.mjs tests/spotly-products-v9.test.mjs tests/mobility-maps-v9.test.mjs tests/mobility-reliability-v9.test.mjs tests/rides-v9-finance.test.mjs
 
   compile-admin:
     name: Verify Next.js Admin screens compile

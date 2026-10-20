@@ -21,8 +21,15 @@ export async function GET(request) {
     const geocoder=new URL(endpoint);
     if(geocoder.protocol!=="https:"||geocoder.hostname==="nominatim.openstreetmap.org")
       throw Object.assign(new Error("A production-licensed search provider is required."),{status:503});
-    const target = `${geocoder.origin+geocoder.pathname}?format=jsonv2&addressdetails=1&limit=6&countrycodes=${country.toLowerCase()}&q=${encodeURIComponent(query)}`;
-    const response = await fetch(target, { headers: { "User-Agent": process.env.SPOTLY_GEOCODING_USER_AGENT || "Spotly/6.2 (support@spotlyafrica.com)", "Accept-Language": "en" }, next: { revalidate: 300 } });
+    // Retain provider API tokens and other operator-configured query params.
+    // Only a Nominatim-compatible, production-licensed backend is supported here.
+    geocoder.searchParams.set("format","jsonv2");
+    geocoder.searchParams.set("addressdetails","1");
+    geocoder.searchParams.set("limit","6");
+    geocoder.searchParams.set("countrycodes",country.toLowerCase());
+    geocoder.searchParams.set("q",query);
+    const target=geocoder.toString();
+    const response = await fetch(target, { headers: { "User-Agent": process.env.SPOTLY_GEOCODING_USER_AGENT || "Spotly/6.2 (support@spotlyafrica.com)", "Accept-Language": "en" }, signal:AbortSignal.timeout(5500),next: { revalidate: 300 } });
     if (!response.ok) throw Object.assign(new Error("Location search is temporarily unavailable."), { status: 503 });
     const raw = await response.json();
     const results = (Array.isArray(raw) ? raw : []).map((item) => ({

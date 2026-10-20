@@ -342,16 +342,21 @@ function Availability({ data, reload }) {
 function LiveLocation({ data }) {
   const [watchError, setWatchError] = useState("");
   const watchRef = useRef(null);
+  const lastFixRef=useRef(Date.now());
   useEffect(() => {
     if (!data?.presence?.online || !navigator.geolocation) { setWatchError(""); return undefined; }
-    let lastSent = 0;
+    let lastSent=0;lastFixRef.current=Date.now();
+    const watchdog=window.setInterval(()=>{
+      if(Date.now()-lastFixRef.current>75000)
+        setWatchError("Live GPS has stopped updating. Keep the Driver app in the foreground or use approved native background tracking. No new work can rely on stale GPS.");
+    },10000);
     watchRef.current = navigator.geolocation.watchPosition((position) => {
-      setWatchError("");
+      lastFixRef.current=Date.now();setWatchError("");
       if (Date.now() - lastSent < 15000) return;
       lastSent = Date.now();
-      authenticatedFetch("/api/driver/location", { method: "POST", body: JSON.stringify({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy }) }).catch((err) => setWatchError(err.message || "Spotly could not update your live location."));
+      authenticatedFetch("/api/driver/location", { method: "POST", body: JSON.stringify({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy, fixAgeMs:Math.max(0,Date.now()-position.timestamp) }) }).catch((err) => setWatchError(err.message || "Spotly could not update your live location."));
     }, (err) => setWatchError(err?.message || "Spotly lost access to your live location."), { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
-    return () => { if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; };
+    return () => { window.clearInterval(watchdog);if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; };
   }, [data?.presence?.online]);
   if (!data?.presence?.online || (!watchError && !["stale", "missing"].includes(data?.accountHealth?.location))) return null;
   return <div role="alert" className="mb-5 flex items-start gap-3 rounded-xl border border-warning bg-[var(--warning-soft)] p-4 text-sm text-[var(--on-warning-soft)]"><WifiOff className="mt-0.5 h-5 w-5 shrink-0"/><div><p className="font-semibold">Spotly may not be able to dispatch you right now</p><p className="mt-1">{watchError || "Your location is stale or missing. Check GPS permission, network connection and battery/location settings."}</p></div></div>;

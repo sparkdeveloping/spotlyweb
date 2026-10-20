@@ -44,7 +44,10 @@ export function AdminMobilityLaunch({openRide,openSend}){
       <div><p className="text-xs font-semibold uppercase tracking-wide text-tertiary">{name}</p><h3 className="mt-2 text-xl font-semibold">{item.enabled?"Accepting requests":"Customer booking disabled"}</h3></div>
       <Badge tone={item.enabled?"success":item.ready?"warning":"danger"}>{item.enabled?"Live switch ON":item.ready?"Ready to review":"Blocked"}</Badge>
      </div>
-     <p className="mt-3 text-sm text-secondary">{item.cityCount} configured pickup cities · {item.geoFenceCount} geofences · scheduler {item.schedulerVerified?"verified in settings":"not verified"}</p>
+     <p className="mt-3 text-sm text-secondary">{item.cityCount} approved pickup cities · {item.geoFenceCount} geofences · scheduler {item.scheduler?.ready?"recurring calls verified":item.schedulerVerified?"flag set, calls not verified":"not verified"}</p>
+     <p className="mt-2 text-xs text-secondary">{item.scheduler?.lastTickAt?
+       `Last authenticated dispatcher: ${item.scheduler.ageSeconds}s ago · ${item.scheduler.consecutive} consecutive successful intervals`:
+       "No recent authenticated dispatch heartbeat recorded"}</p>
      {item.missing?.length?<div className="mt-5 rounded-xl bg-[var(--surface-2)] p-4">
       <p className="text-sm font-semibold">Before enabling</p>
       <ul className="mt-2 space-y-1.5 pl-5 text-xs leading-5 text-secondary">{item.missing.map(m=><li key={m} className="list-disc">{m}</li>)}</ul>

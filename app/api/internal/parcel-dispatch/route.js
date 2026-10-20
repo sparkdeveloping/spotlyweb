@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { apiError, getAdminServices } from "@/lib/firebase-admin";
 import { dispatchParcel } from "@/lib/parcel-server";
 import { effectiveSecret } from "@/lib/platform-secrets-server";
+import {recordDispatchHeartbeat} from "@/lib/mobility-scheduler-health";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,8 @@ export async function GET(request) {
     }
     const jobs = await db.collection("parcelJobs").where("state", "==", "searching_driver").limit(50).get(); const results = [];
     for (const doc of jobs.docs) { const data = doc.data(); if (data.assignedDriverId) continue; const attempted = data.dispatchAttemptedAt?.toMillis?.() || 0; if (attempted && Date.now() - attempted < 45000) continue; try { results.push({ parcelJobId: doc.id, ...(await dispatchParcel({ db, messaging, parcelJobId: doc.id, actorId: "parcel_dispatch_cron" })) }); } catch (error) { results.push({ parcelJobId: doc.id, error: String(error?.message || "dispatch_failed") }); } }
-    return Response.json({ ok: true, checked: jobs.size, results });
+    const failed=results.filter(x=>x.error).length;
+    await recordDispatchHeartbeat(db,"send",{checked:jobs.size,failed});
+    return Response.json({ ok:true, checked:jobs.size,failed,results });
   } catch (error) { return apiError(error); }
 }
