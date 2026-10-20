@@ -299,6 +299,71 @@ export async function POST(request) {
   }
 }
 
+/**
+ * Separate customer-discovery release. Approval alone keeps new records private.
+ * Requires an explicit signed launch confirmation; never enables ordering.
+ */
+export async function PUT(request) {
+  try {
+    const actor=await authenticateRequest(request,{roles:["super_admin","platform_admin"]});
+    const payload=launchSchema.parse(await request.json());
+    const {db}=getAdminServices();
+    const {root,loc}=await stagedRefs(db,payload.batchId,payload.locationId);
+    const ids=safeListingIds(payload.batchId,payload.locationId);
+    const business=db.collection("businesses").doc(ids.businessId);
+    const branch=db.collection("branches").doc(ids.branchId);
+    let result;
+    await db.runTransaction(async tx=>{
+      const [batch,location,biz,bra,claims]=await Promise.all([
+        tx.get(root),tx.get(loc),tx.get(business),tx.get(branch),
+        tx.get(db.collection("businessClaims").where("businessId","==",business.id).limit(25))
+      ]);
+      if(!batch.exists||batch.data().country!=="ZW"||!location.exists)fail("Research location was not found.",404);
+      const entry=location.data(),review=entry.publicationReview;
+      if(!["approved","published"].includes(entry.publicationState)||entry.linkedBusinessId!==business.id||entry.linkedBranchId!==branch.id)
+        fail("First approve this exact research location. Linking an existing merchant cannot launch their listing.");
+      if(!biz.exists||!bra.exists||bra.data().businessId!==business.id)
+        fail("The approved directory business and branch no longer match.");
+      const owned=biz.data();
+      if(owned.source?.type!=="spotly_assist_research"||
+         owned.source?.batchId!==payload.batchId||
+         owned.source?.researchLocationId!==payload.locationId)
+        fail("Research source does not match this business.");
+      if(owned.launchApproved===true && entry.publicationState==="published"){
+        result={state:"published",businessId:business.id,branchId:branch.id,idempotent:true};return;
+      }
+      if(owned.claimStatus!=="unclaimed"||owned.ownershipStatus!=="unclaimed"||
+         (owned.ownerIds||[]).length||owned.commerceEnabled===true||owned.commerceVerified===true)
+        fail("A claimed, commerce-enabled or reassigned business must use its owner-controlled publication process.");
+      if(claims.size>=25||claims.docs.some(doc=>["submitted","needs_information","under_review","approved"].includes(doc.data().status)))
+        fail("An ownership claim is pending. Resolve it before public discovery.");
+      if(!review?.addressVerified||!review?.operatingVerified||!review?.sourceRightsReviewed||!review?.duplicatesReviewed)
+        fail("A documented business/location verification is required.");
+      // This is discovery-only. Merchant ordering, fees, payments and Driver dispatch stay off.
+      const now=FieldValue.serverTimestamp();
+      tx.update(business,{
+        public:true,launchApproved:true,assistAccepting:false,
+        commerceEnabled:false,commerceVerified:false,updatedAt:now
+      });
+      tx.update(branch,{public:true,updatedAt:now});
+      tx.update(loc,{
+        publicationState:"published",discoveryLaunchedAt:now,discoveryLaunchedBy:actor.uid
+      });
+      tx.create(db.collection("auditLogs").doc(),{
+        action:"assist.research.discovery_launched",
+        actorId:actor.uid,entityType:"business",entityId:business.id,
+        metadata:{batchId:payload.batchId,locationId:payload.locationId,branchId:branch.id},
+        createdAt:now
+      });
+      result={state:"published",businessId:business.id,branchId:branch.id};
+    });
+    return Response.json({ok:true,...result,commerceEnabled:false,requestEnabled:false});
+  }catch(error){
+    if(error instanceof z.ZodError)return Response.json({ok:false,error:"A separate explicit discovery-launch confirmation is required."},{status:422});
+    return apiError(error);
+  }
+}
+
 export async function DELETE(request) {
   try {
     const actor=await authenticateRequest(request,{roles:["super_admin","platform_admin"]});
