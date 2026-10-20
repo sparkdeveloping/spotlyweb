@@ -103,17 +103,17 @@ export async function POST(request) {
         tx.get(bRef),tx.get(brRef),tx.get(storeRef),
         tx.get(db.collection("businessClaims").where("businessId","==",bRef.id).limit(25))
       ]);
-      if(!business.exists||business.data().launchApproved!==true||!claimSafeUnpartnered(business.data()) ||
+      if(input.action!=="pause" && (!business.exists||business.data().launchApproved!==true||!claimSafeUnpartnered(business.data()) ||
         business.data().source?.type!=="spotly_assist_research" ||
         business.data().source?.batchId!==input.batchId ||
-        business.data().source?.researchLocationId!==input.locationId) {
+        business.data().source?.researchLocationId!==input.locationId)) {
         throw Object.assign(new Error("This restaurant is claimed, changed ownership, or is not an independently reviewed Spotly listing."),{status:409});
       }
-      if(!branch.exists || branch.data().businessId!==business.id ||
-        branch.data().public!==true || branch.data().status==="archived") {
+      if(input.action!=="pause" && (!branch.exists || branch.data().businessId!==business.id ||
+        branch.data().public!==true || branch.data().status==="archived")) {
         throw Object.assign(new Error("The approved location is not currently available."),{status:409});
       }
-      if(claims.size===25 || claims.docs.some(doc=>["submitted","needs_information","under_review","approved"].includes(doc.data().status))) {
+      if(input.action!=="pause" && (claims.size===25 || claims.docs.some(doc=>["submitted","needs_information","under_review","approved"].includes(doc.data().status)))) {
         throw Object.assign(new Error("A business claim is pending or approved. Stop independent shopping and complete the owner review."),{status:409});
       }
       if(existing.exists && (existing.data().directoryBusinessId!==business.id || existing.data().sourceResearchLocationId!==input.locationId)) {
