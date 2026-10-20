@@ -68,3 +68,14 @@ test("provider polling and redirect URLs cannot reference arbitrary external ser
  assert.ok(poll.includes("trustedPaynowUrl(intent.data().pollUrl)"));
  assert.ok(start.includes("trustedPaynowUrl(response.pollUrl)"));
 });
+
+test("customer cancellation pauses pre-purchase jobs and blocks further shopping",()=>{
+ const customer=read("app/api/customer/independent-shopping/requests/respond/route.js");
+ const driver=read("app/api/driver/assist-shopping/route.js");
+ const admin=read("app/api/admin/assist-fulfillment/route.js");
+ assert.ok(customer.includes('const pauseShopping=!safeImmediate&&job.exists'));
+ assert.ok(customer.includes('tx.update(jobRef,{state:"incident_paused"'));
+ assert.ok(driver.includes("q.cancellationRequested"));
+ assert.ok(driver.includes("Operations must review before any further purchasing."));
+ assert.ok(admin.includes('"financial_resolution_pending"'));
+});

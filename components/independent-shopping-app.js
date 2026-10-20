@@ -186,7 +186,7 @@ export function IndependentShoppingApp() {
           <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{entry.storeName}</h3><span className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold">{entry.state.replaceAll("_"," ")}</span></div>
           <p className="mt-2 text-sm text-[var(--text-2)]">Initial estimate {format(entry.estimate?.totalEstimate, entry.estimate?.currency)}</p>
           {entry.customerMessage&&<p className="mt-2 text-sm text-[var(--text-2)]">{entry.customerMessage}</p>}
-          {entry.paymentStatus==="paid_held"&&<div className="mt-3 rounded-xl border p-3 text-sm">
+          {["paid_held","reconciled"].includes(entry.paymentStatus)&&<div className="mt-3 rounded-xl border p-3 text-sm">
            <p className="font-semibold">Payment received · {entry.dispatchStatus?.replaceAll("_"," ")}</p>
            <p className="mt-1 text-xs">Spotly is independently sourcing your purchase. This is not a merchant order.</p>
            {Number(entry.refundPending)>0&&<p className="mt-1 text-xs">Refund awaiting external reconciliation: {format(entry.refundPending,entry.finalQuote?.currency)}</p>}

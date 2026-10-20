@@ -212,7 +212,7 @@ export async function POST(request){
       tx.get(db.collection("assistRefundRequests").doc("manual_"+input.requestId)),
       tx.get(db.collection("assistRefundRequests").doc("balance_"+input.requestId))]);
     if(!req.exists||req.data().paymentStatus!=="paid_held")fail("No captured funds exist to refund.");
-    if(!["delivered","cancelled_pending_refund","funded_awaiting_shopper","cannot_fulfil"].includes(req.data().state))
+    if(!["delivered","cancelled_pending_refund","funded_awaiting_shopper","cannot_fulfil","financial_resolution_pending"].includes(req.data().state))
       fail("Manual refund review must wait until active shopping and delivery have been resolved.");
     const available=authorizedRefundCapacity(req.data(),balance.exists?[{id:balance.id,...balance.data()}]:[]);
     if(refundCents(input.amount)>refundCents(available))fail("Refund would exceed the remaining captured funds after existing refund commitments.");

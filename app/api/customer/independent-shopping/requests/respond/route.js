@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { independentStoreSafe } from "@/lib/assist-store-safety";
 import { independentShoppingFlags } from "@/lib/independent-shopping";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
+import { notifyRoleAudience } from "@/lib/notification-server";
 export const runtime="nodejs";
 const schema=z.object({
  id:z.string().min(12).max(250),
@@ -42,8 +43,22 @@ export async function POST(request){
            updatedAt:now,createdAt:now
          },{merge:true});
        }
-       state=safeImmediate?"cancelled_pending_refund":d.state;
-       tx.update(ref,{state,cancellationRequested:true,cancellationRequestedAt:now,
+       const pauseShopping=!safeImmediate&&job.exists&&
+         ["assigned","accepted","shopping"].includes(job.data().state);
+       if(pauseShopping){
+         tx.update(jobRef,{state:"incident_paused",pausedFromState:job.data().state,
+           incidentNote:"Customer requested cancellation before purchase completion.",
+           updatedAt:now});
+         tx.set(db.collection("assistShoppingIssues").doc(input.id),{
+           requestId:input.id,driverId:job.data().driverId||"",
+           reportedBy:user.uid,type:"customer_cancellation_review",status:"open",
+           note:"Customer requested cancellation; independent shopping is paused pending Operations review.",
+           previousState:job.data().state,createdAt:now,updatedAt:now
+         });
+       }
+       state=safeImmediate?"cancelled_pending_refund":pauseShopping?"exception_review":d.state;
+       tx.update(ref,{state,dispatchStatus:pauseShopping?"incident_paused":d.dispatchStatus||"not_dispatched",
+         cancellationRequested:true,cancellationRequestedAt:now,
          refundStatus:safeImmediate?"awaiting_provider_execution":d.refundStatus||null,
          customerMessage:safeImmediate?
           "Cancellation accepted before shopper assignment. Finance must arrange and verify the external refund.":
@@ -85,6 +100,15 @@ export async function POST(request){
        action:input.decision,state,createdAt:FieldValue.serverTimestamp()
      });
    });
+   if(input.decision==="request_cancel"){
+     const {messaging,auth}=getAdminServices();
+     await notifyRoleAudience({db,messaging,auth,
+       title:"Independent shopping cancellation requires review",
+       body:"A customer has requested cancellation. Inspect the funded purchase and shopper state before taking action.",
+       workspace:"admin",href:"/assist",category:"assist_shopping",
+       module:"spotly_assist",eventType:"assist.shopping.cancellation_requested"
+     },["operations_manager","finance_admin"]).catch(()=>{});
+   }
    return Response.json({ok:true,state,requestRecorded:input.decision==="request_cancel",
      paymentCollected:false,dispatchCreated:false});
  }catch(error){

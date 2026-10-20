@@ -52,6 +52,8 @@ export async function POST(request){
    }
    const j=job.data(),q=req.data(),now=FieldValue.serverTimestamp();
    const items=(j.items||[]).map(x=>({...x}));
+   if(q.cancellationRequested&&["accept","start","item","propose_substitution","receipt"].includes(input.action))
+     fail("The customer has requested cancellation. Operations must review before any further purchasing.");
    if(!["reject","complete"].includes(input.action)){
      const [settings,float]=await Promise.all([
        tx.get(db.collection("platformSettings").doc("global")),

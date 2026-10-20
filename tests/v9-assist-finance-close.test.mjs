@@ -22,6 +22,8 @@ test("closeout refuses unreconciled float, missing customer refund or unfinished
  assert.throws(()=>independentFinanceClosure(request,job,float,[]));
  assert.throws(()=>independentFinanceClosure(request,job,float,[{amount:2,status:"awaiting_provider_execution"}]));
  assert.throws(()=>independentFinanceClosure({...request,state:"shopping"},job,float,refunds));
+ assert.throws(()=>independentFinanceClosure({...request,providerRefundObserved:true},job,float,refunds));
+ assert.throws(()=>independentFinanceClosure({...request,cancellationRequested:true},job,float,refunds));
  assert.throws(()=>independentFinanceClosure(request,{...job,actualSpend:9},float,refunds));
  assert.throws(()=>independentFinanceClosure(request,{...job,receiptReviewedAt:null},float,refunds));
 });

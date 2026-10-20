@@ -127,3 +127,9 @@ Existing collections remain independentShoppingRequests, assistIndependentShoppi
 ### Remaining external verification
 
 Firebase emulator testing was explicitly excluded from this continuation. Real provider/bank sandbox or controlled-value tests, actual external refund and float settlement verification, recruited vetted Driver field tests, local consumer-compliance approvals, exact restaurant/branch access, native/mobile accessibility validation and final launch authorization remain separate from source-code compilation. Neither CI nor a Vercel preview means V9 is authorized to transact.
+
+### Final safety correction
+
+A funded customer cancellation pauses an assigned/accepted/actively shopping job before further purchases and alerts Operations/Finance. Once a receipt has been submitted or delivery is underway, cancellation becomes a reviewed operational/financial exception; an active delivery is not blindly reversed. The Driver API refuses new purchasing actions whenever cancellation is pending. Failed shopping and financially terminated incidents may be referred to a Finance refund case but do not trigger automatic refunds.
+
+An unreviewed Paynow-reported refund or outstanding customer cancellation blocks automatic finance closure. After a valid closeout, Activity continues displaying the captured amount and treats payment status as reconciled rather than unpaid. These safeguards prevent financial reconciliation from silently ignoring provider reversals or unfinished customer disputes.
