@@ -93,7 +93,7 @@ test("Dispatch recovery has timeout, stable offers, customer retry and protected
 test("Geocoder is country-aware and blocks unlicensed public autocomplete",()=>{
  const search=read("app/api/public/geocode/route.js");
  const reverse=read("app/api/public/reverse-geocode/route.js");
- assert.ok(search.includes("countrycodes="));
+ assert.ok(search.includes('geocoder.searchParams.set("countrycodes"'));
  assert.ok(search.includes("nominatim.openstreetmap.org"));
  assert.ok(reverse.includes("SPOTLY_REVERSE_GEOCODING_URL"));
 });
