@@ -1,0 +1,38 @@
+name: Spotly Restaurant Research Safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/marketplace-trust.js"
+      - "lib/assist-research-match.js"
+      - "app/api/admin/assist-research/**"
+      - "components/admin-assist-research.js"
+      - "components/admin-assist-research-publication.js"
+      - "tests/assist-research-matching.test.mjs"
+      - "tests/assist-research-publication.test.mjs"
+      - ".github/workflows/assist-research-safety.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spotly-restaurant-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review-and-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Test privacy and duplicate protection
+        run: node --test tests/assist-research-matching.test.mjs tests/assist-research-publication.test.mjs
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Compile Admin workflow without deploying
+        run: npm run build
