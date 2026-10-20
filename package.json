@@ -9,7 +9,7 @@
   "scripts": {
     "predev": "node scripts/firebase-project-preflight.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/firebase-project-preflight.mjs",
+    "prebuild": "node scripts/firebase-project-preflight.mjs && node --test tests/v9-assist-research-menu.test.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
