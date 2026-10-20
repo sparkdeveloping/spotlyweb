@@ -101,6 +101,7 @@ test("matching a chain brand never verifies another location's price",()=>{
    currency:"USD",sourceRightsReviewed:true,method:"phone",notes:"Checked at branch A with staff",
    checkedAt:"2026-10-19T08:00:00.000Z"};
  assert.equal(verifiedLocationPrice(source,approval,"Nando's","branch_A",now),true);
+ assert.equal(verifiedLocationPrice(source,null,"Nando's","branch_A",now),false);
  assert.equal(verifiedLocationPrice(source,approval,"Nando's","branch_B",now),false);
  assert.equal(verifiedLocationPrice(source,{...approval,scope:"brand"},"Nando's","branch_A",now),false);
  assert.equal(verifiedLocationPrice(source,{...approval,checkedAt:"2026-09-01T08:00:00.000Z"},"Nando's","branch_A",now),false);
