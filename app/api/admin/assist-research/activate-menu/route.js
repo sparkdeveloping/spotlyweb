@@ -26,7 +26,7 @@ async function loadSource(db, input) {
   }
   if (prices.size > 300 || approvals.size > 120) throw Object.assign(new Error("Split this research batch before menu activation."),{status:409});
   const raw=locSnap.data();
-  if(raw.publicationState!=="published" || !raw.linkedBusinessId || !raw.linkedBranchId) {
+  if(!["approved","published"].includes(raw.publicationState) || !raw.linkedBusinessId || !raw.linkedBranchId) {
     throw Object.assign(new Error("First publish and verify this specific restaurant location in Spotly Admin."),{status:409});
   }
   const compatible = prices.docs.filter(doc=>brandCompatible(raw.brandName || raw.name,doc.data().brand));
@@ -60,7 +60,7 @@ export async function GET(request) {
       db.collection("branches").doc(raw.linkedBranchId).get(),
       db.collection("independentShoppingStores").doc(canonicalStoreId(raw.linkedBusinessId)).get()
     ]);
-    const valid= biz.exists && biz.data().launchApproved===true && claimSafeUnpartnered(biz.data()) &&
+    const valid= raw.publicationState==="published" && biz.exists && biz.data().launchApproved===true && claimSafeUnpartnered(biz.data()) &&
       biz.data().source?.researchLocationId === locationId &&
       biz.data().source?.batchId === batchId &&
       branch.exists && branch.data().businessId === biz.id &&
@@ -68,7 +68,7 @@ export async function GET(request) {
     return Response.json({
       ok:true,batchId,locationId,restaurant:raw.name,brand:raw.brandName||raw.name,
       businessId:raw.linkedBusinessId,branchId:raw.linkedBranchId,
-      canActivate:Boolean(valid),reason:valid?"independent_unclaimed_location":"Location must be a verified, unclaimed research-published Spotly directory business.",
+      publicationState:raw.publicationState,canActivate:Boolean(valid),reason:valid?"independent_unclaimed_location":"This location is approved but not separately released to customers, or its ownership/location checks are incomplete.",
       existingStore:store.exists?{id:store.id,status:store.data().status,itemCount:store.data().items?.length||0}:null,
       prices:compatible.map(doc=>({
         id:doc.id,name:doc.data().itemName,
