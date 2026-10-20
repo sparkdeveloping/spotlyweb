@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
+import { independentStoreSafe } from "@/lib/assist-store-safety";
 export const runtime="nodejs";
 const schema=z.object({
  id:z.string().min(12).max(250),
@@ -21,6 +22,17 @@ export async function POST(request){
        state="cancelled";
      } else {
        if(d.state!=="quote_offered"||!quote)throw Object.assign(new Error("There is no quote awaiting your decision."),{status:409});
+       if(input.decision==="accept_quote"){
+         const storeRef=db.collection("independentShoppingStores").doc(d.storeId);
+         const storeSnap=await tx.get(storeRef);
+         if(!storeSnap.exists)throw Object.assign(new Error("This shopping location is no longer available."),{status:409});
+         const store=storeSnap.data();
+         const canon=store.directoryBusinessId?await tx.get(db.collection("businesses").doc(store.directoryBusinessId)):null;
+         const branch=store.sourceResearchBatchId&&store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
+         if(!independentStoreSafe(store,canon?.exists?canon.data():null,branch?.exists?branch.data():null)){
+           throw Object.assign(new Error("This restaurant has changed availability or ownership. Spotly must recheck the request."),{status:409});
+         }
+       }
        if(Date.parse(quote.expiresAt)<=Date.now())throw Object.assign(new Error("The quote has expired; ask Spotly to check the price again."),{status:409});
        state=input.decision==="accept_quote"?"quote_accepted_awaiting_payment":"quote_declined";
      }
