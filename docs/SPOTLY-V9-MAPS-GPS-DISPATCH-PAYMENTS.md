@@ -61,3 +61,6 @@ Before authorizing payment acceptance, test: a real approved merchant connection
 6. Inspect Admin > Mobility > Service Launch; approve transport compliance, insurance, support hours, Driver vetting and geographic rollout. Do not activate in production until verified.
 
 **CI green proves source checks and the Next.js build, not real external service or field operation.**
+
+### Admin Paynow credential status
+The Admin Service Launch card now checks whether the official Paynow Integration ID and Key are available from server-only settings for the configured fare currency. A configured-but-unusable provider can no longer be silently offered as a ready method. This is a **credential-presence check only**, not a successful financial transaction, callback, reversal or bank settlement test.

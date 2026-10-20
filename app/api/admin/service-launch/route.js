@@ -5,6 +5,7 @@ import {rideSettings} from "@/lib/ride-server";
 import {parcelSettings} from "@/lib/parcel-server";
 import {dispatchHealth} from "@/lib/mobility-scheduler-health";
 import {licensedMapStyle} from "@/lib/mobility-map-provider";
+import {paynowCredentialsConfigured} from "@/lib/paynow-server";
 
 export const runtime="nodejs";
 const READ_ROLES=["super_admin","admin","platform_admin","operations_manager","regional_operations_manager","driver_operations_coordinator","dispatcher","support_manager"];
@@ -13,12 +14,16 @@ const schema=z.object({
  service:z.enum(["ride","send"]),action:z.enum(["enable","disable"]),
  confirmation:z.string().max(70).optional()
 }).strict();
-function prerequisites(settings,service,heartbeat=null){
+function prerequisites(settings,service,heartbeat=null,paynowByCurrency={}){
  const missing=[];
  const mobility=settings.mobility||{},config=service==="ride"?rideSettings(settings):parcelSettings(settings);
  const cities=config.enabledCities||[];
  if(!cities.length)missing.push("Approve at least one pickup city");
  if(!config.paymentMethods?.length)missing.push("Approve an available payment method");
+ const currency=config.pricing?.currency==="ZWG"?"ZWG":"USD";
+ const paynowReady=paynowByCurrency[currency]===true;
+ if(config.paynowEnabled&&!paynowReady)
+  missing.push("Configure actual Paynow merchant credentials for "+currency+" before offering Paynow checkout");
  if(config.dispatchSchedulerVerified!==true)missing.push("Verify a real external dispatch scheduler");
  const scheduler=dispatchHealth(heartbeat||{});
  if(!scheduler.ready)missing.push("Prove at least 3 recent authenticated scheduler ticks with no dispatch failures (last within 3.5 minutes)");
@@ -40,21 +45,23 @@ function prerequisites(settings,service,heartbeat=null){
  }
  return {service,enabled:service==="ride"?mobility.ridesEnabled===true:mobility.send?.enabled===true,
   ready:missing.length===0,missing,cityCount:cities.length,geoFenceCount:Object.keys(fences).length,
-  schedulerVerified:config.dispatchSchedulerVerified===true,scheduler};
+  schedulerVerified:config.dispatchSchedulerVerified===true,scheduler,paynowCredentialsConfigured:paynowReady};
 }
 export async function GET(request){
  try{
   await authenticateRequest(request,{roles:READ_ROLES});
   const {db}=getAdminServices();
-  const [doc,rideHealth,sendHealth]=await Promise.all([
+  const [doc,rideHealth,sendHealth,usdPaynow,zwgPaynow]=await Promise.all([
     db.collection("platformSettings").doc("global").get(),
     db.collection("mobilityDispatchHealth").doc("ride").get(),
-    db.collection("mobilityDispatchHealth").doc("send").get()
+    db.collection("mobilityDispatchHealth").doc("send").get(),
+    paynowCredentialsConfigured("USD").catch(()=>false),
+    paynowCredentialsConfigured("ZWG").catch(()=>false)
   ]);
   const settings=doc.exists?doc.data():{};
   return Response.json({ok:true,services:[
-    prerequisites(settings,"ride",rideHealth.data()),
-    prerequisites(settings,"send",sendHealth.data())]},
+    prerequisites(settings,"ride",rideHealth.data(),{USD:usdPaynow,ZWG:zwgPaynow}),
+    prerequisites(settings,"send",sendHealth.data(),{USD:usdPaynow,ZWG:zwgPaynow})]},
    {headers:{"Cache-Control":"private, no-store"}});
  }catch(error){return apiError(error);}
 }
@@ -66,12 +73,16 @@ export async function POST(request){
   if(data.confirmation!==confirmation)
    throw Object.assign(new Error("Type "+confirmation+" to confirm this service change."),{status:409});
   const ref=db.collection("platformSettings").doc("global");
+  const [usdPaynow,zwgPaynow]=await Promise.all([
+    paynowCredentialsConfigured("USD").catch(()=>false),
+    paynowCredentialsConfigured("ZWG").catch(()=>false)
+  ]);
   let after;
   await db.runTransaction(async tx=>{
    const doc=await tx.get(ref);
    const healthDoc=await tx.get(db.collection("mobilityDispatchHealth").doc(data.service));
    const current=doc.exists?doc.data():{},mobility=current.mobility||{};
-   const prereq=prerequisites(current,data.service,healthDoc.data());
+   const prereq=prerequisites(current,data.service,healthDoc.data(),{USD:usdPaynow,ZWG:zwgPaynow});
    if(data.action==="enable"&&!prereq.ready)
     throw Object.assign(new Error("Cannot enable "+data.service+": "+prereq.missing.join("; ")),{status:409});
    if(data.service==="ride"){

@@ -45,6 +45,9 @@ export function AdminMobilityLaunch({openRide,openSend}){
       <Badge tone={item.enabled?"success":item.ready?"warning":"danger"}>{item.enabled?"Live switch ON":item.ready?"Ready to review":"Blocked"}</Badge>
      </div>
      <p className="mt-3 text-sm text-secondary">{item.cityCount} approved pickup cities · {item.geoFenceCount} geofences · scheduler {item.scheduler?.ready?"recurring calls verified":item.schedulerVerified?"flag set, calls not verified":"not verified"}</p>
+     <p className="mt-2 text-xs text-secondary">Paynow credentials: {item.paynowCredentialsConfigured?
+       "present for the configured fare currency · transaction validation still required":
+       "not configured for this service currency (cash may still be available)"}</p>
      <p className="mt-2 text-xs text-secondary">{item.scheduler?.lastTickAt?
        `Last authenticated dispatcher: ${item.scheduler.ageSeconds}s ago · ${item.scheduler.consecutive} consecutive successful intervals`:
        "No recent authenticated dispatch heartbeat recorded"}</p>

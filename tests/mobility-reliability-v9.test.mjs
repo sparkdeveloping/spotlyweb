@@ -33,3 +33,13 @@ test("Licensed geocoder preserves vendor credentials and client exposes map conf
  assert.ok(reverse.includes("SPOTLY_REVERSE_GEOCODING_URL"));
  assert.ok(publicConfig.includes("licensedMapStyle()"));
 });
+
+test("Admin does not advertise Paynow without actual merchant secrets",()=>{
+ const launch=read("app/api/admin/service-launch/route.js");
+ const secrets=read("lib/paynow-server.js");
+ const admin=read("components/admin-mobility-launch.js");
+ assert.ok(secrets.includes("paynowCredentialsConfigured"));
+ assert.ok(launch.includes("config.paynowEnabled&&!paynowReady"));
+ assert.ok(launch.includes('paynowCredentialsConfigured("USD")'));
+ assert.ok(admin.includes("Paynow credentials"));
+});
