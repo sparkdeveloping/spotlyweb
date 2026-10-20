@@ -64,6 +64,36 @@ export function IndependentShoppingApp() {
       await refreshRequests();
     } catch (error) { setRequestError(error.message); } finally { setBusy(false); }
   }
+  async function startAssistPayment(entry) {
+    setBusy(true);setRequestError("");setRequestNotice("");
+    try {
+      if(!entry.paymentAvailable)throw new Error("This location is not ready to collect independent purchase payments.");
+      const payload=await authenticatedFetch("/api/customer/independent-shopping/pay",{
+        method:"POST",body:JSON.stringify({requestId:entry.id,channel:"web"})
+      });
+      if(payload.redirectUrl){
+        const url=new URL(payload.redirectUrl);
+        if(url.protocol!=="https:" || !(url.hostname==="paynow.co.zw"||url.hostname.endsWith(".paynow.co.zw")))
+          throw new Error("Payment provider returned an unexpected redirect; contact Spotly support.");
+        window.location.assign(url.href);
+        return;
+      }
+      setRequestNotice(payload.instructions||"Payment initiation is pending. Refresh payment status before retrying.");
+      await refreshRequests();
+    }catch(error){setRequestError(error.message||"Could not open secure payment.");}
+    finally{setBusy(false);}
+  }
+  async function checkAssistPayment(entry){
+    setBusy(true);setRequestError("");setRequestNotice("");
+    try{
+      const result=await authenticatedFetch("/api/customer/independent-shopping/pay/status",{
+        method:"POST",body:JSON.stringify({requestId:entry.id})
+      });
+      setRequestNotice(result.state==="paid"?"Payment confirmed by the provider. Spotly must separately assign a shopper.":"Payment status: "+String(result.state||"pending").replaceAll("_"," ")+". No shopper has been dispatched.");
+      await refreshRequests();
+    }catch(error){setRequestError(error.message||"Unable to check payment status.");}
+    finally{setBusy(false);}
+  }
   async function submit(event) {
     event.preventDefault();
     if (!store || !items.length || !result.requestEnabled) return;
@@ -156,6 +186,13 @@ export function IndependentShoppingApp() {
           <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{entry.storeName}</h3><span className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold">{entry.state.replaceAll("_"," ")}</span></div>
           <p className="mt-2 text-sm text-[var(--text-2)]">Initial estimate {format(entry.estimate?.totalEstimate, entry.estimate?.currency)}</p>
           {entry.customerMessage&&<p className="mt-2 text-sm text-[var(--text-2)]">{entry.customerMessage}</p>}
+          {entry.state==="quote_accepted_awaiting_payment"&&<div className="mt-3 rounded-xl border p-4">
+            <p className="text-sm font-semibold">Independent purchase payment</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--text-2)]">This is Spotly's independent purchase service, not payment to or through the restaurant. Your funds are not used to dispatch a shopper until payment and operating-float checks are complete.</p>
+            {entry.paymentAvailable&&["not_initiated","failed","cancelled","expired"].includes(entry.paymentStatus||"not_initiated")&&<button type="button" disabled={busy} onClick={()=>startAssistPayment(entry)} className="mt-3 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Continue securely to Paynow</button>}
+            {!entry.paymentAvailable&&<p className="mt-2 text-xs text-[var(--text-2)]">Payment is not available for this location yet. No action is required.</p>}
+            {entry.paymentStatus&&entry.paymentStatus!=="not_initiated"&&<div className="mt-3 flex flex-wrap items-center gap-3"><span className="text-xs text-[var(--text-2)]">Payment: {entry.paymentStatus.replaceAll("_"," ")}</span><button type="button" disabled={busy} onClick={()=>checkAssistPayment(entry)} className="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-40">Check provider status</button></div>}
+          </div>}
           {entry.finalQuote&&<div className="mt-4 rounded-xl bg-[var(--surface-2)] p-4"><p className="font-semibold">Confirmed total: {format(entry.finalQuote.total, entry.finalQuote.currency)}</p><div className="mt-2 space-y-1 text-xs text-[var(--text-2)]"><p>Merchandise {format(entry.finalQuote.merchandiseTotal,entry.finalQuote.currency)} · Shopping {format(entry.finalQuote.shoppingFee,entry.finalQuote.currency)} · Delivery {format(entry.finalQuote.deliveryFee,entry.finalQuote.currency)}</p><p>Quote expires {new Date(entry.finalQuote.expiresAt).toLocaleString("en-ZW")}</p></div>
             {entry.state==="quote_offered"&&<div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={()=>respondToQuote(entry.id,"accept_quote")} className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Accept quote</button><button type="button" disabled={busy} onClick={()=>respondToQuote(entry.id,"decline_quote")} className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50">No thanks</button></div>}
           </div>}

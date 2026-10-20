@@ -27,3 +27,16 @@ test("payment initiation requires current claim-safe store and separate finance 
  for(const value of ["independentPaymentEnabled","independentStoreSafe","regionalServicePolicy","verifiedAssistQuote"])assert.ok(route.includes(value));
  assert.ok(route.includes('paymentCaptured:false,dispatchCreated:false'));
 });
+
+test("customer checkout exposes Paynow only after distinct finance and store readiness",()=>{
+ const source=read("app/api/customer/independent-shopping/requests/route.js");
+ const app=read("components/independent-shopping-app.js");
+ assert.ok(source.includes("independentPaymentEnabled"));
+ assert.ok(source.includes('state==="quote_accepted_awaiting_payment"'));
+ assert.ok(source.includes("paymentAvailable"));
+ assert.ok(app.includes('if(!entry.paymentAvailable)'));
+ assert.ok(app.includes('startAssistPayment(entry)'));
+ assert.ok(app.includes("paynow.co.zw"));
+ assert.ok(app.includes("/api/customer/independent-shopping/pay/status"));
+ assert.ok(app.includes("No shopper has been dispatched"));
+});

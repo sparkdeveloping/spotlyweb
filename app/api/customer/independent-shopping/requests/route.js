@@ -6,6 +6,7 @@ import { independentPublicStore, independentQuote, independentShoppingFlags } fr
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 import { notifyRoleAudience } from "@/lib/notification-server";
 import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
+import { independentPaymentEnabled } from "@/lib/assist-money";
 
 export const runtime = "nodejs";
 const selectionSchema = z.object({ itemId: z.string().min(2).max(80), quantity: z.number().int().min(1).max(10) }).strict();
@@ -23,12 +24,20 @@ export async function GET(request) {
   try {
     const user = await authenticateRequest(request);
     const { db } = getAdminServices();
-    const snapshot = await db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(30).get();
+    const [snapshot,settingsSnap] = await Promise.all([
+      db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(30).get(),
+      db.collection("platformSettings").doc("global").get()
+    ]);
+    const ids=[...new Set(snapshot.docs.map(doc=>doc.data().storeId).filter(Boolean))];
+    const storeDocs=ids.length?await db.getAll(...ids.map(id=>db.collection("independentShoppingStores").doc(id))):[];
+    const paymentReady=new Map(storeDocs.filter(doc=>doc.exists).map(doc=>[doc.id,independentPaymentEnabled(settingsSnap.data()||{},doc.data())]));
     const requests = snapshot.docs.map((doc) => ({
       id: doc.id, storeName: doc.data().storeName, state: doc.data().state,
       estimate: doc.data().estimate, finalQuote: doc.data().finalQuote || null, customerMessage: doc.data().customerMessage || "",
       createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null,
       storeId:doc.data().storeId,deliveryPin:doc.data().state==="delivered"?null:(doc.data().customerDeliveryPin||null),
+      paymentStatus:doc.data().paymentStatus||"not_initiated",
+      paymentAvailable:doc.data().state==="quote_accepted_awaiting_payment"&&paymentReady.get(doc.data().storeId)===true,
       pendingSubstitutions:doc.data().pendingSubstitutions||[],refundDue:doc.data().refundDue??null,
       refundStatus:doc.data().refundStatus||null,dispatchStatus:doc.data().dispatchStatus||"not_dispatched"
     })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
