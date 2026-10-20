@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { rankRestaurantCandidates, normalizeRestaurantText } from "@/lib/assist-research-match";
+import { rankRestaurantCandidates, normalizeRestaurantText, restaurantMatchSignals } from "@/lib/assist-research-match";
+import { openPlaces } from "@/lib/open-marketplace-data";
 
 export const runtime = "nodejs";
 const roles = ["super_admin", "platform_admin", "operations_manager", "data_import_manager"];
@@ -41,6 +42,10 @@ function safeListingIds(batch,loc) {
 }
 function keyFor(location,address){
   return digest([location.country||"ZW",norm(location.city),norm(location.name),norm(address)].join("|"));
+}
+function curatedCandidates(record,address) {
+  const matches=openPlaces().filter(place => norm(place.city)===norm(record.city) && String(place.country||"ZW").toUpperCase()==="ZW");
+  return rankRestaurantCandidates({...record,address},matches.map(item=>({...item,type:"curated",businessId:item.id})),15);
 }
 function candidate(doc,type) {
   const d=doc.data();
@@ -136,6 +141,7 @@ export async function PATCH(request) {
           if(!payload.businessId||!payload.duplicatesReviewed||!payload.sourceRightsReviewed)fail("Select an existing business and confirm its identity and source review.",422);
           const existing=await tx.get(db.collection("businesses").doc(payload.businessId));
           if(!existing.exists||String(existing.data().country||"ZW")!=="ZW")fail("Selected Zimbabwe business not found.",404);
+          if(!restaurantMatchSignals(old,{...existing.data(),id:existing.id}))fail("Selected business does not resemble this restaurant and city. Manual investigation required.");
           if(payload.branchId){
             const branch=await tx.get(db.collection("branches").doc(payload.branchId));
             if(!branch.exists||branch.data().businessId!==payload.businessId)fail("That branch does not belong to the selected business.",409);
@@ -190,7 +196,7 @@ export async function PATCH(request) {
 
 export async function POST(request) {
   try{
-    const actor=await authenticateRequest(request,{roles});
+    const actor=await authenticateRequest(request,{roles:["super_admin","platform_admin","operations_manager"]});
     const {batchId:batchKey,locationId:locId}=publishSchema.parse(await request.json());
     const {db}=getAdminServices(),{root,loc}=await stagedRefs(db,batchKey,locId);
     const ids=safeListingIds(batchKey,locId);
@@ -211,6 +217,7 @@ export async function POST(request) {
         const ref=db.collection("businesses").doc(review.businessId);
         const existing=await tx.get(ref);
         if(!existing.exists||String(existing.data().country||"ZW")!=="ZW")fail("Existing business no longer available; redo the review.");
+        if(!restaurantMatchSignals(item,{...existing.data(),id:existing.id}))fail("Selected business does not appear to match this restaurant. Redo ownership research.");
         if(review.branchId){
           const snap=await tx.get(db.collection("branches").doc(review.branchId));
           if(!snap.exists||snap.data().businessId!==ref.id)fail("Selected branch no longer belongs to this business.");
@@ -219,7 +226,9 @@ export async function POST(request) {
         result={state:"linked_existing",businessId:ref.id,branchId:review.branchId||null}; 
       }else if(review.decision==="new_business"){
         if(!review.addressVerified||!review.operatingVerified||!meaningfulAddress(review.verifiedAddress))fail("A verified physical pickup address and operating check are required.");
-        // Abort when a verified merchant/branch with the same outlet is discovered.
+        // Abort when a verified merchant/branch or generated directory outlet appears to match.
+        const generated=curatedCandidates(item,review.verifiedAddress);
+        if(generated.some(({match})=>match.rank==="high"))fail("The outlet already appears in Spotly curated directory data. Resolve its canonical identity before publishing a duplicate.");
         const candidates=await findLiveCandidates(tx,db,item,review.verifiedAddress);
         if(candidates.some(({match,candidate})=>match.rank==="high"&&candidate.id!==ids.businessId&&candidate.id!==ids.branchId)){
           fail("A stronger existing business/branch match was found. Link it or review the duplicate first.");
@@ -295,10 +304,11 @@ export async function DELETE(request) {
     const business=db.collection("businesses").doc(ids.businessId);
     const branch=db.collection("branches").doc(ids.branchId);
     const result=await db.runTransaction(async tx=>{
-      const [staged,biz,bra]=await Promise.all([tx.get(loc),tx.get(business),tx.get(branch)]);
+      const [staged,biz,bra,pendingClaims]=await Promise.all([tx.get(loc),tx.get(business),tx.get(branch),tx.get(db.collection("businessClaims").where("businessId","==",business.id).limit(20))]);
       if(!staged.exists||staged.data().publicationState!=="published"||staged.data().linkedBusinessId!==business.id)fail("Only independently published, unclaimed research locations can be withdrawn.");
       if(!biz.exists||!bra.exists)fail("Related business records require manual review.",409);
       const d=biz.data();
+      if(pendingClaims.size>=20 || pendingClaims.docs.some(doc=>["submitted","needs_information","under_review","approved"].includes(doc.data().status)))fail("Business has an existing or pending ownership claim. Manual withdrawal review required.");
       if(d.claimStatus!=="unclaimed" || d.ownerIds?.length || d.verificationStatus!=="unverified" || d.commerceEnabled===true || d.commerceVerified===true)fail("This business is claimed or commerce-enabled. Use the supervised owner process.");
       tx.update(business,{public:false,status:"archived",assistAccepting:false,updatedAt:FieldValue.serverTimestamp()});
       tx.update(branch,{public:false,status:"archived",updatedAt:FieldValue.serverTimestamp()});
