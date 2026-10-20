@@ -78,7 +78,7 @@ export function AssistResearchImport() {
           <span className="rounded-xl bg-[var(--accent-soft)] p-3 text-[var(--accent)]"><Database className="h-6 w-6"/></span>
           <div><p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Zimbabwe only</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight">Restaurant research to Firestore</h1>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Save multi-brand restaurant research privately. Review sources, duplicates, copyright permissions and prices before promoting any listing.</p>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Save multi-brand restaurant research privately. Review sources, duplicates, copyright permissions and prices before promoting any listing.</p><Link href="/admin/assist-menu-launch" className="mt-4 inline-flex items-center rounded-xl border border-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent)]">Activate verified restaurant menus →</Link>
           </div>
         </div>
         <div className="mt-7 rounded-2xl border bg-[var(--surface)] p-6 sm:p-8">
