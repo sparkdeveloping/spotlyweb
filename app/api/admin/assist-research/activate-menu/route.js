@@ -39,10 +39,20 @@ export async function GET(request) {
     const url=new URL(request.url);
     const batchId=url.searchParams.get("batchId");
     const locationId=url.searchParams.get("locationId");
-    if(!/^zw_[a-f0-9]{24}$/.test(batchId||"")||!/^[a-zA-Z0-9_-]{4,110}$/.test(locationId||"")) {
+    if(!/^zw_[a-f0-9]{24}$/.test(batchId||"")||(locationId && !/^[a-zA-Z0-9_-]{4,110}$/.test(locationId))) {
       return Response.json({ok:false,error:"Choose a published restaurant in the research batch."},{status:422});
     }
     const {db}=getAdminServices();
+    if(!locationId){
+      const batch=await db.collection("assistResearchBatches").doc(batchId).get();
+      if(!batch.exists || batch.data()?.country!=="ZW")throw Object.assign(new Error("Batch not found."),{status:404});
+      const locations=await batch.ref.collection("locations").limit(121).get();
+      return Response.json({ok:true,batchId,locations:locations.docs.map(doc=>({
+        id:doc.id,name:doc.data().name,city:doc.data().city,area:doc.data().area,
+        publicationState:doc.data().publicationState||"research_only",
+        linkedBusinessId:doc.data().linkedBusinessId||null
+      })),count:locations.size},{headers:{"Cache-Control":"private, no-store"}});
+    }
     const {raw,compatible}=await loadSource(db,{batchId,locationId});
     const [biz,branch,store]=await Promise.all([
       db.collection("businesses").doc(raw.linkedBusinessId).get(),
