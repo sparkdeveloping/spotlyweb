@@ -49,7 +49,7 @@ export async function GET(request) {
       if(!batch.exists || batch.data()?.country!=="ZW")throw Object.assign(new Error("Batch not found."),{status:404});
       const locations=await batch.ref.collection("locations").limit(121).get();
       return Response.json({ok:true,batchId,locations:locations.docs.map(doc=>({
-        id:doc.id,name:doc.data().name,city:doc.data().city,area:doc.data().area,
+        id:doc.id,name:doc.data().name,brandName:doc.data().brandName||doc.data().name,city:doc.data().city,area:doc.data().area,
         publicationState:doc.data().publicationState||"research_only",
         linkedBusinessId:doc.data().linkedBusinessId||null
       })),count:locations.size},{headers:{"Cache-Control":"private, no-store"}});
