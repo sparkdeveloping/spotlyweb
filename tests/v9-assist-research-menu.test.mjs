@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { brandCompatible, canonicalStoreId, claimSafeUnpartnered, verifiedResearchPrice, verifiedLocationPrice } from "../lib/assist-research-menu.js";
 import { independentStoreSafe } from "../lib/assist-store-safety.js";
+import { marketplaceTrust } from "../lib/marketplace-trust.js";
 const read = p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 
 const business={
@@ -129,4 +130,16 @@ test("all brands use the same location-scoped review queue",()=>{
  assert.ok(ui.includes("All researched restaurants"));
  assert.ok(ui.includes("Filter by brand"));
  assert.ok(ui.includes("Save location-specific price verification"));
+});
+
+test("research launch approval never grants merchant checkout or settlement",()=>{
+ const research={...business,public:true,launchApproved:true,commerceEnabled:true,commerceVerified:true,
+  commerceVerificationStatus:"verified",verificationStatus:"verified",ownerIds:["user_1"],
+  status:"active",capabilities:["merchant_ordering","settlement"]};
+ const trust=marketplaceTrust(research);
+ assert.equal(trust.discoveryAllowed,true);
+ assert.equal(trust.commerceVerified,false);
+ assert.equal(trust.commerce.merchantOrdering,false);
+ assert.equal(trust.commerce.settlement,false);
+ assert.equal(marketplaceTrust({...research,launchApproved:false}).discoveryAllowed,false);
 });

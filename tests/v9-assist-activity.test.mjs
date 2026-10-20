@@ -31,3 +31,13 @@ test("operator evidence and customer expiry plus region checks are mandatory",()
  assert.match(r,/independentShoppingFlags\(settings\).requestEnabled/);
  assert.match(r,/regionalServicePolicy\(settings.assistCoverage/);
 });
+
+test("Activity retains funded purchasing, dispatch and outstanding refund states",()=>{
+ const a=shoppingActivity("req",{state:"collected",paymentStatus:"paid_held",fundedAmount:24.5,
+  dispatchStatus:"collected",refundDue:4,refundStatus:"awaiting_provider_refund",storeId:"branch"},Date.now());
+ assert.equal(a.paymentStatus,"paid_held");assert.equal(a.total,24.5);
+ assert.equal(a.dispatchStatus,"collected");assert.equal(a.refundDue,4);
+ assert.equal(a.refundStatus,"awaiting_provider_refund");assert.equal(a.merchantOrder,false);
+ const substitute=shoppingActivity("r",{state:"shopping",paymentStatus:"paid_held",pendingSubstitutions:[{itemId:"a"}]});
+ assert.equal(substitute.primaryAction,"review_substitution");
+});

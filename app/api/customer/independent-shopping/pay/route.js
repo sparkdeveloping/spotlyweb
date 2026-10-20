@@ -2,13 +2,12 @@ import {randomUUID} from "node:crypto";
 import {FieldValue} from "firebase-admin/firestore";
 import {z} from "zod";
 import {apiError,authenticateRequest,getAdminServices} from "@/lib/firebase-admin";
-import {createPaynow,normalizePaynowStatus} from "@/lib/paynow-server";
+import {createPaynow} from "@/lib/paynow-server";
 import {appUrl,normalizeZimbabwePhone} from "@/lib/server-helpers";
 import {independentStoreSafe} from "@/lib/assist-store-safety";
 import {independentShoppingFlags} from "@/lib/independent-shopping";
 import {regionalServicePolicy} from "@/lib/v9-assist-regions";
 import {verifiedAssistQuote,independentPaymentEnabled} from "@/lib/assist-money";
-import {applyAssistPaymentUpdate} from "@/lib/assist-payment-server";
 export const runtime="nodejs";
 const schema=z.object({requestId:z.string().min(12).max(250),channel:z.enum(["web","ecocash","onemoney"]).default("web"),phone:z.string().max(40).optional()}).strict();
 const fail=(m,s=409)=>{throw Object.assign(new Error(m),{status:s})};
@@ -28,6 +27,9 @@ export async function POST(request){
  let ref=null,prepared=null,providerAccepted=false;
  try{
   const user=await authenticateRequest(request),body=schema.parse(await request.json());
+  // Validate the channel before reserving a payment intent; invalid input must not strand a quote.
+  if(body.channel!=="web"&&!body.phone)fail("Provide the mobile-money payment phone number.",422);
+  if(!user.email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email))fail("Add a valid email to your Spotly account before paying.",422);
   const {db,messaging,auth}=getAdminServices();
   ref=db.collection("independentShoppingRequests").doc(body.requestId);
   const settingsRef=db.collection("platformSettings").doc("global");
@@ -46,11 +48,18 @@ export async function POST(request){
    const b=store.directoryBusinessId?await tx.get(db.collection("businesses").doc(store.directoryBusinessId)):null;
    const loc=store.sourceResearchBatchId&&store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
    if(!independentStoreSafe(store,b?.exists?b.data():null,loc?.exists?loc.data():null))fail("This independently sourced location is not currently eligible.");
-   if(d.paymentIntentReference&&["initiated","pending"].includes(d.paymentStatus)){
+   if(d.paymentIntentReference){
     const old=await tx.get(db.collection("paymentIntents").doc(d.paymentIntentReference));
-    if(old.exists&&old.data().status==="pending"&&(old.data().redirectUrl||old.data().instructions))
-      return {reuse:true,reference:old.id,...old.data()};
-    fail("Payment setup is already in progress. Check its status before retrying.");
+    if(!old.exists||old.data().model!=="independent_shopping"||old.data().customerId!==user.uid)
+      fail("An earlier payment requires Finance review before a new payment can be made.");
+    if(["initiated","pending"].includes(d.paymentStatus)){
+      if(old.data().status==="pending"&&(old.data().redirectUrl||old.data().instructions))
+        return {reuse:true,reference:old.id,...old.data()};
+      fail("Payment setup is in progress. Check provider status before trying again.");
+    }
+    // A failed/expired browser redirect does not prove funds cannot arrive later.
+    // Never create a second independent charge without explicit provider reconciliation.
+    fail("This payment attempt needs provider reconciliation before another payment can be created.");
    }
    const reference="SPOTLY-AS-"+randomUUID().replaceAll("-","").slice(0,28).toUpperCase();
    const intentRef=db.collection("paymentIntents").doc(reference);
@@ -65,27 +74,34 @@ export async function POST(request){
   });
   if(prepared.reuse)return Response.json({ok:true,reused:true,reference:prepared.reference,
    redirectUrl:prepared.redirectUrl||null,instructions:prepared.instructions||null,status:prepared.status});
-  if(body.channel!=="web"&&!body.phone)fail("Provide the payment phone number.",422);
   const paynow=await createPaynow("USD"),base=appUrl(request);
   paynow.resultUrl=base+"/api/payments/paynow/result?currency=USD";
   paynow.returnUrl=base+"/shop-for-me?store="+encodeURIComponent(prepared.storeId);
-  const payment=paynow.createPayment(prepared.reference,prepared.email||"customer@spotly.co.zw");
+  const payment=paynow.createPayment(prepared.reference,prepared.email);
   payment.add("Independent Spotly shopping authorization",prepared.quote.total);
   const response=body.channel==="web"?await paynow.send(payment):
     await paynow.sendMobile(payment,normalizeZimbabwePhone(body.phone),body.channel);
   if(!response?.success)fail(response?.error||"Paynow could not create the purchase payment.",502);
   providerAccepted=true;
   const intentRef=db.collection("paymentIntents").doc(prepared.reference);
-  await db.runTransaction(async tx=>{
+  const finalized=await db.runTransaction(async tx=>{
    const [intent,snap]=await Promise.all([tx.get(intentRef),tx.get(ref)]);
    if(!intent.exists||!snap.exists||snap.data().paymentIntentReference!==prepared.reference)fail("The payment record changed unexpectedly.");
+   // A signed Paynow callback may have already captured funds while send() was returning.
+   // Never overwrite a paid intent or the funded request with "pending".
+   if(intent.data().status==="paid"&&snap.data().paymentStatus==="paid_held")
+     return {status:"paid",captured:true};
+   if(intent.data().status!=="initiated"||snap.data().paymentStatus!=="initiated")
+     fail("The provider has already changed this payment. Review its current status before continuing.");
    tx.update(intentRef,{status:"pending",pollUrl:response.pollUrl||"",redirectUrl:response.redirectUrl||"",
      instructions:response.instructions||"",providerReference:response.paynowReference||"",updatedAt:FieldValue.serverTimestamp()});
    tx.update(ref,{paymentStatus:"pending",updatedAt:FieldValue.serverTimestamp()});
+   return {status:"pending",captured:false};
   });
   return Response.json({ok:true,reused:false,reference:prepared.reference,channel:body.channel,
-   status:"pending",redirectUrl:response.redirectUrl||null,instructions:response.instructions||null,
-   paymentCaptured:false,dispatchCreated:false});
+   status:finalized.status,redirectUrl:finalized.captured?null:response.redirectUrl||null,
+   instructions:finalized.captured?null:response.instructions||null,
+   paymentCaptured:finalized.captured,dispatchCreated:false});
  }catch(error){
   if(ref&&prepared&&!prepared.reuse){
    try{

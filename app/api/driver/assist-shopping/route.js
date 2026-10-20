@@ -4,7 +4,7 @@ import {apiError,authenticateRequest,getAdminServices} from "@/lib/firebase-admi
 import {cost,matchesPin} from "@/lib/assist-fulfillment";
 export const runtime="nodejs";
 const schema=z.object({
- requestId:z.string().min(12).max(250),action:z.enum(["start","item","propose_substitution","receipt","en_route","complete"]),
+ requestId:z.string().min(12).max(250),action:z.enum(["accept","reject","start","item","propose_substitution","receipt","en_route","complete"]),
  itemId:z.string().max(180).optional(),itemStatus:z.enum(["found","unavailable"]).optional(),
  actualQuantity:z.number().int().min(0).max(20).optional(),actualUnitPrice:z.number().finite().min(0).max(100000).optional(),
  replacementName:z.string().trim().max(180).optional(),pin:z.string().regex(/^\d{6}$/).optional(),
@@ -17,6 +17,7 @@ export async function GET(request){
   const jobs=await db.collection("assistIndependentShoppingJobs").where("driverId","==",user.uid).limit(30).get();
   return Response.json({ok:true,jobs:jobs.docs.map(s=>({id:s.id,requestId:s.data().requestId,storeName:s.data().storeName,
     state:s.data().state,authorizedSpend:s.data().authorizedSpend,currency:"USD",items:s.data().items,
+    storeAddress:s.data().storeAddress||"",deliveryAddress:s.data().deliveryAddress||"",contactPhone:s.data().contactPhone||"",
     actualSpend:s.data().actualSpend??null,updatedAt:s.data().updatedAt?.toDate?.()?.toISOString?.()||null}))},
     {headers:{"Cache-Control":"private, no-store"}});
  }catch(e){return apiError(e)}
@@ -34,8 +35,41 @@ export async function POST(request){
    if(!req.exists||req.data().paymentStatus!=="paid_held")fail("The customer funds are not confirmed. Do not purchase anything.");
    const j=job.data(),q=req.data(),now=FieldValue.serverTimestamp();
    const items=(j.items||[]).map(x=>({...x}));
+   if(["accept","start"].includes(input.action)){
+     const [settings,driver,application,presence]=await Promise.all([
+       tx.get(db.collection("platformSettings").doc("global")),
+       tx.get(db.collection("drivers").doc(user.uid)),
+       tx.get(db.collection("driverApplications").doc(user.uid)),
+       tx.get(db.collection("driverPresence").doc(user.uid))
+     ]);
+     if(settings.data()?.assistFinance?.driverDispatchEnabled!==true)
+       fail("Independent shopper dispatch has been paused by Operations.");
+     if(!driver.exists||driver.data().status==="suspended"||
+        !application.exists||!["approved","ready","active"].includes(String(application.data().status||"")))
+       fail("Your Driver authorization must be reviewed before shopping.",403);
+     if(!presence.exists||presence.data().online!==true||presence.data().currentJobId!==jobRef.id)
+       fail("Go online with your assigned shopping job before accepting or starting.");
+   }
+   if(input.action==="accept"||input.action==="reject"){
+     if(j.state!=="assigned")fail("This shopper offer is no longer awaiting your answer.");
+     state=input.action==="accept"?"accepted":"rejected";
+     if(state==="rejected"){
+       const presenceRef=db.collection("driverPresence").doc(user.uid);
+       const presence=await tx.get(presenceRef);
+       if(presence.exists&&presence.data().currentJobId===jobRef.id)
+         tx.update(presenceRef,{currentJobId:FieldValue.delete(),currentWorkType:FieldValue.delete(),updatedAt:now});
+     }
+     tx.update(jobRef,{state,respondedAt:now,updatedAt:now,...(state==="rejected"?{rejectionNote:input.note}:{})});
+     tx.update(reqRef,{state:state==="rejected"?"funded_awaiting_shopper":"shopper_assigned",
+       dispatchStatus:state==="rejected"?"not_dispatched":"shopper_assigned",
+       customerMessage:state==="rejected"?"Your shopper was unavailable. Spotly is arranging another authorized shopper.":"Your shopper accepted the assignment. No items have been purchased yet.",
+       ...(state==="rejected"?{customerDeliveryPin:FieldValue.delete()}:{}),updatedAt:now});
+     tx.create(db.collection("assistShoppingEvents").doc(),{
+       requestId:input.requestId,driverId:user.uid,actorId:user.uid,action:input.action,state,createdAt:now});
+     return;
+   }
    if(input.action==="start"){
-     if(j.state!=="assigned")fail("The shopping job is not ready to start.");
+     if(j.state!=="accepted")fail("Accept this shopping assignment before starting work.");
      state="shopping";
    }else if(input.action==="item"||input.action==="propose_substitution"){
      if(j.state!=="shopping")fail("Items cannot be changed outside active shopping.");

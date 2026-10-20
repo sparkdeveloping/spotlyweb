@@ -5,8 +5,9 @@ const q={state:"quote_accepted_awaiting_payment",paymentStatus:"not_initiated",
  finalQuote:{currency:"USD",merchandiseTotal:8,shoppingFee:2,deliveryFee:1,total:11,verifiedBy:"operator",note:"Staff verified each priced menu item",expiresAt:"2026-10-22T00:00:00Z"}};
 test("Paynow collection stays off until separately cleared",()=>{
  assert.equal(independentPaymentEnabled({},{}),false);
+ assert.equal(independentPaymentEnabled({assistFinance:{enabled:true,providerReviewed:true},independentShopping:{paymentCollectionEnabled:true}},{financeReady:true}),false);
  assert.equal(independentPaymentEnabled({assistFinance:{enabled:true,providerReviewed:true},independentShopping:{paymentCollectionEnabled:true}},{financeReady:false}),false);
- assert.equal(independentPaymentEnabled({assistFinance:{enabled:true,providerReviewed:true},independentShopping:{paymentCollectionEnabled:true}},{financeReady:true}),true);
+ assert.equal(independentPaymentEnabled({assistFinance:{enabled:true,providerReviewed:true,driverDispatchEnabled:true,manualFloatAttestationEnabled:true},independentShopping:{paymentCollectionEnabled:true}},{financeReady:true}),true);
 });
 test("only valid itemized independently verified quotes may be charged",()=>{
  assert.equal(verifiedAssistQuote(q,Date.parse("2026-10-20T09:00:00Z")).total,11);
@@ -25,7 +26,9 @@ test("independent provider callbacks never use merchant ledger or auto Driver di
 test("payment initiation requires current claim-safe store and separate finance signoff",()=>{
  const route=read("app/api/customer/independent-shopping/pay/route.js");
  for(const value of ["independentPaymentEnabled","independentStoreSafe","regionalServicePolicy","verifiedAssistQuote"])assert.ok(route.includes(value));
- assert.ok(route.includes('paymentCaptured:false,dispatchCreated:false'));
+ assert.ok(route.includes('paymentCaptured:finalized.captured,dispatchCreated:false'));
+ assert.ok(route.includes('intent.data().status==="paid"&&snap.data().paymentStatus==="paid_held"'));
+ assert.ok(route.includes('A previous payment attempt needs provider reconciliation')||route.includes('This payment attempt needs provider reconciliation'));
 });
 
 test("customer checkout exposes Paynow only after distinct finance and store readiness",()=>{

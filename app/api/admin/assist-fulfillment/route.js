@@ -22,14 +22,19 @@ export async function GET(request){
  try{
   await authenticateRequest(request,{roles});
   const {db}=getAdminServices();
-  const [jobs,refunds,issues]=await Promise.all([
+  const [jobs,refunds,issues,requests]=await Promise.all([
    db.collection("assistIndependentShoppingJobs").limit(100).get(),
    db.collection("assistRefundRequests").limit(50).get(),
-   db.collection("assistFinanceIssues").limit(50).get()
+   db.collection("assistFinanceIssues").limit(50).get(),
+   db.collection("independentShoppingRequests").where("state","in",
+    ["funded_awaiting_shopper","shopper_assigned","shopping","receipt_submitted","collected","en_route"]).limit(100).get()
   ]);
   return Response.json({ok:true,jobs:jobs.docs.map(d=>({id:d.id,driverId:d.data().driverId,requestId:d.data().requestId,state:d.data().state,
     storeName:d.data().storeName,actualSpend:d.data().actualSpend??null,authorizedSpend:d.data().authorizedSpend,
     receiptPath:d.data().receiptPath||null,updatedAt:d.data().updatedAt?.toDate?.()?.toISOString?.()||null})),
+   requests:requests.docs.map(d=>({id:d.id,storeName:d.data().storeName,state:d.data().state,
+     paymentStatus:d.data().paymentStatus||"not_initiated",total:d.data().finalQuote?.total||null,
+     merchandiseTotal:d.data().finalQuote?.merchandiseTotal||null,dispatchStatus:d.data().dispatchStatus||"not_dispatched"})),
    refunds:refunds.docs.map(d=>({id:d.id,requestId:d.data().requestId,amount:d.data().amount,status:d.data().status})),
    financeIssues:issues.size},{headers:{"Cache-Control":"private, no-store"}});
  }catch(e){return apiError(e)}
@@ -68,7 +73,8 @@ export async function POST(request){
     if(!req.exists)fail("Customer request not found.",404);
     const record={...req.data(),id:ref.id},settings=config.data()||{};
     if(!canShop(record,settings,float.data()||{}))fail("Customer funding, verified float or independent Driver launch approval is missing.");
-    if(prior.exists)fail("A shopper job already exists for this request.");
+    if(prior.exists&&prior.data().state!=="rejected")
+      fail("A shopper job already exists for this request; do not create duplicate assignments.");
     if(!driver.exists||!application.exists||!["approved","ready","active"].includes(String(application.data().status||""))||driver.data().status==="suspended")
       fail("The selected Driver is not approved for work.");
     if(!presence.exists||presence.data().online!==true||presence.data().currentJobId||
@@ -84,11 +90,14 @@ export async function POST(request){
        !regionalServicePolicy(settings.assistCoverage||{},store,"eat").available)
       fail("Store ownership, launch or region availability has changed.");
     const now=FieldValue.serverTimestamp();
-    tx.create(jobRef,{requestId:ref.id,driverId:input.driverId,storeId:record.storeId,storeName:record.storeName,
+    const jobData={requestId:ref.id,driverId:input.driverId,storeId:record.storeId,storeName:record.storeName,
+      storeAddress:String(store.address||""),deliveryAddress:String(record.deliveryAddress||""),
+      contactPhone:String(record.contactPhone||""),
       state:"assigned",currency:"USD",authorizedSpend:Number(record.finalQuote.merchandiseTotal),
       financeFloatReference:float.data().externalReference,financeFloatVerifiedBy:float.data().verifiedBy,
       items:(record.items||[]).map(i=>({itemId:i.itemId,name:i.name,quantity:i.quantity,status:"pending",actualQuantity:0,actualUnitPrice:0})),
-      customerPinHash:pinHash(ref.id,code),createdAt:now,updatedAt:now,assignedBy:actor.uid});
+      customerPinHash:pinHash(ref.id,code),createdAt:now,updatedAt:now,assignedBy:actor.uid};
+    if(prior.exists)tx.set(jobRef,jobData);else tx.create(jobRef,jobData);
     tx.update(ref,{state:"shopper_assigned",dispatchStatus:"shopper_assigned",customerDeliveryPin:code,
       customerMessage:"A verified independent shopper has been assigned. Only share your handoff PIN in person.",
       updatedAt:now});

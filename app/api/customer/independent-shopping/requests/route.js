@@ -37,7 +37,11 @@ export async function GET(request) {
       createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null,
       storeId:doc.data().storeId,deliveryPin:doc.data().state==="delivered"?null:(doc.data().customerDeliveryPin||null),
       paymentStatus:doc.data().paymentStatus||"not_initiated",
-      paymentAvailable:doc.data().state==="quote_accepted_awaiting_payment"&&paymentReady.get(doc.data().storeId)===true,
+      paymentAvailable:doc.data().state==="quote_accepted_awaiting_payment"&&
+        (doc.data().paymentStatus||"not_initiated")==="not_initiated"&&
+        !doc.data().paymentIntentReference&&
+        Date.parse(doc.data().finalQuote?.expiresAt)>Date.now()&&
+        paymentReady.get(doc.data().storeId)===true,
       pendingSubstitutions:doc.data().pendingSubstitutions||[],refundDue:doc.data().refundDue??null,
       refundStatus:doc.data().refundStatus||null,dispatchStatus:doc.data().dispatchStatus||"not_dispatched"
     })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));

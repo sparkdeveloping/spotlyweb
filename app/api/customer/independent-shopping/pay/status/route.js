@@ -17,7 +17,9 @@ export async function POST(request){
   if(!intent.data().pollUrl)return Response.json({ok:true,state:intent.data().status||"initiated"});
   const provider=await createPaynow("USD");
   const normalized=normalizePaynowStatus(await provider.pollTransaction(intent.data().pollUrl));
-  normalized.reference=normalized.reference||reference;
+  if(normalized.reference&&normalized.reference!==reference)
+    throw Object.assign(new Error("The provider returned a different payment reference."),{status:409});
+  normalized.reference=reference;
   const applied=await applyAssistPaymentUpdate(db,reference,normalized,{source:"paynow_status_poll",messaging,auth});
   return Response.json({ok:true,state:applied.state,captured:applied.captured,anomaly:applied.anomaly});
  }catch(error){

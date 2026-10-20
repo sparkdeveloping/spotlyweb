@@ -20,7 +20,10 @@ test("handoff PIN is bound to the request, not exposed to the Driver",()=>{
  assert.equal(matchesPin("request_2","123456",hash),false);
  const driver=read("app/api/driver/assist-shopping/route.js");
  assert.ok(driver.includes("matchesPin"));
- assert.equal(driver.includes("customerDeliveryPin"),false);
+ const getResponse=driver.slice(driver.indexOf("export async function GET"),driver.indexOf("export async function POST"));
+ assert.equal(getResponse.includes("customerDeliveryPin"),false);
+ assert.ok(driver.includes('action:z.enum(["accept","reject","start"'));
+ assert.ok(driver.includes('driverDispatchEnabled!==true'));
 });
 test("independent receipt and refunds are isolated from merchant orders",()=>{
  const admin=read("app/api/admin/assist-fulfillment/route.js");
@@ -33,4 +36,27 @@ test("customer approves substitutions and server verifies receipt upload",()=>{
  const upload=read("app/api/driver/assist-shopping/receipt/route.js");
  assert.ok(subst.includes('customerId!==actor.uid'));
  assert.ok(upload.includes("storage.bucket().file(path).save"));
+});
+
+test("driver offer acceptance, decline and safe reassignment are supported",()=>{
+ const driver=read("app/api/driver/assist-shopping/route.js");
+ const operations=read("app/api/admin/assist-fulfillment/route.js");
+ assert.match(driver,/state==="rejected"\?"funded_awaiting_shopper"/);
+ assert.match(driver,/j.state!=="accepted"/);
+ assert.match(driver,/driverDispatchEnabled!==true/);
+ assert.match(operations,/prior.data\(\).state!=="rejected"/);
+ assert.match(operations,/if\(prior.exists\)tx.set\(jobRef,jobData\)/);
+ const ui=read("components/driver-assist-shopping.js");
+ assert.ok(ui.includes("Accept assignment"));
+ assert.ok(ui.includes("Ask customer to approve replacement"));
+ assert.ok(ui.includes("Submit receipt for review"));
+});
+test("private receipt review validates identity, storage path and actual file signatures",()=>{
+ const receipt=read("app/api/driver/assist-shopping/receipt/route.js");
+ const review=read("app/api/admin/assist-fulfillment/receipt/route.js");
+ assert.match(receipt,/validReceiptSignature\(bytes,file.type\)/);
+ assert.match(review,/authenticateRequest\(request,\{roles\}\)/);
+ assert.match(review,/path!==job.data\(\).receiptPath/);
+ assert.match(review,/no-store/);
+ assert.match(review,/nosniff/);
 });

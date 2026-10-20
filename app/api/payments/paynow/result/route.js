@@ -27,7 +27,9 @@ export async function POST(request) {
     if (normalized.pollUrl) {
       try {
         const polled = normalizePaynowStatus(await paynow.pollTransaction(normalized.pollUrl));
-        polled.reference = polled.reference || normalized.reference;
+        if(polled.reference && polled.reference !== normalized.reference)
+          throw Object.assign(new Error("The polled Paynow payment reference does not match the signed callback."), { status: 409 });
+        polled.reference = normalized.reference;
         await apply(db, normalized.reference, polled, { source: "paynow_webhook_poll_confirmation", messaging, auth });
       } catch (pollError) {
         await db.collection("paymentReconciliationIssues").add({
