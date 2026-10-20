@@ -141,7 +141,8 @@ export async function PATCH(request) {
           if(!payload.businessId||!payload.duplicatesReviewed||!payload.sourceRightsReviewed)fail("Select an existing business and confirm its identity and source review.",422);
           const existing=await tx.get(db.collection("businesses").doc(payload.businessId));
           if(!existing.exists||String(existing.data().country||"ZW")!=="ZW")fail("Selected Zimbabwe business not found.",404);
-          if(!restaurantMatchSignals(old,{...existing.data(),id:existing.id}))fail("Selected business does not resemble this restaurant and city. Manual investigation required.");
+          const candidateMatch=restaurantMatchSignals(old,{...existing.data(),id:existing.id});
+          if(!candidateMatch||candidateMatch.rank==="brand_only")fail("A shared chain name is insufficient to link two outlets. Confirm a matching address, phone or full location name.");
           if(payload.branchId){
             const branch=await tx.get(db.collection("branches").doc(payload.branchId));
             if(!branch.exists||branch.data().businessId!==payload.businessId)fail("That branch does not belong to the selected business.",409);
@@ -217,7 +218,8 @@ export async function POST(request) {
         const ref=db.collection("businesses").doc(review.businessId);
         const existing=await tx.get(ref);
         if(!existing.exists||String(existing.data().country||"ZW")!=="ZW")fail("Existing business no longer available; redo the review.");
-        if(!restaurantMatchSignals(item,{...existing.data(),id:existing.id}))fail("Selected business does not appear to match this restaurant. Redo ownership research.");
+        const candidateMatch=restaurantMatchSignals(item,{...existing.data(),id:existing.id});
+        if(!candidateMatch||candidateMatch.rank==="brand_only")fail("A shared brand alone is not enough to link these outlets. Review exact branch identity.");
         if(review.branchId){
           const snap=await tx.get(db.collection("branches").doc(review.branchId));
           if(!snap.exists||snap.data().businessId!==ref.id)fail("Selected branch no longer belongs to this business.");
