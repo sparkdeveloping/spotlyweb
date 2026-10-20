@@ -1,5 +1,6 @@
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { apiError, verifyAppCheckRequest } from "@/lib/firebase-admin";
+import {mapTilerReady,mapTilerSearchUrl,requestMapTiler,mapTilerForwardResults} from "@/lib/maptiler-geocoding";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,13 @@ export async function GET(request) {
     if(!["ZW","MW"].includes(country))return Response.json({ok:false,error:"Country is not supported."},{status:422});
     const query = [q, city, country==="MW"?"Malawi":"Zimbabwe"].filter(Boolean).join(", ");
     const endpoint=process.env.SPOTLY_GEOCODING_URL;
-    if(!endpoint)throw Object.assign(new Error("Licensed location search is not configured."),{status:503});
+    if(!endpoint&&mapTilerReady()){
+      const url=mapTilerSearchUrl({query:q,city,country});
+      const data=await requestMapTiler(url,{origin:new URL(request.url).origin});
+      const results=mapTilerForwardResults(data,country);
+      return Response.json({ok:true,results},{headers:{"Cache-Control":"private, max-age=120"}});
+    }
+    if(!endpoint)throw Object.assign(new Error("Licensed location search is not configured. Configure MapTiler or a compatible geocoding service."),{status:503});
     const geocoder=new URL(endpoint);
     if(geocoder.protocol!=="https:"||geocoder.hostname==="nominatim.openstreetmap.org")
       throw Object.assign(new Error("A production-licensed search provider is required."),{status:503});
