@@ -43,7 +43,7 @@ test("Send handoff requires pickup and recipient PINs plus configurable proof of
   const source = await read("app/api/driver/parcels/route.js");
   assert.match(source, /matchesParcelPin/);
   assert.match(source, /matchesParcelPin/);
-  assert.match(source, /proofPhotoRequired === true/);
+  assert.match(source, /proofPhotoRequired\s*===\s*true/);
   assert.match(source, /proofPhotoUrl/);
   assert.match(source, /state: nextState/);
 });
@@ -91,7 +91,7 @@ test("Send operational collections and proof uploads are protected", async () =>
 
 test("Customer Activity and Home route Send into the live Send product", async () => {
   const ui = await read("components/marketplace-app.js");
-  assert.match(ui, /nextService === "send"/); assert.match(ui, /router\.push\(`\/\$\{nextService\}`\)/); assert.match(ui, /Manage Send/); assert.match(ui, /api\/customer\/parcels/);
+  assert.match(ui, /nextService === "send"/); assert.match(ui, /publicProductRoute\(nextService\)/); assert.match(ui, /Manage Send/); assert.match(ui, /api\/customer\/parcels/);
 });
 
 test("Scheduled Send defers dispatch until the pickup window and preserves paid scheduling", async () => {

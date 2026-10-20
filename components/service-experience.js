@@ -52,7 +52,7 @@ const SERVICE_CONFIG = {
     suggestions: ["Groceries", "Pharmacy", "Home", "Fashion", "Gifts"]
   },
   book: {
-    label: "Book",
+    label: "SpotlyBook",
     eyebrow: "Services, stays and activities",
     title: "Make time for something",
     description: "Discover services and experiences with real businesses, then request a time and keep the plan in Activity.",
