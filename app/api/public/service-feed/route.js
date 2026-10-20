@@ -8,6 +8,7 @@ import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-t
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
 import { independentPublicStore, independentShoppingFlags } from "@/lib/independent-shopping";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
+import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
 
 export const runtime = "nodejs";
 
@@ -256,7 +257,8 @@ export async function GET(request) {
     const assistedSnapshot = (service === "eat" || service === "shop") && independentShoppingFlags(assistSettings).browseEnabled
       ? await db.collection("independentShoppingStores").where("status", "==", "published").limit(160).get()
       : { docs: [] };
-    const independentStores = assistedSnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
+    const availableSources = await filterSafeIndependentStores(db, assistedSnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+    const independentStores = availableSources
       .filter((raw) => regionalServicePolicy(assistSettings.assistCoverage || {}, raw, service).available)
       .map((raw) => ({ source: raw, public: independentPublicStore(raw.id, raw) })).filter((entry) => entry.public)
       .filter(({ source }) => service === "eat" ? /restaurant|food|cafe|bakery|takeaway|chicken|pizza/i.test(source.category || "") : !/restaurant|food|cafe|bakery|takeaway|chicken|pizza/i.test(source.category || ""));
@@ -311,7 +313,11 @@ export async function GET(request) {
       .filter((business) => matchesService(service, business))
       .filter((business) => !city || !text(business.city) || text(business.city) === city || (branchMap.get(business.id) || []).some((branch) => text(branch.city) === city))
       .filter((business) => matchesArea(business, branchMap.get(business.id) || [], area))
-      .map((business) => ({ ...business, operational: operationalSummary(branchMap.get(business.id) || []), promotion: (promotionMap.get(business.id) || [])[0] || null }));
+      .map((business) => {
+        const linked = independentStores.find(({ source }) => source.directoryBusinessId === business.id);
+        const eligible = Boolean(linked) && !marketplaceTrust(business).commerceVerified && !marketplaceTrust(business).claimed;
+        return { ...business, ...(eligible ? { assistStoreId: linked.public.id, assistModel: "spotly_assist", assistPricesEstimated: true, independentItems: linked.public.items.length } : {}), operational: operationalSummary(branchMap.get(business.id) || []), promotion: (promotionMap.get(business.id) || [])[0] || null };
+      });
 
     const eligibleBusinessMap = new Map(eligibleBusinesses.map((business) => [business.id, business]));
     const itemsAll = productSnapshot.docs
