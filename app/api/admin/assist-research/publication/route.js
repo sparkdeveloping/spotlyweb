@@ -27,7 +27,8 @@ const priceReview = z.object({
   factualDataRightsReviewed: z.boolean(), notes: z.string().trim().min(8).max(700)
 }).strict();
 const command = z.discriminatedUnion("action", [locationReview, priceReview]);
-const publishSchema = z.object({batchId,locationId:id}).strict();\nconst launchSchema = z.object({batchId,locationId:id,confirmation:z.literal("PUBLISH_TO_CUSTOMERS")}).strict();
+const publishSchema = z.object({batchId,locationId:id}).strict();
+const launchSchema = z.object({batchId,locationId:id,confirmation:z.literal("PUBLISH_TO_CUSTOMERS")}).strict();
 const withdrawSchema = z.object({batchId,locationId:id,reason:z.string().trim().min(8).max(700)}).strict();
 const digest = value => createHash("sha256").update(value).digest("hex").slice(0,27);
 const fail = (message,status=409) => { throw Object.assign(new Error(message), { status }); };
@@ -89,7 +90,8 @@ export async function GET(request) {
       ok:true,batchId:key,
       summary:{
         locationCount:locations.size, priceCount:prices.size,
-        reviewedLocations:locations.docs.filter(doc=>doc.data().publicationReview).length,\n        approvedLocations:locations.docs.filter(doc=>doc.data().publicationState==="approved").length,
+        reviewedLocations:locations.docs.filter(doc=>doc.data().publicationReview).length,
+        approvedLocations:locations.docs.filter(doc=>doc.data().publicationState==="approved").length,
         publishedLocations:locations.docs.filter(doc=>doc.data().publicationState==="published").length,
         linkedLocations:locations.docs.filter(doc=>doc.data().publicationState==="linked_existing").length,
         reviewedPrices:prices.docs.filter(doc=>doc.data().priceReview).length
