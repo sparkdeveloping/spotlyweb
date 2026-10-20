@@ -2,6 +2,7 @@ import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebas
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { independentPublicStore, independentShoppingFlags } from "@/lib/independent-shopping";
 import { operationalAssistAvailable } from "@/lib/v9-assist-regions";
+import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,8 @@ export async function GET(request) {
     const city = String(url.searchParams.get("city") || "").trim().toLowerCase().slice(0, 100);
     const search = String(url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 120);
     const storesSnap = await db.collection("independentShoppingStores").where("status", "==", "published").limit(100).get();
-    const stores = storesSnap.docs.map((snap) => ({ ...snap.data(), id: snap.id })).filter((raw) => operationalAssistAvailable(config.data()?.assistCoverage || {}, { ...raw, operationalReviewed: raw.operationalReviewed !== false }, "eat").available).map((raw) => independentPublicStore(raw.id, raw)).filter(Boolean)
+    const safeStores = await filterSafeIndependentStores(db, storesSnap.docs.map((snap) => ({ ...snap.data(), id: snap.id })));
+    const stores = safeStores.filter((raw) => operationalAssistAvailable(config.data()?.assistCoverage || {}, raw, "eat").available).map((raw) => independentPublicStore(raw.id, raw)).filter(Boolean)
       .filter((store) => (!city || store.city.toLowerCase() === city) &&
         (!search || [store.name, store.city, store.area, store.category, ...store.items.map((i) => i.name)]
           .join(" ").toLowerCase().includes(search)))
