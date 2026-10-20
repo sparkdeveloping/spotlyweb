@@ -59,7 +59,7 @@ export async function GET(request) {
       db.collection("branches").doc(raw.linkedBranchId).get(),
       db.collection("independentShoppingStores").doc(canonicalStoreId(raw.linkedBusinessId)).get()
     ]);
-    const valid= biz.exists && claimSafeUnpartnered(biz.data()) &&
+    const valid= biz.exists && biz.data().launchApproved===true && claimSafeUnpartnered(biz.data()) &&
       biz.data().source?.researchLocationId === locationId &&
       biz.data().source?.batchId === batchId &&
       branch.exists && branch.data().businessId === biz.id &&
@@ -101,7 +101,7 @@ export async function POST(request) {
         tx.get(bRef),tx.get(brRef),tx.get(storeRef),
         tx.get(db.collection("businessClaims").where("businessId","==",bRef.id).limit(25))
       ]);
-      if(!business.exists||!claimSafeUnpartnered(business.data()) ||
+      if(!business.exists||business.data().launchApproved!==true||!claimSafeUnpartnered(business.data()) ||
         business.data().source?.type!=="spotly_assist_research" ||
         business.data().source?.batchId!==input.batchId ||
         business.data().source?.researchLocationId!==input.locationId) {
