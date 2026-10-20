@@ -1,5 +1,5 @@
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { verifiedResearchPrice, brandCompatible, claimSafeUnpartnered, canonicalStoreId } from "@/lib/assist-research-menu";
+import { verifiedLocationPrice, brandCompatible, claimSafeUnpartnered, canonicalStoreId } from "@/lib/assist-research-menu";
 import { independentStoreSafe } from "@/lib/assist-store-safety";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 export const runtime="nodejs";
@@ -14,8 +14,8 @@ export async function GET(request) {
     return Response.json({ok:false,error:"Select a valid Zimbabwe research batch and location."},{status:422});
   const {db}=getAdminServices();
   const root=db.collection("assistResearchBatches").doc(batchId),loc=root.collection("locations").doc(locationId);
-  const [batch,location,prices,settings]=await Promise.all([
-   root.get(),loc.get(),root.collection("prices").limit(301).get(),db.collection("platformSettings").doc("global").get()
+  const [batch,location,prices,settings,approvals]=await Promise.all([
+   root.get(),loc.get(),root.collection("prices").limit(301).get(),db.collection("platformSettings").doc("global").get(),loc.collection("menuApprovals").limit(121).get()
   ]);
   if(!batch.exists||batch.data().country!=="ZW"||!location.exists)
     return Response.json({ok:false,error:"Staged Zimbabwe restaurant not found."},{status:404});
@@ -28,12 +28,13 @@ export async function GET(request) {
   ]);
   const b=biz?.exists?biz.data():null,br=branch?.exists?branch.data():null,st=store?.exists?store.data():null;
   const brand=item.brandName||item.name;
-  const eligible=prices.docs.filter(doc=>verifiedResearchPrice(doc.data(),brand));
+  const byId=new Map(approvals.docs.map(doc=>[doc.id,doc.data()]));
+  const eligible=prices.docs.filter(doc=>verifiedLocationPrice({id:doc.id,...doc.data()},byId.get(doc.id),brand,locationId));
   const sameBrand=prices.docs.filter(doc=>brandCompatible(doc.data().brand,brand));
   const pendingClaims=claims?.docs?.some(doc=>["submitted","needs_information","under_review","approved"].includes(doc.data().status))||false;
   const review=item.publicationReview||null;
   const checks=[
-   ok("location_published","Restaurant is individually published",item.publicationState==="published",
+   ok("location_published","Restaurant is explicitly released to customer discovery",item.publicationState==="published"&&b?.launchApproved===true,
       "Research-only and rejected locations cannot receive shopping requests."),
    ok("source_identity","Canonical Firestore business and branch match source",
       Boolean(b&&br&&b.source?.type==="spotly_assist_research"&&b.source?.batchId===batchId&&b.source?.researchLocationId===locationId&&br.businessId===businessId),
@@ -52,7 +53,7 @@ export async function GET(request) {
       "Malawi remains Ride-only; service switches may disable a region."),
    ok("menu_prices","At least one independently verified USD price is current",
       eligible.length>0,
-      "Only item reviews confirmed by phone, business or field visit within 14 days count."),
+      "Only prices verified independently for this exact branch within 14 days count."),
    ok("assistance","Independent shopping menu is activated and operator-attested",
       Boolean(st&&independentStoreSafe(st,b,br)),
       "This is an independent price-check request, not a paid restaurant order.")
