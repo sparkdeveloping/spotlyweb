@@ -6,6 +6,9 @@ on:
     paths:
       - "lib/assist-research-menu.js"
       - "lib/assist-store-safety.js"
+      - "lib/marketplace-trust.js"
+      - "components/admin-assist-menu-launch.js"
+      - "components/admin-assist-research-publication.js"
       - "app/api/admin/assist-research/**"
       - "app/api/admin/assist-shopping/**"
       - "app/api/customer/independent-shopping/**"
@@ -34,3 +37,18 @@ jobs:
           node-version: '22'
       - name: Verify independent menu safeguards
         run: node --test tests/v9-assist-research-menu.test.mjs
+
+  compile-admin:
+    name: Verify Next.js Admin screens compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Compile Next.js in CI, without deployment
+        run: npm run build
