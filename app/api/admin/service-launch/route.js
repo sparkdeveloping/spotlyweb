@@ -6,7 +6,7 @@ import {parcelSettings} from "@/lib/parcel-server";
 
 export const runtime="nodejs";
 const READ_ROLES=["super_admin","admin","platform_admin","operations_manager","regional_operations_manager","driver_operations_coordinator","dispatcher","support_manager"];
-const WRITE_ROLES=["super_admin","platform_admin","operations_manager"];
+const WRITE_ROLES=["super_admin","admin","platform_admin","operations_manager"];
 const schema=z.object({
  service:z.enum(["ride","send"]),action:z.enum(["enable","disable"]),
  confirmation:z.string().max(70).optional()
@@ -33,8 +33,6 @@ function prerequisites(settings,service){
   const matches=countries.filter(country=>fences[country+":"+String(city).toLowerCase()]);
   if(!matches.length)missing.push("Approve a country-specific service geofence for "+city);
  }
- if(service==="send"&&mobility.send?.enabled!==true&&settings.launch?.sendEnabled===true)
-  missing.push("Legacy Send launch flag must be reviewed; it does not enable Send automatically");
  return {service,enabled:service==="ride"?mobility.ridesEnabled===true:mobility.send?.enabled===true,
   ready:missing.length===0,missing,cityCount:cities.length,geoFenceCount:Object.keys(fences).length,
   schedulerVerified:config.dispatchSchedulerVerified===true};
