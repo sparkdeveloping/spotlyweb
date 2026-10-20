@@ -54,7 +54,7 @@ export function AssistResearchImport() {
     } catch (err) { setError(err.message || "Could not stage research."); }
     finally { setBusy(false); }
   }
-  return <AuthGate portal="admin" title="Sign in to Spotly Admin"><AdminAccess>
+  return <AuthGate portal="admin" title="Sign in to Spotly Admin" sameOriginLogin><AdminAccess>
     <PortalShell portalId="admin" activeSection="marketplace">
       <main className="mx-auto max-w-[1040px] px-5 py-10">
         <Link href="/admin/marketplace" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)]"><ArrowLeft className="h-4 w-4"/>Marketplace</Link>
