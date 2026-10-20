@@ -24,12 +24,12 @@ function isDriverLanding(pathname) {
   return !pathname || pathname === "/" || pathname === "/driver" || pathname === "/driver/";
 }
 
-export function AuthGate({ children, portal = "customer", title = "Sign in required" }) {
+export function AuthGate({ children, portal = "customer", title = "Sign in required", sameOriginLogin = false }) {
   const { user, authReady } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const next = currentPortalDestination(portal, pathname, searchParams);
-  const loginHref = spotlyLoginUrl(portal, { next, mode: "signin" });
+  const next = sameOriginLogin ? (pathname || "/") + (searchParams?.toString?.() ? "?" + searchParams.toString() : "") : currentPortalDestination(portal, pathname, searchParams);
+  const loginHref = sameOriginLogin ? "/login?portal=" + encodeURIComponent(portal) + "&mode=signin&next=" + encodeURIComponent(next) : spotlyLoginUrl(portal, { next, mode: "signin" });
 
   if (!authReady) return <div className="flex min-h-screen items-center justify-center bg-grouped"><LoaderCircle className={`h-8 w-8 animate-spin ${portal === "business" ? "text-business" : portal === "driver" ? "text-driver" : "text-violet"}`} /></div>;
   if (!user || user.isAnonymous) {
