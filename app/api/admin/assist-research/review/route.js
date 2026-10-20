@@ -73,7 +73,7 @@ export async function GET(request) {
       mayMissMatches: true, scanIncomplete: likelyIncomplete,
       warning: likelyIncomplete
         ? "At least one city exceeds the bounded Firestore review limit. Do not interpret missing matches as clearance."
-        : "This compares Firestore businesses, branches and locally curated directory records. It remains an advisory match, not a complete ownership audit."
+        : "This compares Firestore businesses, branches and locally curated directory records. It remains an advisory match, not a complete ownership audit.",
       eligibleForPublication: false, priceVerified: false, results
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return apiError(error); }
