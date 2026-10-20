@@ -36,19 +36,28 @@ const stateCopy = {
 };
 
 function LocationSearch({ label, value, onChange, point, onSelect, city = "Harare", country="ZW", currentLocation = false }) {
-  const [results, setResults] = useState([]); const [loading, setLoading] = useState(false); const timer = useRef(null);
+  const [results, setResults] = useState([]); const [loading, setLoading] = useState(false); const [searchError,setSearchError]=useState(""); const timer = useRef(null);
   useEffect(() => {
     clearTimeout(timer.current);
-    if (!value || value.trim().length < 3 || point?.formattedAddress === value) { setResults([]); return undefined; }
+    let active=true;
+    if (!value || value.trim().length < 3 || point?.formattedAddress === value) { setResults([]);setSearchError(""); return undefined; }
+    setSearchError("");
     timer.current = setTimeout(async () => {
       setLoading(true);
-      try { const data = await publicApiFetch(`/api/public/geocode?q=${encodeURIComponent(value.trim())}&city=${encodeURIComponent(city)}&country=${country}`); setResults(data.results || []); }
-      catch { setResults([]); }
-      finally { setLoading(false); }
+      try {
+        const data=await publicApiFetch(`/api/public/geocode?q=${encodeURIComponent(value.trim())}&city=${encodeURIComponent(city)}&country=${country}`);
+        if(active){setResults(data.results||[]);if(!data.results?.length)setSearchError("No matching address found. Refine the search or drop a pin on the map.");}
+      } catch(error) {
+        if(active){setResults([]);setSearchError(error?.message||"Address search is unavailable. Try the map pin if configured.");}
+      } finally {if(active)setLoading(false);}
     }, 420);
-    return () => clearTimeout(timer.current);
+    return () => {active=false;clearTimeout(timer.current);};
   }, [value, point?.formattedAddress, city,country]);
-  return <div className="relative"><label className="block text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">{label}</label><div className="mt-2 flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3"><MapPin className="h-5 w-5 shrink-0 text-[var(--accent)]" /><input value={value} onChange={(e) => onChange(e.target.value)} placeholder={label === "Pickup" ? "Where should we pick you up?" : "Where are you going?"} className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none" />{loading ? <LoaderCircle className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : value ? <button onClick={() => { onChange(""); onSelect(null); }} aria-label={`Clear ${label}`}><X className="h-4 w-4 text-[var(--text-3)]" /></button> : null}{currentLocation ? <button type="button" onClick={currentLocation} className="rounded-[12px] p-2 text-[var(--accent)] hover:bg-[var(--accent-soft)]" aria-label="Use current location"><LocateFixed className="h-5 w-5" /></button> : null}</div>{results.length ? <div className="surface absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[16px] shadow-elevated">{results.map((item) => <button key={item.id} type="button" onClick={() => { onSelect({ lat: item.lat, lng: item.lng, label: item.label.split(",")[0], formattedAddress: item.label, area: item.area, city: item.city, country:item.country }); onChange(item.label); setResults([]); }} className="flex w-full items-start gap-3 border-b border-[var(--border-subtle)] p-3 text-left last:border-0 hover:bg-[var(--surface-hover)]"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" /><span><span className="block text-sm font-semibold">{item.label.split(",")[0]}</span><span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-[var(--text-3)]">{item.label}</span></span></button>)}</div> : null}</div>;
+  return <div className="relative"><label className="block text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">{label}</label><div className="mt-2 flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3"><MapPin className="h-5 w-5 shrink-0 text-[var(--accent)]" /><input value={value} onChange={(e) => onChange(e.target.value)} placeholder={label === "Pickup" ? "Where should we pick you up?" : "Where are you going?"} className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none" />{loading ? <LoaderCircle className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : value ? <button onClick={() => { onChange(""); onSelect(null); }} aria-label={`Clear ${label}`}><X className="h-4 w-4 text-[var(--text-3)]" /></button> : null}{currentLocation ? <button type="button" onClick={currentLocation} className="rounded-[12px] p-2 text-[var(--accent)] hover:bg-[var(--accent-soft)]" aria-label="Use current location"><LocateFixed className="h-5 w-5" /></button> : null}</div>{results.length ? <div className="surface absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[16px] shadow-elevated">{results.map((item) => <button key={item.id} type="button" onClick={() => { onChange(item.label); onSelect({ lat: item.lat, lng: item.lng, label: item.label.split(",")[0], formattedAddress: item.label, area: item.area, city: item.city, country:item.country }); setResults([]); }} className="flex w-full items-start gap-3 border-b border-[var(--border-subtle)] p-3 text-left last:border-0 hover:bg-[var(--surface-hover)]"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" /><span><span className="block text-sm font-semibold">{item.label.split(",")[0]}</span><span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-[var(--text-3)]">{item.label}</span></span></button>)}</div> : null}
+   {point?.formattedAddress===value?<p className="mt-2 flex items-center gap-1.5 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5"/>Location confirmed for fare calculation</p>:
+     searchError?<p role="alert" className="mt-2 text-xs text-danger">{searchError}</p>:
+     value?.trim().length>=3&&!loading?<p className="mt-2 text-xs text-[var(--text-3)]">Select a suggested address or choose a location on the map to continue.</p>:null}
+  </div>;
 }
 
 function RideTimeline({ state }) {
