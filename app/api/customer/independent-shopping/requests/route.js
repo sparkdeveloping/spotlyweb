@@ -27,7 +27,10 @@ export async function GET(request) {
     const requests = snapshot.docs.map((doc) => ({
       id: doc.id, storeName: doc.data().storeName, state: doc.data().state,
       estimate: doc.data().estimate, finalQuote: doc.data().finalQuote || null, customerMessage: doc.data().customerMessage || "",
-      createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null
+      createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null,
+      storeId:doc.data().storeId,deliveryPin:doc.data().state==="delivered"?null:(doc.data().customerDeliveryPin||null),
+      pendingSubstitutions:doc.data().pendingSubstitutions||[],refundDue:doc.data().refundDue??null,
+      refundStatus:doc.data().refundStatus||null,dispatchStatus:doc.data().dispatchStatus||"not_dispatched"
     })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     return Response.json({ ok: true, requests }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
