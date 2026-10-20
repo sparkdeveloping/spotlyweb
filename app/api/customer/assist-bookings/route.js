@@ -23,7 +23,7 @@ export async function GET(request) {
   } catch (error) { return apiError(error); }
 }
 function pick(d) {
-  return { businessName:d.businessName,serviceName:d.serviceName,requestedAt:d.requestedAt,alternativeAt:d.alternativeAt||null,state:d.state,confirmedAt:d.confirmedAt||null,operatorNote:d.customerMessage||"",customerDecision:d.customerDecision||null };
+  return { businessId:d.businessId,businessName:d.businessName,createdAt:d.createdAt?.toDate?.()?.toISOString?.()||null,serviceName:d.serviceName,requestedAt:d.requestedAt,alternativeAt:d.alternativeAt||null,state:d.state,confirmedAt:d.confirmedAt||null,operatorNote:d.customerMessage||"",customerDecision:d.customerDecision||null };
 }
 export async function POST(request) {
   try {
@@ -39,7 +39,7 @@ export async function POST(request) {
     const [businessSnap,settingsSnap]=await Promise.all([db.collection("businesses").doc(input.businessId).get(),db.collection("platformSettings").doc("global").get()]);
     const business=businessSnap.data(),settings=settingsSnap.data()||{};
     if(!businessSnap.exists||business.public!==true||["archived","removed"].includes(business.status)) throw Object.assign(new Error("This business isn't available for a booking request."),{status:404});
-    if(business.assistAccepting===false) throw Object.assign(new Error("This business has paused assisted requests."),{status:409});
+    if(business.assistAccepting===false || (business.source?.type==="spotly_assist_research" && business.launchApproved!==true)) throw Object.assign(new Error("This business is not open for assisted booking requests."),{status:409});
     if(!regionalServicePolicy(settings.assistCoverage||{},business,"book").available) throw Object.assign(new Error("Spotly Assist bookings are unavailable in this location."),{status:409});
     if(["clinic","hospital","medical","dentist","doctor","pharmacy"].some(x=>String(business.category||"").toLowerCase().includes(x))) throw Object.assign(new Error("Assisted booking is not available for this category."),{status:409});
     const entry={customerId:user.uid,businessId:input.businessId,businessName:business.name||"Business",country:business.country||"ZW",city:business.city||"",phone:input.phone,serviceName:input.serviceName,requestedAt:input.requestedAt,flexibility:input.flexibility,notes:input.notes,state:"requested",customerDecision:null,alternativeAt:null,customerMessage:"Spotly will contact the business to check availability. This is not a confirmed appointment.",paymentStatus:"not_initiated",source:"spotly_assist",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};

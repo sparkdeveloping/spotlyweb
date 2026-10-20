@@ -48,6 +48,7 @@ export async function POST(request) {
        if(values.some(x=>typeof x!=="number"||!Number.isFinite(x))||body.merchandiseTotal<=0){
          throw Object.assign(new Error("Confirm merchandise and fee amounts before quoting."),{status:422});
        }
+       if(body.note.trim().length<12)throw Object.assign(new Error("Document who confirmed the actual prices and fees."),{status:422});
        patch.finalQuote={
          merchandiseTotal:round(body.merchandiseTotal),
          shoppingFee:round(body.shoppingFee),
@@ -56,7 +57,7 @@ export async function POST(request) {
          currency:record.estimate?.currency||"USD",
          confirmedAt:new Date().toISOString(),
          expiresAt:new Date(Date.now()+(body.expiresInMinutes||30)*60000).toISOString(),
-         note:body.note
+         note:body.note,verifiedBy:actor.uid
        };
        patch.state="quote_offered";
        patch.customerMessage="Your confirmed quote is ready to review. You have not been charged.";

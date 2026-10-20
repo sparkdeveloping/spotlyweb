@@ -20,7 +20,9 @@ export async function GET(request) {
           deliveryAddress: entry.deliveryAddress, notes: entry.notes,
           estimate: entry.estimate, finalQuote: entry.finalQuote || null, customerMessage: entry.customerMessage || "",
           createdAt: entry.createdAt?.toDate?.()?.toISOString?.() || null,
-          paymentStatus: entry.paymentStatus, dispatchStatus: entry.dispatchStatus
+          paymentStatus: entry.paymentStatus, dispatchStatus: entry.dispatchStatus,
+          quoteExpired:Boolean(entry.state==="quote_offered" && entry.finalQuote?.expiresAt && Date.parse(entry.finalQuote.expiresAt)<=Date.now()),
+          requiresPaymentSetup:entry.state==="quote_accepted_awaiting_payment"
         };
       }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     }, { headers: { "Cache-Control": "private, no-store" } });

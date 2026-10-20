@@ -1,5 +1,6 @@
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
+import { shoppingActivity, bookingActivity } from "@/lib/assist-activity";
 
 export const runtime = "nodejs";
 
@@ -156,16 +157,20 @@ export async function GET(request) {
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 10), 60) : 30;
     const { db } = getAdminServices();
 
-    const [ordersSnapshot, ridesSnapshot, parcelsSnapshot] = await Promise.all([
+    const [ordersSnapshot, ridesSnapshot, parcelsSnapshot, shoppingSnapshot, bookingsSnapshot] = await Promise.all([
       db.collection("orders").where("customerId", "==", user.uid).limit(160).get(),
       db.collection("rideTrips").where("customerId", "==", user.uid).limit(80).get(),
-      db.collection("parcelJobs").where("customerId", "==", user.uid).limit(80).get()
+      db.collection("parcelJobs").where("customerId", "==", user.uid).limit(80).get(),
+      db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(80).get(),
+      db.collection("assistedBookings").where("customerId", "==", user.uid).limit(80).get()
     ]);
 
     const records = [
       ...ordersSnapshot.docs.map((doc) => orderRecord(doc.id, doc.data() || {})).filter(Boolean),
       ...ridesSnapshot.docs.map((doc) => rideRecord(doc.id, doc.data() || {})),
-      ...parcelsSnapshot.docs.map((doc) => parcelRecord(doc.id, doc.data() || {}))
+      ...parcelsSnapshot.docs.map((doc) => parcelRecord(doc.id, doc.data() || {})),
+      ...shoppingSnapshot.docs.map(doc=>shoppingActivity(doc.id,doc.data()||{})),
+      ...bookingsSnapshot.docs.map(doc=>bookingActivity(doc.id,doc.data()||{}))
     ].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || String(a.id).localeCompare(String(b.id)));
 
     const page = records.slice(offset, offset + limit);
