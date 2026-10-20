@@ -48,7 +48,7 @@ test("operator price verification never creates a public product", () => {
 test("approval requires explicit operator decision and confirms absence of automatic ordering", () => {
   assert.match(ui, /Approve business privately/);
   assert.match(ui, /Review & approve restaurants|Save verified review/);
-  assert.match(ui, /customer discovery and purchase-request activation/);
+  assert.match(ui, /public discovery and purchase-request activation/);
 });
 test("withdrawal refuses claimed, verified, commerce-enabled or claimed-pending business", () => {
   assert.match(publication, /ownerIds\?\.length/);
