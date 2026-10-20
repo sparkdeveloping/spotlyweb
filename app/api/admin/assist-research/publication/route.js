@@ -27,7 +27,7 @@ const priceReview = z.object({
   factualDataRightsReviewed: z.boolean(), notes: z.string().trim().min(8).max(700)
 }).strict();
 const command = z.discriminatedUnion("action", [locationReview, priceReview]);
-const publishSchema = z.object({batchId,locationId:id}).strict();
+const publishSchema = z.object({batchId,locationId:id}).strict();\nconst launchSchema = z.object({batchId,locationId:id,confirmation:z.literal("PUBLISH_TO_CUSTOMERS")}).strict();
 const withdrawSchema = z.object({batchId,locationId:id,reason:z.string().trim().min(8).max(700)}).strict();
 const digest = value => createHash("sha256").update(value).digest("hex").slice(0,27);
 const fail = (message,status=409) => { throw Object.assign(new Error(message), { status }); };
@@ -89,7 +89,7 @@ export async function GET(request) {
       ok:true,batchId:key,
       summary:{
         locationCount:locations.size, priceCount:prices.size,
-        reviewedLocations:locations.docs.filter(doc=>doc.data().publicationReview).length,
+        reviewedLocations:locations.docs.filter(doc=>doc.data().publicationReview).length,\n        approvedLocations:locations.docs.filter(doc=>doc.data().publicationState==="approved").length,
         publishedLocations:locations.docs.filter(doc=>doc.data().publicationState==="published").length,
         linkedLocations:locations.docs.filter(doc=>doc.data().publicationState==="linked_existing").length,
         reviewedPrices:prices.docs.filter(doc=>doc.data().priceReview).length
@@ -209,7 +209,7 @@ export async function POST(request) {
       const [rootSnap,locSnap]=await Promise.all([tx.get(root),tx.get(loc)]);
       if(!rootSnap.exists||rootSnap.data().country!=="ZW"||!locSnap.exists)fail("Research location not found.",404);
       const item=locSnap.data(),review=item.publicationReview;
-      if(["published","linked_existing"].includes(item.publicationState)){
+      if(["approved","published","linked_existing"].includes(item.publicationState)){
         result={state:item.publicationState,businessId:item.linkedBusinessId,branchId:item.linkedBranchId,idempotent:true};return;
       }
       if(item.publicationState!=="reviewed"||!review||!review.sourceRightsReviewed||!review.duplicatesReviewed)fail("Complete the location verification review before publishing.");
@@ -255,11 +255,11 @@ export async function POST(request) {
           category:item.category||"Restaurant",categories:[item.category||"Restaurant"],
           country:"ZW",city:item.city,area:item.area||"",address:review.verifiedAddress,
           phone:item.phone||"",description:"Independent directory listing. Not an official Spotly restaurant partner.",
-          currency:"USD",acceptedCurrencies:["USD"],public:true,status:"provisional",
+          currency:"USD",acceptedCurrencies:["USD"],public:false,launchApproved:false,status:"provisional",
           claimStatus:"unclaimed",ownershipStatus:"unclaimed",verificationStatus:"unverified",
           commerceVerificationStatus:"not_verified",commerceVerified:false,commerceEnabled:false,
           onlinePaymentEnabled:false,cashEnabled:false,
-          assistAccepting:true,assistOperationalReady:false,
+          assistAccepting:false,assistOperationalReady:false,
           source,aliases:[item.name,item.brandName||item.name,item.city],
           createdAt:now,updatedAt:now,createdBy:actor.uid
         });
@@ -268,7 +268,7 @@ export async function POST(request) {
           name:"Main location",branchName:"Main location",
           displayName:item.name+" — "+item.city,
           country:"ZW",city:item.city,area:item.area||"",address:review.verifiedAddress,
-          phone:item.phone||"",public:true,status:"provisional",
+          phone:item.phone||"",public:false,status:"provisional",
           fulfilment:[],pickup:{enabled:false},acceptedCurrencies:["USD"],
           operatingHoursStatus:"unverified",assistOperationalReady:false,
           source,createdAt:now,updatedAt:now,createdBy:actor.uid
@@ -278,10 +278,10 @@ export async function POST(request) {
           researchBatchId:batchKey,locationId:locId,createdAt:now
         });
         tx.update(loc,{
-          publicationState:"published",linkedBusinessId:business.id,linkedBranchId:branch.id,
-          publishedAt:now,publishedBy:actor.uid
+          publicationState:"approved",linkedBusinessId:business.id,linkedBranchId:branch.id,
+          approvedAt:now,approvedBy:actor.uid
         });
-        result={state:"published",businessId:business.id,branchId:branch.id};
+        result={state:"approved",businessId:business.id,branchId:branch.id};
       }else fail("Rejected locations cannot be published.");
       tx.create(db.collection("auditLogs").doc(),{
         action:"assist.research.publication."+result.state,
