@@ -1,5 +1,6 @@
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { rankRestaurantCandidates } from "@/lib/assist-research-match";
+import { rankRestaurantCandidates, normalizeRestaurantText } from "@/lib/assist-research-match";
+import { openPlaces } from "@/lib/open-marketplace-data";
 export const runtime = "nodejs";
 const roles = ["super_admin", "platform_admin", "operations_manager", "data_import_manager"];
 const LIMIT_PER_CITY = 120;
@@ -47,6 +48,7 @@ export async function GET(request) {
     const candidates = cityReads.flatMap((snapshot, index) => snapshot.docs.map(doc =>
       cleanCandidate(doc, index % 2 === 0 ? "business" : "branch")
     )).filter(item => item.name);
+    const curated = openPlaces().filter(item => item.name && String(item.country||"ZW").toUpperCase()==="ZW" && cities.some(city=>normalizeRestaurantText(city)===normalizeRestaurantText(item.city)));
     const results = research.map(item => ({
       id: item.id,
       name: item.name,
@@ -54,7 +56,7 @@ export async function GET(request) {
       city: item.city, area: item.area, address: item.address,
       sourceUrl: item.sourceUrl,
       observedAt: item.observedAt,
-      existingCandidates: rankRestaurantCandidates(item, candidates).map(({candidate,match})=>({
+      existingCandidates: rankRestaurantCandidates(item, [...candidates,...curated.map(item=>({...item,type:"curated",businessId:""}))],8).map(({candidate,match})=>({
         id: candidate.id, type: candidate.type, businessId: candidate.businessId,
         name: candidate.name, city: candidate.city, address: candidate.address,
         rank: match.rank, reasons: match.reasons,
@@ -70,8 +72,8 @@ export async function GET(request) {
       strongMatches: strongCount, citiesChecked: cities,
       mayMissMatches: true, scanIncomplete: likelyIncomplete,
       warning: likelyIncomplete
-        ? "At least one city has more records than this bounded review read. Do not interpret missing matches as clearance."
-        : "This is a city-indexed candidate search, not a complete duplicate or ownership audit. Review all businesses and branches before publication.",
+        ? "At least one city exceeds the bounded Firestore review limit. Do not interpret missing matches as clearance."
+        : "This compares Firestore businesses, branches and locally curated directory records. It remains an advisory match, not a complete ownership audit."
       eligibleForPublication: false, priceVerified: false, results
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return apiError(error); }
