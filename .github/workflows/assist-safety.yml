@@ -61,6 +61,30 @@ on:
       - "components/admin-driver-operations.js"
       - "tests/rides-*.test.mjs"
       - "docs/SPOTLY-V9-RIDE-RELEASE.md"
+      - "lib/send-*.js"
+      - "lib/spotly-products.js"
+      - "lib/parcel-server.js"
+      - "app/api/customer/parcels/**"
+      - "app/api/driver/parcels/**"
+      - "app/api/driver/parcel-offers/**"
+      - "app/api/admin/parcels/**"
+      - "app/api/admin/send-recovery/**"
+      - "app/api/admin/service-launch/**"
+      - "app/api/internal/parcel-dispatch/**"
+      - "components/send-app.js"
+      - "components/admin-mobility-launch.js"
+      - "components/marketplace-*.js"
+      - "components/service-experience.js"
+      - "next.config.mjs"
+      - "app/bite/**"
+      - "app/shopper/**"
+      - "app/live/**"
+      - "app/city/**"
+      - "app/sitemap.js"
+      - "data/portals.js"
+      - "tests/send-*.test.mjs"
+      - "tests/spotly-products-v9.test.mjs"
+      - "docs/SPOTLY-V9-SEND-AND-BRANDS.md"
       - ".github/workflows/assist-safety.yml"
   workflow_dispatch:
 
@@ -82,7 +106,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify independent menu safeguards
-        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs tests/rides-production.test.mjs tests/rides-v9-integrity.test.mjs tests/rides-v9-finance.test.mjs
+        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs tests/rides-production.test.mjs tests/rides-v9-integrity.test.mjs tests/send-production.test.mjs tests/send-v9-integrity.test.mjs tests/spotly-products-v9.test.mjs tests/rides-v9-finance.test.mjs
 
   compile-admin:
     name: Verify Next.js Admin screens compile

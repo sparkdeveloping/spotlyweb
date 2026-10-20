@@ -12,6 +12,7 @@ import { Badge, Button, Card, EmptyState, EntityPicker, Modal, Overlay, SearchFi
 import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { deleteSavedItem, loadPublicMarketplaceBusiness, saveFavorite, saveSavedItem, saveUserPreferences, searchLiveBusinesses, searchSpotly, subscribeCustomerOrders, subscribeFavorites, subscribeSavedItems, track } from "@/lib/firebase-services";
 import { cn } from "@/lib/cn";
+import {publicProductRoute} from "@/lib/spotly-products";
 import { formatCurrency } from "@/lib/format";
 import { businessArchetype } from "@/data/business-archetypes";
 import { migrateLegacyState, readState, removeState, writeState } from "@/lib/browser-state";
@@ -36,7 +37,7 @@ const LOCATION_KEY = "spotly-marketplace-location";
 const RECENT_SEARCH_KEY = "spotly-recent-searches";
 const RECENT_BUSINESS_KEY = "spotly-recent-businesses";
 const MARKETPLACE_TABS_ID = "marketplace-sections";
-const SERVICE_PATHS = new Set(["/ride", "/eat", "/shop", "/book", "/events", "/send"]);
+const SERVICE_PATHS=new Set(["/ride","/eat","/bite","/shop","/shopper","/book","/events","/live","/send"]);
 
 function timestamp(value) {
   if (!value) return null;
@@ -719,7 +720,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setTransactionOffer(null);
     setQuery("");
     if (MARKETPLACE_SERVICE_KEYS.has(nextService) || nextService === "ride" || nextService === "send") {
-      router.push(`/${nextService}`);
+      router.push(publicProductRoute(nextService));
       return;
     }
     updateUrl("home", { business: null, order: null, service: nextService, offer: null });

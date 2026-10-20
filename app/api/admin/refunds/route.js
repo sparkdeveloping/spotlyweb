@@ -57,6 +57,22 @@ export async function POST(request) {
         if(rideRef)transaction.set(rideRef,{
           paymentStatus:"refund_pending",paymentReviewRequired:true,
           driverEarningsStatus:"refund_review",updatedAt:FieldValue.serverTimestamp()},{merge:true});
+        if(order.transactionType==="send"&&order.parcelJobId){
+          const parcelRef=db.collection("parcelJobs").doc(order.parcelJobId);
+          const parcelSnap=await transaction.get(parcelRef);
+          if(!parcelSnap.exists)throw Object.assign(new Error("The Send parcel must be investigated first."),{status:409});
+          const parcel=parcelSnap.data();
+          if(parcel.assignedDriverId){
+            transaction.set(db.collection("drivers").doc(parcel.assignedDriverId),{
+              sendFinanceHold:true,sendFinanceHoldAt:FieldValue.serverTimestamp()},{merge:true});
+            transaction.set(db.collection("sendFinanceReviews").doc(order.parcelJobId),{
+              parcelJobId:order.parcelJobId,driverId:parcel.assignedDriverId,
+              issueType:"customer_refund_request",status:"open",
+              createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+          }
+          transaction.set(parcelRef,{paymentStatus:"refund_pending",paymentReviewRequired:true,
+            driverEarningsStatus:"refund_review",updatedAt:FieldValue.serverTimestamp()},{merge:true});
+        }
         transaction.create(refundRef, {
           orderId: body.orderId,
           paymentIntentReference: order.paymentIntentReference || null,
@@ -92,7 +108,7 @@ export async function POST(request) {
          db.collection("rideTrips").doc(order.rideTripId):null;
       const rideSnap=rideRef?await transaction.get(rideRef):null;
       if(rideRef&&!rideSnap?.exists)throw Object.assign(new Error("Ride refund needs a matching trip record."),{status:409});
-      if(rideRef&&body.action==="mark_refunded"){
+      if((rideRef||order.transactionType==="send")&&body.action==="mark_refunded"){
         if(!body.evidenceUrl?.startsWith("https://")||user.uid===refund.requestedBy||
            (refund.processingBy&&user.uid===refund.processingBy))
          throw Object.assign(new Error("Ride refunds require an independent Finance reviewer and HTTPS external payment evidence."),{status:409});
@@ -117,6 +133,10 @@ export async function POST(request) {
       }
 
       if (!["refund_requested", "refund_processing"].includes(refund.status)) throw Object.assign(new Error("This refund cannot be marked complete."), { status: 409 });
+      if(order.transactionType==="send"&&order.parcelJobId)transaction.set(
+        db.collection("parcelJobs").doc(order.parcelJobId),{paymentStatus:"refunded",
+          paymentReviewRequired:true,refundExternalReference:body.providerReference,
+          refundEvidenceUrl:body.evidenceUrl,updatedAt:FieldValue.serverTimestamp()},{merge:true});
       if(rideRef)transaction.set(rideRef,{paymentStatus:"refunded",paymentReviewRequired:true,
         refundEvidenceUrl:body.evidenceUrl,refundExternalReference:body.providerReference,
         updatedAt:FieldValue.serverTimestamp()},{merge:true});

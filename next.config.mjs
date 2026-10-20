@@ -28,6 +28,14 @@ const nextConfig = {
       { protocol: "https", hostname: "yt3.googleusercontent.com" }
     ]
   },
+  redirects:async()=>[
+    {source:"/eat",destination:"/bite",permanent:true},
+    {source:"/shop",destination:"/shopper",permanent:true},
+    {source:"/events",destination:"/live",permanent:true},
+    {source:"/city/:city/eat",destination:"/city/:city/bite",permanent:true},
+    {source:"/city/:city/shop",destination:"/city/:city/shopper",permanent:true},
+    {source:"/city/:city/events",destination:"/city/:city/live",permanent:true}
+  ],
   headers: async () => [
     {
       source: "/(.*)",

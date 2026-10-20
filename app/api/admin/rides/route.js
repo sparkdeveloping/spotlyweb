@@ -57,6 +57,8 @@ export async function PATCH(request) {
     const currentSnap = await settingsRef.get();
     const current = currentSnap.exists ? currentSnap.data() : {};
     const mobility = current.mobility || {};
+    if(body.ridesEnabled!==undefined&&body.ridesEnabled!==(mobility.ridesEnabled===true))
+      throw Object.assign(new Error("Activate or pause Ride from Admin Mobility → Service Launch & Controls."),{status:409});
     const next = {
       ...mobility,
       ...(body.ridesEnabled !== undefined ? { ridesEnabled: body.ridesEnabled } : {}),

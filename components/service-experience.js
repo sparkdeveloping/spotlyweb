@@ -32,7 +32,7 @@ import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-ta
 
 const SERVICE_CONFIG = {
   eat: {
-    label: "Eat",
+    label: "SpotlyBite",
     eyebrow: "Food around you",
     title: "What are you craving?",
     description: "Discover food businesses around you. Menus, ordering, pickup and delivery only appear where the merchant has enabled them.",
@@ -42,7 +42,7 @@ const SERVICE_CONFIG = {
     suggestions: ["Chicken", "Pizza", "Coffee", "Lunch", "Dessert"]
   },
   shop: {
-    label: "Shop",
+    label: "SpotlyShopper",
     eyebrow: "Stores and essentials",
     title: "Find what you need nearby",
     description: "Discover local shops and grocery products. Price, stock, pickup and delivery only appear where a merchant has published a verified offer.",
@@ -62,7 +62,7 @@ const SERVICE_CONFIG = {
     suggestions: ["Massage", "Salon", "Fitness", "Activities", "Stay"]
   },
   events: {
-    label: "Events",
+    label: "SpotlyLive",
     eyebrow: "What’s happening",
     title: "Make plans in your city",
     description: "Find upcoming events, venues and ticket options published by live Spotly businesses.",

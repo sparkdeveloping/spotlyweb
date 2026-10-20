@@ -23,16 +23,19 @@ const CITY_MAP = {
   chipinge: "Chipinge"
 };
 const SERVICES = {
-  eat: { title: "Food delivery & pickup", description: "Restaurants, dishes, pickup and delivery available through Spotly." },
-  shop: { title: "Local shopping", description: "Stores and products available through Spotly." },
+  eat: { title: "SpotlyBite · Food delivery & pickup", description: "Restaurants, dishes, pickup and delivery available through Spotly." },
+  shop: { title: "SpotlyShopper · Local shopping", description: "Stores and products available through Spotly." },
   book: { title: "Services & bookings", description: "Book services, activities and stays available through Spotly." },
-  events: { title: "Events & tickets", description: "Discover events and ticket options available through Spotly." }
+  events: { title: "SpotlyLive · Events & tickets", description: "Discover events and ticket options available through Spotly." }
 };
 
 function resolve(citySlug, service) {
   const city = CITY_MAP[String(citySlug || "").toLowerCase()];
-  const config = SERVICES[String(service || "").toLowerCase()];
-  return city && config ? { city, config, service: String(service).toLowerCase(), citySlug: String(citySlug).toLowerCase() } : null;
+  const slug=String(service||"").toLowerCase();
+  const mapped={bite:"eat",shopper:"shop",live:"events"};
+  const id=mapped[slug]||slug;
+  const config=SERVICES[id];
+  return city && config ? { city, config, service:id,slug,citySlug: String(citySlug).toLowerCase() } : null;
 }
 
 export async function generateMetadata({ params }) {
@@ -42,7 +45,7 @@ export async function generateMetadata({ params }) {
   return {
     title: `${route.config.title} in ${route.city}`,
     description: `${route.config.description} Explore live Spotly businesses in ${route.city}, Zimbabwe.`,
-    alternates: { canonical: `/city/${route.citySlug}/${route.service}` },
+    alternates: { canonical: `/city/${route.citySlug}/${route.slug}` },
     openGraph: {
       title: `${route.config.title} in ${route.city} | Spotly`,
       description: `${route.config.description} Explore live Spotly businesses in ${route.city}, Zimbabwe.`,

@@ -52,6 +52,11 @@ export async function POST(request) {
     });
     if (["high", "critical"].includes(body.severity)){
       await db.collection("drivers").doc(user.uid).set({safetyHold:true,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      if(body.parcelJobId&&parcel&&!["delivered","returned","cancelled","failed"].includes(parcel.state)){
+        await db.collection("parcelJobs").doc(body.parcelJobId).set({
+          safetyReviewHold:true,safetyIncidentId:ref.id,exceptionCode:"safety_review",
+          updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      }
       if(body.rideId&&ride&&!["completed","cancelled","failed"].includes(ride.state)){
         await db.collection("rideTrips").doc(body.rideId).set({safetyReviewHold:true,
           safetyIncidentId:ref.id,exceptionCode:"safety_review",

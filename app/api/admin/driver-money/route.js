@@ -30,7 +30,7 @@ export async function POST(request) {
       const payout = snap.data(); const status = payout.status || "requested";
       const driver=await transaction.get(db.collection("drivers").doc(payout.driverId));
       if(["approve","release","processing","paid"].includes(body.action)&&
-         driver.exists&&driver.data().rideFinanceHold===true)
+         driver.exists&&(driver.data().rideFinanceHold===true||driver.data().sendFinanceHold===true))
         throw Object.assign(new Error("A Ride refund or dispute has suspended this Driver's payouts pending independent Finance reconciliation."),{status:409});
       if (!transitions[status]?.has(body.action)) throw Object.assign(new Error(`A ${status} payout cannot be moved with that action.`), { status: 409 });
       const amount = Number(payout.amount || 0); const currency = payout.currency || "USD"; let nextStatus = status; let effects = null; let type = null;

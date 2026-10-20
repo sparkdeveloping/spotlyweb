@@ -41,8 +41,8 @@ test("Send offer acceptance is transactional and reserves Driver capacity", asyn
 
 test("Send handoff requires pickup and recipient PINs plus configurable proof of delivery", async () => {
   const source = await read("app/api/driver/parcels/route.js");
-  assert.match(source, /parcel\.pickupPin/);
-  assert.match(source, /parcel\.dropoffPin/);
+  assert.match(source, /matchesParcelPin/);
+  assert.match(source, /matchesParcelPin/);
   assert.match(source, /proofPhotoRequired === true/);
   assert.match(source, /proofPhotoUrl/);
   assert.match(source, /state: nextState/);
@@ -59,7 +59,7 @@ test("Send cash and digital completion use Driver Money correctly", async () => 
 test("Paid Paynow Send requests transition into dispatch automatically", async () => {
   const source = await read("lib/payment-processor-server.js");
   assert.match(source, /order\.transactionType === "send"/);
-  assert.match(source, /parcelPaymentPatch\.state = scheduledMs .* "scheduled" : "searching_driver"/);
+  assert.match(source, /patch.state=scheduledMs.*"scheduled":"searching_driver"/);
   assert.match(source, /dispatchParcel/);
   assert.match(source, /parcel_dispatch_failed/);
 });
@@ -99,7 +99,7 @@ test("Scheduled Send defers dispatch until the pickup window and preserves paid 
   assert.match(customer, /pickupMode: z\.enum\(\["now", "scheduled"\]\)/);
   assert.match(customer, /Schedule pickup at least 20 minutes from now/);
   assert.match(customer, /Scheduled Send pickup can be booked up to 7 days ahead/);
-  assert.match(processor, /parcelPaymentPatch\.state = scheduledMs .* "scheduled" : "searching_driver"/);
+  assert.match(processor, /patch.state=scheduledMs.*"scheduled":"searching_driver"/);
   assert.match(cron, /dispatch\.scheduled_due/);
   assert.match(cron, /dueCutoff = Date\.now\(\) \+ 15 \* 60_000/);
   assert.match(server, /scheduled: \["searching_driver", "cancelled", "failed"\]/);

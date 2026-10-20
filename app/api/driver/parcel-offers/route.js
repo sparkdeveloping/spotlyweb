@@ -10,11 +10,11 @@ const schema = z.object({ offerId: z.string().min(3).max(180), action: z.enum(["
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request); const body = schema.parse(await request.json()); const { db, messaging } = getAdminServices(); const offerRef = db.collection("parcelOffers").doc(body.offerId);
-    let parcelJobId = ""; let notification = null;
+    let parcelJobId = ""; let notification = null; let expiredOffer=false;
     await db.runTransaction(async (transaction) => {
       const offerSnap = await transaction.get(offerRef); if (!offerSnap.exists) throw Object.assign(new Error("This Send offer is no longer available."), { status: 404 });
       const offer = offerSnap.data(); if (offer.driverId !== user.uid) throw Object.assign(new Error("This offer is not assigned to your Driver account."), { status: 403 });
-      if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now()) { transaction.set(offerRef, { state: "expired", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); throw Object.assign(new Error("This Send offer expired."), { status: 409 }); }
+      if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now()) { transaction.set(offerRef, { state: "expired", updatedAt: FieldValue.serverTimestamp() }, { merge: true });expiredOffer=true;return; }
       parcelJobId = offer.parcelJobId; const parcelRef = db.collection("parcelJobs").doc(parcelJobId); const parcelSnap = await transaction.get(parcelRef); if (!parcelSnap.exists) throw Object.assign(new Error("The Send request is no longer available."), { status: 404 }); const parcel = parcelSnap.data();
       if (body.action === "view") { if (offer.state === "offered") transaction.set(offerRef, { state: "viewed", viewedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return; }
       if (!["offered", "viewed"].includes(offer.state)) throw Object.assign(new Error("This Send offer is no longer available."), { status: 409 });
@@ -35,6 +35,7 @@ export async function POST(request) {
       transaction.create(db.collection("auditLogs").doc(), { actorId: user.uid, action: "parcel.offer.accepted", entityType: "parcelJob", entityId: parcelJobId, metadata: { offerId: body.offerId }, source: "send_network", createdAt: now });
       notification = { customerId: parcel.customerId, number: parcel.number };
     });
+    if(expiredOffer)throw Object.assign(new Error("The Send offer expired. Refresh your work queue."),{status:409});
     if (body.action === "accept" && notification) {
       const siblings = await db.collection("parcelOffers").where("parcelJobId", "==", parcelJobId).limit(100).get(); const batch = db.batch(); let changed = false;
       siblings.docs.forEach((item) => { if (item.id !== body.offerId && ["offered", "viewed"].includes(item.data().state)) { batch.set(item.ref, { state: "withdrawn", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); changed = true; } }); if (changed) await batch.commit();

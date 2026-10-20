@@ -54,7 +54,7 @@ export async function POST(request) {
     const [settings, driver] = await Promise.all([db.collection("platformSettings").doc("global").get(), db.collection("drivers").doc(user.uid).get()]);
     const minimum = Number(settings.data()?.commerce?.driverPayoutMinimum ?? settings.data()?.commerce?.payoutMinimum ?? 20);
     if (amount + 0.001 < minimum) throw Object.assign(new Error(`Driver payouts currently require at least ${body.currency} ${minimum.toFixed(2)}.`), { status: 422 });
-    if (!driver.exists || !["approved", "ready", "active"].includes(driver.data().status) || driver.data().complianceHold || driver.data().safetyHold || driver.data().rideFinanceHold) throw Object.assign(new Error("Your Driver account cannot request a payout right now."), { status: 409 });
+    if (!driver.exists || !["approved", "ready", "active"].includes(driver.data().status) || driver.data().complianceHold || driver.data().safetyHold || driver.data().rideFinanceHold || driver.data().sendFinanceHold) throw Object.assign(new Error("Your Driver account cannot request a payout right now."), { status: 409 });
     const payoutRef = db.collection("driverPayouts").doc();
     await db.runTransaction(async (transaction) => {
       const accountRef = db.collection("driverPayoutAccounts").doc(user.uid);
