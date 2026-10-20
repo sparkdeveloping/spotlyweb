@@ -42,6 +42,7 @@ export function AssistResearchPublication({batchId,duplicateReport=null}) {
   const [filter,setFilter] = useState("");
   const [withdrawReason,setWithdrawReason] = useState("");
   const [publishConfirmation,setPublishConfirmation] = useState(false);
+  const [launchConfirmation,setLaunchConfirmation] = useState(false);
 
   async function refresh(preserve = true) {
     setError("");
@@ -86,19 +87,31 @@ export function AssistResearchPublication({batchId,duplicateReport=null}) {
       await refresh();
     }catch(err){setError(err.message);}finally{setBusy("");}
   }
-  async function publish(){
+  async function approve(){
     if(!location || !publishConfirmation)return;
-    setBusy("publish");setError("");setNotice("");
+    setBusy("approve");setError("");setNotice("");
     try{
       const result=await authenticatedFetch("/api/admin/assist-research/publication",{
         method:"POST",body:JSON.stringify({batchId,locationId:location.id})
       });
       setNotice(result.state==="linked_existing"
         ? "Research was linked to the existing business without changing the merchant profile or catalogue."
-        : "An unclaimed discovery listing was published. No shopping, checkout or Driver dispatch was activated.");
+        : "Business approved privately. It is not published to customers; ordering and dispatch remain off.");
       setPublishConfirmation(false);
       await refresh();
     }catch(err){setError(err.message);}finally{setBusy("");}
+  }
+  async function launchDiscovery(){
+    if(!location||!launchConfirmation||location.publicationState!=="approved")return;
+    setBusy("launch");setError("");setNotice("");
+    try{
+      await authenticatedFetch("/api/admin/assist-research/publication",{
+        method:"PUT",body:JSON.stringify({batchId,locationId:location.id,confirmation:"PUBLISH_TO_CUSTOMERS"})
+      });
+      setNotice("Directory discovery released separately. Menus, payments, customer requests and Driver dispatch remain disabled.");
+      setLaunchConfirmation(false);await refresh();
+    }catch(err){setError(err.message);}
+    finally{setBusy("");}
   }
   async function withdraw(){
     if(!location || withdrawReason.trim().length<8)return;
@@ -128,12 +141,12 @@ export function AssistResearchPublication({batchId,duplicateReport=null}) {
   return <section className="mt-7 overflow-hidden rounded-2xl border bg-[var(--surface)]">
     <div className="border-b p-5 sm:p-7">
       <div className="flex items-start gap-3"><div className="rounded-xl bg-[var(--accent-soft)] p-2.5 text-[var(--accent)]"><ClipboardCheck className="h-5 w-5"/></div>
-        <div><p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Review before publication</p><h2 className="mt-1 text-2xl font-semibold">Approve & publish</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Validate each restaurant location and independent price record. Linking existing businesses does not modify them. New locations can publish as <strong>unclaimed, discovery-only</strong> listings after verification.</p>
+        <div><p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Independent multi-brand review</p><h2 className="mt-1 text-2xl font-semibold">Review & approve restaurants</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Review every restaurant and branch independently, across all brands. Approval creates a <strong>private, non-orderable</strong> listing. Customer discovery and Spotly Assist requests require separate release decisions.</p>
         </div>
       </div>
       {data&&<div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {[["Locations",data.summary.locationCount],["Reviewed",data.summary.reviewedLocations],["Published",data.summary.publishedLocations],["Prices reviewed",data.summary.reviewedPrices]].map(([label,count])=>
+        {[["Locations",data.summary.locationCount],["Reviewed",data.summary.reviewedLocations],["Approved privately",data.summary.approvedLocations],["Menu refs reviewed",data.summary.reviewedPrices]].map(([label,count])=>
           <div key={label} className="rounded-xl bg-[var(--surface-2)] p-3"><p className="text-xl font-semibold">{count}</p><p className="mt-1 text-xs text-[var(--text-2)]">{label}</p></div>)}
       </div>}
       <div className="mt-5 flex flex-wrap gap-2">{[["locations","Review restaurants"],["prices","Review prices"]].map(([id,label])=><button type="button" key={id} onClick={()=>setTab(id)} className={"rounded-full px-4 py-2 text-sm font-semibold "+(tab===id?"bg-[var(--accent)] text-white":"border")}>{label}</button>)}</div>
@@ -154,7 +167,7 @@ export function AssistResearchPublication({batchId,duplicateReport=null}) {
         <div className="min-w-0 p-5 sm:p-7">
           {location&&locationForm&&<div className="space-y-5">
             <div><p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Restaurant location</p><h3 className="mt-1 text-xl font-semibold">{location.name}</h3><p className="mt-2 text-sm text-[var(--text-2)]">{location.address || "Physical address missing"} · {location.city}</p><a href={location.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)]">Review original source <ExternalLink className="h-3 w-3"/></a></div>
-            {["published","linked_existing","withdrawn"].includes(location.publicationState)?<div className="rounded-xl bg-[var(--surface-2)] p-4"><div className="flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-5 w-5 text-[var(--accent)]"/>{location.publicationState.replaceAll("_"," ")}</div><p className="mt-2 text-xs text-[var(--text-2)]">Business ID: {location.linkedBusinessId || "—"} · Branch ID: {location.linkedBranchId || "—"}</p></div>:<>
+            {["approved","published","linked_existing","withdrawn"].includes(location.publicationState)?<div className="rounded-xl bg-[var(--surface-2)] p-4"><div className="flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-5 w-5 text-[var(--accent)]"/>{location.publicationState.replaceAll("_"," ")}</div><p className="mt-2 text-xs text-[var(--text-2)]">Business ID: {location.linkedBusinessId || "—"} · Branch ID: {location.linkedBranchId || "—"}</p></div>:<>
               <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold">Publication decision<select value={locationForm.decision} onChange={e=>setLocationForm(s=>({...s,decision:e.target.value}))} className={field}><option value="new_business">Create new unclaimed listing</option><option value="link_existing">Link to existing Spotly business</option><option value="reject">Reject research location</option></select></label>
               <label className="text-xs font-semibold">How was the location checked?<select value={locationForm.contactMethod} onChange={e=>setLocationForm(s=>({...s,contactMethod:e.target.value}))} className={field}><option value="phone">Telephone</option><option value="in_person">In person</option><option value="business_confirmed">Confirmed by business</option><option value="independent_field_research">Independent field research</option></select></label></div>
               {locationForm.decision==="new_business"&&<label className="block text-xs font-semibold">Verified physical street address<input value={locationForm.verifiedAddress} onChange={e=>setLocationForm(s=>({...s,verifiedAddress:e.target.value}))} className={field} placeholder="Confirmed street and business entrance"/></label>}
@@ -167,10 +180,16 @@ export function AssistResearchPublication({batchId,duplicateReport=null}) {
               ].map(([key,label])=><label key={key} className="flex items-start gap-3 text-sm"><input type="checkbox" checked={locationForm[key]} onChange={e=>setLocationForm(s=>({...s,[key]:e.target.checked}))} className="mt-1 h-4 w-4"/>{label}</label>)}</div>
               <label className="block text-xs font-semibold">Review evidence / call notes<textarea rows={3} value={locationForm.notes} onChange={e=>setLocationForm(s=>({...s,notes:e.target.value}))} className={field} placeholder="What did you independently verify? Date, who you spoke to, duplicate determination and source review."/></label>
               <button type="button" disabled={!!busy||!canReview(locationForm)||locationForm.notes.trim().length<8} onClick={saveLocation} className="w-full rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">{busy==="location"?"Saving…":"Save verified review"}</button>
-              {location.publicationState==="reviewed"&&<div className="border-t pt-5"><label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={publishConfirmation} onChange={e=>setPublishConfirmation(e.target.checked)} className="mt-1 h-4 w-4"/>I understand this will {location.publicationReview?.decision==="link_existing"?"record a link without modifying the merchant":"publish a discovery-only unclaimed profile with no order or checkout capability"}.</label><button type="button" disabled={!!busy||!publishConfirmation} onClick={publish} className="mt-4 w-full rounded-xl border border-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent)] disabled:opacity-40">{busy==="publish"?"Processing…":location.publicationReview?.decision==="link_existing"?"Confirm existing business link":"Approve & publish listing"}</button></div>}
+              {location.publicationState==="reviewed"&&<div className="border-t pt-5"><label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={publishConfirmation} onChange={e=>setPublishConfirmation(e.target.checked)} className="mt-1 h-4 w-4"/>I understand this will {location.publicationReview?.decision==="link_existing"?"record a link without modifying the merchant":"approve a private, hidden, unclaimed business profile. This does NOT launch it to customers"}.</label><button type="button" disabled={!!busy||!publishConfirmation} onClick={approve} className="mt-4 w-full rounded-xl border border-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent)] disabled:opacity-40">{busy==="approve"?"Approving privately…":location.publicationReview?.decision==="link_existing"?"Confirm existing business link":"Approve business privately"}</button></div>}
             </>}
+            {location.publicationState==="approved"&&<div className="space-y-3 border-t pt-5">
+              <h4 className="text-sm font-semibold">Separate customer-discovery release</h4>
+              <p className="text-xs leading-5 text-[var(--text-2)]">This approved record remains hidden. Only release it when the entire business is ready to be listed to customers. This does not enable customer purchase requests.</p>
+              <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={launchConfirmation} onChange={e=>setLaunchConfirmation(e.target.checked)}/>I explicitly authorize launching this one business to customer discovery now.</label>
+              <button type="button" disabled={!launchConfirmation||!!busy} onClick={launchDiscovery} className="rounded-xl border px-5 py-3 text-sm font-semibold disabled:opacity-40">{busy==="launch"?"Releasing…":"Release to customer discovery"}</button>
+            </div>}
             {location.publicationState==="published"&&<div className="border-t pt-5"><label className="block text-xs font-semibold">Withdraw reason<input value={withdrawReason} onChange={e=>setWithdrawReason(e.target.value)} className={field} placeholder="Required audit reason"/></label><button type="button" disabled={!!busy||withdrawReason.trim().length<8} onClick={withdraw} className="mt-3 inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-40"><Undo2 className="h-4 w-4"/>Withdraw this unclaimed listing</button></div>}
-            <div className="flex gap-2 rounded-xl border p-4 text-xs leading-5 text-[var(--text-2)]"><ShieldCheck className="h-4 w-4 shrink-0"/>No merchant commission, product catalogue, food ordering, shopping payment or Driver dispatch is activated from this action.</div>
+            <div className="flex gap-2 rounded-xl border p-4 text-xs leading-5 text-[var(--text-2)]"><ShieldCheck className="h-4 w-4 shrink-0"/>Review, approval, public discovery and purchase-request activation are four separate decisions. Neither approving a business nor launching its directory page enables merchant orders, payment collection or Driver dispatch.</div>
           </div>}
         </div>
       </div>:<div className="grid lg:grid-cols-[.9fr_1.5fr]">
