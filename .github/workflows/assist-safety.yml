@@ -1,0 +1,36 @@
+name: Spotly Assist Safety Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/assist-research-menu.js"
+      - "lib/assist-store-safety.js"
+      - "app/api/admin/assist-research/**"
+      - "app/api/admin/assist-shopping/**"
+      - "app/api/customer/independent-shopping/**"
+      - "app/api/public/independent-shopping/**"
+      - "app/api/public/service-feed/**"
+      - "tests/v9-assist-research-menu.test.mjs"
+      - ".github/workflows/assist-safety.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spotly-assist-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  safety-tests:
+    name: Read-only unit & source checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify independent menu safeguards
+        run: node --test tests/v9-assist-research-menu.test.mjs
