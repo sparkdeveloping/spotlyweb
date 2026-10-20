@@ -23,6 +23,7 @@ const schema = z.object({
 export async function GET(request) {
   try {
     const user = await authenticateRequest(request);
+    await enforceRateLimit(request,{key:"assist-customer-history",limit:90,windowMs:60000,identity:user.uid});
     const { db } = getAdminServices();
     const [snapshot,settingsSnap] = await Promise.all([
       db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(30).get(),
@@ -43,7 +44,9 @@ export async function GET(request) {
         Date.parse(doc.data().finalQuote?.expiresAt)>Date.now()&&
         paymentReady.get(doc.data().storeId)===true,
       pendingSubstitutions:doc.data().pendingSubstitutions||[],refundDue:doc.data().refundDue??null,
-      refundStatus:doc.data().refundStatus||null,dispatchStatus:doc.data().dispatchStatus||"not_dispatched"
+      refundStatus:doc.data().refundStatus||null,refundPending:doc.data().refundPending||0,
+      refundReconciled:doc.data().refundReconciled||0,cancellationRequested:doc.data().cancellationRequested===true,
+      dispatchStatus:doc.data().dispatchStatus||"not_dispatched"
     })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     return Response.json({ ok: true, requests }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

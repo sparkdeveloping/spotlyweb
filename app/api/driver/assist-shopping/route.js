@@ -4,7 +4,7 @@ import {apiError,authenticateRequest,getAdminServices} from "@/lib/firebase-admi
 import {cost,matchesPin} from "@/lib/assist-fulfillment";
 export const runtime="nodejs";
 const schema=z.object({
- requestId:z.string().min(12).max(250),action:z.enum(["accept","reject","start","item","propose_substitution","receipt","en_route","complete"]),
+ requestId:z.string().min(12).max(250),action:z.enum(["accept","reject","start","item","propose_substitution","receipt","en_route","complete","report_issue"]),
  itemId:z.string().max(180).optional(),itemStatus:z.enum(["found","unavailable"]).optional(),
  actualQuantity:z.number().int().min(0).max(20).optional(),actualUnitPrice:z.number().finite().min(0).max(100000).optional(),
  replacementName:z.string().trim().max(180).optional(),pin:z.string().regex(/^\d{6}$/).optional(),
@@ -25,7 +25,7 @@ export async function GET(request){
 export async function POST(request){
  try{
   const user=await authenticateRequest(request),input=schema.parse(await request.json());
-  const {db}=getAdminServices(),jobRef=db.collection("assistIndependentShoppingJobs").doc(input.requestId),
+  const {db,messaging,auth}=getAdminServices(),jobRef=db.collection("assistIndependentShoppingJobs").doc(input.requestId),
     reqRef=db.collection("independentShoppingRequests").doc(input.requestId);
   let state;
   await db.runTransaction(async tx=>{
@@ -33,8 +33,37 @@ export async function POST(request){
      tx.get(jobRef),tx.get(reqRef),input.action==="receipt"?tx.get(db.collection("assistReceiptUploads").doc(input.requestId)):Promise.resolve(null)]);
    if(!job.exists||job.data().driverId!==user.uid)fail("This independent shopping job is not assigned to you.",403);
    if(!req.exists||req.data().paymentStatus!=="paid_held")fail("The customer funds are not confirmed. Do not purchase anything.");
+   if(input.action==="report_issue"){
+     if(!["assigned","accepted","shopping","receipt_submitted","collected","en_route"].includes(job.data().state)
+       ||input.note.length<12)fail("Provide a specific problem for an active independent shopping assignment.");
+     const now=FieldValue.serverTimestamp();
+     tx.update(jobRef,{state:"incident_paused",pausedFromState:job.data().state,incidentNote:input.note,updatedAt:now});
+     tx.update(reqRef,{state:"exception_review",dispatchStatus:"incident_paused",
+       customerMessage:"Your independent shopping request is paused while Operations reviews a shopper issue.",
+       updatedAt:now});
+     tx.set(db.collection("assistShoppingIssues").doc(input.requestId),{
+       requestId:input.requestId,reportedBy:user.uid,driverId:user.uid,status:"open",type:"shopper_report",
+       previousState:job.data().state,note:input.note,createdAt:now,updatedAt:now
+     });
+     tx.create(db.collection("assistShoppingEvents").doc(),{
+       requestId:input.requestId,driverId:user.uid,actorId:user.uid,action:"report_issue",state:"incident_paused",createdAt:now});
+     state="incident_paused";
+     return;
+   }
    const j=job.data(),q=req.data(),now=FieldValue.serverTimestamp();
    const items=(j.items||[]).map(x=>({...x}));
+   if(!["reject","complete"].includes(input.action)){
+     const [settings,float]=await Promise.all([
+       tx.get(db.collection("platformSettings").doc("global")),
+       tx.get(db.collection("assistShopperFloatTransfers").doc(input.requestId))
+     ]);
+     if(settings.data()?.assistFinance?.driverDispatchEnabled!==true)
+       fail("Independent shopping operations are paused.");
+     if(!float.exists||float.data().status!=="externally_confirmed"||
+        float.data().requestId!==input.requestId||float.data().currency!=="USD"||
+        Number(float.data().amount)<Number(j.authorizedSpend))
+       fail("The independently funded shopping float is not currently verified.");
+   }
    if(["accept","start"].includes(input.action)){
      const [settings,driver,application,presence]=await Promise.all([
        tx.get(db.collection("platformSettings").doc("global")),
@@ -124,6 +153,19 @@ export async function POST(request){
    tx.create(db.collection("assistShoppingEvents").doc(),{
      requestId:input.requestId,driverId:user.uid,actorId:user.uid,action:input.action,state,createdAt:now});
   });
+  if(["report_issue","receipt","en_route","complete","propose_substitution"].includes(input.action)){
+    const snapshot=await reqRef.get();
+    const record=snapshot.data()||{};
+    if(record.customerId)await import("@/lib/notification-server").then(({notifyUser})=>
+     notifyUser({db,messaging,auth,userId:record.customerId,
+       title:input.action==="report_issue"?"Your shopping request needs Operations review":
+          input.action==="propose_substitution"?"Your shopper proposes a replacement":
+          input.action==="complete"?"Your independent shopping delivery is complete":"Shopping request updated",
+       body:record.customerMessage||"Open your Spotly Activity for the latest independent shopping status.",
+       workspace:"customer",href:"/shop-for-me",category:"assist_shopping",module:"spotly_assist",
+       eventType:"assist.shopping."+input.action,entityType:"independentShoppingRequest",entityId:input.requestId
+     })).catch(()=>{});
+  }
   return Response.json({ok:true,state,merchantOrderCreated:false});
  }catch(e){if(e instanceof z.ZodError)return Response.json({ok:false,error:"Review the independent shopping job details.",details:e.flatten()},{status:422});return apiError(e)}
 }

@@ -3,6 +3,7 @@ import { apiError, getAdminServices } from "@/lib/firebase-admin";
 import { createPaynow, normalizePaynowStatus } from "@/lib/paynow-server";
 import { applyProviderPaymentUpdate } from "@/lib/payment-processor-server";
 import { applyAssistPaymentUpdate } from "@/lib/assist-payment-server";
+import {trustedPaynowUrl} from "@/lib/assist-payment-url";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,8 @@ export async function POST(request) {
     // The signed callback is recorded first so a temporary poll failure cannot lose the provider event.
     if (normalized.pollUrl) {
       try {
+        if(!trustedPaynowUrl(normalized.pollUrl))
+          throw Object.assign(new Error("Paynow returned an untrusted polling URL."),{status:409});
         const polled = normalizePaynowStatus(await paynow.pollTransaction(normalized.pollUrl));
         if(polled.reference && polled.reference !== normalized.reference)
           throw Object.assign(new Error("The polled Paynow payment reference does not match the signed callback."), { status: 409 });

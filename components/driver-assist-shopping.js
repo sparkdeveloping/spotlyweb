@@ -12,7 +12,7 @@ const buttonClass="rounded-xl border px-3 py-2 text-sm font-semibold disabled:op
 export function DriverAssistShopping({mode="jobs"}){
  const [jobs,setJobs]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
  const [notice,setNotice]=useState(""),[busy,setBusy]=useState(""),[drafts,setDrafts]=useState({});
- const [files,setFiles]=useState({}),[pins,setPins]=useState({});
+ const [files,setFiles]=useState({}),[pins,setPins]=useState({}),[issueNotes,setIssueNotes]=useState({});
  const load=async()=>{const result=await authenticatedFetch("/api/driver/assist-shopping");setJobs(result.jobs||[]);};
  useEffect(()=>{let live=true;authenticatedFetch("/api/driver/assist-shopping").then(r=>{if(live)setJobs(r.jobs||[]);}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setLoading(false);});return()=>{live=false;};},[]);
  const setDraft=(key,field,value)=>setDrafts(current=>({...current,[key]:{...(current[key]||{}),[field]:value}}));
@@ -35,6 +35,7 @@ export function DriverAssistShopping({mode="jobs"}){
     }
    }
    if(action==="complete")body.pin=pins[job.id]||"";
+   if(action==="report_issue")body.note=issueNotes[job.id]||"";
    await authenticatedFetch("/api/driver/assist-shopping",{method:"POST",body:JSON.stringify(body)});
    await load();
    setNotice("Shopping job updated: "+title(action)+".");
@@ -53,7 +54,7 @@ export function DriverAssistShopping({mode="jobs"}){
   finally{setBusy("");}
  }
  const visible=jobs.filter(j=>mode==="active"
-  ? ["accepted","shopping","receipt_submitted","collected","en_route"].includes(j.state)
+  ? ["accepted","shopping","receipt_submitted","collected","en_route","incident_paused"].includes(j.state)
   : !["delivered","rejected"].includes(j.state));
  if(loading)return <div className="my-5 rounded-2xl border p-5 text-sm text-[var(--text-2)]">Checking independent shopping work…</div>;
  if(!visible.length&&!error)return null;
@@ -87,6 +88,11 @@ export function DriverAssistShopping({mode="jobs"}){
      <button disabled={!!busy||!files[job.id]} className={buttonClass+" mt-3"} onClick={()=>uploadReceipt(job)}>Submit receipt for review</button>
     </div>
    </div>}
+   {["assigned","accepted","shopping","receipt_submitted","collected","en_route"].includes(job.state)&&<div className="mt-4 rounded-xl border p-3">
+    <label className="block text-xs font-semibold">Report a shopping or delivery problem<input className={inputClass} value={issueNotes[job.id]||""} onChange={e=>setIssueNotes(v=>({...v,[job.id]:e.target.value}))} placeholder="Describe the problem in at least 12 characters"/></label>
+    <button disabled={!!busy||(issueNotes[job.id]||"").trim().length<12} onClick={()=>act(job,"report_issue")} className={buttonClass+" mt-2"}>Pause job and alert Operations</button>
+   </div>}
+   {job.state==="incident_paused"&&<p className="mt-4 rounded-xl border p-4 text-sm">This job is paused. Do not buy anything or continue delivery until Operations resolves the incident.</p>}
    {job.state==="receipt_submitted"&&<p className="mt-4 text-sm text-[var(--text-2)]">Receipt submitted. Wait for Operations to verify the purchase before delivery.</p>}
    {job.state==="collected"&&<button disabled={!!busy} className={buttonClass+" mt-4"} onClick={()=>act(job,"en_route")}>Begin delivery</button>}
    {job.state==="en_route"&&<div className="mt-4 space-y-2"><label className="block text-xs">Six-digit PIN from the customer at handoff<input className={inputClass} inputMode="numeric" maxLength={6} autoComplete="off" value={pins[job.id]||""} onChange={e=>setPins(v=>({...v,[job.id]:e.target.value.replace(/[^0-9]/g,"").slice(0,6)}))}/></label><button disabled={!!busy||(pins[job.id]||"").length!==6} className={buttonClass} onClick={()=>act(job,"complete")}>Confirm verified delivery</button></div>}

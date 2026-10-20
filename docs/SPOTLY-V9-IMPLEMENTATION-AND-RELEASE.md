@@ -77,3 +77,53 @@ All of these must be explicitly enabled and reviewed by authorized Spotly person
 The independent V9 collection families remain separate: `independentShoppingRequests`, `assistIndependentShoppingJobs`, `assistReceiptUploads`, `assistShopperFloatTransfers`, `assistMoneyLedger`, `assistRefundRequests`, `assistFinanceIssues`, and their audit event collections. They must remain server-only; existing Firestore and Storage catch-all rules deny direct client access. Standard automatic single-field indexes cover the Admin state query. No additional composite index is required by this milestone.
 
 Do not deploy to Vercel just to see whether the build passes. Keep the feature pull request draft until CI, emulators, external financial validation, and explicit launch gates are complete.
+
+
+## 20 October 2026 — V9 financial closure and exception-control follow-up
+
+### Implementation completed in this follow-up (code only, not a live launch)
+
+- Dedicated independent-purchase refund accounting with integer-cent checks. Unspent merchandise and exception refund commitments cannot exceed originally captured funds.
+- Authenticated Finance workflow for documenting externally executed bank/provider refunds, with independent second-reviewer confirmation and globally reserved external references. A refund request never implies money returned.
+- Customer cancellation before shopper assignment (no purchasing float or job) creates a full external refund request. Active funded purchases require Operations resolution.
+- Driver incident reporting and pausing, Operations resumption or termination with a protected financial handoff, and customer activity states.
+- Finance closure only after delivered purchase, approved receipt, separately reconciled returned shopper float, externally reconciled refunds and strict cent balancing. Independent customer liability allocation remains isolated from merchant settlements.
+- Refund, float return and financial closeout gates remain disabled until explicitly authorized. Sensitive finance operations are role restricted and audit logged.
+- Paynow polling URL validation (HTTPS, Paynow hostname, expected polling path), customer payment polling and history rate limits.
+- Finance and exception queues in Admin; customer refund/cancellation tracking; Driver incident interface.
+- Restaurant launch preflight now clearly distinguishes price-check readiness from payment readiness, without treating read-only preflight as dispatch approval.
+- Regression test suites for refund arithmetic, payment URL security, cancellation, exceptions and finance closeout.
+
+### Required explicit settings
+
+Under platformSettings/global, do not enable until an authorized operational and financial review has been completed:
+
+- assistFinance.enabled: independent finance authorization
+- assistFinance.providerReviewed: Paynow contract, credentials and funds-flow authorization
+- assistFinance.driverDispatchEnabled: shopper dispatch authorization
+- assistFinance.manualFloatAttestationEnabled: externally confirmed shopper float procedure
+- assistFinance.refundReconciliationEnabled: two-person external refund reconciliation procedure
+- assistFinance.closeoutEnabled: two-person purchasing float return and closure procedure
+- independentShopping.paymentCollectionEnabled: independent purchase payments permitted
+- independentShoppingStores/{id}.financeReady: this exact store has received finance approval
+
+These settings are necessary but not sufficient; real banking permissions, funding availability, consumer-protection review, merchant information rights and staffing must separately be verified.
+
+### External provider / refund limitation
+
+No general merchant refund initiation endpoint is verified in the publicly documented Paynow Node SDK. The Paynow BillPay reversal endpoint is a different API. A Finance operator must first execute the authorized refund through the original provider/bank and then submit documentary evidence; a different Finance operator independently reconciles it. The app does not initiate money movement. Two-person documentary confirmation is not equivalent to customer confirmation that funds landed.
+
+Likewise, purchasing float transfers and returns are externally funded and attested, not automatic wallet transfers. The final independent purchase closeout checks that receipt spend plus returned float equals the transferred float, and captured funds equal verified third-party spend plus externally attested customer refunds plus retained service fees.
+
+### Additional server-only document collections
+
+- assistRefundExternalReferences
+- assistFloatReturnExternalReferences
+- assistShoppingIssues
+- assistFinanceClosures
+
+Existing collections remain independentShoppingRequests, assistIndependentShoppingJobs, assistReceiptUploads, assistShopperFloatTransfers, assistMoneyLedger, assistRefundRequests, assistFinanceIssues, assistShoppingEvents and auditLogs. No new client Firestore grants or composite indexes are required by this follow-up. Default-deny Firestore rules prevent direct client writes.
+
+### Remaining external verification
+
+Firebase emulator testing was explicitly excluded from this continuation. Real provider/bank sandbox or controlled-value tests, actual external refund and float settlement verification, recruited vetted Driver field tests, local consumer-compliance approvals, exact restaurant/branch access, native/mobile accessibility validation and final launch authorization remain separate from source-code compilation. Neither CI nor a Vercel preview means V9 is authorized to transact.

@@ -12,6 +12,14 @@ on:
       - "components/marketplace-app.js"
       - "lib/assist-activity.js"
       - "lib/assist-money.js"
+      - "lib/assist-refunds.js"
+      - "lib/assist-finance-close.js"
+      - "lib/assist-payment-url.js"
+      - "app/api/admin/assist-finance-close/**"
+      - "tests/v9-assist-finance-close.test.mjs"
+      - "app/api/admin/assist-refunds/**"
+      - "tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs"
+      - "components/driver-assist-shopping.js"
       - "lib/assist-fulfillment.js"
       - "app/api/admin/assist-fulfillment/**"
       - "app/api/driver/assist-shopping/**"
@@ -53,7 +61,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify independent menu safeguards
-        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs
+        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs
 
   compile-admin:
     name: Verify Next.js Admin screens compile

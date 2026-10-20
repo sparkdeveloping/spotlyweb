@@ -8,6 +8,7 @@ import {independentStoreSafe} from "@/lib/assist-store-safety";
 import {independentShoppingFlags} from "@/lib/independent-shopping";
 import {regionalServicePolicy} from "@/lib/v9-assist-regions";
 import {verifiedAssistQuote,independentPaymentEnabled} from "@/lib/assist-money";
+import {trustedPaynowUrl} from "@/lib/assist-payment-url";
 export const runtime="nodejs";
 const schema=z.object({requestId:z.string().min(12).max(250),channel:z.enum(["web","ecocash","onemoney"]).default("web"),phone:z.string().max(40).optional()}).strict();
 const fail=(m,s=409)=>{throw Object.assign(new Error(m),{status:s})};
@@ -83,6 +84,9 @@ export async function POST(request){
     await paynow.sendMobile(payment,normalizeZimbabwePhone(body.phone),body.channel);
   if(!response?.success)fail(response?.error||"Paynow could not create the purchase payment.",502);
   providerAccepted=true;
+  if(!trustedPaynowUrl(response.pollUrl)||
+     (body.channel==="web"&&!trustedPaynowUrl(response.redirectUrl,{kind:"redirect"})))
+    fail("The Paynow response did not contain verified payment URLs. Contact Finance before trying again.",502);
   const intentRef=db.collection("paymentIntents").doc(prepared.reference);
   const finalized=await db.runTransaction(async tx=>{
    const [intent,snap]=await Promise.all([tx.get(intentRef),tx.get(ref)]);

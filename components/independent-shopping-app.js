@@ -186,6 +186,14 @@ export function IndependentShoppingApp() {
           <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{entry.storeName}</h3><span className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold">{entry.state.replaceAll("_"," ")}</span></div>
           <p className="mt-2 text-sm text-[var(--text-2)]">Initial estimate {format(entry.estimate?.totalEstimate, entry.estimate?.currency)}</p>
           {entry.customerMessage&&<p className="mt-2 text-sm text-[var(--text-2)]">{entry.customerMessage}</p>}
+          {entry.paymentStatus==="paid_held"&&<div className="mt-3 rounded-xl border p-3 text-sm">
+           <p className="font-semibold">Payment received · {entry.dispatchStatus?.replaceAll("_"," ")}</p>
+           <p className="mt-1 text-xs">Spotly is independently sourcing your purchase. This is not a merchant order.</p>
+           {Number(entry.refundPending)>0&&<p className="mt-1 text-xs">Refund awaiting external reconciliation: {format(entry.refundPending,entry.finalQuote?.currency)}</p>}
+           {Number(entry.refundReconciled)>0&&<p className="mt-1 text-xs">Externally reconciled refund: {format(entry.refundReconciled,entry.finalQuote?.currency)}. Please verify it on your payment method.</p>}
+           {!entry.cancellationRequested&&!["delivered","cancelled_pending_refund"].includes(entry.state)&&<button type="button" disabled={busy} onClick={()=>respondToQuote(entry.id,"request_cancel")} className="mt-3 rounded-lg border px-3 py-2 text-xs font-semibold">Request cancellation review</button>}
+          </div>}
+          {["pending_manual_quote","contacting_store","quote_offered"].includes(entry.state)&&<button type="button" disabled={busy} onClick={()=>respondToQuote(entry.id,"cancel")} className="mt-3 rounded-lg border px-3 py-2 text-xs">Cancel unpaid request</button>}
           {entry.state==="quote_accepted_awaiting_payment"&&<div className="mt-3 rounded-xl border p-4">
             <p className="text-sm font-semibold">Independent purchase payment</p>
             <p className="mt-1 text-xs leading-5 text-[var(--text-2)]">This is Spotly's independent purchase service, not payment to or through the restaurant. Your funds are not used to dispatch a shopper until payment and operating-float checks are complete.</p>

@@ -2,6 +2,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { verifiedLocationPrice, brandCompatible, claimSafeUnpartnered, canonicalStoreId } from "@/lib/assist-research-menu";
 import { independentStoreSafe } from "@/lib/assist-store-safety";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
+import { independentPaymentEnabled } from "@/lib/assist-money";
 export const runtime="nodejs";
 const roles=["super_admin","platform_admin","operations_manager","data_import_manager"];
 const ok=(id,label,value,detail="")=>({id,label,pass:Boolean(value),detail});
@@ -58,10 +59,25 @@ export async function GET(request) {
       Boolean(st&&independentStoreSafe(st,b,br)),
       "This is an independent price-check request, not a paid restaurant order.")
   ];
+  const finance=settings.data()?.assistFinance||{};
+  const shopping=settings.data()?.independentShopping||{};
+  const financeChecks=[
+   ok("finance_reviewed","Separate Spotly independent purchasing finance and Paynow review",finance.enabled===true&&finance.providerReviewed===true),
+   ok("purchasing_float","Operational float and shopper dispatch are explicitly approved",
+       finance.manualFloatAttestationEnabled===true&&finance.driverDispatchEnabled===true),
+   ok("refund_reconciliation","External independent-refund reconciliation controls approved",
+       finance.refundReconciliationEnabled===true),
+   ok("store_finance","This exact location has documented financial readiness",st?.financeReady===true),
+   ok("payment_collection","Independent purchase collection explicitly enabled",shopping.paymentCollectionEnabled===true)
+  ];
   return Response.json({
    ok:true,batchId,locationId,restaurant:item.name,brand,
    country:"ZW",canEnableMenu:checks.slice(0,7).every(c=>c.pass),
    canRequestQuote:checks.every(c=>c.pass),
+   canCollectPayment:checks.every(c=>c.pass)&&financeChecks.every(c=>c.pass)&&
+     independentPaymentEnabled(settings.data()||{},st||{}),
+   canDispatchShopper:false,financeChecks,
+   dispatchNote:"Live customer capture, external float attestation, staff eligibility and purchase assignment are separate later authorizations.",
    totalPriceReferences:sameBrand.length,independentlyVerifiedPrices:eligible.length,
    publishedItemCount:st?.status==="published"?st.items?.length||0:0,
    storeStatus:st?.status||"not_created",

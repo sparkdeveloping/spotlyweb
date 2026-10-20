@@ -5,10 +5,11 @@ import {apiError,authenticateRequest,getAdminServices} from "@/lib/firebase-admi
 import {pinHash,canShop,cost} from "@/lib/assist-fulfillment";
 import {independentStoreSafe} from "@/lib/assist-store-safety";
 import {regionalServicePolicy} from "@/lib/v9-assist-regions";
+import {authorizedRefundCapacity,refundCents} from "@/lib/assist-refunds";
 export const runtime="nodejs";
 const roles=["super_admin","platform_admin","operations_manager","finance_admin"];
 const schema=z.object({
- action:z.enum(["record_float","assign","approve_receipt","request_refund"]),
+ action:z.enum(["record_float","assign","approve_receipt","request_refund","resolve_incident","terminate_incident"]),
  requestId:z.string().min(12).max(250),
  driverId:z.string().max(180).optional(),
  transferReference:z.string().max(180).optional(),
@@ -22,12 +23,13 @@ export async function GET(request){
  try{
   await authenticateRequest(request,{roles});
   const {db}=getAdminServices();
-  const [jobs,refunds,issues,requests]=await Promise.all([
+  const [jobs,refunds,issues,requests,shoppingIssues]=await Promise.all([
    db.collection("assistIndependentShoppingJobs").limit(100).get(),
    db.collection("assistRefundRequests").limit(50).get(),
    db.collection("assistFinanceIssues").limit(50).get(),
    db.collection("independentShoppingRequests").where("state","in",
-    ["funded_awaiting_shopper","shopper_assigned","shopping","receipt_submitted","collected","en_route"]).limit(100).get()
+    ["funded_awaiting_shopper","shopper_assigned","shopping","receipt_submitted","collected","en_route","exception_review"]).limit(100).get(),
+   db.collection("assistShoppingIssues").where("status","==","open").limit(50).get()
   ]);
   return Response.json({ok:true,jobs:jobs.docs.map(d=>({id:d.id,driverId:d.data().driverId,requestId:d.data().requestId,state:d.data().state,
     storeName:d.data().storeName,actualSpend:d.data().actualSpend??null,authorizedSpend:d.data().authorizedSpend,
@@ -36,7 +38,10 @@ export async function GET(request){
      paymentStatus:d.data().paymentStatus||"not_initiated",total:d.data().finalQuote?.total||null,
      merchandiseTotal:d.data().finalQuote?.merchandiseTotal||null,dispatchStatus:d.data().dispatchStatus||"not_dispatched"})),
    refunds:refunds.docs.map(d=>({id:d.id,requestId:d.data().requestId,amount:d.data().amount,status:d.data().status})),
-   financeIssues:issues.size},{headers:{"Cache-Control":"private, no-store"}});
+   financeIssues:issues.size,
+   shoppingIssues:shoppingIssues.docs.map(d=>({id:d.id,requestId:d.data().requestId,status:d.data().status,
+     note:d.data().note||"",previousState:d.data().previousState||"",driverId:d.data().driverId||""}))
+  },{headers:{"Cache-Control":"private, no-store"}});
  }catch(e){return apiError(e)}
 }
 export async function POST(request){
@@ -130,13 +135,87 @@ export async function POST(request){
       action:"receipt_approved",actualSpend:spend,refundDue:refund,createdAt:now});
    });
    result={state:"collected",customerRefundIssued:false};
+  }else if(input.action==="terminate_incident"){
+   if(!actor.profile?.roles?.some(r=>["super_admin","platform_admin","operations_manager"].includes(r)))
+     fail("Only Operations can halt an unresolved independent shopping job.",403);
+   if(input.note.length<30)fail("Document the reason for termination, customer contact and financial handoff.",422);
+   const issueRef=db.collection("assistShoppingIssues").doc(input.requestId);
+   const presenceRefId=(await jobRef.get()).data()?.driverId;
+   if(!presenceRefId)fail("Shopper assignment not found.");
+   const presenceRef=db.collection("driverPresence").doc(presenceRefId);
+   await db.runTransaction(async tx=>{
+    const [job,req,issue,presence]=await Promise.all([
+     tx.get(jobRef),tx.get(ref),tx.get(issueRef),tx.get(presenceRef)
+    ]);
+    if(!job.exists||!req.exists||!issue.exists||issue.data().status!=="open"||
+       job.data().state!=="incident_paused"||req.data().paymentStatus!=="paid_held")
+      fail("No matching funded, paused shopper incident exists.");
+    if(actor.uid===issue.data().reportedBy)fail("A different operator must resolve the reported incident.");
+    const now=FieldValue.serverTimestamp();
+    tx.update(jobRef,{state:"terminated_finance_review",incidentResolution:input.note,
+      terminatedAt:now,terminatedBy:actor.uid,updatedAt:now});
+    tx.update(ref,{state:"financial_resolution_pending",dispatchStatus:"terminated_finance_review",
+      customerMessage:"Shopping was stopped. Spotly Finance is reviewing the purchase funds and any refund due.",
+      updatedAt:now});
+    tx.update(issueRef,{status:"terminated_finance_review",resolvedBy:actor.uid,resolution:input.note,updatedAt:now});
+    if(presence.exists&&presence.data().currentJobId===jobRef.id)
+      tx.update(presenceRef,{currentJobId:FieldValue.delete(),currentWorkType:FieldValue.delete(),updatedAt:now});
+    tx.set(db.collection("assistFinanceIssues").doc("failed_shopping_"+input.requestId),{
+      requestId:input.requestId,status:"open",type:"terminated_shopping_funds_review",
+      note:input.note,updatedAt:now,createdAt:now
+    },{merge:true});
+    tx.create(db.collection("auditLogs").doc(),{
+      action:"assist.shopping.terminated_finance_review",actorId:actor.uid,
+      entityType:"independentShoppingRequest",entityId:input.requestId,createdAt:now});
+   });
+   result={state:"financial_resolution_pending",refundIssued:false,financeReviewRequired:true};
+  }else if(input.action==="resolve_incident"){
+   if(!actor.profile?.roles?.some(r=>["super_admin","platform_admin","operations_manager"].includes(r)))
+     fail("Only Operations can authorize resumption of independent shopping.",403);
+   if(input.note.length<20)fail("Document the incident investigation and why resumption is safe.",422);
+   const issueRef=db.collection("assistShoppingIssues").doc(input.requestId);
+   const floatRef=db.collection("assistShopperFloatTransfers").doc(input.requestId);
+   await db.runTransaction(async tx=>{
+    const [job,req,issue,config,float]=await Promise.all([
+     tx.get(jobRef),tx.get(ref),tx.get(issueRef),tx.get(configRef),tx.get(floatRef)
+    ]);
+    if(!job.exists||!req.exists||!issue.exists||issue.data().status!=="open"||
+       job.data().state!=="incident_paused"||req.data().state!=="exception_review")
+      fail("No matching paused independent shopping incident exists.");
+    if(req.data().cancellationRequested)fail("Resolve the customer's cancellation before resuming work.");
+    if(req.data().paymentStatus!=="paid_held"||config.data()?.assistFinance?.driverDispatchEnabled!==true||
+       !float.exists||float.data().status!=="externally_confirmed"||
+       Number(float.data().amount)<Number(job.data().authorizedSpend))
+      fail("Funding, authorized float or the operating permission is missing.");
+    if(actor.uid===issue.data().reportedBy)fail("The incident reporter cannot independently close this case.");
+    const restored=job.data().pausedFromState;
+    if(!["assigned","accepted","shopping","receipt_submitted","collected","en_route"].includes(restored))
+      fail("The earlier state needs manual investigation and cannot be resumed.");
+    const now=FieldValue.serverTimestamp();
+    tx.update(jobRef,{state:restored,incidentResolvedBy:actor.uid,incidentResolution:input.note,
+      pausedFromState:FieldValue.delete(),updatedAt:now});
+    tx.update(ref,{state:restored==="assigned"?"shopper_assigned":restored,
+      dispatchStatus:restored,customerMessage:"Operations reviewed the shopping issue and authorized work to resume.",
+      updatedAt:now});
+    tx.update(issueRef,{status:"resolved",resolvedBy:actor.uid,resolution:input.note,updatedAt:now});
+    tx.create(db.collection("auditLogs").doc(),{
+      action:"assist.shopping.incident_resolved",actorId:actor.uid,entityType:"assistShoppingIssue",
+      entityId:input.requestId,metadata:{restored},createdAt:now});
+   });
+   result={state:"incident_resolved",customerRefundIssued:false};
   }else{
    if(!finance(actor))fail("Only Spotly Finance may request independent purchase refunds.",403);
    if(!input.amount||input.note.length<12)fail("Record the amount and reason for the provider refund.",422);
+   refundCents(input.amount);
    await db.runTransaction(async tx=>{
-    const [req,old]=await Promise.all([tx.get(ref),tx.get(db.collection("assistRefundRequests").doc("manual_"+input.requestId))]);
+    const [req,old,balance]=await Promise.all([tx.get(ref),
+      tx.get(db.collection("assistRefundRequests").doc("manual_"+input.requestId)),
+      tx.get(db.collection("assistRefundRequests").doc("balance_"+input.requestId))]);
     if(!req.exists||req.data().paymentStatus!=="paid_held")fail("No captured funds exist to refund.");
-    if(input.amount>Number(req.data().fundedAmount||0))fail("Refund exceeds captured customer funds.");
+    if(!["delivered","cancelled_pending_refund","funded_awaiting_shopper","cannot_fulfil"].includes(req.data().state))
+      fail("Manual refund review must wait until active shopping and delivery have been resolved.");
+    const available=authorizedRefundCapacity(req.data(),balance.exists?[{id:balance.id,...balance.data()}]:[]);
+    if(refundCents(input.amount)>refundCents(available))fail("Refund would exceed the remaining captured funds after existing refund commitments.");
     if(old.exists)fail("Refund already requested. Reconcile the provider result.");
     const now=FieldValue.serverTimestamp();
     tx.create(db.collection("assistRefundRequests").doc("manual_"+input.requestId),{
