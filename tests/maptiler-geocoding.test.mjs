@@ -44,6 +44,12 @@ test("MapTiler results are normalized into Spotly Ride and Send verified selecti
  assert.match(rows[0].label,/Sam Levy/);
  assert.equal(mapTilerCountry(malawi),"MW");
 });
+test("Neighbourhood pin retains the containing city, not a suburb-only city",()=>{
+ const suburban={...harare,text:"Borrowdale",place_type:["locality"]};
+ const [place]=mapTilerForwardResults({features:[suburban]},"ZW");
+ assert.equal(place.city,"Harare");
+ assert.equal(place.area,"Borrowdale");
+});
 test("Reverse pin retains exact tapped coordinates, rejects out-of-country data",()=>{
  const lat=-17.833821,lng=31.038527;
  const url=new URL(mapTilerReverseUrl({lat,lng,key:KEY}));
