@@ -28,6 +28,7 @@ const priceReview = z.object({
 }).strict();
 const command = z.discriminatedUnion("action", [locationReview, priceReview]);
 const publishSchema = z.object({batchId,locationId:id}).strict();
+const launchSchema = z.object({batchId,locationId:id,confirmation:z.literal("PUBLISH_TO_CUSTOMERS")}).strict();
 const withdrawSchema = z.object({batchId,locationId:id,reason:z.string().trim().min(8).max(700)}).strict();
 const digest = value => createHash("sha256").update(value).digest("hex").slice(0,27);
 const fail = (message,status=409) => { throw Object.assign(new Error(message), { status }); };
@@ -90,6 +91,7 @@ export async function GET(request) {
       summary:{
         locationCount:locations.size, priceCount:prices.size,
         reviewedLocations:locations.docs.filter(doc=>doc.data().publicationReview).length,
+        approvedLocations:locations.docs.filter(doc=>doc.data().publicationState==="approved").length,
         publishedLocations:locations.docs.filter(doc=>doc.data().publicationState==="published").length,
         linkedLocations:locations.docs.filter(doc=>doc.data().publicationState==="linked_existing").length,
         reviewedPrices:prices.docs.filter(doc=>doc.data().priceReview).length
@@ -209,7 +211,7 @@ export async function POST(request) {
       const [rootSnap,locSnap]=await Promise.all([tx.get(root),tx.get(loc)]);
       if(!rootSnap.exists||rootSnap.data().country!=="ZW"||!locSnap.exists)fail("Research location not found.",404);
       const item=locSnap.data(),review=item.publicationReview;
-      if(["published","linked_existing"].includes(item.publicationState)){
+      if(["approved","published","linked_existing"].includes(item.publicationState)){
         result={state:item.publicationState,businessId:item.linkedBusinessId,branchId:item.linkedBranchId,idempotent:true};return;
       }
       if(item.publicationState!=="reviewed"||!review||!review.sourceRightsReviewed||!review.duplicatesReviewed)fail("Complete the location verification review before publishing.");
@@ -255,11 +257,11 @@ export async function POST(request) {
           category:item.category||"Restaurant",categories:[item.category||"Restaurant"],
           country:"ZW",city:item.city,area:item.area||"",address:review.verifiedAddress,
           phone:item.phone||"",description:"Independent directory listing. Not an official Spotly restaurant partner.",
-          currency:"USD",acceptedCurrencies:["USD"],public:true,status:"provisional",
+          currency:"USD",acceptedCurrencies:["USD"],public:false,launchApproved:false,status:"provisional",
           claimStatus:"unclaimed",ownershipStatus:"unclaimed",verificationStatus:"unverified",
           commerceVerificationStatus:"not_verified",commerceVerified:false,commerceEnabled:false,
           onlinePaymentEnabled:false,cashEnabled:false,
-          assistAccepting:true,assistOperationalReady:false,
+          assistAccepting:false,assistOperationalReady:false,
           source,aliases:[item.name,item.brandName||item.name,item.city],
           createdAt:now,updatedAt:now,createdBy:actor.uid
         });
@@ -268,7 +270,7 @@ export async function POST(request) {
           name:"Main location",branchName:"Main location",
           displayName:item.name+" — "+item.city,
           country:"ZW",city:item.city,area:item.area||"",address:review.verifiedAddress,
-          phone:item.phone||"",public:true,status:"provisional",
+          phone:item.phone||"",public:false,status:"provisional",
           fulfilment:[],pickup:{enabled:false},acceptedCurrencies:["USD"],
           operatingHoursStatus:"unverified",assistOperationalReady:false,
           source,createdAt:now,updatedAt:now,createdBy:actor.uid
@@ -278,10 +280,10 @@ export async function POST(request) {
           researchBatchId:batchKey,locationId:locId,createdAt:now
         });
         tx.update(loc,{
-          publicationState:"published",linkedBusinessId:business.id,linkedBranchId:branch.id,
-          publishedAt:now,publishedBy:actor.uid
+          publicationState:"approved",linkedBusinessId:business.id,linkedBranchId:branch.id,
+          approvedAt:now,approvedBy:actor.uid
         });
-        result={state:"published",businessId:business.id,branchId:branch.id};
+        result={state:"approved",businessId:business.id,branchId:branch.id};
       }else fail("Rejected locations cannot be published.");
       tx.create(db.collection("auditLogs").doc(),{
         action:"assist.research.publication."+result.state,
@@ -293,6 +295,71 @@ export async function POST(request) {
     return Response.json({ok:true,...result});
   }catch(error){
     if(error instanceof z.ZodError)return Response.json({ok:false,error:"Select a valid reviewed location."},{status:422});
+    return apiError(error);
+  }
+}
+
+/**
+ * Separate customer-discovery release. Approval alone keeps new records private.
+ * Requires an explicit signed launch confirmation; never enables ordering.
+ */
+export async function PUT(request) {
+  try {
+    const actor=await authenticateRequest(request,{roles:["super_admin","platform_admin"]});
+    const payload=launchSchema.parse(await request.json());
+    const {db}=getAdminServices();
+    const {root,loc}=await stagedRefs(db,payload.batchId,payload.locationId);
+    const ids=safeListingIds(payload.batchId,payload.locationId);
+    const business=db.collection("businesses").doc(ids.businessId);
+    const branch=db.collection("branches").doc(ids.branchId);
+    let result;
+    await db.runTransaction(async tx=>{
+      const [batch,location,biz,bra,claims]=await Promise.all([
+        tx.get(root),tx.get(loc),tx.get(business),tx.get(branch),
+        tx.get(db.collection("businessClaims").where("businessId","==",business.id).limit(25))
+      ]);
+      if(!batch.exists||batch.data().country!=="ZW"||!location.exists)fail("Research location was not found.",404);
+      const entry=location.data(),review=entry.publicationReview;
+      if(!["approved","published"].includes(entry.publicationState)||entry.linkedBusinessId!==business.id||entry.linkedBranchId!==branch.id)
+        fail("First approve this exact research location. Linking an existing merchant cannot launch their listing.");
+      if(!biz.exists||!bra.exists||bra.data().businessId!==business.id)
+        fail("The approved directory business and branch no longer match.");
+      const owned=biz.data();
+      if(owned.source?.type!=="spotly_assist_research"||
+         owned.source?.batchId!==payload.batchId||
+         owned.source?.researchLocationId!==payload.locationId)
+        fail("Research source does not match this business.");
+      if(owned.launchApproved===true && entry.publicationState==="published"){
+        result={state:"published",businessId:business.id,branchId:branch.id,idempotent:true};return;
+      }
+      if(owned.claimStatus!=="unclaimed"||owned.ownershipStatus!=="unclaimed"||
+         (owned.ownerIds||[]).length||owned.commerceEnabled===true||owned.commerceVerified===true)
+        fail("A claimed, commerce-enabled or reassigned business must use its owner-controlled publication process.");
+      if(claims.size>=25||claims.docs.some(doc=>["submitted","needs_information","under_review","approved"].includes(doc.data().status)))
+        fail("An ownership claim is pending. Resolve it before public discovery.");
+      if(!review?.addressVerified||!review?.operatingVerified||!review?.sourceRightsReviewed||!review?.duplicatesReviewed)
+        fail("A documented business/location verification is required.");
+      // This is discovery-only. Merchant ordering, fees, payments and Driver dispatch stay off.
+      const now=FieldValue.serverTimestamp();
+      tx.update(business,{
+        public:true,launchApproved:true,assistAccepting:false,
+        commerceEnabled:false,commerceVerified:false,updatedAt:now
+      });
+      tx.update(branch,{public:true,updatedAt:now});
+      tx.update(loc,{
+        publicationState:"published",discoveryLaunchedAt:now,discoveryLaunchedBy:actor.uid
+      });
+      tx.create(db.collection("auditLogs").doc(),{
+        action:"assist.research.discovery_launched",
+        actorId:actor.uid,entityType:"business",entityId:business.id,
+        metadata:{batchId:payload.batchId,locationId:payload.locationId,branchId:branch.id},
+        createdAt:now
+      });
+      result={state:"published",businessId:business.id,branchId:branch.id};
+    });
+    return Response.json({ok:true,...result,commerceEnabled:false,requestEnabled:false});
+  }catch(error){
+    if(error instanceof z.ZodError)return Response.json({ok:false,error:"A separate explicit discovery-launch confirmation is required."},{status:422});
     return apiError(error);
   }
 }
