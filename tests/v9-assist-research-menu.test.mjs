@@ -37,6 +37,9 @@ test("only recent independently verified prices can be activated",()=>{
 test("claims and disabled locations stop independent orders",()=>{
   assert.equal(claimSafeUnpartnered(business),true);
   assert.equal(claimSafeUnpartnered({...business,ownerIds:["owner"]}),false);
+  assert.equal(claimSafeUnpartnered({...business,claimStatus:"claim_needs_information"}),false);
+  assert.equal(claimSafeUnpartnered({...business,claimStatus:undefined}),false);
+  assert.equal(claimSafeUnpartnered({...business,ownershipStatus:"claim_pending"}),false);
   assert.equal(independentStoreSafe(store,business,branch),true);
   assert.equal(independentStoreSafe(store,{...business,claimStatus:"claimed"},branch),false);
   assert.equal(independentStoreSafe(store,{...business,assistAccepting:false},branch),false);
@@ -76,15 +79,17 @@ test("public and request endpoints enforce canonical availability",()=>{
   ]) assert.match(read(file),/filterSafeIndependentStores/);
 });
 
-test("Admin preflight is read-only and reports independently verified menu blockers",()=>{
+test("Admin preflight is read-only and reports independent-price and claim blockers",()=>{
   const source=read("app/api/admin/assist-research/pilot-preflight/route.js");
-  assert.match(source,/authenticateRequest\\(request,\\{roles\\}\\)/);
-  assert.match(source,/verifiedResearchPrice/);
-  assert.match(source,/pendingClaims/);
-  assert.match(source,/canEnableMenu/);
-  assert.match(source,/canRequestQuote/);
-  assert.match(source,/mutationsPerformed:false,paymentCollected:false,driverDispatched:false/);
-  assert.doesNotMatch(source,/\\.set\\(|\\.update\\(|\\.create\\(|\\.delete\\(|runTransaction\\(/);
+  assert.ok(source.includes("authenticateRequest(request,{roles})"));
+  assert.ok(source.includes("verifiedResearchPrice"));
+  assert.ok(source.includes("pendingClaims"));
+  assert.ok(source.includes("canEnableMenu"));
+  assert.ok(source.includes("canRequestQuote"));
+  assert.ok(source.includes("mutationsPerformed:false,paymentCollected:false,driverDispatched:false"));
+  for(const mutation of [".set(", ".update(", ".create(", ".delete(", "runTransaction("]){
+    assert.equal(source.includes(mutation),false,"Preflight should not write Firestore: "+mutation);
+  }
   const ui=read("components/admin-assist-menu-launch.js");
-  assert.match(ui,/Run read-only pilot checks/);
+  assert.ok(ui.includes("Run read-only pilot checks"));
 });
