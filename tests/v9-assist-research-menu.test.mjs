@@ -75,3 +75,16 @@ test("public and request endpoints enforce canonical availability",()=>{
     "app/api/public/service-feed/route.js"
   ]) assert.match(read(file),/filterSafeIndependentStores/);
 });
+
+test("Admin preflight is read-only and reports independently verified menu blockers",()=>{
+  const source=read("app/api/admin/assist-research/pilot-preflight/route.js");
+  assert.match(source,/authenticateRequest\\(request,\\{roles\\}\\)/);
+  assert.match(source,/verifiedResearchPrice/);
+  assert.match(source,/pendingClaims/);
+  assert.match(source,/canEnableMenu/);
+  assert.match(source,/canRequestQuote/);
+  assert.match(source,/mutationsPerformed:false,paymentCollected:false,driverDispatched:false/);
+  assert.doesNotMatch(source,/\\.set\\(|\\.update\\(|\\.create\\(|\\.delete\\(|runTransaction\\(/);
+  const ui=read("components/admin-assist-menu-launch.js");
+  assert.match(ui,/Run read-only pilot checks/);
+});
