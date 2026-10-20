@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { apiError, getAdminServices } from "@/lib/firebase-admin";
 import { createPaynow, normalizePaynowStatus } from "@/lib/paynow-server";
 import { applyProviderPaymentUpdate } from "@/lib/payment-processor-server";
+import { applyAssistPaymentUpdate } from "@/lib/assist-payment-server";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,10 @@ export async function POST(request) {
     if (!normalized.reference) throw Object.assign(new Error("The Paynow result did not include a merchant reference."), { status: 400 });
 
     const { db, messaging, auth } = getAdminServices();
-    const result = await applyProviderPaymentUpdate(db, normalized.reference, normalized, { source: "paynow_webhook", messaging, auth });
+    const intent = await db.collection("paymentIntents").doc(normalized.reference).get();
+    if(!intent.exists)throw Object.assign(new Error("Payment intent not found."),{status:404});
+    const apply = intent.data().model==="independent_shopping" ? applyAssistPaymentUpdate : applyProviderPaymentUpdate;
+    const result = await apply(db, normalized.reference, normalized, { source: "paynow_webhook", messaging, auth });
 
     // Paynow recommends polling the transaction URL to confirm important status updates.
     // The signed callback is recorded first so a temporary poll failure cannot lose the provider event.
@@ -24,7 +28,7 @@ export async function POST(request) {
       try {
         const polled = normalizePaynowStatus(await paynow.pollTransaction(normalized.pollUrl));
         polled.reference = polled.reference || normalized.reference;
-        await applyProviderPaymentUpdate(db, normalized.reference, polled, { source: "paynow_webhook_poll_confirmation", messaging, auth });
+        await apply(db, normalized.reference, polled, { source: "paynow_webhook_poll_confirmation", messaging, auth });
       } catch (pollError) {
         await db.collection("paymentReconciliationIssues").add({
           paymentIntentReference: normalized.reference,
