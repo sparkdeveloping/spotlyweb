@@ -13,6 +13,7 @@ export function AssistMenuLaunch(){
  const [detail,setDetail]=useState(null),[selected,setSelected]=useState([]);
  const [opsReady,setOpsReady]=useState(false),[rightsReady,setRightsReady]=useState(false);
  const [busy,setBusy]=useState(""),[notice,setNotice]=useState(""),[error,setError]=useState("");
+ const [preflight,setPreflight]=useState(null);
  useEffect(()=>{
    authenticatedFetch("/api/admin/assist-research").then(data=>{
      const items=(data.batches||[]).filter(x=>x.country==="ZW");
@@ -28,11 +29,19 @@ export function AssistMenuLaunch(){
  },[batchId]);
  useEffect(()=>{
    if(!batchId||!locationId)return;
-   let active=true;setError("");setNotice("");setDetail(null);setSelected([]);setOpsReady(false);setRightsReady(false);
+   let active=true;setError("");setNotice("");setDetail(null);setPreflight(null);setSelected([]);setOpsReady(false);setRightsReady(false);
    authenticatedFetch("/api/admin/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId))
      .then(d=>{if(active)setDetail(d);}).catch(e=>{if(active)setError(e.message);});
    return()=>{active=false};
  },[batchId,locationId]);
+ async function checkPilot(){
+   setBusy("preflight");setError("");setPreflight(null);
+   try{
+     const d=await authenticatedFetch("/api/admin/assist-research/pilot-preflight?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
+     setPreflight(d);
+   }catch(e){setError(e.message||"Could not inspect pilot readiness.");}
+   finally{setBusy("");}
+ }
  async function execute(action){
    setBusy(action);setError("");setNotice("");
    try{
@@ -43,7 +52,7 @@ export function AssistMenuLaunch(){
      });
      setNotice(action==="pause"?"Spotly Assist requests paused.":"Verified menu activated for customer price-check requests. No payments or dispatch activated.");
      const d=await authenticatedFetch("/api/admin/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
-     setDetail(d);
+     setDetail(d);setPreflight(null);
    }catch(e){setError(e.message);}finally{setBusy("");}
  }
  const published=locations.filter(x=>x.publicationState==="published");
@@ -67,6 +76,8 @@ export function AssistMenuLaunch(){
     {detail&&<div className="mt-7 border-t pt-6">
      <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-semibold">{detail.restaurant}</h2><p className="mt-2 text-xs text-[var(--text-2)]">Business: {detail.businessId} · Branch: {detail.branchId}</p></div><span className="rounded-full bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold">{detail.existingStore?.status||"Not activated"}</span></div>
      {!detail.canActivate&&<p className="mt-5 rounded-xl border p-4 text-sm text-[var(--danger)]">{detail.reason}</p>}
+     <div className="mt-5"><button type="button" onClick={checkPilot} disabled={!!busy} className="rounded-xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-40">{busy==="preflight"?"Running checks…":"Run read-only pilot checks"}</button></div>
+     {preflight&&<div className="mt-4 rounded-xl border bg-[var(--surface-2)] p-4"><h3 className="font-semibold">Pilot readiness · {preflight.checks.filter(x=>x.pass).length}/{preflight.checks.length} checks passed</h3><p className="mt-2 text-xs text-[var(--text-2)]">{preflight.independentlyVerifiedPrices} verified prices out of {preflight.totalPriceReferences} researched menu items. This test makes no Firestore changes.</p><div className="mt-4 space-y-3">{preflight.checks.map(x=><div key={x.id} className="flex gap-3 text-sm"><span aria-label={x.pass?"Passed":"Blocked"} className={x.pass?"font-semibold text-[var(--success)]":"font-semibold text-[var(--danger)]"}>{x.pass?"PASS":"BLOCK"}</span><div><p className="font-medium">{x.label}</p>{!x.pass&&<p className="mt-1 text-xs text-[var(--text-2)]">{x.detail}</p>}</div></div>)}</div></div>}
      <div className="mt-5 flex gap-3 rounded-xl bg-[var(--surface-2)] p-4"><ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent)]"/><p className="text-sm text-[var(--text-2)]">Only menu prices independently checked within the last 14 days qualify. Each customer still receives a final price quote before any transaction.</p></div>
      <div className="mt-6 flex items-center justify-between gap-3"><h3 className="text-lg font-semibold">Verified menu ({eligible.length})</h3><button type="button" className="text-xs font-semibold text-[var(--accent)]" onClick={()=>setSelected(eligible.map(x=>x.id))}>Select all verified</button></div>
      <div className="mt-3 max-h-[440px] space-y-2 overflow-y-auto">{(detail.prices||[]).map(p=><label key={p.id} className={"flex items-start gap-3 rounded-xl border p-4 "+(!p.verified?"opacity-60":"")}>
