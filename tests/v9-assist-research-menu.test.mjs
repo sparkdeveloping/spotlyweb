@@ -62,6 +62,12 @@ test("activation is not checkout or dispatch and requires independent verificati
     assert.doesNotMatch(route,new RegExp('collection\\("'+collection+'"\\)'));
   }
 });
+test("quote offering and acceptance both recheck canonical ownership",()=>{
+ for(const file of [
+   "app/api/admin/assist-shopping/actions/route.js",
+   "app/api/customer/independent-shopping/requests/respond/route.js"
+ ]) assert.match(read(file),/independentStoreSafe/);
+});
 test("public and request endpoints enforce canonical availability",()=>{
   for(const file of [
     "app/api/public/independent-shopping/route.js",
