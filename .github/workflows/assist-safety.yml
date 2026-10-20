@@ -1,0 +1,134 @@
+name: Spotly Assist Safety Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/assist-research-menu.js"
+      - "lib/assist-store-safety.js"
+      - "lib/marketplace-trust.js"
+      - "components/admin-assist-menu-launch.js"
+      - "components/assist-activity-section.js"
+      - "components/marketplace-app.js"
+      - "lib/assist-activity.js"
+      - "lib/assist-money.js"
+      - "lib/assist-refunds.js"
+      - "lib/assist-finance-close.js"
+      - "lib/assist-payment-url.js"
+      - "app/api/admin/assist-finance-close/**"
+      - "tests/v9-assist-finance-close.test.mjs"
+      - "app/api/admin/assist-refunds/**"
+      - "tests/v9-assist-refunds.test.mjs"
+      - "tests/v9-assist-finance-close.test.mjs"
+      - "components/driver-assist-shopping.js"
+      - "lib/assist-fulfillment.js"
+      - "app/api/admin/assist-fulfillment/**"
+      - "app/api/driver/assist-shopping/**"
+      - "app/api/customer/independent-shopping/substitution/**"
+      - "components/admin-assist-fulfillment.js"
+      - "components/driver/assist-shopping-workspace.js"
+      - "tests/v9-assist-fulfillment.test.mjs"
+      - "lib/assist-payment-server.js"
+      - "app/api/customer/independent-shopping/pay/**"
+      - "app/api/payments/paynow/result/**"
+      - "tests/v9-assist-money.test.mjs"
+      - "app/api/customer/activity/**"
+      - "tests/v9-assist-activity.test.mjs"
+      - "components/admin-assist-research-publication.js"
+      - "app/api/admin/assist-research/**"
+      - "app/api/admin/assist-shopping/**"
+      - "app/api/customer/independent-shopping/**"
+      - "app/api/public/independent-shopping/**"
+      - "app/api/public/service-feed/**"
+      - "tests/v9-assist-research-menu.test.mjs"
+      - "lib/ride-*.js"
+      - "app/api/customer/rides/**"
+      - "app/api/driver/rides/**"
+      - "app/api/driver/ride-offers/**"
+      - "app/api/driver/location/**"
+      - "app/api/driver/incidents/**"
+      - "app/api/driver/payout/**"
+      - "app/api/admin/rides/**"
+      - "app/api/admin/ride-finance-review/**"
+      - "app/api/admin/refunds/**"
+      - "app/api/admin/driver-money/**"
+      - "app/api/admin/launch-readiness/**"
+      - "app/api/payments/**"
+      - "app/api/public/geocode/**"
+      - "app/api/public/reverse-geocode/**"
+      - "components/ride-*.js"
+      - "components/driver-app.js"
+      - "components/admin-driver-operations.js"
+      - "tests/rides-*.test.mjs"
+      - "docs/SPOTLY-V9-RIDE-RELEASE.md"
+      - "lib/send-*.js"
+      - "lib/spotly-products.js"
+      - "lib/parcel-server.js"
+      - "app/api/customer/parcels/**"
+      - "app/api/driver/parcels/**"
+      - "app/api/driver/parcel-offers/**"
+      - "app/api/admin/parcels/**"
+      - "app/api/admin/send-recovery/**"
+      - "app/api/admin/service-launch/**"
+      - "app/api/internal/parcel-dispatch/**"
+      - "components/send-app.js"
+      - "components/admin-mobility-launch.js"
+      - "components/marketplace-*.js"
+      - "components/service-experience.js"
+      - "next.config.mjs"
+      - "app/bite/**"
+      - "app/shopper/**"
+      - "app/live/**"
+      - "app/city/**"
+      - "app/sitemap.js"
+      - "data/portals.js"
+      - "tests/send-*.test.mjs"
+      - "tests/spotly-products-v9.test.mjs"
+      - "docs/SPOTLY-V9-SEND-AND-BRANDS.md"
+      - "app/api/public/map-config/**"
+      - "app/api/public/geocode/**"
+      - "app/api/driver/location/**"
+      - "app/api/internal/ride-dispatch/**"
+      - "app/api/internal/parcel-dispatch/**"
+      - "lib/mobility-*.js"
+      - "components/mobility-map.js"
+      - "components/admin-mobility-launch.js"
+      - "tests/mobility-*.test.mjs"
+      - "docs/SPOTLY-V9-MAPS-GPS-DISPATCH-PAYMENTS.md"
+      - ".github/workflows/assist-safety.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spotly-assist-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  safety-tests:
+    name: Read-only unit & source checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify independent menu safeguards
+        run: node --test tests/v9-assist-research-menu.test.mjs tests/v9-assist-activity.test.mjs tests/v9-assist-money.test.mjs tests/v9-assist-fulfillment.test.mjs tests/v9-assist-refunds.test.mjs tests/v9-assist-finance-close.test.mjs tests/rides-production.test.mjs tests/rides-v9-integrity.test.mjs tests/send-production.test.mjs tests/send-v9-integrity.test.mjs tests/spotly-products-v9.test.mjs tests/mobility-maps-v9.test.mjs tests/mobility-reliability-v9.test.mjs tests/mobility-address-selection-v9.test.mjs tests/rides-v9-finance.test.mjs
+
+  compile-admin:
+    name: Verify Next.js Admin screens compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Compile Next.js in CI, without deployment
+        run: npm run build
