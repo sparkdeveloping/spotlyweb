@@ -72,6 +72,14 @@ export async function POST(request) {
         const presenceRef=assignedDriverId?db.collection("driverPresence").doc(assignedDriverId):null;
         const presence=presenceRef?await transaction.get(presenceRef):null;
         const needsReview=ride.paymentStatus==="paid";
+        if(needsReview&&ride.assignedDriverId){
+          transaction.set(db.collection("drivers").doc(ride.assignedDriverId),{
+            rideFinanceHold:true,rideFinanceHoldAt:FieldValue.serverTimestamp()},{merge:true});
+          transaction.set(db.collection("rideFinanceReviews").doc(body.rideId),{
+            rideId:body.rideId,driverId:ride.assignedDriverId,status:"open",
+            issueType:"customer_cancelled_paid_trip",
+            createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+        }
         if(needsReview)transaction.set(db.collection("adminQueueItems").doc("ride_payment_refund_"+body.rideId),{
           queue:"ride-exceptions",type:"captured_ride_cancelled",status:"open",priority:"high",
           rideId:body.rideId,entityId:body.rideId,title:"Customer cancelled paid Ride · Finance review",

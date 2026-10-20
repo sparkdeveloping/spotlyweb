@@ -57,3 +57,11 @@ Server-side secrets/environment: SPOTLY_GEOCODING_URL, SPOTLY_REVERSE_GEOCODING_
 CI jobs validate the source and Next.js compilation, not external providers or field operations.
 
 No live customer Ride requests, Driver payments or business launch are activated by this feature-branch work.
+
+## Final finance + geofence safeguards (same V9 continuation)
+
+Every enabled Ride city now requires an explicit operator-reviewed service-geofence center and radius, keyed as country:city (for example ZW:harare). Country rectangles alone are not enough to prevent a caller forging a city name in a request. The server validates the pickup distance against the configured geofence; there are no guessed pre-approved city coordinates. Admin Ride Operations can enter verified geofence parameters. This also applies to Malawi.
+
+Provider disputes, initiated customer refunds and serious ride termination record a persistent Ride finance case and set a Driver payout hold. A separately authorized Finance operator must record the outcome, HTTPS bank/provider documentary evidence and a detailed reason; a second Finance reviewer must independently confirm before removing the hold. The system refuses clearance while another tracked Ride finance review remains unresolved. This attests to an external resolution; it never initiates a refund or payout, and does not alter historical external bank balances. Evidence can be reviewed in Admin Ride detail when the user has Finance permission.
+
+Note: Scheduled rides, ride-for-someone-else, street-tile map SDK, traffic-aware navigation, iOS native background location and real external dispatch/payment service provisioning still require their own implementations or operational integrations. Do not interpret CI green as verification of those capabilities.

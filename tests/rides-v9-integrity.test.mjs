@@ -23,13 +23,18 @@ test("Ride launch accepts only explicitly enabled country and city, blocks cross
  assert.equal(insideCountryBounds(ZW,"ZW"),true);
  assert.equal(insideCountryBounds(MW,"MW"),true);
  assert.equal(insideCountryBounds({lat:38,lng:-94},"ZW"),false);
- const policy={enabledCountries:["ZW","MW"],enabledCities:["Harare","Lilongwe"],enabledAreas:{}};
+ const policy={enabledCountries:["ZW","MW"],enabledCities:["Harare","Lilongwe"],enabledAreas:{},
+ cityGeofences:{"ZW:harare":{country:"ZW",lat:-17.83,lng:31.05,radiusKm:45},
+ "MW:lilongwe":{country:"MW",lat:-13.96,lng:33.79,radiusKm:45}}};
  assert.equal(validateRideTerritory(ZW,{...ZW,lat:-17.84},policy).country,"ZW");
  assert.equal(validateRideTerritory(MW,{...MW,lat:-13.95},policy).country,"MW");
  assert.throws(()=>validateRideTerritory(ZW,MW,policy));
  assert.throws(()=>validateRideTerritory({...ZW,country:"US"},ZW,policy));
  assert.throws(()=>validateRideTerritory(ZW,ZW,{...policy,enabledCountries:[]}));
  assert.throws(()=>validateRideTerritory(ZW,ZW,{...policy,enabledCities:[]}));
+ assert.throws(()=>validateRideTerritory({...MW,city:"Harare",country:"ZW"},ZW,policy));
+ assert.throws(()=>validateRideTerritory({...ZW,city:"Lilongwe"},ZW,policy));
+ assert.throws(()=>validateRideTerritory(ZW,ZW,{...policy,cityGeofences:{}}));
 });
 test("Verified road route uses an approved HTTPS routing endpoint and actual road metrics",async()=>{
  assert.match(routeEndpoint(ZW,{...ZW,lng:31.12},"https://routing.example.org"),/route\/v1\/driving/);

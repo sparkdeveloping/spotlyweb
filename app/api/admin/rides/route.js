@@ -15,6 +15,7 @@ const mobilitySchema = z.object({
   routingVerified:z.boolean().optional(),
   dispatchSchedulerVerified:z.boolean().optional(),
   enabledCountries:z.array(z.enum(["ZW","MW"])).max(2).optional(),
+  cityGeofences:z.record(z.string().min(4).max(130),z.object({country:z.enum(["ZW","MW"]),lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180),radiusKm:z.number().min(3).max(100)}).strict()).optional(),
   maxSearchSeconds:z.number().int().min(90).max(1200).optional(),
   safetyToolkitEnabled: z.boolean().optional(),
   cashEnabled: z.boolean().optional(),
@@ -62,6 +63,7 @@ export async function PATCH(request) {
       ...(body.routingVerified!==undefined?{routingVerified:body.routingVerified}:{}),
       ...(body.dispatchSchedulerVerified!==undefined?{dispatchSchedulerVerified:body.dispatchSchedulerVerified}:{}),
       ...(body.enabledCountries!==undefined?{enabledCountries:body.enabledCountries}:{}),
+      ...(body.cityGeofences!==undefined?{cityGeofences:body.cityGeofences}:{}),
       ...(body.maxSearchSeconds!==undefined?{maxSearchSeconds:body.maxSearchSeconds}:{}),
       ...(body.safetyToolkitEnabled !== undefined ? { safetyToolkitEnabled: body.safetyToolkitEnabled } : {}),
       ...(body.cashEnabled !== undefined ? { cashEnabled: body.cashEnabled } : {}),
@@ -169,6 +171,13 @@ export async function POST(request) {
         const active=current.data();
         const presence=active.assignedDriverId?db.collection("driverPresence").doc(active.assignedDriverId):null;
         const driverState=presence?await tx.get(presence):null;
+        if(active.assignedDriverId){
+          tx.set(db.collection("drivers").doc(active.assignedDriverId),{
+            rideFinanceHold:true,rideFinanceHoldAt:now},{merge:true});
+          tx.set(db.collection("rideFinanceReviews").doc(body.rideId),{
+            rideId:body.rideId,driverId:active.assignedDriverId,status:"open",
+            issueType:"interrupted_active_trip",createdAt:now,updatedAt:now},{merge:true});
+        }
         tx.update(ref,{state:"failed",paymentReviewRequired:true,driverEarningsStatus:"on_hold",
           failureReason:reason,failedAt:now,updatedAt:now});
         if(active.orderId)tx.update(db.collection("orders").doc(active.orderId),{
@@ -204,6 +213,13 @@ export async function POST(request) {
         const presence=presenceRef?await tx.get(presenceRef):null;
         const now=FieldValue.serverTimestamp();
         const needsReview=currentRide.paymentStatus==="paid";
+        if(needsReview&&currentRide.assignedDriverId){
+          tx.set(db.collection("drivers").doc(currentRide.assignedDriverId),{
+            rideFinanceHold:true,rideFinanceHoldAt:now},{merge:true});
+          tx.set(db.collection("rideFinanceReviews").doc(body.rideId),{
+            rideId:body.rideId,driverId:currentRide.assignedDriverId,status:"open",
+            issueType:"cancelled_paid_trip",createdAt:now,updatedAt:now},{merge:true});
+        }
         tx.update(ref,{state:"cancelled",exceptionCode:needsReview?"paid_ride_cancelled":"admin_cancelled",
          paymentReviewRequired:needsReview,cancellationReason:reason,cancelledBy:"admin",cancelledAt:now,updatedAt:now});
         if(currentRide.orderId)tx.update(db.collection("orders").doc(currentRide.orderId),{

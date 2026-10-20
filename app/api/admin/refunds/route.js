@@ -46,9 +46,14 @@ export async function POST(request) {
         const rideSnap=rideRef?await transaction.get(rideRef):null;
         const ride=rideSnap?.exists?rideSnap.data():null;
         if(rideRef&&!ride)throw Object.assign(new Error("Ride record requires Finance investigation."),{status:409});
-        if(ride?.assignedDriverId)
+        if(ride?.assignedDriverId){
           transaction.set(db.collection("drivers").doc(ride.assignedDriverId),{
             rideFinanceHold:true,rideFinanceHoldAt:FieldValue.serverTimestamp()},{merge:true});
+          transaction.set(db.collection("rideFinanceReviews").doc(order.rideTripId),{
+            rideId:order.rideTripId,driverId:ride.assignedDriverId,status:"open",
+            issueType:"external_customer_refund",refundRequestId:refundRef.id,
+            createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+        }
         if(rideRef)transaction.set(rideRef,{
           paymentStatus:"refund_pending",paymentReviewRequired:true,
           driverEarningsStatus:"refund_review",updatedAt:FieldValue.serverTimestamp()},{merge:true});
