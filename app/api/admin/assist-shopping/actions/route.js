@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { notifyUser } from "@/lib/notification-server";
+import { independentStoreSafe } from "@/lib/assist-store-safety";
 export const runtime = "nodejs";
 const roles = ["super_admin","platform_admin","operations_manager"];
 const schema = z.object({
@@ -25,6 +26,16 @@ export async function POST(request) {
      const snap = await tx.get(ref);
      if(!snap.exists) throw Object.assign(new Error("Shopping request not found."),{status:404});
      const record=snap.data();
+     if(body.action==="offer_quote"){
+       const storeSnap=await tx.get(db.collection("independentShoppingStores").doc(record.storeId));
+       if(!storeSnap.exists)throw Object.assign(new Error("This restaurant is no longer available for independent shopping."),{status:409});
+       const store=storeSnap.data();
+       const canonical=store.directoryBusinessId?await tx.get(db.collection("businesses").doc(store.directoryBusinessId)):null;
+       const branch=store.sourceResearchBatchId&&store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
+       if(!independentStoreSafe(store,canonical?.exists?canonical.data():null,branch?.exists?branch.data():null)){
+         throw Object.assign(new Error("The restaurant is claimed or Spotly Assist is disabled. Do not send a new quote."),{status:409});
+       }
+     }
      if(!["pending_manual_quote","contacting_store","quote_offered"].includes(record.state)){
        throw Object.assign(new Error("The request is no longer available for this action."),{status:409});
      }
