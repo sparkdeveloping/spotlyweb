@@ -96,5 +96,5 @@ export function AssistResearchImport() {
         </div>
       </main>
     </PortalShell>
-  </AuthGate>;
+  </AdminAccess></AuthGate>;
 }
