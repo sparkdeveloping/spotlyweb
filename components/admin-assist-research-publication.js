@@ -29,7 +29,7 @@ const canReview = (form) => form.decision === "reject" ||
     ? form.addressVerified && form.operatingVerified && form.sourceRightsReviewed && form.duplicatesReviewed && form.verifiedAddress.trim().length >= 8
     : form.sourceRightsReviewed && form.duplicatesReviewed && form.businessId.trim().length >= 4);
 
-export function AssistResearchPublication({batchId}) {
+export function AssistResearchPublication({batchId,duplicateReport=null}) {
   const [data,setData] = useState(null);
   const [selectedId,setSelectedId] = useState("");
   const [tab,setTab] = useState("locations");
@@ -70,6 +70,8 @@ export function AssistResearchPublication({batchId}) {
   },[batchId]);
   const location=data?.locations.find(x=>x.id===selectedId);
   const price=data?.prices.find(x=>x.id===priceId);
+  const suggested=(duplicateReport?.results || []).find(item=>item.id===selectedId)?.existingCandidates || [];
+  const selectable=suggested.filter(item=>item.type!=="curated" && item.businessId && item.rank!=="brand_only");
   const locations=useMemo(()=> (data?.locations||[]).filter(x =>
     !filter || [x.name,x.brandName,x.city,x.area,x.publicationState].join(" ").toLowerCase().includes(filter.toLowerCase())
   ),[data,filter]);
@@ -156,7 +158,7 @@ export function AssistResearchPublication({batchId}) {
               <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold">Publication decision<select value={locationForm.decision} onChange={e=>setLocationForm(s=>({...s,decision:e.target.value}))} className={field}><option value="new_business">Create new unclaimed listing</option><option value="link_existing">Link to existing Spotly business</option><option value="reject">Reject research location</option></select></label>
               <label className="text-xs font-semibold">How was the location checked?<select value={locationForm.contactMethod} onChange={e=>setLocationForm(s=>({...s,contactMethod:e.target.value}))} className={field}><option value="phone">Telephone</option><option value="in_person">In person</option><option value="business_confirmed">Confirmed by business</option><option value="independent_field_research">Independent field research</option></select></label></div>
               {locationForm.decision==="new_business"&&<label className="block text-xs font-semibold">Verified physical street address<input value={locationForm.verifiedAddress} onChange={e=>setLocationForm(s=>({...s,verifiedAddress:e.target.value}))} className={field} placeholder="Confirmed street and business entrance"/></label>}
-              {locationForm.decision==="link_existing"&&<div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold">Existing Spotly business ID<input value={locationForm.businessId} onChange={e=>setLocationForm(s=>({...s,businessId:e.target.value}))} className={field} placeholder="Choose from duplicate review"/></label><label className="text-xs font-semibold">Branch ID (optional)<input value={locationForm.branchId} onChange={e=>setLocationForm(s=>({...s,branchId:e.target.value}))} className={field}/></label></div>}
+              {locationForm.decision==="link_existing"&&<div className="space-y-3">{selectable.length>0&&<label className="block text-xs font-semibold">Choose an identified business or branch<select className={field} value="" onChange={e=>{const match=selectable.find(item=>item.type+"|"+item.id===e.target.value);if(match)setLocationForm(s=>({...s,businessId:match.businessId,branchId:match.type==="branch"?match.id:""}));}}><option value="">Select verified candidate…</option>{selectable.map(match=><option key={match.type+"_"+match.id} value={match.type+"|"+match.id}>{match.name} · {match.type} · {match.rank}</option>)}</select></label>}{suggested.some(x=>x.type==="curated")&&<p className="rounded-xl border p-3 text-xs text-[var(--text-2)]">This location may already exist in Spotly’s generated directory. Those records need separate canonical migration and cannot be linked as Firestore merchants here.</p>}<div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold">Existing Spotly business ID<input value={locationForm.businessId} onChange={e=>setLocationForm(s=>({...s,businessId:e.target.value}))} className={field} placeholder="Choose from duplicate review"/></label><label className="text-xs font-semibold">Branch ID (optional)<input value={locationForm.branchId} onChange={e=>setLocationForm(s=>({...s,branchId:e.target.value}))} className={field}/></label></div></div>}
               <div className="space-y-3 rounded-xl bg-[var(--surface-2)] p-4">{[
                 ["addressVerified","I confirmed the exact physical address"],
                 ["operatingVerified","This location is currently operating"],
