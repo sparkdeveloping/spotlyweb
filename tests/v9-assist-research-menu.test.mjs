@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { brandCompatible, canonicalStoreId, claimSafeUnpartnered, verifiedResearchPrice } from "../lib/assist-research-menu.js";
+import { brandCompatible, canonicalStoreId, claimSafeUnpartnered, verifiedResearchPrice, verifiedLocationPrice } from "../lib/assist-research-menu.js";
 import { independentStoreSafe } from "../lib/assist-store-safety.js";
 const read = p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 
 const business={
-  public:true,status:"provisional",country:"ZW",claimStatus:"unclaimed",
+  public:true,launchApproved:true,status:"provisional",country:"ZW",claimStatus:"unclaimed",
   ownerIds:[],verificationStatus:"unverified",commerceEnabled:false,
   source:{type:"spotly_assist_research",batchId:"zw_test",researchLocationId:"loc1"}
 };
@@ -41,6 +41,7 @@ test("claims and disabled locations stop independent orders",()=>{
   assert.equal(claimSafeUnpartnered({...business,claimStatus:undefined}),false);
   assert.equal(claimSafeUnpartnered({...business,ownershipStatus:"claim_pending"}),false);
   assert.equal(independentStoreSafe(store,business,branch),true);
+  assert.equal(independentStoreSafe(store,{...business,launchApproved:false},branch),false);
   assert.equal(independentStoreSafe(store,{...business,claimStatus:"claimed"},branch),false);
   assert.equal(independentStoreSafe(store,{...business,assistAccepting:false},branch),false);
   assert.equal(independentStoreSafe(store,business,{...branch,public:false}),false);
@@ -56,7 +57,7 @@ test("research-linked stores cannot become independent from their canonical reco
 test("activation is not checkout or dispatch and requires independent verification",()=>{
   const route=read("app/api/admin/assist-research/activate-menu/route.js");
   assert.match(route,/operatorCoverageAttestedBy/);
-  assert.match(route,/verifiedResearchPrice/);
+  assert.match(route,/verifiedLocationPrice/);
   assert.match(route,/claimSafeUnpartnered/);
   assert.match(route,/businessClaims/);
   assert.match(route,/tx\.set\(storeRef/);
@@ -82,7 +83,7 @@ test("public and request endpoints enforce canonical availability",()=>{
 test("Admin preflight is read-only and reports independent-price and claim blockers",()=>{
   const source=read("app/api/admin/assist-research/pilot-preflight/route.js");
   assert.ok(source.includes("authenticateRequest(request,{roles})"));
-  assert.ok(source.includes("verifiedResearchPrice"));
+  assert.ok(source.includes("verifiedLocationPrice"));
   assert.ok(source.includes("pendingClaims"));
   assert.ok(source.includes("canEnableMenu"));
   assert.ok(source.includes("canRequestQuote"));
@@ -92,4 +93,39 @@ test("Admin preflight is read-only and reports independent-price and claim block
   }
   const ui=read("components/admin-assist-menu-launch.js");
   assert.ok(ui.includes("Run read-only pilot checks"));
+});
+
+test("matching a chain brand never verifies another location's price",()=>{
+ const source={id:"p1",brand:"Nando's",currency:"USD",itemName:"Quarter Chicken"};
+ const approval={sourcePriceId:"p1",locationId:"branch_A",scope:"specific_location",verifiedPrice:8,
+   currency:"USD",sourceRightsReviewed:true,method:"phone",notes:"Checked at branch A with staff",
+   checkedAt:"2026-10-19T08:00:00.000Z"};
+ assert.equal(verifiedLocationPrice(source,approval,"Nando's","branch_A",now),true);
+ assert.equal(verifiedLocationPrice(source,approval,"Nando's","branch_B",now),false);
+ assert.equal(verifiedLocationPrice(source,{...approval,scope:"brand"},"Nando's","branch_A",now),false);
+ assert.equal(verifiedLocationPrice(source,{...approval,checkedAt:"2026-09-01T08:00:00.000Z"},"Nando's","branch_A",now),false);
+ assert.equal(verifiedLocationPrice({...source,brand:"Hungry Lion"},approval,"Nando's","branch_A",now),false);
+});
+test("approval, discovery release and Assist ordering are three separate privileges",()=>{
+ const route=read("app/api/admin/assist-research/publication/route.js");
+ const trust=read("lib/marketplace-trust.js");
+ assert.ok(route.includes('publicationState:"approved"'));
+ assert.ok(route.includes('public:false,launchApproved:false'));
+ assert.ok(route.includes('confirmation:z.literal("PUBLISH_TO_CUSTOMERS")'));
+ assert.ok(route.includes('publicationState:"published",discoveryLaunchedAt'));
+ assert.ok(trust.includes('record.launchApproved !== true'));
+ const menu=read("app/api/admin/assist-research/activate-menu/route.js");
+ assert.ok(menu.includes("launchApproved===true"));
+ assert.ok(menu.includes("menuApprovals"));
+});
+test("all brands use the same location-scoped review queue",()=>{
+ const route=read("app/api/admin/assist-research/location-prices/route.js");
+ const menu=read("app/api/admin/assist-research/activate-menu/route.js");
+ const ui=read("components/admin-assist-menu-launch.js");
+ assert.ok(route.includes("confirmedForThisLocation"));
+ assert.ok(route.includes("menuApprovals"));
+ assert.ok(menu.includes("verifiedLocationPrice"));
+ assert.ok(ui.includes("All researched restaurants"));
+ assert.ok(ui.includes("Filter by brand"));
+ assert.ok(ui.includes("Save location-specific price verification"));
 });
