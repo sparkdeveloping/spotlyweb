@@ -14,7 +14,8 @@ test("Fare quote does not depend on real-time dispatch but still needs verified 
  const quote=read("app/api/customer/rides/quote/route.js");
  const booking=read("app/api/customer/rides/route.js");
  assert.ok(service.includes("export function rideQuoteAvailability"));
- assert.ok(service.includes("if(!config.routingVerified||!process.env.SPOTLY_ROUTING_URL)"));
+ assert.ok(service.includes("const routeReady=routingConfiguration()"));
+ assert.ok(service.includes('if(!config.routingVerified||!routingConfiguration().ready)'));
  assert.ok(quote.includes("rideQuoteAvailability(settings,pickup)"));
  assert.ok(quote.includes("const booking=rideAvailability(settings,pickup)"));
  assert.ok(quote.includes("bookingAvailable:booking.enabled"));

@@ -7,6 +7,7 @@ import {dispatchHealth} from "@/lib/mobility-scheduler-health";
 import {licensedMapStyle} from "@/lib/mobility-map-provider";
 import {mapTilerReady} from "@/lib/maptiler-geocoding";
 import {paynowCredentialsConfigured} from "@/lib/paynow-server";
+import {routingConfiguration} from "@/lib/ride-routing";
 
 export const runtime="nodejs";
 const READ_ROLES=["super_admin","admin","platform_admin","operations_manager","regional_operations_manager","driver_operations_coordinator","dispatcher","support_manager"];
@@ -28,7 +29,7 @@ function prerequisites(settings,service,heartbeat=null,paynowByCurrency={}){
  if(config.dispatchSchedulerVerified!==true)missing.push("Verify a real external dispatch scheduler");
  const scheduler=dispatchHealth(heartbeat||{});
  if(!scheduler.ready)missing.push("Prove at least 3 recent authenticated scheduler ticks with no dispatch failures (last within 3.5 minutes)");
- if(config.routingVerified!==true||!process.env.SPOTLY_ROUTING_URL)missing.push("Configure and verify HTTPS road routing");
+ if(config.routingVerified!==true||!routingConfiguration().ready)missing.push("Configure, authenticate and verify real HTTPS road routing");
  if(!licensedMapStyle())missing.push("Configure licensed MapLibre street tiles (SPOTLY_MAP_STYLE_URL)");
  if(!((process.env.SPOTLY_GEOCODING_URL&&process.env.SPOTLY_REVERSE_GEOCODING_URL)||mapTilerReady()))
   missing.push("Configure licensed forward and reverse geocoding (MapTiler key or compatible services)");
