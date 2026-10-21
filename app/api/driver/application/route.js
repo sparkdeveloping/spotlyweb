@@ -94,39 +94,55 @@ export async function POST(request) {
 
     if (body.action === "save") {
       const values = body.application || {};
-      const currentStep = Number(values.currentStep ?? 0);
-      const vehicleType = body.vehicle?.type || null;
-      const requestedCapabilities = normalizeCapabilities(values.requestedCapabilities || [], vehicleType || "").filter((capabilityId) => !vehicleType || DRIVER_CAPABILITIES[capabilityId]?.vehicleTypes?.includes(vehicleType));
-      // Step 1 (identity/contact) must be saveable before the applicant has even seen vehicle fields.
+      const existingSnap = await appRef.get();
+      const existing = existingSnap.exists ? existingSnap.data() : {};
+      if (["application_submitted", "under_review", "approved", "ready", "active", "suspended", "offboarded"].includes(existing.status)) {
+        throw Object.assign(new Error("This application is with Spotly. Wait for a request for changes before editing."), { status: 409 });
+      }
+      const currentStep = Number(values.currentStep ?? existing.currentStep ?? 0);
+      const vehicleType = body.vehicle?.type || "";
+      const updates = { userId: user.uid, updatedAt: now };
+      if (!existingSnap.exists) {
+        updates.createdAt = now;
+        updates.status = "application_started";
+        updates.email = user.email || user.profile?.email || "";
+      }
+      if (values.legalName !== undefined) updates.legalName = safeText(values.legalName, 160);
+      if (values.phone !== undefined) updates.phone = normalizeZimbabwePhone(values.phone);
+      if (values.city !== undefined) updates.city = safeText(values.city, 80);
+      if (values.preferredZones !== undefined) updates.preferredZones = values.preferredZones;
+      if (values.emergencyContactName !== undefined) updates.emergencyContactName = safeText(values.emergencyContactName, 160);
+      if (values.emergencyContactPhone !== undefined) updates.emergencyContactPhone = normalizeZimbabwePhone(values.emergencyContactPhone);
+      if (values.requestedCapabilities !== undefined) {
+        updates.requestedCapabilities = [...new Set(values.requestedCapabilities)].filter((id) => DRIVER_CAPABILITIES[id] && (!vehicleType || DRIVER_CAPABILITIES[id].vehicleTypes.includes(vehicleType)));
+      }
+      if (values.agreementsAccepted !== undefined) updates.agreementsAccepted = values.agreementsAccepted;
+      if (values.locationConsent !== undefined) updates.locationConsent = values.locationConsent;
+      if (values.currentStep !== undefined) updates.currentStep = Math.max(Number(existing.currentStep || 0), currentStep);
+      // Step 1 (identity/contact) must be saveable before the applicant has seen vehicle setup.
       if (body.vehicle && currentStep >= 2 && body.vehicle.type !== "bicycle" && safeText(body.vehicle.registration || "", 40).length < 2) {
         throw Object.assign(new Error("Add the motor vehicle registration before continuing."), { status: 400 });
       }
       if (body.vehicle && currentStep >= 2 && body.vehicle.type !== "bicycle" && (!safeText(body.vehicle.make || "", 80) || !safeText(body.vehicle.model || "", 80))) {
         throw Object.assign(new Error("Add the motor vehicle make and model before continuing."), { status: 400 });
       }
-      await appRef.set({
-        userId: user.uid,
-        email: user.email || user.profile?.email || "",
-        legalName: safeText(values.legalName || user.name || user.profile?.displayName || "", 160),
-        phone: normalizeZimbabwePhone(values.phone || user.profile?.phoneNumber || ""),
-        city: safeText(values.city || "Harare", 80),
-        preferredZones: values.preferredZones || [],
-        requestedCapabilities,
-        emergencyContactName: safeText(values.emergencyContactName, 160),
-        emergencyContactPhone: normalizeZimbabwePhone(values.emergencyContactPhone || ""),
-        currentStep,
-        agreementsAccepted: Boolean(values.agreementsAccepted),
-        locationConsent: Boolean(values.locationConsent),
-        status: "application_started",
-        updatedAt: now,
-        createdAt: now
-      }, { merge: true });
-      // Only persist the primary vehicle after the applicant has actually completed Work & vehicle.
+      const batch = db.batch();
+      batch.set(appRef, updates, { merge: true });
       if (body.vehicle && currentStep >= 2) {
+        const vehicleRef = db.collection("driverVehicles").doc(`${user.uid}_primary`);
+        const existingVehicle = await vehicleRef.get();
+        if (existingVehicle.exists && existingVehicle.data()?.driverId !== user.uid) {
+          throw Object.assign(new Error("The primary vehicle does not belong to this Driver."), { status: 403 });
+        }
+        const requestedCapabilities = updates.requestedCapabilities || existing.requestedCapabilities || [];
         const vehicle = normalizedVehicle({ ...body.vehicle, requestedCapabilities });
-        await db.collection("driverVehicles").doc(`${user.uid}_primary`).set({ driverId: user.uid, ...vehicle, status: "pending_review", setupComplete: true, updatedAt: now, createdAt: now }, { merge: true });
+        const vehicleUpdates = { driverId: user.uid, ...vehicle, updatedAt: now };
+        // Do not downgrade an approved or rejected vehicle during a draft save.
+        if (!existingVehicle.exists) Object.assign(vehicleUpdates, { status: "pending_review", setupComplete: true, createdAt: now });
+        batch.set(vehicleRef, vehicleUpdates, { merge: true });
       }
-      return Response.json({ ok: true });
+      await batch.commit();
+      return Response.json({ ok: true, currentStep: updates.currentStep ?? existing.currentStep ?? 0 });
     }
 
     if (body.action === "vehicle") {
@@ -194,7 +210,6 @@ export async function POST(request) {
       if (EXPIRY_REQUIRED_TYPES.has(body.document.type) && !body.document.expiresAt) throw Object.assign(new Error(`Add the expiry date for your ${body.document.type.replaceAll("_", " ")}.`), { status: 400 });
       if (body.document.expiresAt && new Date(body.document.expiresAt).getTime() <= Date.now()) throw Object.assign(new Error("That document is already expired."), { status: 400 });
       const [currentAppSnap, currentDriverSnap] = await Promise.all([appRef.get(), db.collection("drivers").doc(user.uid).get()]);
-      const currentStatus = currentAppSnap.data()?.status || "application_started";
       const activeLifecycle = currentDriverSnap.exists && ["approved", "ready", "active", "temporarily_unavailable", "suspended"].includes(currentDriverSnap.data()?.status);
       const docRef = db.collection("driverDocuments").doc();
       await docRef.set({
@@ -202,7 +217,7 @@ export async function POST(request) {
         expiresAt: body.document.expiresAt || null, referenceNumber: safeText(body.document.referenceNumber || "", 100) || null,
         vehicleId: inferredVehicleId, status: "uploaded", uploadedAt: now, updatedAt: now
       });
-      await appRef.set({ status: activeLifecycle ? currentStatus : "application_started", updatedAt: now }, { merge: true });
+      await appRef.set({ updatedAt: now }, { merge: true });
       await db.collection("adminQueueItems").doc(`driver_document_${docRef.id}`).set({
         queue: "driver-documents", type: "driver_document_review", entityId: docRef.id, driverId: user.uid, documentId: docRef.id, vehicleId: inferredVehicleId,
         status: "open", priority: activeLifecycle ? "high" : "normal", title: `${safeText(currentAppSnap.data()?.legalName || user.name || "Driver", 120)} · ${body.document.type.replaceAll("_", " ")}`,
@@ -219,12 +234,23 @@ export async function POST(request) {
         const age = Math.floor(Date.now() / 1000) - Number(user.auth_time || 0);
         if (!user.auth_time || age > 15 * 60) throw Object.assign(new Error("Sign in again before changing a verified payout account."), { status: 401 });
       }
+      if (![body.payout.provider, body.payout.recipientName, body.payout.identifier].every((value) => String(value || "").trim().length >= 2)) {
+        throw Object.assign(new Error("Enter a valid provider, recipient name and account or wallet identifier."), { status: 400 });
+      }
       const identifier = safeText(body.payout.identifier, 120);
-      await db.collection("driverPayoutAccounts").doc(user.uid).set({
+      const payoutRef = db.collection("driverPayoutAccounts").doc(user.uid);
+      const driverRef = db.collection("drivers").doc(user.uid);
+      const linkedDriver = await driverRef.get();
+      const payoutBatch = db.batch();
+      payoutBatch.set(payoutRef, {
         driverId: user.uid, type: body.payout.type, provider: safeText(body.payout.provider, 80), recipientName: safeText(body.payout.recipientName, 160),
-        identifierEncrypted: encryptFinancialValue(identifier), maskedIdentifier: `•••• ${accountLast4(identifier)}`, verificationState: "pending", updatedAt: now, createdAt: now
+        identifierEncrypted: encryptFinancialValue(identifier), maskedIdentifier: `•••• ${accountLast4(identifier)}`, verificationState: "pending",
+        updatedAt: now, ...(!existingPayout.exists ? { createdAt: now } : {})
       }, { merge: true });
-      await appRef.set({ payoutComplete: true, updatedAt: now }, { merge: true });
+      payoutBatch.set(appRef, { payoutComplete: true, updatedAt: now }, { merge: true });
+      // A changed payout must be reverified before an already-active Driver can accept more work.
+      if (linkedDriver.exists) payoutBatch.set(driverRef, { payoutVerificationState: "pending", updatedAt: now }, { merge: true });
+      await payoutBatch.commit();
       await Promise.allSettled([
         notifyUser({ db, messaging, auth, userId: user.uid, title: "Payout details sent to Spotly", body: "Your payout destination is saved and waiting for verification.", href: "/profile", category: "driver_review", workspace: "driver", module: "money", eventType: "driver_payout_account.submitted", importance: "high", entityType: "driverPayoutAccount", entityId: user.uid, email: true, forceOperationalEmail: true }),
         notifyRoleAudience({ db, messaging, auth, title: "Driver payout account needs review", body: `${safeText(body.payout.recipientName, 160)} submitted Driver payout details for verification.`, href: `/mobility?driver=${encodeURIComponent(user.uid)}`, category: "admin_review", workspace: "admin", module: "money", eventType: "driver_payout_account.submitted", importance: "high", entityType: "driverPayoutAccount", entityId: user.uid, email: true, forceOperationalEmail: true }, ["super_admin", "finance_admin", "operations_manager"])
@@ -254,13 +280,16 @@ export async function POST(request) {
       return Response.json({ ok: true, trainingComplete, trainingModules: modules });
     }
 
-    const [appSnap, vehicleSnap, documentQuery] = await Promise.all([
-      appRef.get(), db.collection("driverVehicles").doc(`${user.uid}_primary`).get(), db.collection("driverDocuments").where("driverId", "==", user.uid).limit(100).get()
+    const [appSnap, vehicleSnap, documentQuery, payoutSnap] = await Promise.all([
+      appRef.get(), db.collection("driverVehicles").doc(`${user.uid}_primary`).get(), db.collection("driverDocuments").where("driverId", "==", user.uid).limit(100).get(), db.collection("driverPayoutAccounts").doc(user.uid).get()
     ]);
     if (!appSnap.exists) throw Object.assign(new Error("Complete your Driver application before submitting."), { status: 409 });
+    if (["application_submitted", "under_review", "approved", "ready", "active", "suspended", "offboarded"].includes(appSnap.data()?.status)) {
+      throw Object.assign(new Error("This application has already been submitted or reviewed."), { status: 409 });
+    }
     const primaryVehicle = vehicleSnap.exists ? { id: vehicleSnap.id, ...vehicleSnap.data() } : null;
     const documents = documentQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
-    const readiness = applicationReadiness(appSnap.data(), primaryVehicle, documents);
+    const readiness = applicationReadiness(appSnap.data(), primaryVehicle, documents, payoutSnap.exists ? payoutSnap.data() : null);
     if (!readiness.complete) throw Object.assign(new Error("Complete every Driver application step before submitting."), { status: 409, blockers: readiness.checks.filter((item) => !item.ok) });
     await appRef.set({ status: "application_submitted", submittedAt: now, updatedAt: now }, { merge: true });
     await db.collection("adminQueueItems").doc(`driver_application_${user.uid}`).set({
@@ -274,6 +303,12 @@ export async function POST(request) {
     return Response.json({ ok: true, status: "application_submitted" });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the Driver application details.", details: error.flatten() }, { status: 400 });
+    if (Array.isArray(error?.blockers)) {
+      return Response.json({ ok: false, error: error.message, blockers: error.blockers.map((item) => (
+        typeof item === "string" ? { id: item, label: item.replaceAll("_", " "), step: 2 } :
+        { id: item.id, label: item.label, action: item.action, step: item.step, status: item.status, reviewReason: item.reviewReason }
+      )) }, { status: Number(error.status) || 409 });
+    }
     return apiError(error);
   }
 }

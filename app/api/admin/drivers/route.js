@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
-import { docsData, docData, operationalEligibility, notifyUsers } from "@/lib/driver-delivery-server";
+import { applicationReadiness, docsData, docData, operationalEligibility, notifyUsers } from "@/lib/driver-delivery-server";
 import { DRIVER_CAPABILITIES, capabilityRequirements, capabilitySummary, documentRequirementsFor, normalizeCapabilities } from "@/lib/driver-capabilities";
 import { driverBalanceAccountId, sanitizeDriverBalance } from "@/lib/driver-money-server";
 import { safeText } from "@/lib/server-helpers";
@@ -72,14 +72,25 @@ export async function POST(request) {
     const app = appSnap.data() || {};
     const updates = {};
     if (body.action === "approve") {
-      const [vehicleQuery, docsQuery] = await Promise.all([
+      if (!["application_submitted", "under_review"].includes(app.status)) {
+        throw Object.assign(new Error("The Driver must submit a complete application before Admin approval."), { status: 409 });
+      }
+      const [vehicleQuery, docsQuery, payoutAccountSnap] = await Promise.all([
         db.collection("driverVehicles").where("driverId", "==", body.driverId).limit(10).get(),
-        db.collection("driverDocuments").where("driverId", "==", body.driverId).limit(50).get()
+        db.collection("driverDocuments").where("driverId", "==", body.driverId).limit(50).get(),
+        db.collection("driverPayoutAccounts").doc(body.driverId).get()
       ]);
       const vehicles = vehicleQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
       const vehicle = vehicles.find((item) => item.status === "approved") || null;
       const documents = docsQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
       if (!vehicle) throw Object.assign(new Error("Approve at least one Driver vehicle before activating work."), { status: 409 });
+      if (!payoutAccountSnap.exists || payoutAccountSnap.data()?.verificationState !== "verified") {
+        throw Object.assign(new Error("Verify the Driver payout destination before approving the account."), { status: 409 });
+      }
+      const submission = applicationReadiness(app, vehicle, documents, payoutAccountSnap.data());
+      if (!submission.complete) {
+        throw Object.assign(new Error("The Driver application has incomplete requirements: " + submission.checks.filter((check) => !check.ok).map((check) => check.label).join(", ")), { status: 409 });
+      }
       const requested = normalizeCapabilities(app.requestedCapabilities || [], vehicle.type);
       const capabilityStates = {};
       for (const capabilityId of requested) {
@@ -90,7 +101,7 @@ export async function POST(request) {
       updates.status = "approved"; updates.approvedAt = now; updates.reviewedBy = actor.uid;
       const batch = db.batch();
       batch.set(appRef, updates, { merge: true });
-      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", city: app.city || "Harare", zoneIds: app.preferredZones || [], requestedCapabilities: requested, capabilities: capabilityStates, selectedVehicleId: vehicle.id, status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
+      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", city: app.city || "Harare", zoneIds: app.preferredZones || [], requestedCapabilities: requested, capabilities: capabilityStates, selectedVehicleId: vehicle.id, payoutVerificationState: "verified", status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
       batch.set(db.collection("adminQueueItems").doc(`driver_application_${body.driverId}`), { status: "completed", completedAt: now, completedBy: actor.uid, updatedAt: now }, { merge: true });
       await batch.commit();
     } else if (body.action === "request_information") await appRef.set({ status: "information_required", reviewReason: reason, reviewedBy: actor.uid, updatedAt: now }, { merge: true });
@@ -110,7 +121,12 @@ export async function POST(request) {
     } else if (["verify_payout_account", "reject_payout_account"].includes(body.action)) {
       const ref = db.collection("driverPayoutAccounts").doc(body.driverId); const snap = await ref.get();
       if (!snap.exists) throw Object.assign(new Error("The Driver payout account was not found."), { status: 404 });
-      await ref.set({ verificationState: body.action === "verify_payout_account" ? "verified" : "rejected", verificationReason: reason || null, reviewedAt: now, reviewedBy: actor.uid, updatedAt: now }, { merge: true });
+      const nextPayoutState = body.action === "verify_payout_account" ? "verified" : "rejected";
+      const linkedDriver = await driverRef.get();
+      const payoutBatch = db.batch();
+      payoutBatch.set(ref, { verificationState: nextPayoutState, verificationReason: reason || null, reviewedAt: now, reviewedBy: actor.uid, updatedAt: now }, { merge: true });
+      if (linkedDriver.exists) payoutBatch.set(driverRef, { payoutVerificationState: nextPayoutState, updatedAt: now }, { merge: true });
+      await payoutBatch.commit();
     } else if (["approve_vehicle", "request_vehicle_setup", "reject_vehicle"].includes(body.action)) {
       if (!body.vehicleId) throw Object.assign(new Error("Choose a vehicle."), { status: 400 });
       const ref = db.collection("driverVehicles").doc(body.vehicleId);
@@ -143,6 +159,10 @@ export async function POST(request) {
       if (!driverSnap.exists) throw Object.assign(new Error("Approve the Driver account before changing work types."), { status: 409 });
       const current = driverSnap.data();
       if (body.capabilityStatus === "active") {
+        const accountSnap = await db.collection("driverPayoutAccounts").doc(body.driverId).get();
+        if (!accountSnap.exists || accountSnap.data()?.verificationState !== "verified") {
+          throw Object.assign(new Error("Verify the Driver payout destination before activating this work type."), { status: 409 });
+        }
         const [vehiclesQuery, docsQuery] = await Promise.all([
           db.collection("driverVehicles").where("driverId", "==", body.driverId).limit(20).get(),
           db.collection("driverDocuments").where("driverId", "==", body.driverId).limit(100).get()
