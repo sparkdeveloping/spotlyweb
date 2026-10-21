@@ -1,5 +1,6 @@
 import {apiError,verifyAppCheckRequest} from "@/lib/firebase-admin";
 import {enforceRateLimit} from "@/lib/rate-limit-server";
+import {mapTilerReady,mapTilerReverseUrl,requestMapTiler,mapTilerReverseLocation} from "@/lib/maptiler-geocoding";
 export const runtime="nodejs";
 export async function GET(request){
  try{
@@ -10,7 +11,13 @@ export async function GET(request){
   if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat< -90||lat>90||lng< -180||lng>180)
    return Response.json({ok:false,error:"Invalid coordinates."},{status:400});
   const endpoint=process.env.SPOTLY_REVERSE_GEOCODING_URL;
-  if(!endpoint)throw Object.assign(new Error("Licensed location identification is not configured."),{status:503});
+  if(!endpoint&&mapTilerReady()){
+    const url=mapTilerReverseUrl({lat,lng});
+    const result=await requestMapTiler(url,{origin:new URL(request.url).origin});
+    const location=mapTilerReverseLocation(result,lat,lng);
+    return Response.json({ok:true,location},{headers:{"Cache-Control":"private, no-store"}});
+  }
+  if(!endpoint)throw Object.assign(new Error("Licensed location identification is not configured. Configure MapTiler or a compatible reverse-geocoding service."),{status:503});
   const target=new URL(endpoint);
   if(target.protocol!=="https:"||target.hostname==="nominatim.openstreetmap.org")
    throw Object.assign(new Error("Licensed geocoding is required."),{status:503});
