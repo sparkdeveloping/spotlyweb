@@ -23,6 +23,7 @@ import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/mar
 import { cn } from "@/lib/cn";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
 import { marketplaceMedia } from "@/lib/marketplace-editorial";
+import { marketplaceTier } from "@/lib/marketplace-ranking";
 
 export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
@@ -140,6 +141,7 @@ export function MarketplaceHome({
   onActivity,
   onSetup
 }) {
+  const readyNow = businessResults.filter(({ business }) => marketplaceTier(business) >= 3).slice(0, 8);
   const nearby = businessResults.slice(0, 8);
   const food = businessResults.filter(({ business }) => serviceMatchesBusiness("eat", business)).slice(0, 8);
   const bookable = businessResults.filter(({ business }) => serviceMatchesBusiness("book", business)).slice(0, 8);
@@ -189,9 +191,10 @@ export function MarketplaceHome({
 
     {interestMatches.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Based on your interests" description="Using the interests you chose during Spotly setup" action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{interestMatches.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
+    {readyNow.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Ready on Spotly" description="Services with active merchant commerce or explicitly enabled Assist — not just directory profiles" action="Explore" onAction={onSearch}/><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{readyNow.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness}/>)}</div></section> : null}
     {nearby.length ? <p className="mt-7 max-w-2xl text-xs leading-5 text-[var(--text-3)]">Spotly includes useful city listings alongside verified commerce businesses. Ordering, pickup, booking and payment only appear where the business has enabled them.</p> : null}
 
-    {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Near you" : `Popular in ${location.city}`} description={location.coordinates ? "Using the location you shared" : "Based on what is live in your selected city"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+    {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Discover near you" : `Explore ${location.city}`} description={location.coordinates ? "Ranked by actual service readiness, then relevance and proximity" : "Verified and usable services first, followed by useful city listings"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
     {food.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={trulyNew ? "Start with food" : "Bite nearby"} action="Explore Bite" onAction={() => onSelectService("eat")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{food.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 

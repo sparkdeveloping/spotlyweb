@@ -24,6 +24,7 @@ import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "
 import { MarketplaceTrustBadge, MarketplaceTrustNotice } from "@/components/marketplace-trust-ui";
 import { AssistActivitySection } from "@/components/assist-activity-section";
 import { marketplaceMedia } from "@/lib/marketplace-editorial";
+import { rankMarketplaceBusinesses } from "@/lib/marketplace-ranking";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
 import { ServiceDiscoveryView } from "@/components/service-experience";
@@ -898,7 +899,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     if (selectedBranch && !acceptedCurrencies.includes(currency)) setCurrency(acceptedCurrencies[0] || "USD");
   }, [selectedBranch, acceptedCurrencies, currency]);
 
-  const businessResults = useMemo(() => businesses.map((business) => {
+  const businessResults = useMemo(() => { const rows = businesses.map((business) => {
     const coords = business.coordinates || business.location || ((Number.isFinite(Number(business.latitude)) && Number.isFinite(Number(business.longitude))) ? { lat: Number(business.latitude), lng: Number(business.longitude) } : null);
     const distance = location.coordinates && coords ? distanceKm(location.coordinates, coords) : null;
     return { business, distance };
@@ -908,7 +909,9 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     const areaMatch = !areaTerm || `${business.area || ""} ${business.suburb || ""} ${business.address || ""}`.toLowerCase().includes(areaTerm);
     const radiusMatch = distance === null || distance <= Number(location.radiusKm || 20);
     return cityMatch && areaMatch && radiusMatch;
-  }).sort((a, b) => (a.distance ?? 9999) - (b.distance ?? 9999)), [businesses, location]);
+  });
+    return rankMarketplaceBusinesses(rows);
+  }, [businesses, location]);
 
   const serviceResults = useMemo(() => {
     if (!["eat", "shop", "book", "events"].includes(service)) return businessResults;

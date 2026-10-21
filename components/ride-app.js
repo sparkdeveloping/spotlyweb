@@ -86,6 +86,7 @@ export function RideApp() {
   const { user, profile } = useAuth(); const { settings } = usePlatform(); const { toast } = useToast();
   const ridesEnabled = typeof settings?.mobility?.ridesEnabled === "boolean" ? settings.mobility.ridesEnabled : settings?.launch?.ridesEnabled === true;
   const cashEnabled = settings?.mobility?.cashEnabled !== false; const paynowEnabled = settings?.integrations?.paynowEnabled === true && (settings?.commerce?.paymentMethods || []).includes("paynow");
+  const [bookingStep, setBookingStep] = useState(0); const [bookingError, setBookingError] = useState("");
   const [city,setCity]=useState(settings?.launch?.primaryCity||"Harare");
   const [country,setCountry]=useState(settings?.launch?.primaryCountry==="MW"?"MW":"ZW");
   const [pickupText, setPickupText] = useState(""); const [dropoffText, setDropoffText] = useState(""); const [pickup, setPickup] = useState(null); const [dropoff, setDropoff] = useState(null);
@@ -113,7 +114,7 @@ export function RideApp() {
 
   async function getQuote() {
     if (!pickup || !dropoff) return toast("Choose both a pickup point and destination.", { type: "error" });
-    setLoading("quote"); try { const data = await authenticatedFetch("/api/customer/rides/quote", { method: "POST", body: JSON.stringify({ pickup, dropoff, serviceType }) }); setQuote({...data.quote,bookingAvailable:data.bookingAvailable===true,bookingReason:data.bookingReason||""}); } catch (error) { toast(error.message, { type: "error" }); } finally { setLoading(""); }
+    setLoading("quote"); try { const data = await authenticatedFetch("/api/customer/rides/quote", { method: "POST", body: JSON.stringify({ pickup, dropoff, serviceType }) }); setQuote({...data.quote,bookingAvailable:data.bookingAvailable===true,bookingReason:data.bookingReason||""}); setBookingStep(3); } catch (error) { setBookingError(error.message||"The fare estimate is unavailable."); toast(error.message, { type: "error" }); } finally { setLoading(""); }
   }
   useEffect(() => { setQuote(null); }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, serviceType,city,country]);
 
@@ -137,42 +138,71 @@ export function RideApp() {
 
   return <AuthGate portal="customer" title="Sign in to request a ride">
     <CustomerShell current="home" user={user} profile={profile} locationLabel={city} mainClassName="max-w-[1180px]">
-      <section className="grid gap-8 pb-10 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <section className="mx-auto grid max-w-3xl gap-6 pb-10">
         <div>
           <div className="relative overflow-hidden rounded-[24px] bg-[linear-gradient(145deg,#5142c4,#7567e8)] px-5 py-7 text-[var(--service-foreground)] sm:px-7 sm:py-9">
             <ServiceArtwork service="ride" className="absolute right-0 top-0 h-full w-[45%] opacity-90" />
             <div className="relative z-10 max-w-xl"><p className="text-sm font-semibold text-[color-mix(in_srgb,var(--service-foreground)_75%,transparent)]">Ride</p><h1 className="mt-2 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">Where to?</h1><p className="mt-3 text-sm leading-6 text-[color-mix(in_srgb,var(--service-foreground)_80%,transparent)]">Set the exact pickup and destination. Spotly shows the estimate before any Driver is requested.</p></div>
           </div>
 
-          <div className="mt-7 grid gap-3 sm:grid-cols-2">
-           <label className="block text-xs font-semibold uppercase">Country
-            <select className="field-control mt-2 h-12 w-full" value={country} onChange={e=>{
-              const next=e.target.value;setCountry(next);setCity(next==="MW"?"Lilongwe":"Harare");
-              setPickup(null);setDropoff(null);setPickupText("");setDropoffText("");setQuote(null);
-            }}><option value="ZW">Zimbabwe</option><option value="MW">Malawi</option></select>
-           </label>
-           <label className="block text-xs font-semibold uppercase">Pickup city
-            <input className="field-control mt-2 h-12 w-full" value={city} onChange={e=>{
-             setCity(e.target.value);setPickup(null);setDropoff(null);setPickupText("");setDropoffText("");setQuote(null);
-            }} placeholder="Harare, Lilongwe..." />
-           </label>
-          </div>
-          <div className="mt-7 space-y-4"><LocationSearch label="Pickup" value={pickupText} onChange={(value) => { setPickupText(value); if (value !== pickup?.formattedAddress){setPickup(null);setQuote(null);} }} point={pickup} onSelect={place=>{setPickup(place);setQuote(null);}} city={city} country={country} currentLocation={useCurrentPickup} /><LocationSearch label="Destination" value={dropoffText} onChange={(value) => { setDropoffText(value); if (value !== dropoff?.formattedAddress){setDropoff(null);setQuote(null);} }} point={dropoff} onSelect={place=>{setDropoff(place);setQuote(null);}} city={city} country={country} />
-            <div className="grid grid-cols-2 gap-3"><Button variant="outline" onClick={()=>setMapTarget("pickup")}><MapPin className="h-4 w-4"/>Pickup on map</Button>
-              <Button variant="outline" onClick={()=>setMapTarget("dropoff")}><MapPin className="h-4 w-4"/>Destination on map</Button></div>
-            <PinDropMap open={Boolean(mapTarget)} label={mapTarget==="pickup"?"Pin your pickup":"Pin your destination"} country={country}
-              initialPoint={mapTarget==="pickup"?pickup:dropoff} onClose={()=>setMapTarget(null)}
-              onSelect={place=>{
-               if(mapTarget==="pickup"){setPickup(place);setPickupText(place.formattedAddress);setCity(place.city);}
-               else{setDropoff(place);setDropoffText(place.formattedAddress);}setQuote(null);
-              }}/>
-          </div>
-
-          <section className="mt-8 border-t border-[var(--border-subtle)] pt-7"><div className="flex items-end justify-between gap-4"><div><p className="text-sm font-semibold">Choose your ride</p><p className="mt-1 text-sm text-[var(--text-3)]">Same route, different fit.</p></div></div><div className="mt-4 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">{rideTypes.map((type) => { const selected = serviceType === type.id; return <button key={type.id} onClick={() => {setServiceType(type.id);setQuote(null);}} className="flex w-full items-center gap-4 py-4 text-left transition hover:bg-[var(--surface-hover)]"><span className={cn("flex h-11 w-11 items-center justify-center rounded-[12px]", selected ? "bg-[var(--accent)] text-[var(--on-accent)]" : "bg-[var(--surface-2)] text-[var(--accent)]")}><CarFront className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold">{type.label}</strong><span className="mt-1 block text-xs text-[var(--text-3)]">{type.description} · {type.seats}</span></span>{selected ? <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" /> : <ChevronRight className="h-4 w-4 text-[var(--text-3)]" />}</button>; })}</div></section>
-          <Button className="mt-7 w-full sm:w-auto" size="lg" onClick={getQuote} loading={loading === "quote"} disabled={!pickup || !dropoff}>See fare estimate<ChevronRight className="h-4 w-4" /></Button>
+          <nav aria-label="Ride booking steps" className="mt-6 grid grid-cols-4 gap-2">
+            {["Pickup", "Destination", "Vehicle", "Review"].map((name,index)=><button type="button" key={name}
+              disabled={index > bookingStep}
+              onClick={()=>{setBookingStep(index);setBookingError("");}}
+              className={cn("rounded-xl border px-2 py-3 text-center text-xs font-semibold transition sm:text-sm",bookingStep===index?"border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]":"border-[var(--border)] text-secondary",index>bookingStep&&"opacity-55")}>
+              <span className="block text-[10px] font-semibold uppercase tracking-wide">0{index+1}</span>{name}
+            </button>)}
+          </nav>
+          {bookingError ? <p role="alert" className="mt-5 rounded-xl border border-danger bg-[var(--danger-soft)] p-4 text-sm text-danger">{bookingError}</p> : null}
+          {bookingStep===0 ? <div className="mt-7 space-y-5">
+            <div><h2 className="text-2xl font-semibold tracking-tight">Where should your Driver meet you?</h2><p className="mt-1 text-sm text-secondary">Search an address or use the map to confirm one exact pickup point.</p></div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-semibold uppercase">Country
+                <select className="field-control mt-2 h-12 w-full" value={country} onChange={e=>{
+                  const next=e.target.value;setCountry(next);setCity(next==="MW"?"Lilongwe":"Harare");
+                  setPickup(null);setDropoff(null);setPickupText("");setDropoffText("");setQuote(null);
+                }}><option value="ZW">Zimbabwe</option><option value="MW">Malawi</option></select>
+              </label>
+              <label className="block text-xs font-semibold uppercase">City
+                <input className="field-control mt-2 h-12 w-full" value={city} onChange={e=>{
+                  setCity(e.target.value);setPickup(null);setDropoff(null);setPickupText("");setDropoffText("");setQuote(null);
+                }} placeholder="Harare or Lilongwe" />
+              </label>
+            </div>
+            <LocationSearch label="Pickup" value={pickupText} onChange={(value)=>{
+              setPickupText(value);if(value!==pickup?.formattedAddress){setPickup(null);setQuote(null);}
+            }} point={pickup} onSelect={place=>{setPickup(place);if(place)setPickupText(place.formattedAddress);setQuote(null);}} city={city} country={country} currentLocation={useCurrentPickup}/>
+            <Button variant="outline" onClick={()=>setMapTarget("pickup")}><MapPin className="h-4 w-4"/>Choose pickup on map</Button>
+            <Button className="w-full" size="lg" disabled={!pickup} onClick={()=>{setBookingError("");setBookingStep(1);}}>Continue to destination<ChevronRight className="h-4 w-4"/></Button>
+          </div> : null}
+          {bookingStep===1 ? <div className="mt-7 space-y-5">
+            <div><h2 className="text-2xl font-semibold tracking-tight">Where are you going?</h2><p className="mt-1 text-sm text-secondary">Pickup: {pickup?.formattedAddress||"Not selected"} · Confirm your destination to continue.</p></div>
+            <LocationSearch label="Destination" value={dropoffText} onChange={(value)=>{
+              setDropoffText(value);if(value!==dropoff?.formattedAddress){setDropoff(null);setQuote(null);}
+            }} point={dropoff} onSelect={place=>{setDropoff(place);if(place)setDropoffText(place.formattedAddress);setQuote(null);}} city={city} country={country}/>
+            <Button variant="outline" onClick={()=>setMapTarget("dropoff")}><MapPin className="h-4 w-4"/>Choose destination on map</Button>
+            <div className="grid grid-cols-2 gap-3"><Button variant="outline" onClick={()=>setBookingStep(0)}>Back</Button><Button disabled={!pickup||!dropoff} onClick={()=>{setBookingError("");setBookingStep(2);}}>Choose vehicle<ChevronRight className="h-4 w-4"/></Button></div>
+          </div> : null}
+          <PinDropMap open={Boolean(mapTarget)} label={mapTarget==="pickup"?"Confirm pickup location":"Confirm destination location"} country={country}
+            initialPoint={mapTarget==="pickup"?pickup:dropoff} onClose={()=>setMapTarget(null)}
+            onSelect={place=>{
+              if(mapTarget==="pickup"){setPickup(place);setPickupText(place.formattedAddress);setCity(place.city);}
+              else {setDropoff(place);setDropoffText(place.formattedAddress);}
+              setQuote(null);
+            }}/>
+          {bookingStep===2 ? <div className="mt-7">
+          <section className="border-t border-[var(--border-subtle)] pt-7"><div className="flex items-end justify-between gap-4"><div><p className="text-sm font-semibold">Choose your ride</p><p className="mt-1 text-sm text-[var(--text-3)]">Same route, different fit.</p></div></div><div className="mt-4 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">{rideTypes.map((type) => { const selected = serviceType === type.id; return <button key={type.id} onClick={() => {setServiceType(type.id);setQuote(null);}} className="flex w-full items-center gap-4 py-4 text-left transition hover:bg-[var(--surface-hover)]"><span className={cn("flex h-11 w-11 items-center justify-center rounded-[12px]", selected ? "bg-[var(--accent)] text-[var(--on-accent)]" : "bg-[var(--surface-2)] text-[var(--accent)]")}><CarFront className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold">{type.label}</strong><span className="mt-1 block text-xs text-[var(--text-3)]">{type.description} · {type.seats}</span></span>{selected ? <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" /> : <ChevronRight className="h-4 w-4 text-[var(--text-3)]" />}</button>; })}</div></section>
+          <div className="mt-7 grid grid-cols-2 gap-3"><Button variant="outline" onClick={()=>setBookingStep(1)}>Back</Button><Button size="lg" onClick={getQuote} loading={loading==="quote"} disabled={!pickup||!dropoff}>See fare<ChevronRight className="h-4 w-4"/></Button></div>
+          </div> : null}
+          {bookingStep===3 ? <div className="mt-7 rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-5">
+            <h2 className="text-xl font-semibold">Review your journey</h2>
+            <p className="mt-3 text-sm text-secondary"><strong>Pickup:</strong> {pickup?.formattedAddress||"Not selected"}</p>
+            <p className="mt-2 text-sm text-secondary"><strong>Destination:</strong> {dropoff?.formattedAddress||"Not selected"}</p>
+            <Button variant="ghost" className="mt-3" onClick={()=>{setBookingStep(1);setQuote(null);}}>Edit locations</Button>
+          </div> : null}
         </div>
 
-        <aside className="lg:sticky lg:top-24">
+        {bookingStep===3 && <aside className="mt-1">
           <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-5 shadow-card"><p className="text-sm font-semibold">Your estimate</p>{quote ? <><div className="mt-5 flex items-end justify-between"><div><p className="text-3xl font-semibold tracking-[-.04em]">{formatCurrency(quote.total, quote.currency)}</p><p className="mt-1 text-xs text-[var(--text-3)]">{quote.distanceKm} km · about {quote.durationMinutes} min</p></div><Badge>{quote.serviceLabel}</Badge></div><div className="mt-4"><RoadRouteMap compact pickup={pickup} dropoff={dropoff} path={quote.routePath||[]}/></div><div className="mt-5 border-t border-[var(--border-subtle)] pt-4"><p className="text-xs font-semibold text-[var(--text-3)]">Payment</p><div className="mt-3 grid grid-cols-2 gap-2">{cashEnabled ? <button onClick={() => setPaymentMethod("cash")} className={cn("rounded-[12px] border p-3 text-left", paymentMethod === "cash" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)]")}><Banknote className="h-4 w-4" /><p className="mt-2 text-sm font-semibold">Cash</p></button> : null}{paynowEnabled ? <button onClick={() => setPaymentMethod("paynow")} className={cn("rounded-[12px] border p-3 text-left", paymentMethod === "paynow" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)]")}><CreditCard className="h-4 w-4" /><p className="mt-2 text-sm font-semibold">Paynow</p></button> : null}</div><p className="mt-3 text-xs leading-5 text-[var(--text-3)]">Paynow rides are paid from Activity after completion. Cash is collected by the Driver at drop-off.</p></div>
            {quote.bookingAvailable!==true?<p role="status" className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 text-xs leading-5 text-[var(--text-2)]">
               This is an informational road-based estimate, not an available booking. {quote.bookingReason||"SpotlyRide is not accepting bookings yet."}
@@ -183,7 +213,7 @@ export function RideApp() {
            </Button></> : <div className="py-8 text-center"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-[12px] bg-[var(--surface-2)] text-[var(--text-3)]"><Clock3 className="h-5 w-5" /></span><p className="mt-3 text-sm font-semibold">Your fare will appear here</p><p className="mt-1 text-xs leading-5 text-[var(--text-3)]">Choose both places and a ride type first.</p></div>}</div>
           <div className="mt-4 flex gap-3 border-t border-[var(--border-subtle)] pt-5"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--accent)]" /><div><p className="font-semibold">Ride with verification</p><p className="mt-1 text-xs leading-5 text-[var(--text-3)]">Approved Drivers, current location and a pickup PIN protect the handoff.</p></div></div>
           {history.length ? <div className="mt-6 border-t border-[var(--border-subtle)] pt-5"><div className="flex items-center justify-between"><p className="font-semibold">Recent rides</p><Link href="/activity" className="text-xs font-semibold text-[var(--accent)]">All activity</Link></div><div className="mt-2 divide-y divide-[var(--border-subtle)]">{history.slice(0,3).map((ride) => <div key={ride.id} className="flex items-center gap-3 py-3"><CarFront className="h-4 w-4 text-[var(--accent)]" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{ride.dropoff?.label || ride.dropoff?.area || "Ride"}</p><p className="mt-0.5 text-xs capitalize text-[var(--text-3)]">{String(ride.state).replaceAll("_", " ")}</p></div><span className="text-sm font-semibold">{formatCurrency(ride.quote?.total || 0, ride.currency || "USD")}</span></div>)}</div></div> : null}
-        </aside>
+        </aside>}
       </section>
       <Modal open={Boolean(cancelRide)} onClose={() => { if (loading !== "cancel") { setCancelRide(null); setCancelReason(""); } }} title="Cancel this ride?" description="Your Driver may already be heading to you." size="sm"><div className="p-5"><label className="text-sm font-semibold">Reason<textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} className="field-control mt-2 min-h-24 w-full" placeholder="Tell us why you need to cancel" /></label><div className="mt-5 flex gap-3"><Button variant="outline" className="flex-1" onClick={() => { setCancelRide(null); setCancelReason(""); }}>Keep ride</Button><Button className="flex-1" onClick={confirmCancel} loading={loading === "cancel"} disabled={cancelReason.trim().length < 3}>Cancel ride</Button></div></div></Modal>
     </CustomerShell>

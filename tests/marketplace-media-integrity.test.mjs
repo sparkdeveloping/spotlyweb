@@ -19,19 +19,27 @@ test("merchant-approved marketplace media always wins over editorial fallback", 
   assert.equal(media.generated, false);
 });
 
-test("unclaimed marketplace records receive category-appropriate editorial media", () => {
-  assert.match(marketplaceMedia({ id: "ok", name: "OK Zimbabwe", category: "Groceries", businessType: "grocery_retail" }).src, /02_Shop_Groceries/);
-  assert.match(marketplaceMedia({ id: "pharm", name: "Pharmacy", category: "Pharmacy" }).src, /02_Shop_Groceries\/pharmacy_/);
-  assert.match(marketplaceMedia({ id: "salon", name: "Salon", category: "Beauty & Wellness", businessType: "appointments_services" }).src, /03_Book_Beauty_Wellness/);
-  assert.match(marketplaceMedia({ id: "event", name: "Live Show", category: "Events & Activities", businessType: "ticketing_events" }).src, /04_Events_Activities/);
-  assert.match(marketplaceMedia({ id: "hotel", name: "Hotel", category: "Accommodation", businessType: "accommodation_activities" }).src, /07_Stay_Travel/);
+test("unclaimed listings use shipped, attributed category images rather than missing editorial-pack assets", () => {
+  for (const [record, asset] of [
+    [{ id: "food", name: "Cafe", category: "Restaurants", businessType: "restaurant_food" }, "eat.webp"],
+    [{ id: "grocery", name: "Grocery", category: "Groceries", businessType: "grocery_retail" }, "groceries.webp"]
+  ]) {
+    const media = marketplaceMedia(record);
+    assert.equal(media.kind, "editorial");
+    assert.match(media.src, new RegExp(asset.replace(".", "\\.")));
+    assert.ok(fs.existsSync(new URL(`../public${media.src}`, import.meta.url)), media.src);
+  }
+  const unsupported = marketplaceMedia({ id: "pharm", name: "Pharmacy", category: "Pharmacy" });
+  assert.equal(unsupported.kind, "designed");
+  assert.equal(unsupported.src, "");
+  assert.equal(marketplaceMedia({ name: "Research listing", source: { type: "spotly_assist_research" }, logoUrl: "https://example.com/logo.jpg" }).kind, "designed");
 });
 
-test("visible service result sets do not repeat editorial photos while the pool has capacity", () => {
+test("editorial set avoids repeating an image when only one licensed category image ships", () => {
   const assigned = marketplaceMediaSet(screenshotRestaurants);
-  const sources = screenshotRestaurants.map((record) => assigned.get(record.id)?.src);
-  assert.equal(new Set(sources).size, screenshotRestaurants.length);
-  for (const source of sources) assert.match(source, /01_Eat/);
+  const images = screenshotRestaurants.map((record) => assigned.get(record.id)?.src).filter(Boolean);
+  assert.equal(images.length, 1);
+  assert.match(images[0], /eat\.webp/);
 });
 
 test("marketplace UI identifies generic editorial media instead of implying it is merchant photography", () => {

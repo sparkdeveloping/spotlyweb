@@ -19,6 +19,7 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { NotificationCenter } from "@/components/notification-center";
 import { DriverAssistShopping } from "@/components/driver-assist-shopping";
+import { PinDropMap } from "@/components/mobility-map";
 import { zimbabweCities } from "@/data/business-config";
 import { DRIVER_CAPABILITIES, DRIVER_TRAINING_MODULES, capabilitySupportsVehicle, documentRequirementsFor, normalizeCapabilities, trainingModuleIsCurrent, trainingRequirementsFor, validDriverPhone } from "@/lib/driver-capabilities";
 
@@ -871,6 +872,52 @@ function DriverMobileNav({ safe, hasActive }) {
   return <nav aria-label="Driver mobile navigation" className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 rounded-2xl border bg-[color-mix(in_srgb,var(--surface)_96%,transparent)] p-1.5 shadow-xl backdrop-blur md:hidden">{items.map(([id,href,labelText]) => <Link key={id} href={href} className={cn("rounded-xl px-1 py-2 text-center text-[11px] font-semibold", safe === id || (id === "active" && hasActive) ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-secondary")}>{labelText}</Link>)}</nav>;
 }
 
+function DriverRideLab() {
+  const { user, authReady } = useAuth();
+  const { toast } = useToast();
+  const [lab, setLab] = useState(null);
+  const [point, setPoint] = useState(null);
+  const [country, setCountry] = useState("ZW");
+  const [mapOpen, setMapOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!authReady || !user?.uid || user.isAnonymous) return undefined;
+    let active = true;
+    authenticatedFetch("/api/driver/ride-lab", { cache: "no-store" })
+      .then((result) => { if (active) { setLab(result); setCountry(result.country || "ZW"); setPoint(result.position || null); } })
+      .catch(() => { if (active) setLab(null); });
+    return () => { active = false; };
+  }, [authReady, user?.uid, user?.isAnonymous]);
+  if (!lab?.allowed) return null;
+  async function publish() {
+    if (!point) return setError("Select a location from the map first.");
+    setBusy(true); setError("");
+    try {
+      const result = await authenticatedFetch("/api/driver/ride-lab", { method: "POST",
+        body: JSON.stringify({ country, location: { lat: point.lat, lng: point.lng } }) });
+      setLab((previous) => ({ ...previous, position: result.position, country }));
+      toast("Simulated Ride Lab position updated.", { type: "success" });
+    } catch (err) { setError(err.message || "Test location could not be saved."); }
+    finally { setBusy(false); }
+  }
+  return <SectionCard padded title="Ride Lab · simulated location" description="Invitation-only testing. Pick a point on the map and submit it as a test position. This does not change your live GPS, create or accept a real ride, or dispatch a Driver.">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <label className="text-sm font-medium">Test country
+        <select className="field-control mt-2 w-full" value={country} onChange={e=>{setCountry(e.target.value);setPoint(null);}}>
+          <option value="ZW">Zimbabwe</option><option value="MW">Malawi</option>
+        </select>
+      </label>
+      <Button variant="outline" onClick={()=>setMapOpen(true)}><MapPin className="h-4 w-4"/>Choose simulated Driver location</Button>
+      <Button disabled={!point || busy} loading={busy} onClick={publish}>Publish test point</Button>
+    </div>
+    <p className="mt-3 text-xs text-secondary">{point?`Selected: ${Number(point.lat).toFixed(5)}, ${Number(point.lng).toFixed(5)}`:"No point selected"}{lab.position?` · Last recorded test location: ${Number(lab.position.lat).toFixed(5)}, ${Number(lab.position.lng).toFixed(5)}`:""}</p>
+    {error?<p role="alert" className="mt-3 text-sm text-danger">{error}</p>:null}
+    <PinDropMap open={mapOpen} country={country} initialPoint={point} label="Simulate Driver location"
+      onClose={()=>setMapOpen(false)} onSelect={(place)=>setPoint({lat:place.lat,lng:place.lng})}/>
+  </SectionCard>;
+}
+
 export function DriverApp({ section = "home" }) {
   const safe = sectionMeta[section] ? section : "home";
   const { data, loading, error, load } = useDriverData();
@@ -888,5 +935,5 @@ export function DriverApp({ section = "home" }) {
   const approvedWorkspace = Boolean(data?.driver && ["approved", "ready", "active"].includes(data.driver.status));
   const lifecycleState = Boolean(data?.driver && !approvedWorkspace && ["suspended", "offboarded", "former", "temporarily_unavailable", "offboarding"].includes(data.driver.status));
   const hasActive = Boolean(data?.activeRide || data?.activeParcel || data?.activeJob);
-  return <AuthGate portal="driver" title="Spotly Driver"><PortalShell portalId="driver" activeSection={safe}><div className="mx-auto max-w-[1280px] px-4 py-7 pb-24 sm:px-6 lg:px-8 lg:py-9">{loading ? <PageSkeleton /> : error ? <EmptyState icon={AlertTriangle} title="Driver could not be loaded" description={error} action={<Button onClick={() => load()}><RefreshCw className="h-4 w-4" />Try again</Button>} /> : lifecycleState ? <DriverLifecycleState data={data || {}} /> : !approvedWorkspace ? <DriverApplication data={data || {}} reload={load} /> : <><LiveLocation data={data} />{hasActive && safe !== "active" ? <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">You have active work</p><p className="mt-1 text-sm">{data.activeRide ? "Ride" : data.activeParcel ? "Send" : data.activeJob?.fulfilmentMode === "driver_shops" ? "Shop & Deliver" : "Delivery"} · {labelStatus((data.activeRide || data.activeParcel || data.activeJob)?.state)}</p></div><Button asChild><Link href="/active">Resume job</Link></Button></div> : null}{safe === "home" && <DriverHome data={data} reload={load} onOffer={offer} onRideOffer={rideOffer} onParcelOffer={parcelOffer} />}{safe === "jobs" && <Jobs data={data} offer={offer} rideOffer={rideOffer} parcelOffer={parcelOffer} />}{safe === "jobs" && <DriverAssistShopping mode="jobs" />}{safe === "active" && (data.activeRide ? <ActiveRide data={data} reload={load} /> : data.activeParcel ? <ActiveParcel data={data} reload={load} /> : <ActiveJob data={data} reload={load} />)}{safe === "active" && <DriverAssistShopping mode="active" />}{safe === "earnings" && <Earnings data={data} reload={load} />}{safe === "history" && <HistoryView data={data} />}{safe === "notifications" && <NotificationCenter workspace="driver" title="Driver notifications" description="Offers, application actions, safety, payouts and work updates." />}{safe === "support" && <Support data={data} />}{safe === "profile" && <Profile data={data} reload={load} />}<DriverMobileNav safe={safe} hasActive={hasActive}/></>}</div></PortalShell></AuthGate>;
+  return <AuthGate portal="driver" title="Spotly Driver"><PortalShell portalId="driver" activeSection={safe}><div className="mx-auto max-w-[1280px] px-4 py-7 pb-24 sm:px-6 lg:px-8 lg:py-9">{loading ? <PageSkeleton /> : error ? <EmptyState icon={AlertTriangle} title="Driver could not be loaded" description={error} action={<Button onClick={() => load()}><RefreshCw className="h-4 w-4" />Try again</Button>} /> : lifecycleState ? <DriverLifecycleState data={data || {}} /> : !approvedWorkspace ? <DriverApplication data={data || {}} reload={load} /> : <><LiveLocation data={data} />{hasActive && safe !== "active" ? <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">You have active work</p><p className="mt-1 text-sm">{data.activeRide ? "Ride" : data.activeParcel ? "Send" : data.activeJob?.fulfilmentMode === "driver_shops" ? "Shop & Deliver" : "Delivery"} · {labelStatus((data.activeRide || data.activeParcel || data.activeJob)?.state)}</p></div><Button asChild><Link href="/active">Resume job</Link></Button></div> : null}{safe === "home" && <DriverHome data={data} reload={load} onOffer={offer} onRideOffer={rideOffer} onParcelOffer={parcelOffer} />}{safe === "jobs" && <Jobs data={data} offer={offer} rideOffer={rideOffer} parcelOffer={parcelOffer} />}{safe === "jobs" && <DriverAssistShopping mode="jobs" />}{safe === "active" && (data.activeRide ? <ActiveRide data={data} reload={load} /> : data.activeParcel ? <ActiveParcel data={data} reload={load} /> : <ActiveJob data={data} reload={load} />)}{safe === "active" && <DriverAssistShopping mode="active" />}{safe === "earnings" && <Earnings data={data} reload={load} />}{safe === "history" && <HistoryView data={data} />}{safe === "notifications" && <NotificationCenter workspace="driver" title="Driver notifications" description="Offers, application actions, safety, payouts and work updates." />}{safe === "support" && <Support data={data} />}{safe === "profile" && <Profile data={data} reload={load} />}<DriverMobileNav safe={safe} hasActive={hasActive}/></>}<DriverRideLab /></div></PortalShell></AuthGate>;
 }

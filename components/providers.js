@@ -128,26 +128,37 @@ function ToastProvider({ children }) {
     const kind=normalized.type||"success";
     const next={id,message,type:kind,title:normalized.title||(kind==="error"?"Unable to continue":kind==="info"?"Notice":"Done")};
     setToasts((items) => [...items.slice(-3), next]);
-    window.setTimeout(() => dismiss(id), normalized.duration || 3600);
+    window.setTimeout(() => dismiss(id), normalized.duration || (kind === "error" ? 9000 : 3600));
     return id;
   }, [dismiss]);
+
+  useEffect(() => {
+    const onActionError = (event) => {
+      const message = String(event.detail?.message || "The action could not be completed.").slice(0, 400);
+      toast(message, { type: "error", title: "Action needs attention", duration: 10000 });
+    };
+    window.addEventListener("spotly:action-error", onActionError);
+    return () => window.removeEventListener("spotly:action-error", onActionError);
+  }, [toast]);
 
   const value = useMemo(() => ({ toast, dismiss }), [toast, dismiss]);
 
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed inset-x-4 top-4 z-[100] flex flex-col items-end gap-2 sm:left-auto sm:right-4 sm:w-[390px]">
+      <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[200] flex flex-col items-end gap-2 sm:left-auto sm:right-5 sm:w-[420px]">
         <AnimatePresence initial={false}>
           {toasts.map((item) => {
             const Icon = item.type === "error" ? CircleAlert : item.type === "info" ? Info : CheckCircle2;
             return (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, y: -16, scale: 0.97 }}
+                initial={{ opacity: 0, y: 16, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, x: 24, scale: 0.97 }}
-                className="surface pointer-events-auto flex w-full items-start gap-3 rounded-2xl p-4 shadow-elevated"
+                role={item.type === "error" ? "alert" : "status"}
+                aria-live={item.type === "error" ? "assertive" : "polite"}
+                className="surface pointer-events-auto flex w-full items-start gap-3 rounded-2xl border border-[var(--border)] p-4 shadow-elevated"
               >
                 <Icon className={item.type === "error" ? "mt-0.5 h-5 w-5 text-danger" : item.type === "info" ? "mt-0.5 h-5 w-5 text-info" : "mt-0.5 h-5 w-5 text-success"} />
                 <div className="min-w-0 flex-1">
