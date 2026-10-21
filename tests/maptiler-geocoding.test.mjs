@@ -69,6 +69,10 @@ test("Requests include trusted website origin without echoing untrusted origins"
    return {ok:true,status:200,json:async()=>json};
   }});
  assert.deepEqual(got,json);
+ await requestMapTiler(url,{origin:"https://admin.spotlyafrica.com",fetcher:async(_,opts)=>{
+  assert.equal(opts.headers.Origin,"https://admin.spotlyafrica.com");
+  return {ok:true,status:200,json:async()=>json};
+ }});
  await requestMapTiler(url,{origin:"https://attacker.example",fetcher:async(_,opts)=>{
   assert.equal(opts.headers.Origin,undefined);
   return {ok:true,status:200,json:async()=>json};

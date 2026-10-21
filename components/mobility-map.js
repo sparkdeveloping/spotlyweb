@@ -8,7 +8,7 @@ import {publicApiFetch} from "@/lib/api-client";
 // Client-side SDK only; production map tiles/style are provided by a separately
 // licensed provider, never by OSMF's shared tile infrastructure.
 let mapLibraryPromise;
-function loadMapLibrary(){
+export function loadMapLibrary(){
  if(typeof window==="undefined")return Promise.reject(new Error("Interactive map requires a browser."));
  if(window.maplibregl)return Promise.resolve(window.maplibregl);
  if(!mapLibraryPromise)mapLibraryPromise=new Promise((resolve,reject)=>{
@@ -28,7 +28,7 @@ function loadMapLibrary(){
  }).catch(err=>{mapLibraryPromise=null;throw err});
  return mapLibraryPromise;
 }
-async function loadStyle(){
+export async function loadStyle(){
  const response=await fetch("/api/public/map-config",{cache:"no-store"});
  if(!response.ok)throw new Error("Map configuration could not be loaded.");
  const result=await response.json();
