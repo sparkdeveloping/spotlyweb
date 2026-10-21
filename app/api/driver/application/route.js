@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { applicationReadiness } from "@/lib/driver-delivery-server";
+import {safeDriverBlockers} from "@/lib/driver-application-feedback";
 import { DRIVER_CAPABILITIES, DRIVER_TRAINING_MODULES, documentRequirementsFor, normalizeCapabilities, trainingModuleIsCurrent, trainingRequirementsFor } from "@/lib/driver-capabilities";
 import { normalizeZimbabwePhone, safeText } from "@/lib/server-helpers";
 import { accountLast4, encryptFinancialValue } from "@/lib/business-money-server";
@@ -261,7 +262,13 @@ export async function POST(request) {
     const primaryVehicle = vehicleSnap.exists ? { id: vehicleSnap.id, ...vehicleSnap.data() } : null;
     const documents = documentQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
     const readiness = applicationReadiness(appSnap.data(), primaryVehicle, documents);
-    if (!readiness.complete) throw Object.assign(new Error("Complete every Driver application step before submitting."), { status: 409, blockers: readiness.checks.filter((item) => !item.ok) });
+    if(!readiness.complete){
+       return Response.json({
+         ok:false,
+         error:"Some application requirements still need attention. Review the items listed below.",
+         blockers:safeDriverBlockers(readiness.checks)
+       },{status:409,headers:{"Cache-Control":"private, no-store"}});
+     }
     await appRef.set({ status: "application_submitted", submittedAt: now, updatedAt: now }, { merge: true });
     await db.collection("adminQueueItems").doc(`driver_application_${user.uid}`).set({
       queue: "driver-applications", type: "driver_application", entityId: user.uid, driverId: user.uid, status: "open", priority: "normal", title: safeText(appSnap.data().legalName || user.name || "Driver application", 160), createdAt: now, updatedAt: now
