@@ -24,6 +24,8 @@ import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "
 import { MarketplaceTrustBadge, MarketplaceTrustNotice } from "@/components/marketplace-trust-ui";
 import { AssistActivitySection } from "@/components/assist-activity-section";
 import { marketplaceMedia } from "@/lib/marketplace-editorial";
+import { rankMarketplaceBusinesses } from "@/lib/marketplace-ranking";
+import { MarketplaceDesignedCover } from "@/components/marketplace-designed-cover";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
 import { ServiceDiscoveryView } from "@/components/service-experience";
@@ -88,7 +90,7 @@ function LocationControl({ value, cities, supportedAreas, onChange, onLocate, lo
 function BusinessVisual({ business }) {
   const media = marketplaceMedia(business);
   const profile = marketplaceProfile(business);
-  if (!media.src) return <div className="flex h-full flex-col justify-end bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2)_62%,var(--surface))] p-5"><span className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] bg-[var(--surface)] text-[var(--accent)] shadow-sm"><Store className="h-5 w-5" /></span><p className="mt-auto pt-8 text-lg font-semibold tracking-[-.025em]">{profile.displayCategory}</p><p className="mt-1 text-xs text-[var(--text-3)]">Spotly directory</p></div>;
+  if (!media.src) return <MarketplaceDesignedCover business={business} />;
   return <><Image src={media.src} alt="" fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />{media.kind === "editorial" ? <span title="Editorial category image — not supplied by this business" className="absolute bottom-3 right-3 rounded-full bg-black/45 px-2 py-1 text-[9px] font-semibold text-[var(--media-text)] backdrop-blur">Editorial</span> : null}</>;
 }
 
@@ -98,7 +100,7 @@ function BusinessCard({ business, favorite, onFavorite, onOpen, distance }) {
   const cta = marketplaceActionLabel(business);
   const location = distance !== null ? `${distance.toFixed(1)} km away` : business.area || business.city || "";
   return <article className="relative overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] transition hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] hover:shadow-card">
-    <button onClick={() => onOpen(business)} className="block w-full text-left"><div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} />{marketplaceMedia(business).src ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" /> : null}{profile.cardMode === "commerce" ? <div className="absolute bottom-3 left-3"><MarketplaceTrustBadge business={business} compact /></div> : null}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-semibold">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{location ? ` · ${location}` : ""}</p></div><ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-3)]" /></div><div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{profile.cardMode === "commerce" ? (locationCount ? `${locationCount} ${locationCount === 1 ? "location" : "locations"}` : "Available on Spotly") : "Directory listing"}</span><span className="font-semibold text-[var(--accent)]">{cta}</span></div></div></button>
+    <button onClick={() => business.assistStoreId && business.assistAccepting !== false ? window.location.assign(`/shop-for-me?store=${encodeURIComponent(business.assistStoreId)}`) : onOpen(business)} className="block w-full text-left"><div className="relative aspect-[16/10] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} />{marketplaceMedia(business).src ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" /> : null}{profile.cardMode === "commerce" ? <div className="absolute bottom-3 left-3"><MarketplaceTrustBadge business={business} compact /></div> : null}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-semibold">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{location ? ` · ${location}` : ""}</p></div><ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-3)]" /></div><div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{profile.cardMode === "commerce" ? (locationCount ? `${locationCount} ${locationCount === 1 ? "location" : "locations"}` : "Available on Spotly") : business.assistStoreId && business.assistAccepting !== false ? "Independent listing · Spotly Assist" : "Directory listing"}</span><span className="font-semibold text-[var(--accent)]">{cta}</span></div></div></button>
     <button type="button" onClick={() => onFavorite(business)} aria-label={favorite ? "Remove from saved" : "Save business"} className={cn("absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-black/35 text-[var(--media-text)] backdrop-blur", favorite && "bg-[var(--surface)] text-[var(--danger)]")}><Heart className={cn("h-4 w-4", favorite && "fill-current")} /></button>
   </article>;
 }
@@ -898,7 +900,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     if (selectedBranch && !acceptedCurrencies.includes(currency)) setCurrency(acceptedCurrencies[0] || "USD");
   }, [selectedBranch, acceptedCurrencies, currency]);
 
-  const businessResults = useMemo(() => businesses.map((business) => {
+  const businessResults = useMemo(() => { const rows = businesses.map((business) => {
     const coords = business.coordinates || business.location || ((Number.isFinite(Number(business.latitude)) && Number.isFinite(Number(business.longitude))) ? { lat: Number(business.latitude), lng: Number(business.longitude) } : null);
     const distance = location.coordinates && coords ? distanceKm(location.coordinates, coords) : null;
     return { business, distance };
@@ -908,7 +910,9 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     const areaMatch = !areaTerm || `${business.area || ""} ${business.suburb || ""} ${business.address || ""}`.toLowerCase().includes(areaTerm);
     const radiusMatch = distance === null || distance <= Number(location.radiusKm || 20);
     return cityMatch && areaMatch && radiusMatch;
-  }).sort((a, b) => (a.distance ?? 9999) - (b.distance ?? 9999)), [businesses, location]);
+  });
+    return rankMarketplaceBusinesses(rows);
+  }, [businesses, location]);
 
   const serviceResults = useMemo(() => {
     if (!["eat", "shop", "book", "events"].includes(service)) return businessResults;

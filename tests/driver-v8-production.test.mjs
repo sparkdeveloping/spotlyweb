@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { documentRequirementsFor, capabilityRequirements } from "../lib/driver-capabilities.js";
+import { documentRequirementsFor, capabilityRequirements, requirementPlan, validDriverPhone } from "../lib/driver-capabilities.js";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -334,4 +334,79 @@ test("new vehicle work types merge into active Driver training rather than becom
   assert.match(api, /requestedCapabilities: mergedRequestedCapabilities/);
   assert.match(ui, /function ActiveDriverTraining/);
   assert.match(ui, /When you add a vehicle or request a new kind of work/);
+});
+
+test("Driver readiness validates saved Zimbabwe contacts and authoritative payout evidence", () => {
+  const vehicle = { id: "test_primary", type: "car", registration: "ABC 123", make: "Toyota", model: "Corolla" };
+  const application = { legalName: "Full Driver", phone: "+263", city: "Harare", emergencyContactName: "", emergencyContactPhone: "",
+    requestedCapabilities: ["ride_passenger"], payoutComplete: true, agreementsAccepted: true, locationConsent: true, trainingModules: {} };
+  const docs = ["identity", "licence", "registration", "insurance", "vehicle_fitness"].map((type) =>
+    ({ type, vehicleId: ["registration", "insurance", "vehicle_fitness"].includes(type) ? "test_primary" : null, status: "uploaded" }));
+  const missing = requirementPlan({ application, vehicle, documents: docs, payoutAccount: null });
+  assert.equal(missing.complete, false);
+  for (const id of ["phone", "emergency_contact", "emergency_phone", "payout", "training_general_safety"]) {
+    assert.equal(missing.checks.find((item) => item.id === id)?.ok, false, id);
+  }
+  assert.equal(validDriverPhone("+263"), false);
+  assert.equal(validDriverPhone("0771234567"), true);
+  assert.equal(validDriverPhone("+263771234567"), true);
+  assert.equal(validDriverPhone("077"), false);
+  application.phone = "+263771234567";
+  application.emergencyContactName = "Emergency Contact";
+  application.emergencyContactPhone = "0771234567";
+  const payoutAccount = { type: "mobile_money", provider: "EcoCash", recipientName: "Full Driver", maskedIdentifier: "•••• 4567", verificationState: "pending" };
+  const pending = requirementPlan({ application, vehicle, documents: docs, payoutAccount });
+  assert.equal(pending.checks.find((item) => item.id === "payout")?.ok, true, "pending payout verification permits application review");
+  assert.equal(pending.checks.find((item) => item.id === "document_insurance")?.ok, true, "uploaded insurance permits application review");
+  assert.equal(pending.complete, false, "training must still be complete");
+  assert.equal(requirementPlan({ application: { ...application, requestedCapabilities: [] }, vehicle, documents: docs, payoutAccount }).checks.find((item) => item.id === "work")?.ok, false);
+  assert.equal(requirementPlan({ application, vehicle, documents: docs.map((item) => item.type === "insurance" ? { ...item, status: "rejected" } : item), payoutAccount }).checks.find((item) => item.id === "document_insurance")?.ok, false);
+});
+
+test("Driver submit returns blockers, never follows failed saves and retains lifecycle progression", async () => {
+  const [api, ui, bootstrap] = await Promise.all([
+    read("app/api/driver/application/route.js"), read("components/driver-app.js"), read("app/api/driver/bootstrap/route.js")
+  ]);
+  assert.match(api, /blockers: error\.blockers\.map/);
+  assert.match(api, /db\.batch\(\)/);
+  assert.match(api, /if \(!existingSnap\.exists\)/);
+  assert.match(api, /\["application_submitted", "under_review"/);
+  assert.doesNotMatch(api, /status: activeLifecycle \? currentStatus : "application_started"/);
+  assert.match(ui, /if \(!\(await saveStep\(5\)\)\) return/);
+  assert.match(ui, /What still needs attention/);
+  assert.match(ui, /setSubmitBlockers\(err\.blockers\)/);
+  assert.doesNotMatch(ui, /setStep\(Math\.min\(Number\(data\?\.application\?\.currentStep/);
+  assert.match(bootstrap, /const primaryVehicle = vehicles\.find/);
+  assert.match(bootstrap, /payoutAccount, phase/);
+});
+
+test("Admin cannot approve an unsubmitted Driver or bypass payout verification", async () => {
+  const [admin, delivery, application] = await Promise.all([
+    read("app/api/admin/drivers/route.js"),
+    read("lib/driver-delivery-server.js"),
+    read("app/api/driver/application/route.js")
+  ]);
+  assert.match(admin, /\["application_submitted", "under_review"\]\.includes\(app\.status\)/);
+  assert.match(admin, /payoutAccountSnap\.data\(\)\?\.verificationState !== "verified"/);
+  assert.match(admin, /applicationReadiness\(app, vehicle, documents, payoutAccountSnap\.data\(\)\)/);
+  assert.match(admin, /payoutVerificationState: "verified"/);
+  assert.match(admin, /Verify the Driver payout destination before activating this work type/);
+  assert.match(delivery, /verified_payout/);
+  assert.match(delivery, /driver\.payoutVerificationState === "verified"/);
+  assert.match(application, /payoutBatch\.set\(driverRef, \{ payoutVerificationState: "pending"/);
+  assert.match(admin, /payoutBatch\.set\(driverRef, \{ payoutVerificationState: nextPayoutState/);
+});
+
+test("Driver workspace delays transient missing-session errors and scrolls application errors into view", async () => {
+  const driver = await read("components/driver-app.js");
+  assert.match(driver, /attempt < 3/);
+  assert.match(driver, /err\.message !== "Sign in to continue\."/);
+  assert.match(driver, /errorRef\.current\?\.scrollIntoView/);
+  assert.match(driver, /ref=\{errorRef\} role="alert"/);
+});
+
+test("Ride booking scrolls quote and validation errors into view", async () => {
+  const ride = await read("components/ride-app.js");
+  assert.match(ride, /bookingErrorRef\.current\?\.scrollIntoView/);
+  assert.match(ride, /ref=\{bookingErrorRef\} role="alert"/);
 });

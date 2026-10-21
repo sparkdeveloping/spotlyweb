@@ -3,6 +3,7 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable } from "@/lib/marketplace-trust";
+import { compareMarketplaceBusinesses } from "@/lib/marketplace-ranking";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,7 @@ export async function GET(request) {
     const records = mergeCuratedWithFirestore(curated, firestore)
       .filter((item) => !city || !text(item.city) || text(item.city) === text(city))
       .filter((item) => !requestedTokens.length || requestedTokens.every((token) => searchable(item).includes(token)))
-      .sort((a, b) => Number(b.commerceVerified) - Number(a.commerceVerified) || Number(b.isFeatured) - Number(a.isFeatured) || (Number(b.rating || 0) - Number(a.rating || 0)) || a.name.localeCompare(b.name))
+      .sort((a, b) => compareMarketplaceBusinesses(a, b))
       .slice(0, max);
 
     return Response.json({ ok: true, businesses: records, total: records.length, dataAttribution: { openStreetMap: "© OpenStreetMap contributors", license: "ODbL-1.0", licenseUrl: "https://www.openstreetmap.org/copyright" } }, {

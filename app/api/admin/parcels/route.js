@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { notifyUsers, operationalEligibility } from "@/lib/driver-delivery-server";
 import { dispatchParcel, parcelSettings, plainParcel } from "@/lib/parcel-server";
 import { safeText } from "@/lib/server-helpers";
+import {validateCoverageCollection} from "@/lib/mobility-coverage";
 
 export const runtime = "nodejs";
 const ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager", "driver_operations_coordinator", "dispatcher", "support_manager"];
@@ -30,13 +31,18 @@ export async function GET(request) {
 export async function PATCH(request) {
   try {
     const actor = await authenticateRequest(request, { roles: CONFIG_ROLES }); const body = settingsSchema.parse(await request.json()); const { db } = getAdminServices(); const ref = db.collection("platformSettings").doc("global"); const currentSnap = await ref.get(); const current = currentSnap.exists ? currentSnap.data() : {}; const mobility = current.mobility || {}; const send = mobility.send || {};
+    const validatedZones=body.cityGeofences===undefined?null:validateCoverageCollection(body.cityGeofences,{
+      enabledCountries:["ZW"],
+      enabledCities:body.enabledCities??send.enabledCities??[],
+      send:true
+    });
     if(body.enabled!==undefined&&body.enabled!==(send.enabled===true))
       throw Object.assign(new Error("Use Admin Mobility → Service Launch & Controls to activate or pause Send."),{status:409});
     const next = { ...send,
      ...(body.routingVerified!==undefined?{routingVerified:body.routingVerified}:{}),
      ...(body.dispatchSchedulerVerified!==undefined?{dispatchSchedulerVerified:body.dispatchSchedulerVerified}:{}),
      ...(body.maxSearchSeconds!==undefined?{maxSearchSeconds:body.maxSearchSeconds}:{}),
-     ...(body.cityGeofences!==undefined?{cityGeofences:body.cityGeofences}:{}), ...(body.enabled !== undefined ? { enabled: body.enabled } : {}), ...(body.cashEnabled !== undefined ? { cashEnabled: body.cashEnabled } : {}), ...(body.scheduledEnabled !== undefined ? { scheduledEnabled: body.scheduledEnabled } : {}), ...(body.enabledCities !== undefined ? { enabledCities: [...new Set(body.enabledCities.map((value) => value.trim()).filter(Boolean))] } : {}), ...(body.enabledAreas !== undefined ? { enabledAreas: Object.fromEntries(Object.entries(body.enabledAreas).map(([city, areas]) => [city.trim(), [...new Set(areas.map((value) => value.trim()).filter(Boolean))]]).filter(([city, areas]) => city && areas.length)) } : {}), ...(body.pricing ? { pricing: { ...(send.pricing || {}), ...body.pricing } } : {}) };
+     ...(validatedZones!==null?{cityGeofences:validatedZones}:{}), ...(body.enabled !== undefined ? { enabled: body.enabled } : {}), ...(body.cashEnabled !== undefined ? { cashEnabled: body.cashEnabled } : {}), ...(body.scheduledEnabled !== undefined ? { scheduledEnabled: body.scheduledEnabled } : {}), ...(body.enabledCities !== undefined ? { enabledCities: [...new Set(body.enabledCities.map((value) => value.trim()).filter(Boolean))] } : {}), ...(body.enabledAreas !== undefined ? { enabledAreas: Object.fromEntries(Object.entries(body.enabledAreas).map(([city, areas]) => [city.trim(), [...new Set(areas.map((value) => value.trim()).filter(Boolean))]]).filter(([city, areas]) => city && areas.length)) } : {}), ...(body.pricing ? { pricing: { ...(send.pricing || {}), ...body.pricing } } : {}) };
     await ref.set({ mobility: { ...mobility, send: next }, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.uid }, { merge: true });
     await db.collection("auditLogs").add({ actorId: actor.uid, action: "mobility.send_settings.updated", entityType: "platformSettings", entityId: "global", metadata: { enabled: next.enabled === true, cashEnabled: next.cashEnabled !== false, enabledCities: next.enabledCities || [], enabledAreas: next.enabledAreas || {}, pricing: next.pricing || {} }, source: "admin_send", createdAt: FieldValue.serverTimestamp() });
     return Response.json({ ok: true, send: parcelSettings({ ...current, mobility: { ...mobility, send: next } }) });

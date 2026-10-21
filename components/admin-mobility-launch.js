@@ -8,13 +8,45 @@ import {Badge,Button,Card,PageSkeleton} from "@/components/ui";
 export function AdminMobilityLaunch({openRide,openSend}){
  const [data,setData]=useState(null),[error,setError]=useState("");
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(""),[confirm,setConfirm]=useState({});
+ const [routeStatus,setRouteStatus]=useState(null),[routeProbe,setRouteProbe]=useState(null),[routeBusy,setRouteBusy]=useState("");
+ const [lab,setLab]=useState(null),[labInput,setLabInput]=useState(""),[labBusy,setLabBusy]=useState(false),[labError,setLabError]=useState("");
+ const loadLab=useCallback(async()=>{
+   try{
+     const result=await authenticatedFetch("/api/admin/ride-lab",{cache:"no-store"});
+     setLab(result);setLabInput((result.testerEmails||[]).join("\n"));setLabError("");
+   }catch(e){setLabError(e.message||"The Ride Lab access list could not be loaded.");}
+ },[]);
+ async function saveLab(){
+   setLabBusy(true);setLabError("");
+   try{
+     const testerEmails=labInput.split(/[\n,;]+/).map((item)=>item.trim().toLowerCase()).filter(Boolean);
+     const result=await authenticatedFetch("/api/admin/ride-lab",{method:"POST",body:JSON.stringify({testerEmails})});
+     setLab((current)=>({...current,testerEmails:result.testerEmails}));setLabInput(result.testerEmails.join("\n"));
+   }catch(e){setLabError(e.message||"Ride Lab access could not be saved.");}
+   finally{setLabBusy(false);}
+ }
+
  const load=useCallback(async()=>{
   setLoading(true);
   try{setData(await authenticatedFetch("/api/admin/service-launch",{cache:"no-store"}));setError("");}
   catch(e){setError(e.message);}
   finally{setLoading(false);}
  },[]);
- useEffect(()=>{load();},[load]);
+ useEffect(()=>{
+   load();loadLab();
+   authenticatedFetch("/api/admin/mobility-routing-diagnostics",{cache:"no-store"})
+     .then(setRouteStatus).catch(e=>setRouteStatus({configured:false,message:e.message}));
+ },[load,loadLab]);
+ async function testRouting(country){
+  setRouteBusy(country);setRouteProbe(null);
+  try{
+   const result=await authenticatedFetch("/api/admin/mobility-routing-diagnostics",{
+    method:"POST",body:JSON.stringify({country})
+   });
+   setRouteProbe(result);
+  }catch(e){setRouteProbe({ok:false,error:e.message});}
+  finally{setRouteBusy("");}
+ }
  async function change(service,action){
   setBusy(service);setError("");
   try{
@@ -32,6 +64,44 @@ export function AdminMobilityLaunch({openRide,openSend}){
    <h2 className="mt-2 text-2xl font-semibold">Where and when SpotlyRide and SpotlySend operate</h2>
    <p className="mt-3 max-w-3xl text-sm leading-6 text-secondary">Configure cities, service zones, pricing and proof requirements in the service tabs. Activate only after all technical checks and real Driver/support field verification. Saving a draft never activates customer bookings.</p>
    <div className="mt-4 flex flex-wrap gap-3"><Button variant="outline" onClick={openRide}><CarFront className="h-4 w-4"/>Configure Ride</Button><Button variant="outline" onClick={openSend}><Package className="h-4 w-4"/>Configure Send</Button><Button asChild variant="outline"><Link href="/admin/system?tab=launch"><ShieldAlert className="h-4 w-4"/>Full launch readiness</Link></Button></div>
+  </Card>
+  <Card className="p-5 sm:p-6">
+   <div className="flex flex-wrap items-start justify-between gap-4">
+    <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-tertiary">Invitation-only · Test environment</p><h3 className="mt-2 text-lg font-semibold">Ride Lab access and simulated locations</h3>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">Invite verified Spotly accounts to the Driver Ride Lab. They can drop a test pin and share a clearly simulated location. These positions are separate from live Driver GPS, dispatched Ride trips, payouts and passenger requests.</p></div>
+    <Badge tone="info">No customer bookings enabled</Badge>
+   </div>
+   <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,.8fr)]">
+     <label className="text-sm font-semibold">Invited tester emails · one per line
+       <textarea className="field-control mt-2 min-h-32 w-full" value={labInput} onChange={e=>setLabInput(e.target.value)} placeholder="tester@example.com" autoCapitalize="none" autoComplete="off"/>
+     </label>
+     <div className="rounded-xl bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">Last test positions</p>
+       {(lab?.recentPositions||[]).length?<div className="mt-3 max-h-40 space-y-2 overflow-y-auto">{lab.recentPositions.slice(0,8).map(row=><p key={row.id} className="text-xs text-secondary">{row.country} · {Number(row.lat).toFixed(4)}, {Number(row.lng).toFixed(4)} · {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "No timestamp"}</p>)}</div>:<p className="mt-2 text-xs text-secondary">No test locations yet.</p>}
+       <p className="mt-4 text-sm font-semibold">Recent simulated test rides</p>
+       {(lab?.recentTrips||[]).length?<div className="mt-2 max-h-28 space-y-2 overflow-y-auto">{lab.recentTrips.slice(0,8).map(row=><p key={row.id} className="text-xs text-secondary">{String(row.state).replaceAll("_"," ")} · {row.createdAt ? new Date(row.createdAt).toLocaleString() : "Test session"}</p>)}</div>:<p className="mt-2 text-xs text-secondary">No simulated rides yet.</p>}
+       <p className="mt-3 text-xs text-secondary">Requires a verified email. Inviting does not approve a Driver, grant operational capabilities, or enable production booking.</p>
+     </div>
+   </div>
+   {labError&&<p role="alert" className="mt-3 text-sm text-danger">{labError}</p>}
+   <div className="mt-4 flex flex-wrap gap-2"><Button disabled={!lab||labBusy} loading={labBusy} onClick={saveLab}>Save Ride Lab invitations</Button><Button variant="outline" onClick={loadLab}>Refresh test locations</Button></div>
+  </Card>
+  <Card className="p-5 sm:p-6">
+   <div className="flex flex-wrap items-start justify-between gap-4">
+    <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-tertiary">Licensed road routing</p>
+     <h3 className="mt-2 text-lg font-semibold">Test real routes before approving service</h3>
+     <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">Check the configured MapMap/OSRM provider with real road geometry. This does not activate SpotlyRide or SpotlySend, dispatch Drivers, or collect payments.</p>
+    </div>
+    <Badge tone={routeStatus?.configured?"success":"warning"}>{routeStatus?.configured?"Credential configuration present":"Routing not configured here"}</Badge>
+   </div>
+   <p className="mt-3 text-xs text-secondary">Provider: {routeStatus?.provider||"Checking..."} · {routeStatus?.message||"Checking this deployment."}</p>
+   <div className="mt-4 flex flex-wrap gap-3">
+    <Button variant="outline" loading={routeBusy==="ZW"} disabled={Boolean(routeBusy)} onClick={()=>testRouting("ZW")}>Test Harare driving route</Button>
+    <Button variant="outline" loading={routeBusy==="MW"} disabled={Boolean(routeBusy)} onClick={()=>testRouting("MW")}>Test Lilongwe driving route</Button>
+   </div>
+   {routeProbe?<div className={`mt-4 rounded-xl border p-4 text-sm ${routeProbe.ok?"border-[var(--border)] bg-[var(--surface-2)]":"border-danger bg-[var(--danger-soft)] text-danger"}`} role="status">
+    {routeProbe.ok?<><span className="font-semibold">{routeProbe.city}: Route confirmed</span><p className="mt-1 text-secondary">{routeProbe.distanceKm} km · about {routeProbe.durationMinutes} min · {routeProbe.durationMs} ms provider response</p><p className="mt-2 text-xs text-secondary">This confirms only this sample route. City geofences, field testing and launch permissions remain separate.</p></>:
+     <span>{routeProbe.error||"Route test failed."}</span>}
+   </div>:null}
   </Card>
   {error&&<div role="alert" className="rounded-xl border border-danger bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</div>}
   <div className="grid gap-5 lg:grid-cols-2">

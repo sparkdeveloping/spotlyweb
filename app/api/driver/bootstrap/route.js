@@ -37,8 +37,11 @@ export async function GET(request) {
     const documents = docsData(documentsQuery);
     const presence = docData(presenceSnap);
     const selectedVehicle = vehicles.find((item) => item.id === (presence?.vehicleId || driver?.selectedVehicleId)) || vehicles.find((item) => item.status === "approved") || vehicles[0] || null;
-    const readiness = applicationReadiness(application || {}, selectedVehicle, documents);
-    const requirements = requirementPlan({ application: application || {}, vehicle: selectedVehicle, documents, phase: driver ? "operational" : "application" });
+    const primaryVehicle = vehicles.find((item) => item.id === `${user.uid}_primary`) || null;
+    const payoutAccount = payoutAccountSnap.exists ? payoutAccountSnap.data() : null;
+    // Match the exact primary-vehicle and payout records used by the submit endpoint.
+    const readiness = applicationReadiness(application || {}, primaryVehicle, documents, payoutAccount);
+    const requirements = requirementPlan({ application: application || {}, vehicle: primaryVehicle, documents, payoutAccount, phase: driver ? "operational" : "application" });
     const capabilities = capabilitySummary({ driver: driver || {}, application: application || {}, vehicle: selectedVehicle, documents });
     const eligibility = operationalEligibility({ driver, application: application || {}, vehicle: selectedVehicle, documents, presence });
     const locationUpdatedAt = presence?.locationUpdatedAt ? new Date(presence.locationUpdatedAt).getTime() : 0;

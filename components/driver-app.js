@@ -19,8 +19,9 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { NotificationCenter } from "@/components/notification-center";
 import { DriverAssistShopping } from "@/components/driver-assist-shopping";
+import { PinDropMap } from "@/components/mobility-map";
 import { zimbabweCities } from "@/data/business-config";
-import { DRIVER_CAPABILITIES, DRIVER_TRAINING_MODULES, capabilitySupportsVehicle, documentRequirementsFor, normalizeCapabilities, trainingModuleIsCurrent, trainingRequirementsFor } from "@/lib/driver-capabilities";
+import { DRIVER_CAPABILITIES, DRIVER_TRAINING_MODULES, capabilitySupportsVehicle, documentRequirementsFor, normalizeCapabilities, trainingModuleIsCurrent, trainingRequirementsFor, validDriverPhone } from "@/lib/driver-capabilities";
 
 const sectionMeta = {
   home: { title: "Driver home", description: "Know if you can work, what is live now and what needs your attention." },
@@ -80,15 +81,40 @@ function labelStatus(value = "") { return String(value).replaceAll("_", " "); }
 function dateTime(value) { if (!value) return "—"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }); }
 
 function useDriverData() {
-  const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  const { user, authReady } = useAuth();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const load = useCallback(async ({ quiet = false } = {}) => {
-    if (!quiet) setLoading(true); setError("");
-    try { setData(await authenticatedFetch("/api/driver/bootstrap")); }
-    catch (err) { setError(err.message || "Driver information could not be loaded."); }
-    finally { if (!quiet) setLoading(false); }
-  }, []);
-  useEffect(() => { load(); const timer = window.setInterval(() => load({ quiet: true }), 10000); return () => clearInterval(timer); }, [load]);
-  return { data, loading, error, load };
+    // Wait for shared Firebase login restoration instead of raising a false error.
+    if (!authReady || !user?.uid || user.isAnonymous) return;
+    if (!quiet) { setLoading(true); setError(""); }
+    try {
+      // Cross-subdomain Firebase session restoration may finish after the first API call.
+      // Retry only a transient missing-token response before replacing the page with an error.
+      let next;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          next = await authenticatedFetch("/api/driver/bootstrap", { cache: "no-store" });
+          break;
+        } catch (err) {
+          if (err.message !== "Sign in to continue." || attempt === 2) throw err;
+          await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+        }
+      }
+      setData(next); setError("");
+    } catch (err) {
+      // Preserve the last usable screen if a subsequent refresh temporarily fails.
+      if (!quiet) setError(err.message || "Driver information could not be loaded.");
+    } finally { if (!quiet) setLoading(false); }
+  }, [authReady, user?.uid, user?.isAnonymous]);
+  useEffect(() => {
+    if (!authReady || !user?.uid || user.isAnonymous) return undefined;
+    load();
+    const timer = window.setInterval(() => load({ quiet: true }), 10000);
+    return () => window.clearInterval(timer);
+  }, [authReady, user?.uid, user?.isAnonymous, load]);
+  return { data, loading: loading || !authReady, error, load };
 }
 
 function ProgressSteps({ current }) {
@@ -99,12 +125,16 @@ function DriverApplication({ data, reload }) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const existing = data?.application || {};
-  const vehicle = data?.vehicles?.[0] || {};
+  const vehicle = data?.vehicles?.find((item) => item.id === `${user?.uid}_primary`) || {};
   const [step, setStep] = useState(Math.min(Number(existing.currentStep || 0), 5));
   const [editing, setEditing] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [submitBlockers, setSubmitBlockers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
+  const errorRef = useRef(null);
+  useEffect(() => { if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [error]);
   const [openTraining, setOpenTraining] = useState("");
   const [trainingAnswers, setTrainingAnswers] = useState({});
   const [documentMeta, setDocumentMeta] = useState({});
@@ -122,20 +152,38 @@ function DriverApplication({ data, reload }) {
     model: vehicle.model || "",
     year: vehicle.year || "",
     ownership: vehicle.ownership || "driver_owned",
-    payoutType: "mobile_money",
-    payoutProvider: "EcoCash",
+    payoutType: data?.payoutAccount?.type || "mobile_money",
+    payoutProvider: data?.payoutAccount?.provider || "EcoCash",
     payoutProviderOther: "",
-    payoutName: existing.legalName || profile?.displayName || "",
+    payoutName: data?.payoutAccount?.recipientName || existing.legalName || profile?.displayName || "",
     payoutIdentifier: "",
     agreementsAccepted: Boolean(existing.agreementsAccepted),
     locationConsent: Boolean(existing.locationConsent)
   });
-  useEffect(() => { setStep(Math.min(Number(data?.application?.currentStep ?? step), 5)); }, [data?.application?.currentStep]);
-  const uploaded = new Map((data?.documents || []).map((item) => [item.type, item]));
+  // Background status refresh must never reset navigation or discard unsaved changes.
+  const uploaded = new Map(DOCUMENTS.map(({ type }) => [type, (data?.documents || [])
+    .filter((item) => item.type === type && (!VEHICLE_SCOPED_DOCUMENTS.has(type) || item.vehicleId === `${user?.uid}_primary` || (item.vehicleId == null && vehicle.id === `${user?.uid}_primary`)))
+    .slice().sort((a, b) => new Date(b.updatedAt || b.uploadedAt || 0).getTime() - new Date(a.updatedAt || a.uploadedAt || 0).getTime())[0]])
+    .filter(([, item]) => item));
   const requestedCapabilities = form.requestedCapabilities.filter((id) => capabilitySupportsVehicle(id, form.vehicleType));
   const requiredDocumentTypes = documentRequirementsFor({ vehicleType: form.vehicleType, capabilities: requestedCapabilities });
   const requiredTraining = trainingRequirementsFor(requestedCapabilities);
   const reviewState = ["application_submitted", "under_review", "information_required", "approved", "rejected"].includes(existing.status) && !editing;
+  const readinessChecks = data?.readiness?.checks || [];
+  const missingChecks = submitBlockers.length ? submitBlockers : readinessChecks.filter((item) => !item.ok);
+  const stepFor = (check) => Number.isInteger(check.step) ? check.step : check.type === "document" ? 2 : check.type === "money" ? 4 : check.type === "training" || check.type === "agreements" ? 5 : check.type === "vehicle" || check.type === "capabilities" ? 1 : 0;
+  function openRequirement(check) { setStep(stepFor(check)); setEditing(true); setError(""); }
+  function profileErrors() {
+    const result = {};
+    if (form.legalName.trim().length < 2) result.legalName = "Enter your full legal name.";
+    if (!validDriverPhone(form.phone)) result.phone = "Add a valid Zimbabwe phone number, not just +263.";
+    if (!form.city.trim()) result.city = "Choose a city.";
+    if (form.emergencyContactName.trim().length < 2) result.emergencyContactName = "Enter your emergency contact's name.";
+    if (!validDriverPhone(form.emergencyContactPhone)) result.emergencyContactPhone = "Add a valid Zimbabwe emergency contact number.";
+    return result;
+  }
+  const documentReady = (document) => Boolean(document && ["uploaded", "pending_review", "approved"].includes(document.status || "uploaded") &&
+    (!document.expiresAt || new Date(document.expiresAt).getTime() > Date.now()));
 
   function setVehicleType(vehicleType) {
     const nextCapabilities = normalizeCapabilities(form.requestedCapabilities, vehicleType).filter((id) => capabilitySupportsVehicle(id, vehicleType));
@@ -157,24 +205,36 @@ function DriverApplication({ data, reload }) {
       // A brand-new applicant can save identity/contact details before vehicle setup exists.
       if (nextStep >= 2) payload.vehicle = { type: form.vehicleType, registration: form.vehicleType === "bicycle" ? "" : form.registration, make: form.make, model: form.model, year: form.year ? Number(form.year) : null, ownership: form.ownership, requestedCapabilities };
       await authenticatedFetch("/api/driver/application", { method: "POST", body: JSON.stringify(payload) });
+      setSubmitBlockers([]);
       await reload({ quiet: true });
       return true;
     } catch (err) { setError(err.message); return false; }
     finally { setSaving(false); }
   }
   async function nextStep() {
-    if (step === 0 && (!form.legalName.trim() || !form.phone.trim() || !form.city.trim())) return setError("Add your name, phone and city before continuing.");
-    if (step === 1 && requestedCapabilities.length === 0) return setError("Choose at least one kind of work you want to do.");
-    if (step === 1 && form.vehicleType !== "bicycle" && !form.registration.trim()) return setError("Add your motor vehicle registration before continuing.");
-    if (step === 1 && form.vehicleType !== "bicycle" && (!form.make.trim() || !form.model.trim())) return setError("Add the make and model of the motor vehicle before continuing.");
-    if (step === 2 && requiredDocumentTypes.some((type) => !uploaded.has(type))) return setError("Upload each document required for the work and vehicle you selected.");
-    if (step === 4 && !existing.payoutComplete && !form.payoutIdentifier.trim()) return setError("Add where Spotly should send your earnings.");
+    setError("");
+    if (step === 0) {
+      const errors = profileErrors();
+      setFieldErrors(errors);
+      if (Object.keys(errors).length) return setError("Complete the highlighted contact fields before continuing.");
+    }
+    if (step === 1 && !requestedCapabilities.length) return setError("Choose at least one kind of work for your vehicle.");
+    if (step === 1 && form.vehicleType !== "bicycle" && form.registration.trim().length < 2) return setError("Add your motor vehicle registration.");
+    if (step === 1 && form.vehicleType !== "bicycle" && (!form.make.trim() || !form.model.trim())) return setError("Add the make and model of your vehicle.");
+    if (step === 1 && form.year && (!Number.isInteger(Number(form.year)) || Number(form.year) < 1950 || Number(form.year) > 2100)) return setError("Enter a valid vehicle year.");
+    if (step === 2 && requiredDocumentTypes.some((type) => !documentReady(uploaded.get(type)))) return setError("Upload or replace every missing, expired or rejected required document.");
+    if (step === 4 && !data?.payoutAccount && !form.payoutIdentifier.trim()) return setError("Add where Spotly should send your earnings.");
+    if (step === 4 && (form.payoutIdentifier.trim() || !data?.payoutAccount) && (!form.payoutName.trim() || !(form.payoutProvider === "Other bank" ? form.payoutProviderOther : form.payoutProvider).trim() || form.payoutIdentifier.trim().length < 3)) return setError("Enter a valid recipient name, provider and account or wallet identifier.");
     if (step === 5 && (!form.agreementsAccepted || !form.locationConsent)) return setError("Accept the Driver and location terms before submitting.");
     if (!(await saveStep(Math.min(step + 1, 5)))) return;
-    if (step === 4 && !existing.payoutComplete) {
-      await authenticatedFetch("/api/driver/application", { method: "POST", body: JSON.stringify({ action: "payout", payout: { type: form.payoutType, provider: form.payoutProvider === "Other bank" ? form.payoutProviderOther : form.payoutProvider, recipientName: form.payoutName || form.legalName, identifier: form.payoutIdentifier } }) });
-    }
-    if (step < 5) setStep((value) => value + 1);
+    try {
+      if (step === 4 && (form.payoutIdentifier.trim() || !data?.payoutAccount)) {
+        await authenticatedFetch("/api/driver/application", { method: "POST", body: JSON.stringify({ action: "payout", payout: { type: form.payoutType, provider: form.payoutProvider === "Other bank" ? form.payoutProviderOther : form.payoutProvider, recipientName: form.payoutName || form.legalName, identifier: form.payoutIdentifier } }) });
+        setForm((current) => ({ ...current, payoutIdentifier: "" }));
+        await reload({ quiet: true });
+      }
+      if (step < 5) setStep((value) => value + 1);
+    } catch (err) { setError(err.message || "The payout information could not be saved."); }
   }
   async function uploadDocument(type, file) {
     if (!file) return;
@@ -194,7 +254,7 @@ function DriverApplication({ data, reload }) {
   async function completeTraining(moduleId, trainingAnswer) {
     setSaving(true); setError("");
     try {
-      await saveStep(5);
+      if (!(await saveStep(5))) return;
       await authenticatedFetch("/api/driver/application", { method: "POST", body: JSON.stringify({ action: "training", trainingModuleId: moduleId, trainingAnswer, trainingComplete: true }) });
       await reload({ quiet: true });
       setOpenTraining("");
@@ -203,14 +263,21 @@ function DriverApplication({ data, reload }) {
     finally { setSaving(false); }
   }
   async function submit() {
-    setSaving(true); setError("");
+    setSaving(true); setError(""); setSubmitBlockers([]);
     try {
-      await saveStep(5);
+      const errors = profileErrors();
+      setFieldErrors(errors);
+      if (Object.keys(errors).length) { setStep(0); setError("Complete the highlighted contact fields before submitting."); return; }
+      if (!form.agreementsAccepted || !form.locationConsent) { setStep(5); setError("Accept the Driver and location terms before submitting."); return; }
+      // A failed save MUST abort submission.
+      if (!(await saveStep(5))) return;
       await authenticatedFetch("/api/driver/application", { method: "POST", body: JSON.stringify({ action: "submit" }) });
       await reload();
       toast("Your Driver application was sent to Spotly.", { type: "success" });
-    } catch (err) { setError(err.message); }
-    finally { setSaving(false); }
+    } catch (err) {
+      setError(err.message || "The application could not be submitted.");
+      if (Array.isArray(err.blockers)) setSubmitBlockers(err.blockers);
+    } finally { setSaving(false); }
   }
 
   if (reviewState) {
@@ -218,7 +285,7 @@ function DriverApplication({ data, reload }) {
     const information = existing.status === "information_required";
     return <div className="space-y-6">
       <PageHeader eyebrow="Spotly Driver" title={rejected ? "Your application was not approved" : information ? "Spotly needs something from you" : existing.status === "approved" ? "You’re approved" : "Your application is being reviewed"} description={rejected ? "This decision does not restart your application. Read the reason below and use the available next step." : information ? "Fix the requested item and send it back for review." : existing.status === "approved" ? "Spotly is activating the work types you qualify for." : "Your Activation Centre shows what is with you and what is with Spotly."} />
-      {(rejected || information) && <Card className={cn("p-5", rejected ? "border-danger" : "border-warning")}><p className="font-semibold">{rejected ? "Decision" : "Your action"}</p><p className="mt-2 text-sm text-secondary">{existing.reviewReason || (rejected ? "Spotly could not approve this application in its current form." : "Update the requested information, then submit again.")}</p><div className="mt-4 flex flex-wrap gap-2">{information && <Button onClick={() => { setStep(2); setEditing(true); }}>Fix application</Button>}<Button asChild variant="outline"><Link href="/support?topic=driver-application">Get help</Link></Button></div></Card>}
+      {(rejected || information) && <Card className={cn("p-5", rejected ? "border-danger" : "border-warning")}><p className="font-semibold">{rejected ? "Decision" : "Your action"}</p><p className="mt-2 text-sm text-secondary">{existing.reviewReason || (rejected ? "Spotly could not approve this application in its current form." : "Update the requested information, then submit again.")}</p><div className="mt-4 flex flex-wrap gap-2">{information && <Button onClick={() => { setStep(0); setEditing(true); }}>Fix application</Button>}{rejected && <Button onClick={() => { setStep(0); setEditing(true); }}>Review and correct application</Button>}<Button asChild variant="outline"><Link href="/support?topic=driver-application">Get help</Link></Button></div></Card>}
       <SectionCard padded title="Activation progress" description="Every item has a clear owner. ‘Spotly reviewing’ means you do not need to keep resubmitting it."><div className="divide-y">{(data?.requirements?.checks || data?.readiness?.checks || []).map((item) => <div key={item.id} className="flex items-center gap-3 py-4"><span className={cn("flex h-9 w-9 items-center justify-center rounded-lg", item.ok ? "bg-[var(--success-soft)] text-success" : item.owner === "spotly" ? "bg-[var(--info-soft)] text-info" : "bg-[var(--warning-soft)] text-warning")}>{item.ok ? <CheckCircle2 className="h-5 w-5" /> : <Clock3 className="h-5 w-5" />}</span><span className="min-w-0 flex-1"><span className="block font-medium">{item.label}</span>{item.reviewReason ? <span className="mt-1 block text-xs text-secondary">{item.reviewReason}</span> : null}</span><Badge tone={item.ok ? "success" : item.owner === "spotly" ? "info" : "warning"}>{item.ok ? "Complete" : item.owner === "spotly" ? "Spotly reviewing" : "Your action"}</Badge></div>)}</div></SectionCard>
       {information && <Button variant="outline" onClick={() => { setStep(0); setEditing(true); }}>Review all details</Button>}
     </div>;
@@ -227,12 +294,23 @@ function DriverApplication({ data, reload }) {
   return <div className="space-y-6">
     <PageHeader eyebrow={`Step ${step + 1} of ${APPLICATION_STEPS.length}`} title="Activation Centre" description="Spotly shows only the requirements that apply to the work and vehicle you choose." />
     <ProgressSteps current={step} />
-    {error && <div role="alert" className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{error}</div>}
-    {step === 0 && <SectionCard padded title="Your details" description="Tell Spotly who you are, where you plan to work and who to contact in an emergency."><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">Full legal name<input className="field-control mt-2 w-full" value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} /></label><label className="text-sm font-medium">Phone<input className="field-control mt-2 w-full" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+263" /></label><label className="text-sm font-medium">City<select className="field-control mt-2 w-full" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}>{zimbabweCities.map((city) => <option key={city} value={city}>{city}</option>)}</select></label><label className="text-sm font-medium">Emergency contact<input className="field-control mt-2 w-full" value={form.emergencyContactName} onChange={(e) => setForm({ ...form, emergencyContactName: e.target.value })} /></label><label className="text-sm font-medium">Emergency phone<input className="field-control mt-2 w-full" value={form.emergencyContactPhone} onChange={(e) => setForm({ ...form, emergencyContactPhone: e.target.value })} /></label></div></SectionCard>}
+    <SectionCard padded title="Application readiness" description="Checks reflect the latest saved application. Unsaved edits appear once saved. Documents awaiting Spotly review can still be submitted.">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{APPLICATION_STEPS.map((label, index) => {
+        const checks = readinessChecks.filter((item) => stepFor(item) === index);
+        const incomplete = checks.filter((item) => !item.ok);
+        return <button type="button" key={label} onClick={() => setStep(index)} className={cn("flex items-center gap-3 rounded-xl border p-3 text-left transition hover:bg-[var(--surface-2)]", step === index && "border-[var(--accent)]")}>
+          <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", incomplete.length ? "bg-[var(--warning-soft)] text-warning" : "bg-[var(--success-soft)] text-success")}>{incomplete.length ? <AlertTriangle className="h-4 w-4"/> : <CheckCircle2 className="h-4 w-4"/>}</span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="block text-xs text-secondary">{!checks.length ? "Preferences optional" : incomplete.length ? `${incomplete.length} item${incomplete.length === 1 ? "" : "s"} to complete` : "Saved requirements complete"}</span></span>
+        </button>;
+      })}</div>
+      {missingChecks.length ? <div className="mt-4 border-t pt-4"><p className="mb-3 text-sm font-semibold">What still needs attention ({missingChecks.length})</p><div className="grid gap-2">{missingChecks.map((item) => <button key={item.id} type="button" onClick={() => openRequirement(item)} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--surface-2)] px-3 py-3 text-left hover:bg-[var(--accent-soft)]"><span><span className="block text-sm font-medium">{item.action || item.label}</span>{item.reviewReason ? <span className="mt-1 block text-xs text-secondary">{item.reviewReason}</span> : null}</span><span className="shrink-0 text-xs font-semibold text-[var(--accent)]">Step {stepFor(item) + 1} →</span></button>)}</div></div> : <p className="mt-4 text-sm font-medium text-success">All saved application requirements are complete. Document and payout approval remain separate.</p>}
+    </SectionCard>
+    {error && <div ref={errorRef} role="alert" className="scroll-mt-28 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{error}</div>}
+    {step === 0 && <SectionCard padded title="Your details" description="Tell Spotly who you are, where you plan to work and who to contact in an emergency."><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">Full legal name<input aria-invalid={Boolean(fieldErrors.legalName)} className="field-control mt-2 w-full" value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} />{fieldErrors.legalName && <span className="mt-1 block text-xs text-danger">{fieldErrors.legalName}</span>}</label><label className="text-sm font-medium">Phone<input aria-invalid={Boolean(fieldErrors.phone)} className="field-control mt-2 w-full" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+263 7…" />{fieldErrors.phone && <span className="mt-1 block text-xs text-danger">{fieldErrors.phone}</span>}</label><label className="text-sm font-medium">City<select className="field-control mt-2 w-full" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}>{zimbabweCities.map((city) => <option key={city} value={city}>{city}</option>)}</select></label><label className="text-sm font-medium">Emergency contact<input aria-invalid={Boolean(fieldErrors.emergencyContactName)} className="field-control mt-2 w-full" value={form.emergencyContactName} onChange={(e) => setForm({ ...form, emergencyContactName: e.target.value })} />{fieldErrors.emergencyContactName && <span className="mt-1 block text-xs text-danger">{fieldErrors.emergencyContactName}</span>}</label><label className="text-sm font-medium">Emergency phone<input aria-invalid={Boolean(fieldErrors.emergencyContactPhone)} className="field-control mt-2 w-full" value={form.emergencyContactPhone} onChange={(e) => setForm({ ...form, emergencyContactPhone: e.target.value })} />{fieldErrors.emergencyContactPhone && <span className="mt-1 block text-xs text-danger">{fieldErrors.emergencyContactPhone}</span>}</label></div></SectionCard>}
     {step === 1 && <div className="space-y-4"><SectionCard padded title="What do you want to do?" description="Each work type activates independently. You can start earning from approved work without waiting for unrelated work types."><div className="grid gap-3 sm:grid-cols-2">{Object.values(DRIVER_CAPABILITIES).map((capability) => { const supported = capabilitySupportsVehicle(capability.id, form.vehicleType); const selected = form.requestedCapabilities.includes(capability.id); return <button type="button" key={capability.id} disabled={!supported} onClick={() => toggleCapability(capability.id)} className={cn("rounded-xl border p-4 text-left transition", selected && supported && "border-[var(--accent)] bg-[var(--accent-soft)]", !supported && "cursor-not-allowed opacity-45")}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{capability.label}</p><p className="mt-1 text-sm leading-5 text-secondary">{capability.description}</p></div>{selected && supported ? <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--accent)]" /> : null}</div></button>; })}</div></SectionCard><SectionCard padded title="Your vehicle" description="The vehicle changes what work and documents Spotly can require."><div className="grid gap-3 sm:grid-cols-4">{DRIVER_VEHICLES.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => setVehicleType(id)} className={cn("rounded-xl border p-4 text-left", form.vehicleType === id && "border-[var(--accent)] bg-[var(--accent-soft)]")}><Icon className="h-6 w-6 text-[var(--accent)]" /><p className="mt-3 font-semibold">{label}</p></button>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label className="text-sm font-medium">Ownership<select className="field-control mt-2 w-full" value={form.ownership} onChange={(e) => setForm({ ...form, ownership: e.target.value })}><option value="driver_owned">I own it</option><option value="rented">Rented</option><option value="fleet_owned">Fleet / company owned</option></select></label>{form.vehicleType !== "bicycle" && <label className="text-sm font-medium">Registration<input className="field-control mt-2 w-full uppercase" value={form.registration} onChange={(e) => setForm({ ...form, registration: e.target.value })} placeholder="ABC 1234" /></label>}<label className="text-sm font-medium">Year<input type="number" min="1950" max="2100" className="field-control mt-2 w-full" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="2022" /></label><label className="text-sm font-medium">Make<input className="field-control mt-2 w-full" value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} placeholder={form.vehicleType === "bicycle" ? "Optional" : "Toyota"} /></label><label className="text-sm font-medium">Model<input className="field-control mt-2 w-full" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} /></label></div></SectionCard></div>}
     {step === 2 && <SectionCard padded title="Required documents" description="This list is generated from your selected work and vehicle. Motorized work explicitly requires a Driver licence; a bicycle does not inherit motor-vehicle paperwork."><div className="grid gap-4 md:grid-cols-2">{requiredDocumentTypes.map((type) => { const item = DOCUMENTS.find((entry) => entry.type === type) || { type, label: labelStatus(type), helper: "Upload the evidence Spotly requested." }; const doc = uploaded.get(type); const meta = documentMeta[type] || {}; return <Card key={type} className="p-4"><div className="flex items-start gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><IdCard className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{item.label}</p>{doc && <Badge tone={doc.status === "approved" ? "success" : doc.status === "rejected" ? "danger" : "warning"}>{labelStatus(doc.status)}</Badge>}</div><p className="mt-1 text-sm leading-5 text-secondary">{doc?.reviewReason || item.helper}</p>{doc?.referenceNumber ? <p className="mt-2 text-xs text-secondary">Reference: {doc.referenceNumber}</p> : null}{doc?.expiresAt ? <p className="mt-1 text-xs text-secondary">Expires {dateTime(doc.expiresAt)}</p> : null}<div className="mt-4 grid gap-3">{type !== "identity" ? <label className="text-xs font-semibold">{type === "licence" ? "LICENCE NUMBER" : type === "registration" ? "REGISTRATION NUMBER" : "REFERENCE NUMBER (OPTIONAL)"}<input className="field-control mt-1 w-full" value={meta.referenceNumber ?? (type === "registration" ? form.registration : "")} onChange={(event) => setDocumentMeta((current) => ({ ...current, [type]: { ...(current[type] || {}), referenceNumber: event.target.value } }))} disabled={type === "registration" && Boolean(form.registration)} /></label> : null}{EXPIRY_DOCUMENTS.has(type) ? <label className="text-xs font-semibold">EXPIRY DATE<input type="date" className="field-control mt-1 w-full" value={meta.expiresAt || ""} onChange={(event) => setDocumentMeta((current) => ({ ...current, [type]: { ...(current[type] || {}), expiresAt: event.target.value } }))} /></label> : null}<label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-[var(--surface-2)]"><Upload className="h-4 w-4" />{uploading === type ? "Uploading…" : doc ? "Replace document" : "Upload document"}<input type="file" accept="image/*,.pdf" className="sr-only" disabled={Boolean(uploading)} onChange={(event) => uploadDocument(type, event.target.files?.[0])} /></label></div></div></div></Card>; })}</div></SectionCard>}
     {step === 3 && <SectionCard padded title="Where you want to work" description="These are preferences, not guaranteed jobs. Spotly still applies service areas and capability rules."><label className="text-sm font-medium">Preferred areas <span className="font-normal text-tertiary">separate with commas</span><input className="field-control mt-2 w-full" value={form.preferredZones} onChange={(e) => setForm({ ...form, preferredZones: e.target.value })} placeholder="Borrowdale, Highlands, Avondale" /></label><div className="mt-4 rounded-xl bg-[var(--surface-2)] p-4 text-sm text-secondary"><MapPin className="mb-2 h-5 w-5 text-[var(--accent)]" />When you are active, Spotly uses your live location to send nearby work that matches your approved capabilities and selected vehicle.</div></SectionCard>}
-    {step === 4 && <SectionCard padded title="Getting paid" description="Saving a payout destination and being approved to work are separate. Spotly will show whether payout verification is still pending."><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Payout type<select className="field-control mt-2 w-full" value={form.payoutType} onChange={(e) => setForm({ ...form, payoutType: e.target.value, payoutProvider: e.target.value === "mobile_money" ? "EcoCash" : "CBZ" })}><option value="mobile_money">Mobile money</option><option value="bank">Bank account</option></select></label><label className="text-sm font-medium">Provider<select className="field-control mt-2 w-full" value={form.payoutProvider} onChange={(e) => setForm({ ...form, payoutProvider: e.target.value, payoutProviderOther: e.target.value === "Other bank" ? form.payoutProviderOther : "" })}>{(form.payoutType === "bank" ? BANK_PAYOUT_PROVIDERS : MOBILE_PAYOUT_PROVIDERS).map((provider) => <option key={provider}>{provider}</option>)}</select></label>{form.payoutType === "bank" && form.payoutProvider === "Other bank" && <label className="text-sm font-medium">Bank name<input className="field-control mt-2 w-full" value={form.payoutProviderOther} onChange={(e) => setForm({ ...form, payoutProviderOther: e.target.value })} /></label>}<label className="text-sm font-medium">Recipient name<input className="field-control mt-2 w-full" value={form.payoutName} onChange={(e) => setForm({ ...form, payoutName: e.target.value })} /></label><label className="text-sm font-medium">Account / wallet identifier<input className="field-control mt-2 w-full" value={form.payoutIdentifier} onChange={(e) => setForm({ ...form, payoutIdentifier: e.target.value })} placeholder={existing.payoutComplete ? "Already saved" : "Enter securely"} /></label></div>{existing.payoutComplete && <p className="mt-4 text-sm font-semibold text-success">Payout details saved. Verification can continue separately.</p>}</SectionCard>}
+    {step === 4 && <SectionCard padded title="Getting paid" description="Saving a payout destination and being approved to work are separate. Spotly will show whether payout verification is still pending."><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Payout type<select className="field-control mt-2 w-full" value={form.payoutType} onChange={(e) => setForm({ ...form, payoutType: e.target.value, payoutProvider: e.target.value === "mobile_money" ? "EcoCash" : "CBZ" })}><option value="mobile_money">Mobile money</option><option value="bank">Bank account</option></select></label><label className="text-sm font-medium">Provider<select className="field-control mt-2 w-full" value={form.payoutProvider} onChange={(e) => setForm({ ...form, payoutProvider: e.target.value, payoutProviderOther: e.target.value === "Other bank" ? form.payoutProviderOther : "" })}>{(form.payoutType === "bank" ? BANK_PAYOUT_PROVIDERS : MOBILE_PAYOUT_PROVIDERS).map((provider) => <option key={provider}>{provider}</option>)}</select></label>{form.payoutType === "bank" && form.payoutProvider === "Other bank" && <label className="text-sm font-medium">Bank name<input className="field-control mt-2 w-full" value={form.payoutProviderOther} onChange={(e) => setForm({ ...form, payoutProviderOther: e.target.value })} /></label>}<label className="text-sm font-medium">Recipient name<input className="field-control mt-2 w-full" value={form.payoutName} onChange={(e) => setForm({ ...form, payoutName: e.target.value })} /></label><label className="text-sm font-medium">Account / wallet identifier<input className="field-control mt-2 w-full" value={form.payoutIdentifier} onChange={(e) => setForm({ ...form, payoutIdentifier: e.target.value })} placeholder={existing.payoutComplete ? "Already saved" : "Enter securely"} /></label></div>{data?.payoutAccount && <p className="mt-4 text-sm font-semibold text-success">Payout destination saved: {data.payoutAccount.provider} · {data.payoutAccount.maskedIdentifier}. Verification: {labelStatus(data.payoutAccount.verificationState || "pending")}.</p>}</SectionCard>}
     {step === 5 && <div className="space-y-4">
       <SectionCard padded title="Short work training" description="Complete only the modules for the work you selected. Each module has operating guidance and one quick comprehension check; Spotly records the module version you completed.">
         <div className="space-y-3">{requiredTraining.map((moduleId) => {
@@ -821,6 +899,96 @@ function DriverMobileNav({ safe, hasActive }) {
   return <nav aria-label="Driver mobile navigation" className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 rounded-2xl border bg-[color-mix(in_srgb,var(--surface)_96%,transparent)] p-1.5 shadow-xl backdrop-blur md:hidden">{items.map(([id,href,labelText]) => <Link key={id} href={href} className={cn("rounded-xl px-1 py-2 text-center text-[11px] font-semibold", safe === id || (id === "active" && hasActive) ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-secondary")}>{labelText}</Link>)}</nav>;
 }
 
+function DriverRideLab() {
+  const { user, authReady } = useAuth();
+  const { toast } = useToast();
+  const [lab, setLab] = useState(null);
+  const [trips, setTrips] = useState({ myTrips: [], offers: [] });
+  const [point, setPoint] = useState(null);
+  const [country, setCountry] = useState("ZW");
+  const [mapOpen, setMapOpen] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const loadTrips = useCallback(async () => {
+    try {
+      const result = await authenticatedFetch("/api/mobility/ride-lab", { cache: "no-store" });
+      setTrips({ myTrips: result.myTrips || [], offers: result.offers || [] });
+    } catch (err) { setError(err.message || "Ride Lab trips could not be loaded."); }
+  }, []);
+  useEffect(() => {
+    if (!authReady || !user?.uid || user.isAnonymous) return undefined;
+    let active = true;
+    authenticatedFetch("/api/driver/ride-lab", { cache: "no-store" })
+      .then((result) => {
+        if (!active) return;
+        setLab(result); setCountry(result.country || "ZW"); setPoint(result.position || null);
+        if (result.allowed) loadTrips();
+      }).catch(() => { if (active) setLab(null); });
+    return () => { active = false; };
+  }, [authReady, user?.uid, user?.isAnonymous, loadTrips]);
+  if (!lab?.allowed) return null;
+  async function publish() {
+    if (!point) return setError("Select a simulated location from the map first.");
+    setBusy("position"); setError("");
+    try {
+      const result = await authenticatedFetch("/api/driver/ride-lab", { method: "POST",
+        body: JSON.stringify({ country, location: { lat: point.lat, lng: point.lng } }) });
+      setLab((previous) => ({ ...previous, position: result.position, country }));
+      await loadTrips();
+      toast("Ride Lab simulated location updated.", { type: "success" });
+    } catch (err) { setError(err.message || "Test location could not be saved."); }
+    finally { setBusy(""); }
+  }
+  async function act(action, rideId) {
+    setBusy(rideId); setError("");
+    try {
+      await authenticatedFetch("/api/mobility/ride-lab", { method: "POST",
+        body: JSON.stringify({ action, rideId }) });
+      await loadTrips();
+      toast("Ride Lab test state updated.", { type: "success" });
+    } catch (err) { setError(err.message || "Could not update the simulated Ride."); }
+    finally { setBusy(""); }
+  }
+  const active = (trips.myTrips || []).filter((ride) => ride.driverId === user?.uid &&
+    !["completed", "cancelled"].includes(ride.state));
+  const offers = (trips.offers || []).filter((ride) => !["completed", "cancelled"].includes(ride.state));
+  return <SectionCard padded title="Ride Lab · simulated Driver" description="Invitation-only sandbox workflow. Test locations and offers remain in isolated Ride Lab records. These are NOT live GPS, production passenger rides, dispatch, payments or safety/PIN certification.">
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="text-sm font-medium">Test country
+        <select className="field-control mt-2 w-full" value={country} onChange={(e)=>{setCountry(e.target.value);setPoint(null);}}>
+          <option value="ZW">Zimbabwe</option><option value="MW">Malawi</option>
+        </select>
+      </label>
+      <Button variant="outline" onClick={()=>setMapOpen(true)}><MapPin className="h-4 w-4"/>Move simulated vehicle</Button>
+      <Button loading={busy==="position"} disabled={!point || Boolean(busy)} onClick={publish}>Publish test point</Button>
+      <Button variant="ghost" onClick={loadTrips} disabled={Boolean(busy)}><RefreshCw className="h-4 w-4"/>Refresh offers</Button>
+    </div>
+    <p className="mt-3 text-xs text-secondary">{point?`Selected position: ${Number(point.lat).toFixed(5)}, ${Number(point.lng).toFixed(5)}`:"No test location selected"}{lab.position?` · Last published: ${Number(lab.position.lat).toFixed(5)}, ${Number(lab.position.lng).toFixed(5)}`:""}</p>
+    {error ? <p role="alert" className="mt-3 text-sm text-danger">{error}</p> : null}
+    <div className="mt-5 grid gap-4 lg:grid-cols-2">
+      <div><p className="mb-2 text-sm font-semibold">Simulated offers from other testers</p>
+        <div className="space-y-3">{offers.map((ride) => <div key={ride.id} className="rounded-xl border p-3">
+          <p className="text-sm font-semibold">{ride.pickup?.label || ride.pickup?.formattedAddress || "Pickup"} → {ride.dropoff?.label || ride.dropoff?.formattedAddress || "Destination"}</p>
+          <p className="mt-1 text-xs text-secondary">Test only · {ride.serviceType}</p>
+          <Button className="mt-3" size="sm" loading={busy===ride.id} disabled={Boolean(busy)} onClick={()=>act("accept", ride.id)}>Accept simulated Ride</Button>
+        </div>)}{!offers.length?<p className="rounded-xl bg-[var(--surface-2)] p-3 text-sm text-secondary">No test offers. Another invited account can create one from Spotly Ride.</p>:null}</div>
+      </div>
+      <div><p className="mb-2 text-sm font-semibold">Your accepted test rides</p>
+        <div className="space-y-3">{active.map((ride) => <div key={ride.id} className="rounded-xl border p-3">
+          <p className="text-sm font-semibold">{String(ride.state).replaceAll("_", " ")}</p>
+          <p className="mt-1 text-xs text-secondary">Move the simulated pin to update the test rider's map. Then advance the lifecycle manually.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" loading={busy===ride.id} disabled={Boolean(busy)} onClick={()=>act("advance",ride.id)}>Advance test state</Button>
+            <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={()=>act("cancel",ride.id)}>Cancel test</Button>
+          </div>
+        </div>)}{!active.length?<p className="rounded-xl bg-[var(--surface-2)] p-3 text-sm text-secondary">No accepted simulated rides.</p>:null}</div>
+      </div>
+    </div>
+    <PinDropMap open={mapOpen} country={country} initialPoint={point} label="Simulate Driver location"
+      onClose={()=>setMapOpen(false)} onSelect={(place)=>setPoint({lat:place.lat,lng:place.lng})}/>
+  </SectionCard>;
+}
+
 export function DriverApp({ section = "home" }) {
   const safe = sectionMeta[section] ? section : "home";
   const { data, loading, error, load } = useDriverData();
@@ -838,5 +1006,5 @@ export function DriverApp({ section = "home" }) {
   const approvedWorkspace = Boolean(data?.driver && ["approved", "ready", "active"].includes(data.driver.status));
   const lifecycleState = Boolean(data?.driver && !approvedWorkspace && ["suspended", "offboarded", "former", "temporarily_unavailable", "offboarding"].includes(data.driver.status));
   const hasActive = Boolean(data?.activeRide || data?.activeParcel || data?.activeJob);
-  return <AuthGate portal="driver" title="Spotly Driver"><PortalShell portalId="driver" activeSection={safe}><div className="mx-auto max-w-[1280px] px-4 py-7 pb-24 sm:px-6 lg:px-8 lg:py-9">{loading ? <PageSkeleton /> : error ? <EmptyState icon={AlertTriangle} title="Driver could not be loaded" description={error} action={<Button onClick={() => load()}><RefreshCw className="h-4 w-4" />Try again</Button>} /> : lifecycleState ? <DriverLifecycleState data={data || {}} /> : !approvedWorkspace ? <DriverApplication data={data || {}} reload={load} /> : <><LiveLocation data={data} />{hasActive && safe !== "active" ? <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">You have active work</p><p className="mt-1 text-sm">{data.activeRide ? "Ride" : data.activeParcel ? "Send" : data.activeJob?.fulfilmentMode === "driver_shops" ? "Shop & Deliver" : "Delivery"} · {labelStatus((data.activeRide || data.activeParcel || data.activeJob)?.state)}</p></div><Button asChild><Link href="/active">Resume job</Link></Button></div> : null}{safe === "home" && <DriverHome data={data} reload={load} onOffer={offer} onRideOffer={rideOffer} onParcelOffer={parcelOffer} />}{safe === "jobs" && <Jobs data={data} offer={offer} rideOffer={rideOffer} parcelOffer={parcelOffer} />}{safe === "jobs" && <DriverAssistShopping mode="jobs" />}{safe === "active" && (data.activeRide ? <ActiveRide data={data} reload={load} /> : data.activeParcel ? <ActiveParcel data={data} reload={load} /> : <ActiveJob data={data} reload={load} />)}{safe === "active" && <DriverAssistShopping mode="active" />}{safe === "earnings" && <Earnings data={data} reload={load} />}{safe === "history" && <HistoryView data={data} />}{safe === "notifications" && <NotificationCenter workspace="driver" title="Driver notifications" description="Offers, application actions, safety, payouts and work updates." />}{safe === "support" && <Support data={data} />}{safe === "profile" && <Profile data={data} reload={load} />}<DriverMobileNav safe={safe} hasActive={hasActive}/></>}</div></PortalShell></AuthGate>;
+  return <AuthGate portal="driver" title="Spotly Driver"><PortalShell portalId="driver" activeSection={safe}><div className="mx-auto max-w-[1280px] px-4 py-7 pb-24 sm:px-6 lg:px-8 lg:py-9">{loading ? <PageSkeleton /> : error ? <EmptyState icon={AlertTriangle} title="Driver could not be loaded" description={error} action={<Button onClick={() => load()}><RefreshCw className="h-4 w-4" />Try again</Button>} /> : lifecycleState ? <DriverLifecycleState data={data || {}} /> : !approvedWorkspace ? <DriverApplication data={data || {}} reload={load} /> : <><LiveLocation data={data} />{hasActive && safe !== "active" ? <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">You have active work</p><p className="mt-1 text-sm">{data.activeRide ? "Ride" : data.activeParcel ? "Send" : data.activeJob?.fulfilmentMode === "driver_shops" ? "Shop & Deliver" : "Delivery"} · {labelStatus((data.activeRide || data.activeParcel || data.activeJob)?.state)}</p></div><Button asChild><Link href="/active">Resume job</Link></Button></div> : null}{safe === "home" && <DriverHome data={data} reload={load} onOffer={offer} onRideOffer={rideOffer} onParcelOffer={parcelOffer} />}{safe === "jobs" && <Jobs data={data} offer={offer} rideOffer={rideOffer} parcelOffer={parcelOffer} />}{safe === "jobs" && <DriverAssistShopping mode="jobs" />}{safe === "active" && (data.activeRide ? <ActiveRide data={data} reload={load} /> : data.activeParcel ? <ActiveParcel data={data} reload={load} /> : <ActiveJob data={data} reload={load} />)}{safe === "active" && <DriverAssistShopping mode="active" />}{safe === "earnings" && <Earnings data={data} reload={load} />}{safe === "history" && <HistoryView data={data} />}{safe === "notifications" && <NotificationCenter workspace="driver" title="Driver notifications" description="Offers, application actions, safety, payouts and work updates." />}{safe === "support" && <Support data={data} />}{safe === "profile" && <Profile data={data} reload={load} />}<DriverMobileNav safe={safe} hasActive={hasActive}/></>}<DriverRideLab /></div></PortalShell></AuthGate>;
 }
