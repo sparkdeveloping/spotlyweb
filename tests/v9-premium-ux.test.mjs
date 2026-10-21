@@ -104,6 +104,10 @@ test("Premium discovery differentiates independent Assist from photo-less stale 
 test("The Menu editorial spotlight uses real source observations without indefinite guaranteed prices", async () => {
   const { THEMENU_RESTAURANT_SPOTLIGHTS, themenuPriceLabel } = await import("../lib/themenu-curated-spotlights.js");
   assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS.length, 2);
+  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[0].menuItems.length, 8);
+  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[1].menuItems.length, 8);
+  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[0].menuItems.find(dish=>dish.name==="Margherita pizza").price,12);
+  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[1].menuItems.find(dish=>dish.name==="Garlic prawns").price,12);
   const asOf = Date.parse("2026-10-21T23:00:00Z");
   for (const item of THEMENU_RESTAURANT_SPOTLIGHTS) {
     assert.equal(new URL(item.listingUrl).hostname, "themenu.co.zw");
@@ -116,4 +120,8 @@ test("The Menu editorial spotlight uses real source observations without indefin
   assert.match(page,/not guaranteed Spotly checkout prices/);
   assert.match(page,/independent Spotly Assist checkout is offered only where separately enabled/i);
   assert.match(page,/Editorial food photo/);
+  assert.match(page,/Preview \{item\.menuItems\.length\} dishes/);
+  assert.match(page,/group-open:rotate-90/);
+  assert.match(page,/items-start gap-3 sm:grid-cols-2/);
+  assert.match(page,/themenuPriceLabel\(item\)\?`\$\$\{dish\.price\.toFixed\(2\)\}`:"Check price"/);
 });

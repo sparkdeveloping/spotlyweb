@@ -415,10 +415,16 @@ export function ServiceDiscoveryView({
               <p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--accent)]">New · Restaurant menu discovery</p>
               <h3 className="mt-2 text-xl font-semibold tracking-[-.035em]">Explore menus around Harare</h3>
               <p className="mt-2 text-sm leading-6 text-secondary">Independent restaurant information sourced from <a href="https://themenu.co.zw/" target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">The Menu</a> under a content-use permission. Prices are source listings, not guaranteed Spotly checkout prices or claims of restaurant affiliation.</p>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">{THEMENU_RESTAURANT_SPOTLIGHTS.map(item=><a key={item.id} href={item.listingUrl} target="_blank" rel="noopener noreferrer" className="group flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)] p-4 transition hover:border-[var(--accent)]">
-                <span className="block"><span className="block font-semibold">{item.name}</span><span className="mt-1 block text-xs text-secondary">{item.category} · {item.area}</span><span className="mt-3 block text-sm text-[var(--text)]">{item.menuHighlight}</span><span className="mt-1 block text-xs font-medium text-secondary">{themenuPriceLabel(item)||"Check the source for current prices"}</span></span>
-                <span className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent)]">View source menu <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5"/></span>
-              </a>)}</div>
+              <div className="mt-5 grid items-start gap-3 sm:grid-cols-2">{THEMENU_RESTAURANT_SPOTLIGHTS.map(item=><div key={item.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)] p-4">
+                <p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.category} · {item.area}</p>
+                <p className="mt-3 text-sm text-[var(--text)]">{item.menuHighlight}</p><p className="mt-1 text-xs font-medium text-secondary">{themenuPriceLabel(item)||"Check the source for current prices"}</p>
+                <details className="group mt-4 border-t border-[var(--border)] pt-3">
+                  <summary className="cursor-pointer list-none text-xs font-semibold text-[var(--accent)]">Preview {item.menuItems.length} dishes and source-listed prices <span aria-hidden="true" className="ml-1 inline-block transition-transform group-open:rotate-90">›</span></summary>
+                  <ul className="mt-3 divide-y divide-[var(--border-subtle)]">{item.menuItems.map(dish=><li key={dish.name} className="flex items-start justify-between gap-3 py-2 text-xs"><span className="min-w-0 leading-5">{dish.name}</span><span className="shrink-0 font-semibold tabular-nums">{themenuPriceLabel(item)?`${dish.price.toFixed(2)}`:"Check price"}</span></li>)}</ul>
+                  <p className="mt-2 text-[11px] leading-5 text-secondary">Illustrative source listing, not verified stock or a Spotly sales offer. Prices require reconfirmation.</p>
+                </details>
+                <a href={item.listingUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent)] hover:underline">Open The Menu's source listing <ArrowRight className="h-3.5 w-3.5"/></a>
+              </div>)}</div>
               <p className="mt-3 text-xs leading-5 text-[var(--text-3)]">The Menu information captured 21 October 2026. Confirm availability and price directly before purchase; independent Spotly Assist checkout is offered only where separately enabled.</p>
             </div>
           </div>
