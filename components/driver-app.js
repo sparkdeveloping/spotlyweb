@@ -83,6 +83,7 @@ function dateTime(value) { if (!value) return "—"; const date = new Date(value
 function useDriverData() {
   const { user, authReady } = useAuth();
   const [data, setData] = useState(null);
+  const [dataUid, setDataUid] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const load = useCallback(async ({ quiet = false } = {}) => {
@@ -102,7 +103,7 @@ function useDriverData() {
           await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
         }
       }
-      setData(next); setError("");
+      setData(next); setDataUid(user.uid); setError("");
     } catch (err) {
       // Preserve the last usable screen if a subsequent refresh temporarily fails.
       if (!quiet) setError(err.message || "Driver information could not be loaded.");
@@ -114,7 +115,9 @@ function useDriverData() {
     const timer = window.setInterval(() => load({ quiet: true }), 10000);
     return () => window.clearInterval(timer);
   }, [authReady, user?.uid, user?.isAnonymous, load]);
-  return { data, loading: loading || !authReady, error, load };
+  // Never render one Driver\'s cached application while a different Firebase identity is loading.
+  const identityMatches = Boolean(user?.uid && dataUid === user.uid);
+  return { data: identityMatches ? data : null, loading: loading || !authReady || (!error && Boolean(user?.uid) && !identityMatches), error, load };
 }
 
 function ProgressSteps({ current }) {
@@ -293,6 +296,7 @@ function DriverApplication({ data, reload }) {
 
   return <div className="space-y-6">
     <PageHeader eyebrow={`Step ${step + 1} of ${APPLICATION_STEPS.length}`} title="Activation Centre" description="Spotly shows only the requirements that apply to the work and vehicle you choose." />
+    <p className="text-xs text-secondary">Signed in as <span className="font-semibold text-[var(--text)]">{user?.email || "your Spotly account"}</span>. Your application and approved work are linked to this account.</p>
     <ProgressSteps current={step} />
     <SectionCard padded title="Application readiness" description="Checks reflect the latest saved application. Unsaved edits appear once saved. Documents awaiting Spotly review can still be submitted.">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{APPLICATION_STEPS.map((label, index) => {
