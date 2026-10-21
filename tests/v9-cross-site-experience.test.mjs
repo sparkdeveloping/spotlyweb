@@ -50,7 +50,7 @@ test("Ride booking is guided through pickup, destination, vehicle and review, wi
   assert.match(ride, /bookingStep===2/);
   assert.match(ride, /bookingStep===3/);
   assert.match(ride, /setBookingStep\(3\)/);
-  assert.match(ride, /authenticatedFetch\("\/api\/customer\/rides\/quote"/);
+  assert.match(ride, /quoteFetch\("\/api\/customer\/rides\/quote"/);
   assert.match(ride, /quote\.bookingAvailable===true/);
   assert.match(ride, /PinDropMap/);
 });
