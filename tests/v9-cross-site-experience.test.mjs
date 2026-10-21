@@ -104,6 +104,10 @@ test("Ride Lab supports isolated two-account shadow requests, offers, test movem
   assert.match(route, /transaction\.update\(ref, \{ state, driverId: user\.uid/);
   assert.match(route, /driver_assigned: "driver_to_pickup"/);
   assert.match(route, /driver_arrived_pickup: "in_trip"/);
+  assert.match(route, /positionSnap\.data\(\)\?\.country !== data\.pickup\.country/);
+  assert.match(route, /updatedAt: positions\[index\]\.data\(\)\?\.updatedAt/);
+  assert.match(rider, /driverUpdatedAt=\{ride\.driverPosition\.updatedAt\}/);
+  assert.match(rider, /simulation pickup=\{ride\.pickup\}/);
   assert.match(route, /in_trip: "completed"/);
   assert.match(route, /insideCountryBounds\(input\.pickup/);
   assert.match(route, /enforceRateLimit/);
@@ -117,4 +121,11 @@ test("Ride Lab supports isolated two-account shadow requests, offers, test movem
   assert.match(rider, /Simulated Driver location/);
   assert.match(rider, /Ride booking is still disabled/);
   assert.match(admin, /recentTrips/);
+});
+
+test("shadow map is explicitly labeled and never claims verified road routing", async () => {
+  const map = await read("components/mobility-map.js");
+  assert.match(map, /simulation=false/);
+  assert.match(map, /Illustrative straight-line test path/);
+  assert.match(map, /not a verified driving route or real-time operational tracking/);
 });

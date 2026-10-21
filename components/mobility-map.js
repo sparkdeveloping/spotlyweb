@@ -92,7 +92,7 @@ export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",labe
  </div>;
 }
 
-export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverUpdatedAt=null,compact=false}){
+export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverUpdatedAt=null,compact=false,simulation=false}){
  const container=useRef(null),map=useRef(null),pinMarkers=useRef([]),driverMarker=useRef(null);
  const [error,setError]=useState("");
  const coords=[pickup,...path,dropoff].map(coordinates).filter(Boolean);
@@ -162,9 +162,9 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
  const recentDriver=lastFix&&Date.now()-lastFix<=120000&&coordinates(driverLocation);
  return <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]">
    <div className="flex items-center justify-between gap-2 p-3"><div><p className="text-sm font-semibold">Road route</p>
-     <p className="mt-1 text-xs text-secondary">Verified driving route · {recentDriver?"Driver GPS recent":"Driver position may be unavailable or stale"}</p></div><Navigation className="h-4 w-4 text-[var(--accent)]"/></div>
+     <p className="mt-1 text-xs text-secondary">{simulation ? "Illustrative straight-line test path · simulated location, never live GPS" : `Verified driving route · ${recentDriver?"Driver GPS recent":"Driver position may be unavailable or stale"}`}</p></div><Navigation className="h-4 w-4 text-[var(--accent)]"/></div>
    <div ref={container} className={compact?"h-48 w-full":"h-[290px] w-full"} aria-label="Route street map"/>
    {error&&<p className="px-3 py-2 text-xs text-secondary">{error}</p>}
-   <p className="p-3 text-xs text-secondary">Map data © OpenStreetMap contributors. Traffic-aware arrival times are not guaranteed.</p>
+   <p className="p-3 text-xs text-secondary">{simulation ? "Ride Lab only: this is not a verified driving route or real-time operational tracking. " : ""}Map data © OpenStreetMap contributors. Traffic-aware arrival times are not guaranteed.</p>
   </div>;
 }

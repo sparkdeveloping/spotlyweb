@@ -937,7 +937,7 @@ function DriverRideLab() {
   }
   const active = (trips.myTrips || []).filter((ride) => ride.driverId === user?.uid &&
     !["completed", "cancelled"].includes(ride.state));
-  const offers = (trips.offers || []).filter((ride) => !["completed", "cancelled"].includes(ride.state));
+  const offers = (trips.offers || []).filter((ride) => ride.pickup?.country === country && !["completed", "cancelled"].includes(ride.state));
   return <SectionCard padded title="Ride Lab · simulated Driver" description="Invitation-only sandbox workflow. Test locations and offers remain in isolated Ride Lab records. These are NOT live GPS, production passenger rides, dispatch, payments or safety/PIN certification.">
     <div className="flex flex-wrap items-end gap-3">
       <label className="text-sm font-medium">Test country
@@ -956,8 +956,8 @@ function DriverRideLab() {
         <div className="space-y-3">{offers.map((ride) => <div key={ride.id} className="rounded-xl border p-3">
           <p className="text-sm font-semibold">{ride.pickup?.label || ride.pickup?.formattedAddress || "Pickup"} → {ride.dropoff?.label || ride.dropoff?.formattedAddress || "Destination"}</p>
           <p className="mt-1 text-xs text-secondary">Test only · {ride.serviceType}</p>
-          <Button className="mt-3" size="sm" loading={busy===ride.id} disabled={Boolean(busy)} onClick={()=>act("accept", ride.id)}>Accept simulated Ride</Button>
-        </div>)}{!offers.length?<p className="rounded-xl bg-[var(--surface-2)] p-3 text-sm text-secondary">No test offers. Another invited account can create one from Spotly Ride.</p>:null}</div>
+          <Button className="mt-3" size="sm" loading={busy===ride.id} disabled={Boolean(busy)} onClick={()=>act("accept", ride.id)} disabled={!lab.position || Boolean(busy)}>Accept simulated Ride</Button>
+        </div>)}{!offers.length?<p className="rounded-xl bg-[var(--surface-2)] p-3 text-sm text-secondary">No matching test offers. Publish a test position in this country, then another invited account can create a request from Spotly Ride.</p>:null}</div>
       </div>
       <div><p className="mb-2 text-sm font-semibold">Your accepted test rides</p>
         <div className="space-y-3">{active.map((ride) => <div key={ride.id} className="rounded-xl border p-3">

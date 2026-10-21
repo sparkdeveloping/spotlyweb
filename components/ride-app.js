@@ -243,7 +243,7 @@ export function RideApp() {
               <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{String(ride.state).replaceAll("_"," ")}</p>
                 {!["cancelled","completed"].includes(ride.state)?<Button variant="outline" size="sm" loading={rideLabBusy==="cancel"} onClick={()=>testRide("cancel",ride.id)}>Cancel test</Button>:null}</div>
               <p className="mt-2 text-xs text-secondary">{ride.pickup?.label||"Pickup"} → {ride.dropoff?.label||"Destination"}</p>
-              {ride.driverPosition?<div className="mt-3"><RoadRouteMap compact pickup={ride.pickup} dropoff={ride.dropoff} driverLocation={ride.driverPosition}/><p className="mt-1 text-xs text-secondary">Simulated Driver location · not live GPS</p></div>:null}
+              {ride.driverPosition?<div className="mt-3"><RoadRouteMap compact simulation pickup={ride.pickup} dropoff={ride.dropoff} driverLocation={ride.driverPosition} driverUpdatedAt={ride.driverPosition.updatedAt}/><p className="mt-1 text-xs text-secondary">Simulated Driver location · not live GPS</p></div>:null}
             </div>)}</div>
           </div> : null}
           {bookingStep===3 ? <div className="mt-7 rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-5">
