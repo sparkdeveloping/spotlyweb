@@ -86,6 +86,7 @@ export function RideApp() {
   const { user, profile } = useAuth(); const { settings } = usePlatform(); const { toast } = useToast();
   const ridesEnabled = typeof settings?.mobility?.ridesEnabled === "boolean" ? settings.mobility.ridesEnabled : settings?.launch?.ridesEnabled === true;
   const cashEnabled = settings?.mobility?.cashEnabled !== false; const paynowEnabled = settings?.integrations?.paynowEnabled === true && (settings?.commerce?.paymentMethods || []).includes("paynow");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [bookingStep, setBookingStep] = useState(0); const [bookingError, setBookingError] = useState("");
   const [city,setCity]=useState(settings?.launch?.primaryCity||"Harare");
   const [country,setCountry]=useState(settings?.launch?.primaryCountry==="MW"?"MW":"ZW");
@@ -127,10 +128,10 @@ export function RideApp() {
 
   if (activeRide) return <CustomerShell immersive><ActiveRide ride={activeRide} onRefresh={() => load({ quiet: true })} onCancel={setCancelRide} /></CustomerShell>;
 
-  if (!ridesEnabled) return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
+  if (!ridesEnabled && !previewOpen) return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
     <section className="mx-auto max-w-4xl py-8 sm:py-16">
       <div className="grid items-center gap-8 md:grid-cols-[1fr_300px]">
-        <div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Ride</p><h1 className="mt-3 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">Ride is coming to {city} carefully, not halfway.</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-2)]">The ride request, Driver dispatch, trip lifecycle and operations system are installed. Customer requests open only when approved Driver coverage and local support are ready.</p><div className="mt-7 flex flex-wrap gap-3"><Button asChild><Link href="/">Explore what is live</Link></Button><Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button></div></div>
+        <div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Ride</p><h1 className="mt-3 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">Ride is coming to {city} carefully, not halfway.</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-2)]">The ride request, Driver dispatch, trip lifecycle and operations system are installed. Customer requests open only when approved Driver coverage and local support are ready.</p><div className="mt-7 flex flex-wrap gap-3"><Button asChild><Link href="/">Explore what is live</Link></Button><Button variant="outline" onClick={()=>setPreviewOpen(true)}>Preview a fare</Button><Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button></div></div>
         <div className="relative min-h-[250px] overflow-hidden rounded-[24px] bg-[linear-gradient(145deg,#5142c4,#7567e8)] p-6 text-[var(--service-foreground)]"><ServiceArtwork service="ride" className="absolute inset-0 h-full w-full" /><div className="relative z-10 flex h-full min-h-[200px] items-end"><div><p className="text-xs font-semibold uppercase tracking-[.12em] text-[color-mix(in_srgb,var(--service-foreground)_70%,transparent)]">Not yet available here</p><p className="mt-2 text-xl font-semibold">We will only switch this on when the full ride is ready.</p></div></div></div>
       </div>
     </section>
@@ -138,6 +139,7 @@ export function RideApp() {
 
   return <AuthGate portal="customer" title="Sign in to request a ride">
     <CustomerShell current="home" user={user} profile={profile} locationLabel={city} mainClassName="max-w-[1180px]">
+      {!ridesEnabled ? <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">Fare preview only. Ride booking is still disabled until approved Drivers, dispatch and local support are verified.</div> : null}
       <section className="mx-auto grid max-w-3xl gap-6 pb-10">
         <div>
           <div className="relative overflow-hidden rounded-[24px] bg-[linear-gradient(145deg,#5142c4,#7567e8)] px-5 py-7 text-[var(--service-foreground)] sm:px-7 sm:py-9">

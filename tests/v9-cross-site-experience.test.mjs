@@ -15,6 +15,8 @@ test("real commerce takes priority over stale popularity, ratings or paid featur
   ]);
   assert.deepEqual(ranked.map((x) => x.id), ["merchant", "assist", "verified", "directory"]);
   assert.equal(marketplaceTier({ public: true, source: { type: "spotly_assist_research" } }), 1, "research imports alone do not prove Assist availability");
+  assert.equal(marketplaceTier({ assistStoreId: "real-assist-store", assistAccepting: true }), 3, "a working Assist handoff outranks passive listings");
+  assert.equal(marketplaceTier({ assistStoreId: "closed-assist-store", assistAccepting: false }), 1, "disabled Assist availability must not be promoted");
 });
 
 test("no editorial images point to unshipped assets, and generic directory logos cannot impersonate merchants", () => {
@@ -72,4 +74,18 @@ test("Admin capability cards use a legible two-column layout, not four cards acr
   assert.ok(start >= 0);
   assert.match(source.slice(start, start + 300), /md:grid-cols-2/);
   assert.doesNotMatch(source.slice(start, start + 300), /xl:grid-cols-4/);
+});
+
+test("directory cards use a designed non-branded visual and provide a real Assist handoff", async () => {
+  const [cover, home, service, app] = await Promise.all([
+    read("components/marketplace-designed-cover.js"),
+    read("components/marketplace-home.js"),
+    read("components/service-experience.js"),
+    read("components/marketplace-app.js")
+  ]);
+  assert.match(cover, /Illustrative category card/);
+  for (const source of [home, service, app]) assert.match(source, /MarketplaceDesignedCover/);
+  assert.match(home, /assistStoreId/);
+  assert.match(home, /shop-for-me\?store=/);
+  assert.match(home, /Editorial photo credits/);
 });
