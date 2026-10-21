@@ -20,7 +20,8 @@ import { cn } from "@/lib/cn";
 import { NotificationCenter } from "@/components/notification-center";
 import { DriverAssistShopping } from "@/components/driver-assist-shopping";
 import { zimbabweCities } from "@/data/business-config";
-import { DRIVER_CAPABILITIES, DRIVER_TRAINING_MODULES, capabilitySupportsVehicle, documentRequirementsFor, normalizeCapabilities, trainingModuleIsCurrent, trainingRequirementsFor } from "@/lib/driver-capabilities";
+import { DRIVER_CAPABILITIES, DRIVER_TRAINING_MODULES, capabilitySupportsVehicle, documentRequirementsFor, normalizeCapabilities, trainingModuleIsCurrent, trainingRequirementsFor, driverPhoneUsable } from "@/lib/driver-capabilities";
+import {safeDriverBlockers,driverBlockerHelp,DRIVER_APPLICATION_STEP_LABELS} from "@/lib/driver-application-feedback";
 
 const sectionMeta = {
   home: { title: "Driver home", description: "Know if you can work, what is live now and what needs your attention." },
@@ -105,6 +106,7 @@ function DriverApplication({ data, reload }) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
+  const [submissionBlockers,setSubmissionBlockers]=useState([]);
   const [openTraining, setOpenTraining] = useState("");
   const [trainingAnswers, setTrainingAnswers] = useState({});
   const [documentMeta, setDocumentMeta] = useState({});
@@ -136,6 +138,14 @@ function DriverApplication({ data, reload }) {
   const requiredDocumentTypes = documentRequirementsFor({ vehicleType: form.vehicleType, capabilities: requestedCapabilities });
   const requiredTraining = trainingRequirementsFor(requestedCapabilities);
   const reviewState = ["application_submitted", "under_review", "information_required", "approved", "rejected"].includes(existing.status) && !editing;
+  const pendingChecks=safeDriverBlockers(data?.readiness?.checks||[]).filter(item=>{
+    if(item.id==="agreements")return !(form.agreementsAccepted&&form.locationConsent);
+    if(item.id==="identity")return !(
+      form.legalName.trim()&&driverPhoneUsable(form.phone)&&form.city.trim()
+    );
+    return true;
+  });
+  const applicationIssues=submissionBlockers.length?submissionBlockers:pendingChecks;
 
   function setVehicleType(vehicleType) {
     const nextCapabilities = normalizeCapabilities(form.requestedCapabilities, vehicleType).filter((id) => capabilitySupportsVehicle(id, vehicleType));
@@ -163,7 +173,7 @@ function DriverApplication({ data, reload }) {
     finally { setSaving(false); }
   }
   async function nextStep() {
-    if (step === 0 && (!form.legalName.trim() || !form.phone.trim() || !form.city.trim())) return setError("Add your name, phone and city before continuing.");
+    if (step === 0 && (!form.legalName.trim() || !driverPhoneUsable(form.phone) || !form.city.trim())) return setError("Add your name, a complete phone number (not just +263), and city before continuing.");
     if (step === 1 && requestedCapabilities.length === 0) return setError("Choose at least one kind of work you want to do.");
     if (step === 1 && form.vehicleType !== "bicycle" && !form.registration.trim()) return setError("Add your motor vehicle registration before continuing.");
     if (step === 1 && form.vehicleType !== "bicycle" && (!form.make.trim() || !form.model.trim())) return setError("Add the make and model of the motor vehicle before continuing.");
@@ -194,7 +204,7 @@ function DriverApplication({ data, reload }) {
   async function completeTraining(moduleId, trainingAnswer) {
     setSaving(true); setError("");
     try {
-      await saveStep(5);
+      if(!(await saveStep(5)))return;
       await authenticatedFetch("/api/driver/application", { method: "POST", body: JSON.stringify({ action: "training", trainingModuleId: moduleId, trainingAnswer, trainingComplete: true }) });
       await reload({ quiet: true });
       setOpenTraining("");
@@ -203,14 +213,22 @@ function DriverApplication({ data, reload }) {
     finally { setSaving(false); }
   }
   async function submit() {
-    setSaving(true); setError("");
+    setSaving(true);setError("");setSubmissionBlockers([]);
     try {
-      await saveStep(5);
+      if(!form.agreementsAccepted||!form.locationConsent){
+        setError("Accept both Driver agreements before submitting.");
+        setSubmissionBlockers([{id:"agreements",label:"Driver agreements accepted",step:5}]);
+        return;
+      }
+      if(!(await saveStep(5)))return;
       await authenticatedFetch("/api/driver/application", { method: "POST", body: JSON.stringify({ action: "submit" }) });
+      setSubmissionBlockers([]);
       await reload();
       toast("Your Driver application was sent to Spotly.", { type: "success" });
-    } catch (err) { setError(err.message); }
-    finally { setSaving(false); }
+    }catch(err){
+      setError(err.message||"Driver application could not be submitted.");
+      setSubmissionBlockers(safeDriverBlockers(err.blockers||err.payload?.blockers||[]));
+    }finally{setSaving(false);}
   }
 
   if (reviewState) {
@@ -228,12 +246,28 @@ function DriverApplication({ data, reload }) {
     <PageHeader eyebrow={`Step ${step + 1} of ${APPLICATION_STEPS.length}`} title="Activation Centre" description="Spotly shows only the requirements that apply to the work and vehicle you choose." />
     <ProgressSteps current={step} />
     {error && <div role="alert" className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{error}</div>}
+    {submissionBlockers.length>0&&<section aria-label="Application requirements to fix" className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+      <h3 className="font-semibold">Fix these items before submitting</h3>
+      <p className="mt-1 text-xs text-secondary">These are the requirements returned by Spotly's submission validation. Your uploaded work and training will not be discarded.</p>
+      <div className="mt-3 space-y-2">{submissionBlockers.map(item=><div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{item.label}</p><p className="mt-1 text-xs text-secondary">{driverBlockerHelp(item)}</p></div>
+        <Button size="sm" variant="outline" onClick={()=>{setStep(item.step);setError("");}}>Go to {DRIVER_APPLICATION_STEP_LABELS[item.step]}</Button>
+      </div>)}</div>
+    </section>}
     {step === 0 && <SectionCard padded title="Your details" description="Tell Spotly who you are, where you plan to work and who to contact in an emergency."><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">Full legal name<input className="field-control mt-2 w-full" value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} /></label><label className="text-sm font-medium">Phone<input className="field-control mt-2 w-full" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+263" /></label><label className="text-sm font-medium">City<select className="field-control mt-2 w-full" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}>{zimbabweCities.map((city) => <option key={city} value={city}>{city}</option>)}</select></label><label className="text-sm font-medium">Emergency contact<input className="field-control mt-2 w-full" value={form.emergencyContactName} onChange={(e) => setForm({ ...form, emergencyContactName: e.target.value })} /></label><label className="text-sm font-medium">Emergency phone<input className="field-control mt-2 w-full" value={form.emergencyContactPhone} onChange={(e) => setForm({ ...form, emergencyContactPhone: e.target.value })} /></label></div></SectionCard>}
     {step === 1 && <div className="space-y-4"><SectionCard padded title="What do you want to do?" description="Each work type activates independently. You can start earning from approved work without waiting for unrelated work types."><div className="grid gap-3 sm:grid-cols-2">{Object.values(DRIVER_CAPABILITIES).map((capability) => { const supported = capabilitySupportsVehicle(capability.id, form.vehicleType); const selected = form.requestedCapabilities.includes(capability.id); return <button type="button" key={capability.id} disabled={!supported} onClick={() => toggleCapability(capability.id)} className={cn("rounded-xl border p-4 text-left transition", selected && supported && "border-[var(--accent)] bg-[var(--accent-soft)]", !supported && "cursor-not-allowed opacity-45")}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{capability.label}</p><p className="mt-1 text-sm leading-5 text-secondary">{capability.description}</p></div>{selected && supported ? <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--accent)]" /> : null}</div></button>; })}</div></SectionCard><SectionCard padded title="Your vehicle" description="The vehicle changes what work and documents Spotly can require."><div className="grid gap-3 sm:grid-cols-4">{DRIVER_VEHICLES.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => setVehicleType(id)} className={cn("rounded-xl border p-4 text-left", form.vehicleType === id && "border-[var(--accent)] bg-[var(--accent-soft)]")}><Icon className="h-6 w-6 text-[var(--accent)]" /><p className="mt-3 font-semibold">{label}</p></button>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label className="text-sm font-medium">Ownership<select className="field-control mt-2 w-full" value={form.ownership} onChange={(e) => setForm({ ...form, ownership: e.target.value })}><option value="driver_owned">I own it</option><option value="rented">Rented</option><option value="fleet_owned">Fleet / company owned</option></select></label>{form.vehicleType !== "bicycle" && <label className="text-sm font-medium">Registration<input className="field-control mt-2 w-full uppercase" value={form.registration} onChange={(e) => setForm({ ...form, registration: e.target.value })} placeholder="ABC 1234" /></label>}<label className="text-sm font-medium">Year<input type="number" min="1950" max="2100" className="field-control mt-2 w-full" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="2022" /></label><label className="text-sm font-medium">Make<input className="field-control mt-2 w-full" value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} placeholder={form.vehicleType === "bicycle" ? "Optional" : "Toyota"} /></label><label className="text-sm font-medium">Model<input className="field-control mt-2 w-full" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} /></label></div></SectionCard></div>}
     {step === 2 && <SectionCard padded title="Required documents" description="This list is generated from your selected work and vehicle. Motorized work explicitly requires a Driver licence; a bicycle does not inherit motor-vehicle paperwork."><div className="grid gap-4 md:grid-cols-2">{requiredDocumentTypes.map((type) => { const item = DOCUMENTS.find((entry) => entry.type === type) || { type, label: labelStatus(type), helper: "Upload the evidence Spotly requested." }; const doc = uploaded.get(type); const meta = documentMeta[type] || {}; return <Card key={type} className="p-4"><div className="flex items-start gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]"><IdCard className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{item.label}</p>{doc && <Badge tone={doc.status === "approved" ? "success" : doc.status === "rejected" ? "danger" : "warning"}>{labelStatus(doc.status)}</Badge>}</div><p className="mt-1 text-sm leading-5 text-secondary">{doc?.reviewReason || item.helper}</p>{doc?.referenceNumber ? <p className="mt-2 text-xs text-secondary">Reference: {doc.referenceNumber}</p> : null}{doc?.expiresAt ? <p className="mt-1 text-xs text-secondary">Expires {dateTime(doc.expiresAt)}</p> : null}<div className="mt-4 grid gap-3">{type !== "identity" ? <label className="text-xs font-semibold">{type === "licence" ? "LICENCE NUMBER" : type === "registration" ? "REGISTRATION NUMBER" : "REFERENCE NUMBER (OPTIONAL)"}<input className="field-control mt-1 w-full" value={meta.referenceNumber ?? (type === "registration" ? form.registration : "")} onChange={(event) => setDocumentMeta((current) => ({ ...current, [type]: { ...(current[type] || {}), referenceNumber: event.target.value } }))} disabled={type === "registration" && Boolean(form.registration)} /></label> : null}{EXPIRY_DOCUMENTS.has(type) ? <label className="text-xs font-semibold">EXPIRY DATE<input type="date" className="field-control mt-1 w-full" value={meta.expiresAt || ""} onChange={(event) => setDocumentMeta((current) => ({ ...current, [type]: { ...(current[type] || {}), expiresAt: event.target.value } }))} /></label> : null}<label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-[var(--surface-2)]"><Upload className="h-4 w-4" />{uploading === type ? "Uploading…" : doc ? "Replace document" : "Upload document"}<input type="file" accept="image/*,.pdf" className="sr-only" disabled={Boolean(uploading)} onChange={(event) => uploadDocument(type, event.target.files?.[0])} /></label></div></div></div></Card>; })}</div></SectionCard>}
     {step === 3 && <SectionCard padded title="Where you want to work" description="These are preferences, not guaranteed jobs. Spotly still applies service areas and capability rules."><label className="text-sm font-medium">Preferred areas <span className="font-normal text-tertiary">separate with commas</span><input className="field-control mt-2 w-full" value={form.preferredZones} onChange={(e) => setForm({ ...form, preferredZones: e.target.value })} placeholder="Borrowdale, Highlands, Avondale" /></label><div className="mt-4 rounded-xl bg-[var(--surface-2)] p-4 text-sm text-secondary"><MapPin className="mb-2 h-5 w-5 text-[var(--accent)]" />When you are active, Spotly uses your live location to send nearby work that matches your approved capabilities and selected vehicle.</div></SectionCard>}
     {step === 4 && <SectionCard padded title="Getting paid" description="Saving a payout destination and being approved to work are separate. Spotly will show whether payout verification is still pending."><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Payout type<select className="field-control mt-2 w-full" value={form.payoutType} onChange={(e) => setForm({ ...form, payoutType: e.target.value, payoutProvider: e.target.value === "mobile_money" ? "EcoCash" : "CBZ" })}><option value="mobile_money">Mobile money</option><option value="bank">Bank account</option></select></label><label className="text-sm font-medium">Provider<select className="field-control mt-2 w-full" value={form.payoutProvider} onChange={(e) => setForm({ ...form, payoutProvider: e.target.value, payoutProviderOther: e.target.value === "Other bank" ? form.payoutProviderOther : "" })}>{(form.payoutType === "bank" ? BANK_PAYOUT_PROVIDERS : MOBILE_PAYOUT_PROVIDERS).map((provider) => <option key={provider}>{provider}</option>)}</select></label>{form.payoutType === "bank" && form.payoutProvider === "Other bank" && <label className="text-sm font-medium">Bank name<input className="field-control mt-2 w-full" value={form.payoutProviderOther} onChange={(e) => setForm({ ...form, payoutProviderOther: e.target.value })} /></label>}<label className="text-sm font-medium">Recipient name<input className="field-control mt-2 w-full" value={form.payoutName} onChange={(e) => setForm({ ...form, payoutName: e.target.value })} /></label><label className="text-sm font-medium">Account / wallet identifier<input className="field-control mt-2 w-full" value={form.payoutIdentifier} onChange={(e) => setForm({ ...form, payoutIdentifier: e.target.value })} placeholder={existing.payoutComplete ? "Already saved" : "Enter securely"} /></label></div>{existing.payoutComplete && <p className="mt-4 text-sm font-semibold text-success">Payout details saved. Verification can continue separately.</p>}</SectionCard>}
     {step === 5 && <div className="space-y-4">
+      {applicationIssues.length>0&&<section aria-label="Remaining application requirements" className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+        <h3 className="text-sm font-semibold">{applicationIssues.length} application requirement{applicationIssues.length===1?"":"s"} to complete</h3>
+        <p className="mt-1 text-xs text-secondary">Finish these before sending your application. Spotly will verify the latest saved information on submission.</p>
+        <div className="mt-3 space-y-2">{applicationIssues.map(item=><div key={item.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div className="min-w-0"><span className="font-medium">{item.label}</span><p className="text-xs text-secondary">{driverBlockerHelp(item)}</p></div>
+          <Button size="sm" variant="outline" onClick={()=>{setStep(item.step);setError("");}}>Review {DRIVER_APPLICATION_STEP_LABELS[item.step]}</Button>
+        </div>)}</div>
+      </section>}
       <SectionCard padded title="Short work training" description="Complete only the modules for the work you selected. Each module has operating guidance and one quick comprehension check; Spotly records the module version you completed.">
         <div className="space-y-3">{requiredTraining.map((moduleId) => {
           const module = DRIVER_TRAINING_MODULES[moduleId];
