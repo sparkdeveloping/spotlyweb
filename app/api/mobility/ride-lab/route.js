@@ -2,8 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
-import { insideCountryBounds } from "@/lib/ride-geography";
-import { haversineKm } from "@/lib/driver-delivery-server";
+import { validateRideLabLocations } from "@/lib/ride-lab-validation";
 
 export const runtime = "nodejs";
 const point = z.object({
@@ -70,12 +69,9 @@ export async function POST(request) {
     const now = FieldValue.serverTimestamp();
 
     if (input.action === "request") {
-      if (input.pickup.country !== input.dropoff.country ||
-          !insideCountryBounds(input.pickup, input.pickup.country) ||
-          !insideCountryBounds(input.dropoff, input.pickup.country) ||
-          haversineKm(input.pickup, input.dropoff) < 0.3 ||
-          haversineKm(input.pickup, input.dropoff) > 200) {
-        throw Object.assign(new Error("Choose two different locations within the same supported country (up to 200 km)."), { status: 400 });
+      const locationValidation = validateRideLabLocations(input.pickup, input.dropoff);
+      if (!locationValidation.ok) {
+        throw Object.assign(new Error(locationValidation.error), { status: 400 });
       }
       const doc = collection.doc();
       await doc.create({ customerId: user.uid, driverId: null, state: "searching_driver",
