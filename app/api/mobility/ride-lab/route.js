@@ -51,7 +51,9 @@ export async function GET(request) {
     const open = rows.filter((row) => row.state === "searching_driver" && row.customerId !== user.uid).slice(0, 12);
     const driverIds = [...new Set(own.map((row) => row.driverId).filter(Boolean))].slice(0, 12);
     const positions = await Promise.all(driverIds.map((id) => db.collection("mobilityRideLabLocations").doc(id).get()));
-    const byDriver = Object.fromEntries(driverIds.map((id, index) => [id, positions[index]?.data()?.location || null]));
+    const byDriver = Object.fromEntries(driverIds.map((id, index) => [id, positions[index]?.exists ? {
+      ...(positions[index].data()?.location || {}), updatedAt: positions[index].data()?.updatedAt?.toDate?.()?.toISOString() || null
+    } : null]));
     return Response.json({ ok: true, simulation: true,
       myTrips: own.map((row) => publicTrip(row.id, row, byDriver[row.driverId] || null)),
       offers: open.map((row) => publicTrip(row.id, row)) },
@@ -92,6 +94,10 @@ export async function POST(request) {
       const data = snap.data();
       if (END.has(data.state)) throw Object.assign(new Error("This simulated Ride is already finished."), { status: 409 });
       if (input.action === "accept") {
+        const positionSnap = await transaction.get(db.collection("mobilityRideLabLocations").doc(user.uid));
+        if (!positionSnap.exists || positionSnap.data()?.country !== data.pickup.country) {
+          throw Object.assign(new Error("Publish a simulated Driver position in the Ride's country before accepting."), { status: 409 });
+        }
         if (data.customerId === user.uid) throw Object.assign(new Error("Use a different invited account as the test Driver."), { status: 403 });
         if (data.state !== "searching_driver" || data.driverId) throw Object.assign(new Error("Another tester already accepted this test request."), { status: 409 });
         state = "driver_assigned";
