@@ -83,10 +83,45 @@ function ActiveRide({ ride, onRefresh, onCancel }) {
 }
 
 export function RideApp() {
-  const { user, profile } = useAuth(); const { settings } = usePlatform(); const { toast } = useToast();
+  const { user, profile, authReady } = useAuth(); const { settings } = usePlatform(); const { toast } = useToast();
   const ridesEnabled = typeof settings?.mobility?.ridesEnabled === "boolean" ? settings.mobility.ridesEnabled : settings?.launch?.ridesEnabled === true;
   const cashEnabled = settings?.mobility?.cashEnabled !== false; const paynowEnabled = settings?.integrations?.paynowEnabled === true && (settings?.commerce?.paymentMethods || []).includes("paynow");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [rideLabAllowed, setRideLabAllowed] = useState(false);
+  const [rideLabTrips, setRideLabTrips] = useState([]);
+  const [rideLabBusy, setRideLabBusy] = useState("");
+  const [rideLabError, setRideLabError] = useState("");
+  const loadRideLab = useCallback(async () => {
+    try {
+      const result = await authenticatedFetch("/api/mobility/ride-lab", { cache: "no-store" });
+      setRideLabTrips(result.myTrips || []); setRideLabError("");
+    } catch (err) { setRideLabError(err.message || "Could not load simulated rides."); }
+  }, []);
+  useEffect(() => {
+    if (!authReady || !user?.uid || user.isAnonymous) return undefined;
+    let active = true;
+    authenticatedFetch("/api/driver/ride-lab", { cache: "no-store" })
+      .then((result) => {
+        if (!active) return;
+        setRideLabAllowed(Boolean(result.allowed));
+        if (result.allowed) loadRideLab();
+      }).catch(() => { if (active) setRideLabAllowed(false); });
+    return () => { active = false; };
+  }, [authReady, user?.uid, user?.isAnonymous, loadRideLab]);
+
+  async function testRide(action, rideId = "") {
+    setRideLabBusy(action); setRideLabError("");
+    try {
+      const body = action === "request" ? { action, pickup, dropoff, serviceType } : { action, rideId };
+      await authenticatedFetch("/api/mobility/ride-lab", {
+        method: "POST", body: JSON.stringify(body)
+      });
+      await loadRideLab();
+      toast("Simulated Ride Lab request updated. No real booking or payment occurred.", { type: "info" });
+    } catch (err) { setRideLabError(err.message || "The simulated Ride could not be updated."); }
+    finally { setRideLabBusy(""); }
+  }
+
   const [bookingStep, setBookingStep] = useState(0); const [bookingError, setBookingError] = useState("");
   const [city,setCity]=useState(settings?.launch?.primaryCity||"Harare");
   const [country,setCountry]=useState(settings?.launch?.primaryCountry==="MW"?"MW":"ZW");
@@ -131,7 +166,7 @@ export function RideApp() {
   if (!ridesEnabled && !previewOpen) return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
     <section className="mx-auto max-w-4xl py-8 sm:py-16">
       <div className="grid items-center gap-8 md:grid-cols-[1fr_300px]">
-        <div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Ride</p><h1 className="mt-3 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">Ride is coming to {city} carefully, not halfway.</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-2)]">The ride request, Driver dispatch, trip lifecycle and operations system are installed. Customer requests open only when approved Driver coverage and local support are ready.</p><div className="mt-7 flex flex-wrap gap-3"><Button asChild><Link href="/">Explore what is live</Link></Button><Button variant="outline" onClick={()=>setPreviewOpen(true)}>Preview a fare</Button><Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button></div></div>
+        <div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Ride</p><h1 className="mt-3 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">Ride is coming to {city} carefully, not halfway.</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-2)]">The ride request, Driver dispatch, trip lifecycle and operations system are installed. Customer requests open only when approved Driver coverage and local support are ready.</p><div className="mt-7 flex flex-wrap gap-3"><Button asChild><Link href="/">Explore what is live</Link></Button><Button variant="outline" onClick={()=>setPreviewOpen(true)}>Preview a fare</Button>{rideLabAllowed?<Button variant="outline" onClick={()=>{setPreviewOpen(true);setBookingStep(3);}}>Open my test rides</Button>:null}<Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button></div></div>
         <div className="relative min-h-[250px] overflow-hidden rounded-[24px] bg-[linear-gradient(145deg,#5142c4,#7567e8)] p-6 text-[var(--service-foreground)]"><ServiceArtwork service="ride" className="absolute inset-0 h-full w-full" /><div className="relative z-10 flex h-full min-h-[200px] items-end"><div><p className="text-xs font-semibold uppercase tracking-[.12em] text-[color-mix(in_srgb,var(--service-foreground)_70%,transparent)]">Not yet available here</p><p className="mt-2 text-xl font-semibold">We will only switch this on when the full ride is ready.</p></div></div></div>
       </div>
     </section>
@@ -195,6 +230,21 @@ export function RideApp() {
           {bookingStep===2 ? <div className="mt-7">
           <section className="border-t border-[var(--border-subtle)] pt-7"><div className="flex items-end justify-between gap-4"><div><p className="text-sm font-semibold">Choose your ride</p><p className="mt-1 text-sm text-[var(--text-3)]">Same route, different fit.</p></div></div><div className="mt-4 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">{rideTypes.map((type) => { const selected = serviceType === type.id; return <button key={type.id} onClick={() => {setServiceType(type.id);setQuote(null);}} className="flex w-full items-center gap-4 py-4 text-left transition hover:bg-[var(--surface-hover)]"><span className={cn("flex h-11 w-11 items-center justify-center rounded-[12px]", selected ? "bg-[var(--accent)] text-[var(--on-accent)]" : "bg-[var(--surface-2)] text-[var(--accent)]")}><CarFront className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold">{type.label}</strong><span className="mt-1 block text-xs text-[var(--text-3)]">{type.description} · {type.seats}</span></span>{selected ? <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" /> : <ChevronRight className="h-4 w-4 text-[var(--text-3)]" />}</button>; })}</div></section>
           <div className="mt-7 grid grid-cols-2 gap-3"><Button variant="outline" onClick={()=>setBookingStep(1)}>Back</Button><Button size="lg" onClick={getQuote} loading={loading==="quote"} disabled={!pickup||!dropoff}>See fare<ChevronRight className="h-4 w-4"/></Button></div>
+          </div> : null}
+          {bookingStep===3 && rideLabAllowed ? <div className="mt-5 rounded-2xl border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.13em] text-[var(--accent)]">Invitation only · Ride Lab</p><h2 className="mt-2 text-lg font-semibold">Simulated rides</h2>
+              <p className="mt-1 text-xs leading-5 text-secondary">No Driver dispatch, payment, cash, PIN, or operational verification. A second invited tester accepts in Driver Ride Lab. Refresh to view status and shadow location.</p></div>
+              <Button size="sm" variant="outline" onClick={loadRideLab}><RefreshCw className="h-4 w-4"/>Refresh tests</Button>
+            </div>
+            {pickup&&dropoff ? <Button className="mt-4 w-full" loading={rideLabBusy==="request"} disabled={Boolean(rideLabBusy)} onClick={()=>testRide("request")}>Create simulated Ride request</Button> :
+              <p className="mt-3 text-sm text-secondary">To create a new test request, go through pickup and destination first.</p>}
+            {rideLabError?<p role="alert" className="mt-3 text-sm text-danger">{rideLabError}</p>:null}
+            <div className="mt-4 space-y-3">{rideLabTrips.filter(ride=>ride.customerId===user?.uid).map(ride=><div key={ride.id} className="rounded-xl border bg-[var(--surface)] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{String(ride.state).replaceAll("_"," ")}</p>
+                {!["cancelled","completed"].includes(ride.state)?<Button variant="outline" size="sm" loading={rideLabBusy==="cancel"} onClick={()=>testRide("cancel",ride.id)}>Cancel test</Button>:null}</div>
+              <p className="mt-2 text-xs text-secondary">{ride.pickup?.label||"Pickup"} → {ride.dropoff?.label||"Destination"}</p>
+              {ride.driverPosition?<div className="mt-3"><RoadRouteMap compact pickup={ride.pickup} dropoff={ride.dropoff} driverLocation={ride.driverPosition}/><p className="mt-1 text-xs text-secondary">Simulated Driver location · not live GPS</p></div>:null}
+            </div>)}</div>
           </div> : null}
           {bookingStep===3 ? <div className="mt-7 rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-5">
             <h2 className="text-xl font-semibold">Review your journey</h2>

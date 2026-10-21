@@ -89,3 +89,32 @@ test("directory cards use a designed non-branded visual and provide a real Assis
   assert.match(home, /shop-for-me\?store=/);
   assert.match(home, /Editorial photo credits/);
 });
+
+test("Ride Lab supports isolated two-account shadow requests, offers, test movement and state transitions", async () => {
+  const [route, rider, driver, admin] = await Promise.all([
+    read("app/api/mobility/ride-lab/route.js"),
+    read("components/ride-app.js"),
+    read("components/driver-app.js"),
+    read("app/api/admin/ride-lab/route.js")
+  ]);
+  assert.match(route, /await invited\(db, user\)/);
+  assert.match(route, /user\.email_verified !== true/);
+  assert.match(route, /mobilityRideLabTrips/);
+  assert.match(route, /data\.customerId === user\.uid/);
+  assert.match(route, /transaction\.update\(ref, \{ state, driverId: user\.uid/);
+  assert.match(route, /driver_assigned: "driver_to_pickup"/);
+  assert.match(route, /driver_arrived_pickup: "in_trip"/);
+  assert.match(route, /in_trip: "completed"/);
+  assert.match(route, /insideCountryBounds\(input\.pickup/);
+  assert.match(route, /enforceRateLimit/);
+  for (const liveCollection of ["rideTrips", "rideOffers", "driverPresence", "driverEarningsLedger"]) {
+    assert.doesNotMatch(route, new RegExp(`db\\.collection\\("${liveCollection}"\\)`));
+  }
+  assert.match(driver, /Accept simulated Ride/);
+  assert.match(driver, /Move simulated vehicle/);
+  assert.match(driver, /Advance test state/);
+  assert.match(rider, /Create simulated Ride request/);
+  assert.match(rider, /Simulated Driver location/);
+  assert.match(rider, /Ride booking is still disabled/);
+  assert.match(admin, /recentTrips/);
+});

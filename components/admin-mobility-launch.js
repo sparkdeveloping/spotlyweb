@@ -77,6 +77,8 @@ export function AdminMobilityLaunch({openRide,openSend}){
      </label>
      <div className="rounded-xl bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">Last test positions</p>
        {(lab?.recentPositions||[]).length?<div className="mt-3 max-h-40 space-y-2 overflow-y-auto">{lab.recentPositions.slice(0,8).map(row=><p key={row.id} className="text-xs text-secondary">{row.country} · {Number(row.lat).toFixed(4)}, {Number(row.lng).toFixed(4)} · {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "No timestamp"}</p>)}</div>:<p className="mt-2 text-xs text-secondary">No test locations yet.</p>}
+       <p className="mt-4 text-sm font-semibold">Recent simulated test rides</p>
+       {(lab?.recentTrips||[]).length?<div className="mt-2 max-h-28 space-y-2 overflow-y-auto">{lab.recentTrips.slice(0,8).map(row=><p key={row.id} className="text-xs text-secondary">{String(row.state).replaceAll("_"," ")} · {row.createdAt ? new Date(row.createdAt).toLocaleString() : "Test session"}</p>)}</div>:<p className="mt-2 text-xs text-secondary">No simulated rides yet.</p>}
        <p className="mt-3 text-xs text-secondary">Requires a verified email. Inviting does not approve a Driver, grant operational capabilities, or enable production booking.</p>
      </div>
    </div>

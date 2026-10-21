@@ -12,11 +12,14 @@ export async function GET(request) {
   try {
     await authenticateRequest(request, { roles: ROLES });
     const { db } = getAdminServices();
-    const [config, sample] = await Promise.all([
+    const [config, sample, trips] = await Promise.all([
       db.collection("mobilityRideLab").doc("access").get(),
-      db.collection("mobilityRideLabLocations").orderBy("updatedAt", "desc").limit(30).get()
+      db.collection("mobilityRideLabLocations").orderBy("updatedAt", "desc").limit(30).get(),
+      db.collection("mobilityRideLabTrips").orderBy("updatedAt", "desc").limit(20).get()
     ]);
     return Response.json({ ok: true, testerEmails: config.data()?.testerEmails || [],
+      recentTrips: trips.docs.map((doc) => ({ id: doc.id, state: doc.data().state, simulation: true,
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || null })),
       recentPositions: sample.docs.map((doc) => ({ id: doc.id, country: doc.data().country,
         lat: doc.data().location?.lat, lng: doc.data().location?.lng,
         updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || null })) });

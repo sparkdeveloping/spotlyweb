@@ -889,43 +889,87 @@ function DriverRideLab() {
   const { user, authReady } = useAuth();
   const { toast } = useToast();
   const [lab, setLab] = useState(null);
+  const [trips, setTrips] = useState({ myTrips: [], offers: [] });
   const [point, setPoint] = useState(null);
   const [country, setCountry] = useState("ZW");
   const [mapOpen, setMapOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const loadTrips = useCallback(async () => {
+    try {
+      const result = await authenticatedFetch("/api/mobility/ride-lab", { cache: "no-store" });
+      setTrips({ myTrips: result.myTrips || [], offers: result.offers || [] });
+    } catch (err) { setError(err.message || "Ride Lab trips could not be loaded."); }
+  }, []);
   useEffect(() => {
     if (!authReady || !user?.uid || user.isAnonymous) return undefined;
     let active = true;
     authenticatedFetch("/api/driver/ride-lab", { cache: "no-store" })
-      .then((result) => { if (active) { setLab(result); setCountry(result.country || "ZW"); setPoint(result.position || null); } })
-      .catch(() => { if (active) setLab(null); });
+      .then((result) => {
+        if (!active) return;
+        setLab(result); setCountry(result.country || "ZW"); setPoint(result.position || null);
+        if (result.allowed) loadTrips();
+      }).catch(() => { if (active) setLab(null); });
     return () => { active = false; };
-  }, [authReady, user?.uid, user?.isAnonymous]);
+  }, [authReady, user?.uid, user?.isAnonymous, loadTrips]);
   if (!lab?.allowed) return null;
   async function publish() {
-    if (!point) return setError("Select a location from the map first.");
-    setBusy(true); setError("");
+    if (!point) return setError("Select a simulated location from the map first.");
+    setBusy("position"); setError("");
     try {
       const result = await authenticatedFetch("/api/driver/ride-lab", { method: "POST",
         body: JSON.stringify({ country, location: { lat: point.lat, lng: point.lng } }) });
       setLab((previous) => ({ ...previous, position: result.position, country }));
-      toast("Simulated Ride Lab position updated.", { type: "success" });
+      await loadTrips();
+      toast("Ride Lab simulated location updated.", { type: "success" });
     } catch (err) { setError(err.message || "Test location could not be saved."); }
-    finally { setBusy(false); }
+    finally { setBusy(""); }
   }
-  return <SectionCard padded title="Ride Lab · simulated location" description="Invitation-only testing. Pick a point on the map and submit it as a test position. This does not change your live GPS, create or accept a real ride, or dispatch a Driver.">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+  async function act(action, rideId) {
+    setBusy(rideId); setError("");
+    try {
+      await authenticatedFetch("/api/mobility/ride-lab", { method: "POST",
+        body: JSON.stringify({ action, rideId }) });
+      await loadTrips();
+      toast("Ride Lab test state updated.", { type: "success" });
+    } catch (err) { setError(err.message || "Could not update the simulated Ride."); }
+    finally { setBusy(""); }
+  }
+  const active = (trips.myTrips || []).filter((ride) => ride.driverId === user?.uid &&
+    !["completed", "cancelled"].includes(ride.state));
+  const offers = (trips.offers || []).filter((ride) => !["completed", "cancelled"].includes(ride.state));
+  return <SectionCard padded title="Ride Lab · simulated Driver" description="Invitation-only sandbox workflow. Test locations and offers remain in isolated Ride Lab records. These are NOT live GPS, production passenger rides, dispatch, payments or safety/PIN certification.">
+    <div className="flex flex-wrap items-end gap-3">
       <label className="text-sm font-medium">Test country
-        <select className="field-control mt-2 w-full" value={country} onChange={e=>{setCountry(e.target.value);setPoint(null);}}>
+        <select className="field-control mt-2 w-full" value={country} onChange={(e)=>{setCountry(e.target.value);setPoint(null);}}>
           <option value="ZW">Zimbabwe</option><option value="MW">Malawi</option>
         </select>
       </label>
-      <Button variant="outline" onClick={()=>setMapOpen(true)}><MapPin className="h-4 w-4"/>Choose simulated Driver location</Button>
-      <Button disabled={!point || busy} loading={busy} onClick={publish}>Publish test point</Button>
+      <Button variant="outline" onClick={()=>setMapOpen(true)}><MapPin className="h-4 w-4"/>Move simulated vehicle</Button>
+      <Button loading={busy==="position"} disabled={!point || Boolean(busy)} onClick={publish}>Publish test point</Button>
+      <Button variant="ghost" onClick={loadTrips} disabled={Boolean(busy)}><RefreshCw className="h-4 w-4"/>Refresh offers</Button>
     </div>
-    <p className="mt-3 text-xs text-secondary">{point?`Selected: ${Number(point.lat).toFixed(5)}, ${Number(point.lng).toFixed(5)}`:"No point selected"}{lab.position?` · Last recorded test location: ${Number(lab.position.lat).toFixed(5)}, ${Number(lab.position.lng).toFixed(5)}`:""}</p>
-    {error?<p role="alert" className="mt-3 text-sm text-danger">{error}</p>:null}
+    <p className="mt-3 text-xs text-secondary">{point?`Selected position: ${Number(point.lat).toFixed(5)}, ${Number(point.lng).toFixed(5)}`:"No test location selected"}{lab.position?` · Last published: ${Number(lab.position.lat).toFixed(5)}, ${Number(lab.position.lng).toFixed(5)}`:""}</p>
+    {error ? <p role="alert" className="mt-3 text-sm text-danger">{error}</p> : null}
+    <div className="mt-5 grid gap-4 lg:grid-cols-2">
+      <div><p className="mb-2 text-sm font-semibold">Simulated offers from other testers</p>
+        <div className="space-y-3">{offers.map((ride) => <div key={ride.id} className="rounded-xl border p-3">
+          <p className="text-sm font-semibold">{ride.pickup?.label || ride.pickup?.formattedAddress || "Pickup"} → {ride.dropoff?.label || ride.dropoff?.formattedAddress || "Destination"}</p>
+          <p className="mt-1 text-xs text-secondary">Test only · {ride.serviceType}</p>
+          <Button className="mt-3" size="sm" loading={busy===ride.id} disabled={Boolean(busy)} onClick={()=>act("accept", ride.id)}>Accept simulated Ride</Button>
+        </div>)}{!offers.length?<p className="rounded-xl bg-[var(--surface-2)] p-3 text-sm text-secondary">No test offers. Another invited account can create one from Spotly Ride.</p>:null}</div>
+      </div>
+      <div><p className="mb-2 text-sm font-semibold">Your accepted test rides</p>
+        <div className="space-y-3">{active.map((ride) => <div key={ride.id} className="rounded-xl border p-3">
+          <p className="text-sm font-semibold">{String(ride.state).replaceAll("_", " ")}</p>
+          <p className="mt-1 text-xs text-secondary">Move the simulated pin to update the test rider's map. Then advance the lifecycle manually.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" loading={busy===ride.id} disabled={Boolean(busy)} onClick={()=>act("advance",ride.id)}>Advance test state</Button>
+            <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={()=>act("cancel",ride.id)}>Cancel test</Button>
+          </div>
+        </div>)}{!active.length?<p className="rounded-xl bg-[var(--surface-2)] p-3 text-sm text-secondary">No accepted simulated rides.</p>:null}</div>
+      </div>
+    </div>
     <PinDropMap open={mapOpen} country={country} initialPoint={point} label="Simulate Driver location"
       onClose={()=>setMapOpen(false)} onSelect={(place)=>setPoint({lat:place.lat,lng:place.lng})}/>
   </SectionCard>;
