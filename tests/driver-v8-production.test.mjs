@@ -379,3 +379,20 @@ test("Driver submit returns blockers, never follows failed saves and retains lif
   assert.match(bootstrap, /const primaryVehicle = vehicles\.find/);
   assert.match(bootstrap, /payoutAccount, phase/);
 });
+
+test("Admin cannot approve an unsubmitted Driver or bypass payout verification", async () => {
+  const [admin, delivery, application] = await Promise.all([
+    read("app/api/admin/drivers/route.js"),
+    read("lib/driver-delivery-server.js"),
+    read("app/api/driver/application/route.js")
+  ]);
+  assert.match(admin, /\["application_submitted", "under_review"\]\.includes\(app\.status\)/);
+  assert.match(admin, /payoutAccountSnap\.data\(\)\?\.verificationState !== "verified"/);
+  assert.match(admin, /applicationReadiness\(app, vehicle, documents, payoutAccountSnap\.data\(\)\)/);
+  assert.match(admin, /payoutVerificationState: "verified"/);
+  assert.match(admin, /Verify the Driver payout destination before activating this work type/);
+  assert.match(delivery, /verified_payout/);
+  assert.match(delivery, /driver\.payoutVerificationState === "verified"/);
+  assert.match(application, /payoutBatch\.set\(driverRef, \{ payoutVerificationState: "pending"/);
+  assert.match(admin, /payoutBatch\.set\(driverRef, \{ payoutVerificationState: nextPayoutState/);
+});

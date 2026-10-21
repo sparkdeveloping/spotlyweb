@@ -238,11 +238,19 @@ export async function POST(request) {
         throw Object.assign(new Error("Enter a valid provider, recipient name and account or wallet identifier."), { status: 400 });
       }
       const identifier = safeText(body.payout.identifier, 120);
-      await db.collection("driverPayoutAccounts").doc(user.uid).set({
+      const payoutRef = db.collection("driverPayoutAccounts").doc(user.uid);
+      const driverRef = db.collection("drivers").doc(user.uid);
+      const linkedDriver = await driverRef.get();
+      const payoutBatch = db.batch();
+      payoutBatch.set(payoutRef, {
         driverId: user.uid, type: body.payout.type, provider: safeText(body.payout.provider, 80), recipientName: safeText(body.payout.recipientName, 160),
-        identifierEncrypted: encryptFinancialValue(identifier), maskedIdentifier: `•••• ${accountLast4(identifier)}`, verificationState: "pending", updatedAt: now, createdAt: now
+        identifierEncrypted: encryptFinancialValue(identifier), maskedIdentifier: `•••• ${accountLast4(identifier)}`, verificationState: "pending",
+        updatedAt: now, ...(!existingPayout.exists ? { createdAt: now } : {})
       }, { merge: true });
-      await appRef.set({ payoutComplete: true, updatedAt: now }, { merge: true });
+      payoutBatch.set(appRef, { payoutComplete: true, updatedAt: now }, { merge: true });
+      // A changed payout must be reverified before an already-active Driver can accept more work.
+      if (linkedDriver.exists) payoutBatch.set(driverRef, { payoutVerificationState: "pending", updatedAt: now }, { merge: true });
+      await payoutBatch.commit();
       await Promise.allSettled([
         notifyUser({ db, messaging, auth, userId: user.uid, title: "Payout details sent to Spotly", body: "Your payout destination is saved and waiting for verification.", href: "/profile", category: "driver_review", workspace: "driver", module: "money", eventType: "driver_payout_account.submitted", importance: "high", entityType: "driverPayoutAccount", entityId: user.uid, email: true, forceOperationalEmail: true }),
         notifyRoleAudience({ db, messaging, auth, title: "Driver payout account needs review", body: `${safeText(body.payout.recipientName, 160)} submitted Driver payout details for verification.`, href: `/mobility?driver=${encodeURIComponent(user.uid)}`, category: "admin_review", workspace: "admin", module: "money", eventType: "driver_payout_account.submitted", importance: "high", entityType: "driverPayoutAccount", entityId: user.uid, email: true, forceOperationalEmail: true }, ["super_admin", "finance_admin", "operations_manager"])
