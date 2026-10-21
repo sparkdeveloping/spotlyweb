@@ -81,15 +81,28 @@ function labelStatus(value = "") { return String(value).replaceAll("_", " "); }
 function dateTime(value) { if (!value) return "—"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short" }); }
 
 function useDriverData() {
-  const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  const { user, authReady } = useAuth();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const load = useCallback(async ({ quiet = false } = {}) => {
-    if (!quiet) setLoading(true); setError("");
-    try { setData(await authenticatedFetch("/api/driver/bootstrap")); }
-    catch (err) { setError(err.message || "Driver information could not be loaded."); }
-    finally { if (!quiet) setLoading(false); }
-  }, []);
-  useEffect(() => { load(); const timer = window.setInterval(() => load({ quiet: true }), 10000); return () => clearInterval(timer); }, [load]);
-  return { data, loading, error, load };
+    // Wait for shared Firebase login restoration instead of raising a false error.
+    if (!authReady || !user?.uid || user.isAnonymous) return;
+    if (!quiet) { setLoading(true); setError(""); }
+    try {
+      const next = await authenticatedFetch("/api/driver/bootstrap", { cache: "no-store" });
+      setData(next); setError("");
+    } catch (err) {
+      if (!quiet) setError(err.message || "Driver information could not be loaded.");
+    } finally { if (!quiet) setLoading(false); }
+  }, [authReady, user?.uid, user?.isAnonymous]);
+  useEffect(() => {
+    if (!authReady || !user?.uid || user.isAnonymous) return undefined;
+    load();
+    const timer = window.setInterval(() => load({ quiet: true }), 10000);
+    return () => window.clearInterval(timer);
+  }, [authReady, user?.uid, user?.isAnonymous, load]);
+  return { data, loading: loading || !authReady, error, load };
 }
 
 function ProgressSteps({ current }) {
