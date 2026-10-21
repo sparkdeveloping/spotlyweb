@@ -103,7 +103,7 @@ function useDriverData() {
           await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
         }
       }
-      setData(next); setDataUid(user.uid); setError("");
+      setData(next); setError(""); setDataUid(user.uid);
     } catch (err) {
       // Preserve the last usable screen if a subsequent refresh temporarily fails.
       if (!quiet) setError(err.message || "Driver information could not be loaded.");
