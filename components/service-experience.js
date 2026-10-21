@@ -28,6 +28,7 @@ import { MARKETPLACE_SERVICES } from "@/components/marketplace-home";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
 import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 import { marketplaceMedia, marketplaceMediaSet } from "@/lib/marketplace-editorial";
+import { MarketplaceDesignedCover } from "@/components/marketplace-designed-cover";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 
 const SERVICE_CONFIG = {
@@ -161,7 +162,7 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
   return <article className={cn("group relative overflow-hidden rounded-[var(--radius-card)] border bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card", commerce ? "border-[var(--border-subtle)]" : "border-[color-mix(in_srgb,var(--border-subtle)_80%,transparent)]")}>
     <button type="button" onClick={() => assisted ? window.location.assign("/shop-for-me?store=" + encodeURIComponent(business.assistStoreId)) : assistedBooking ? window.location.assign("/assist/book?business=" + encodeURIComponent(business.id)) : onOpen(business)} className="block w-full text-left">
       <div className={cn("relative overflow-hidden", commerce ? "aspect-[16/10] bg-[var(--surface-2)]" : "aspect-[16/9] bg-[var(--surface-2)]")}>
-        {image ? <Image src={image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 768px) 100vw, 33vw" /> : <div className="flex h-full flex-col justify-end bg-[linear-gradient(145deg,var(--accent-soft),var(--surface-2)_62%,var(--surface))] p-5"><span className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] bg-[var(--surface)] text-[var(--accent)] shadow-sm"><Store className="h-5 w-5" /></span><p className="mt-8 max-w-[80%] text-lg font-semibold tracking-[-.025em] text-[var(--text)]">{profile.displayCategory}</p><p className="mt-1 text-xs text-[var(--text-3)]">Spotly directory</p></div>}
+        {image ? <Image src={image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 768px) 100vw, 33vw" /> : <MarketplaceDesignedCover business={business} />}
         {image ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" /> : null}
         {image && media.kind === "editorial" ? <span title="Editorial category image — not supplied by this business" aria-label="Editorial category image" className="absolute bottom-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-black/45 text-[var(--media-text)] backdrop-blur"><Info className="h-3.5 w-3.5" /></span> : null}
         {commerce && image ? <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}<MarketplaceTrustBadge business={business} compact />{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div> : null}
