@@ -35,6 +35,7 @@ import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 import { useTheme } from "@/components/providers";
 import { useAuth } from "@/components/firebase-provider";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { Badge, Overlay } from "@/components/ui";
 import { markNotificationRead, subscribeNotifications } from "@/lib/firebase-services";
 import { adminSectionsForProfile } from "@/lib/admin-access";
@@ -429,6 +430,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
             <UserMenu portal={portal} />
           </div>
         </header>
+        <EmailVerificationBanner />
         {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = canonicalSpotlyUrl(attentionNotification.href, notificationWorkspace(attentionNotification)); }} className="rounded-[10px] bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">View update</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-[10px] border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
         <main key={pathname} className={cn("portal-gradient min-h-[calc(100vh-4.5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}>

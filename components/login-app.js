@@ -53,8 +53,11 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
     try {
       if (mode === "signup") {
         if (!acceptedTerms) throw new Error("Confirm that you agree to the Spotly terms and privacy notice.");
-        await createAccount({ email, password, displayName });
-        toast("Your Spotly account is ready. We also sent an email verification link.", { title: "Welcome to Spotly" });
+        const signup = await createAccount({ email, password, displayName });
+        toast(signup.verificationEmailSent
+          ? "Account created. Check your email for a verification link. You can resend it from your Spotly workspace."
+          : "Account created, but we could not send the verification email. Use Resend verification email in your Spotly workspace.",
+          { title: "Verify your email", type: signup.verificationEmailSent ? "success" : "info", duration: 10000 });
       } else if (mode === "reset") {
         await resetPassword(email);
         setResetSent(true);
@@ -79,7 +82,7 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
       ? "Create one Spotly account, then continue directly into your Driver application."
       : portal === "business"
         ? "Create one Spotly account, then continue the business claim or setup you started."
-        : "Create one account for orders, pickup updates, and any workspaces you are later invited to use."
+        : "Create one account for orders, pickup updates, and invited workspaces. We will ask you to verify your email after signup."
     : mode === "reset"
       ? "Enter the email used for your Spotly account."
       : portal === "business"

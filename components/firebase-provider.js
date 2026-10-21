@@ -120,6 +120,7 @@ export function FirebaseProvider({ children }) {
   const [driverApplication, setDriverApplication] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [verificationRevision, setVerificationRevision] = useState(0);
   const recaptchaRef = useRef(null);
   const sharedBootstrapAttemptedRef = useRef(false);
   const initialAuthResolvedRef = useRef(false);
@@ -282,10 +283,18 @@ export function FirebaseProvider({ children }) {
         : await createUserWithEmailAndPassword(client.auth, normalizedEmail, password);
       if (displayName) await updateProfile(result.user, { displayName });
       await ensureUserProfile(result.user, { displayName });
+      // Creating the account must not claim email delivery succeeded when Firebase declined it.
+      // Send before cross-domain SSO: a temporary session issue must not prevent the link.
+      let verificationEmailSent = false;
+      try {
+        await sendEmailVerification(result.user, { url: spotlyPortalUrl("customer", "/account") });
+        verificationEmailSent = true;
+      } catch {
+        // Signup remains valid. The in-app verification banner offers a real resend action.
+      }
       await persistSharedBrowserSession(result.user, { required: true });
-      await sendEmailVerification(result.user, { url: spotlyPortalUrl("customer", "/account") }).catch(() => {});
       await track("sign_up", { method: "password" });
-      return result.user;
+      return { user: result.user, verificationEmailSent };
     } catch (error) {
       throw new Error(friendlyAuthError(error));
     } finally {
@@ -317,6 +326,56 @@ export function FirebaseProvider({ children }) {
     await clearSharedBrowserSession();
     if (client) await signOut(client.auth);
   }, [user]);
+
+  const sendVerificationEmail = useCallback(async () => {
+    const current = getFirebaseClient()?.auth?.currentUser;
+    if (!current || current.isAnonymous || !current.email) {
+      throw new Error("Sign in with an email address to request verification.");
+    }
+    try {
+      await current.reload();
+      setVerificationRevision((previous) => previous + 1);
+      if (current.emailVerified) return { alreadyVerified: true };
+      await sendEmailVerification(current, { url: spotlyPortalUrl("customer", "/account") });
+      return { alreadyVerified: false };
+    } catch (error) {
+      throw new Error(friendlyAuthError(error));
+    }
+  }, []);
+
+  const refreshEmailVerification = useCallback(async () => {
+    const current = getFirebaseClient()?.auth?.currentUser;
+    if (!current || current.isAnonymous) throw new Error("Sign in to check your email verification.");
+    try {
+      await current.reload();
+      // The Ride Lab and other protected API routes read the refreshed email_verified token claim.
+      await current.getIdToken(true);
+      setVerificationRevision((previous) => previous + 1);
+      return current.emailVerified === true;
+    } catch (error) {
+      throw new Error(friendlyAuthError(error));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.uid || !user?.email || user.isAnonymous || user.emailVerified) return undefined;
+    let lastRefresh = 0;
+    function refreshOnReturn() {
+      if (document.visibilityState !== "visible" || !getFirebaseClient()?.auth?.currentUser) return;
+      const now = Date.now();
+      if (now - lastRefresh < 30000) return;
+      lastRefresh = now;
+      refreshEmailVerification().catch(() => {
+        // Manual verification status refresh remains available in the banner.
+      });
+    }
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+    };
+  }, [user?.uid, user?.email, user?.isAnonymous, user?.emailVerified, refreshEmailVerification]);
 
   const resetPassword = useCallback(async (email) => {
     const client = getFirebaseClient();
@@ -411,6 +470,8 @@ export function FirebaseProvider({ children }) {
     createAccount,
     signIn,
     logout,
+    sendVerificationEmail,
+    refreshEmailVerification,
     resetPassword,
     linkProvider,
     addPassword,
@@ -418,7 +479,7 @@ export function FirebaseProvider({ children }) {
     enablePushNotifications,
     ensureAnonymousSession,
     hasRole
-  }), [user, profile, memberships, staffProfile, driverProfile, driverApplication, authReady, authError, createAccount, signIn, logout, resetPassword, linkProvider, addPassword, beginPhoneLink, enablePushNotifications, ensureAnonymousSession, hasRole]);
+  }), [user, profile, memberships, staffProfile, driverProfile, driverApplication, authReady, authError, verificationRevision, createAccount, signIn, logout, sendVerificationEmail, refreshEmailVerification, resetPassword, linkProvider, addPassword, beginPhoneLink, enablePushNotifications, ensureAnonymousSession, hasRole]);
 
   return <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>;
 }

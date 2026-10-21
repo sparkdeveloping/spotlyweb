@@ -1,4 +1,5 @@
 "use client";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -62,7 +63,7 @@ export function CustomerShell({
     }
   }
 
-  if (immersive) return <div className="min-h-screen bg-[var(--background)] text-[var(--text)]">{children}</div>;
+  if (immersive) return <div className="min-h-screen bg-[var(--background)] text-[var(--text)]"><EmailVerificationBanner />{children}</div>;
 
   return <div className="min-h-screen bg-[var(--background)] text-[var(--text)]">
     <header className="customer-topbar sticky top-0 z-40 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] backdrop-blur-2xl">
@@ -105,6 +106,7 @@ export function CustomerShell({
       </div>
       {locationPanel}
     </header>
+    <EmailVerificationBanner />
 
     <main className={cn("v7-page-enter mx-auto w-full max-w-[1320px] px-4 pb-28 pt-5 sm:px-6 sm:pt-7 lg:px-8 lg:pb-14", mainClassName)}>{children}</main>
 
