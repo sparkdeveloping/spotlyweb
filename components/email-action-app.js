@@ -47,7 +47,7 @@ export function EmailActionApp() {
         setDetail("This link is for a different account action. Open the original email again.");
         return;
       }
-      setAccountEmail(info.data?.email || info.data?.previousEmail || "");
+      setAccountEmail(mode === "revertSecondFactorAddition" ? (info.data?.multiFactorInfo?.displayName || info.data?.multiFactorInfo?.phoneNumber || "") : (info.data?.email || info.data?.previousEmail || ""));
       setPhase("ready");
     }).catch((error) => {
       if (!active) return;
@@ -81,7 +81,7 @@ export function EmailActionApp() {
         setConfirmPassword("");
       } else {
         await applyActionCode(auth, code);
-        if (mode === "verifyEmail" && auth.currentUser) {
+        if (["verifyEmail", "verifyAndChangeEmail"].includes(mode) && auth.currentUser) {
           // Refresh the current browser session when available. The action link
           // also works in a separate browser with no authenticated session.
           await auth.currentUser.reload().catch(() => null);
@@ -99,7 +99,11 @@ export function EmailActionApp() {
     ? "Your email has been verified. You can now return to Spotly and continue where you left off."
     : mode === "resetPassword"
       ? "Your Spotly password has been updated. Sign in with your new password."
-      : "Your previous email address has been restored. Review your account security when you sign in.";
+      : mode === "recoverEmail"
+        ? "Your previous email address has been restored. Review your account security when you sign in."
+        : mode === "verifyAndChangeEmail"
+          ? "Your new email address has been confirmed. Sign in again if Spotly asks you to refresh your account."
+          : "The recently added security factor has been removed. Review your account security when you sign in.";
   const Icon = phase === "success" ? CheckCircle2 : mode === "resetPassword" ? KeyRound : mode === "recoverEmail" ? LockKeyhole : MailCheck;
 
   return <div className="relative flex min-h-screen flex-col overflow-hidden bg-[var(--grouped)] text-[var(--text)]">
@@ -123,7 +127,7 @@ export function EmailActionApp() {
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-7 w-7" /></span>
             <h2 className="mt-6 text-2xl font-semibold tracking-[-.035em]">{phase === "success" ? "All set" : config?.title || "Account link unavailable"}</h2>
             <p className="mt-2 text-sm leading-6 text-secondary">{phase === "success" ? successText : config?.description || "Return to Spotly to request a valid account link."}</p>
-            {phase === "ready" && accountEmail && <p className="mt-4 break-all rounded-xl bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">Account: <strong className="text-[var(--text)]">{accountEmail}</strong></p>}
+            {phase === "ready" && accountEmail && <p className="mt-4 break-all rounded-xl bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">{mode === "revertSecondFactorAddition" ? "Security factor: " : "Account: "}<strong className="text-[var(--text)]">{accountEmail}</strong></p>}
 
             {phase === "checking" && <div role="status" className="mt-7 flex items-center gap-2 text-sm text-secondary"><RefreshCw className="h-4 w-4 animate-spin" />Checking your secure link…</div>}
 

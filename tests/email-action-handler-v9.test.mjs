@@ -9,6 +9,8 @@ test("all Firebase email template actions have matching safe operations", () => 
   assert.equal(EMAIL_ACTION_MODES.verifyEmail.operation, "VERIFY_EMAIL");
   assert.equal(EMAIL_ACTION_MODES.resetPassword.operation, "PASSWORD_RESET");
   assert.equal(EMAIL_ACTION_MODES.recoverEmail.operation, "RECOVER_EMAIL");
+  assert.equal(EMAIL_ACTION_MODES.verifyAndChangeEmail.operation, "VERIFY_AND_CHANGE_EMAIL");
+  assert.equal(EMAIL_ACTION_MODES.revertSecondFactorAddition.operation, "REVERT_SECOND_FACTOR_ADDITION");
   assert.equal(EMAIL_ACTION_MODES.unknown, undefined);
 });
 
