@@ -154,16 +154,29 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
   const [assistExplained, setAssistExplained] = useState(false);
   const assisted = Boolean(business.assistStoreId);
   const media = assignedMedia || mediaForBusiness(business);
-  const image = assisted ? "" : media.src;
+  const image = media.src;
   const operation = business.operational || {};
   const commerce = profile.cardMode === "commerce";
-  const assistedBooking = service === "book" && !commerce && business.assistAccepting !== false;
+  const assistedBooking = service === "book" && !commerce && !assisted && business.assistAccepting !== false;
   const action = marketplaceActionLabel(business, service);
+  // An unlicensed, discovery-only record should not impersonate a full merchant
+  // with a huge synthetic storefront banner. Render it as a compact directory row.
+  if (!commerce && !assisted && !image && !assistedBooking) {
+    return <article className="relative flex min-h-28 items-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-4 transition hover:border-[var(--accent)] hover:shadow-card">
+      <button type="button" onClick={()=>onOpen(business)} className="flex min-w-0 flex-1 items-center gap-4 text-left">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Store className="h-5 w-5"/></span>
+        <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{business.name}</span><span className="mt-1 block truncate text-xs text-secondary">{profile.displayCategory} · {business.area || business.city || "Zimbabwe"}</span><span className="mt-1 block text-xs text-tertiary">Independent directory · not yet orderable</span></span>
+        <ChevronRight className="mr-8 h-4 w-4 shrink-0 text-secondary"/>
+      </button>
+      <button type="button" onClick={()=>onFavorite?.(business)} aria-label="Save or unsave business" className="absolute right-3 top-3 rounded-full p-1 text-secondary hover:text-[var(--accent)]"><Heart className={cn("h-4 w-4",favorite&&"fill-current")}/></button>
+    </article>;
+  }
   return <article className={cn("group relative overflow-hidden rounded-[var(--radius-card)] border bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card", commerce ? "border-[var(--border-subtle)]" : "border-[color-mix(in_srgb,var(--border-subtle)_80%,transparent)]")}>
     <button type="button" onClick={() => assisted ? window.location.assign("/shop-for-me?store=" + encodeURIComponent(business.assistStoreId)) : assistedBooking ? window.location.assign("/assist/book?business=" + encodeURIComponent(business.id)) : onOpen(business)} className="block w-full text-left">
       <div className={cn("relative overflow-hidden", commerce ? "aspect-[16/10] bg-[var(--surface-2)]" : "aspect-[16/9] bg-[var(--surface-2)]")}>
         {image ? <Image src={image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 768px) 100vw, 33vw" /> : <MarketplaceDesignedCover business={business} />}
         {image ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" /> : null}
+        {image && media.kind === "licensed-directory" ? <span title="Licensed directory photograph supplied by The Menu; not a claim of merchant affiliation." className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">Photo: The Menu</span> : null}
         {image && media.kind === "editorial" ? <span title="Editorial category image — not supplied by this business" aria-label="Editorial category image" className="absolute bottom-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-black/45 text-[var(--media-text)] backdrop-blur"><Info className="h-3.5 w-3.5" /></span> : null}
         {commerce && image ? <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}<MarketplaceTrustBadge business={business} compact />{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div> : null}
       </div>
@@ -317,7 +330,12 @@ export function ServiceDiscoveryView({
   }).filter((business) => !["deals", "today", "tonight", "weekend", "free"].includes(filter) || itemBusinessIds.has(business.id)), [feed.businesses, filter, category, itemBusinessIds, service]);
   const visibleItems = useMemo(() => sortItems(itemFilterMatches, sort, service, currency), [itemFilterMatches, sort, service, currency]);
   const commerceBusinesses = useMemo(() => visibleBusinesses.filter((business) => marketplaceProfile(business).cardMode === "commerce"), [visibleBusinesses]);
-  const directoryBusinesses = useMemo(() => visibleBusinesses.filter((business) => marketplaceProfile(business).cardMode !== "commerce"), [visibleBusinesses]);
+  const assistBusinesses = useMemo(() => visibleBusinesses.filter((business) =>
+    marketplaceProfile(business).cardMode !== "commerce" && Boolean(business.assistStoreId) &&
+    business.assistAccepting !== false), [visibleBusinesses]);
+  const directoryBusinesses = useMemo(() => visibleBusinesses.filter((business) =>
+    marketplaceProfile(business).cardMode !== "commerce" &&
+    !(business.assistStoreId && business.assistAccepting !== false)), [visibleBusinesses]);
   const featured = commerceBusinesses.filter((business) => business.isFeatured).slice(0, 4);
   const completedOrder = orders.find((order) => COMPLETE_ORDER_STATUSES.has(String(order.status || "").toLowerCase()) && order.businessId && visibleBusinesses.some((business) => business.id === order.businessId));
   const recentBusiness = completedOrder ? visibleBusinesses.find((business) => business.id === completedOrder.businessId) : null;
@@ -364,7 +382,8 @@ export function ServiceDiscoveryView({
 
       {loading ? <div className="mt-5"><ServiceSkeleton /></div> : error && !feed.businesses.length ? <EmptyState className="mt-5" icon={Search} title={`${config.label} is temporarily unavailable`} description="Spotly could not refresh this service right now. Your other services and Activity are still available." action={<Button variant="outline" onClick={() => setQuery((value) => `${value} `)}>Try again</Button>} /> : visibleBusinesses.length ? <div className="mt-6 space-y-10">
         {commerceBusinesses.length ? <div><div className="mb-4 flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Available on Spotly</p><h3 className="mt-1 text-lg font-semibold tracking-[-.025em]">Ready for {service === "book" ? "booking" : service === "events" ? "tickets" : service === "eat" ? "ordering" : "shopping"}</h3></div><span className="text-xs text-[var(--text-3)]">Verified commerce</span></div><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed = commerceBusinesses.slice(0, 12); const media = marketplaceMediaSet(listed); return listed.map((business) => <BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />); })()}</div></div> : null}
-        {directoryBusinesses.length ? <div><div className="mb-4"><p className="text-sm font-semibold text-[var(--text-2)]">Explore {service === "shop" ? "stores" : service === "eat" ? "places to eat" : service === "book" ? "services & places" : "venues"} in {location.city || "your city"}</p><p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--text-3)]">These are discovery listings. Spotly does not show ordering, pickup, booking or ticket actions until the business enables verified commerce.</p></div><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed = directoryBusinesses.slice(0, 18); const media = marketplaceMediaSet(listed); return listed.map((business) => <BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />); })()}</div></div> : null}
+        {assistBusinesses.length ? <div><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Assist · independent shopping</p><h3 className="mt-1 text-lg font-semibold">Choose a restaurant, request a price check</h3><p className="mt-2 max-w-2xl text-xs leading-5 text-secondary">Spotly shops independently. Restaurants have not been represented as participating merchants; prices are estimates until confirmed for your request.</p></div><span className="text-xs font-medium text-secondary">Assisted requests</span></div><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed=assistBusinesses.slice(0,12);const media=marketplaceMediaSet(listed);return listed.map(business=><BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness}/>); })()}</div></div> : null}
+        {directoryBusinesses.length ? <div><div className="mb-4"><p className="text-sm font-semibold text-[var(--text-2)]">Explore {service === "shop" ? "stores" : service === "eat" ? "places to eat" : service === "book" ? "services & places" : "venues"} in {location.city || "your city"}</p><p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--text-3)]">Browse independent directory records below. Real photographs appear only when licensing and location matching are verified; unverified businesses cannot accept Spotly checkout.</p></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed = directoryBusinesses.slice(0, 18); const media = marketplaceMediaSet(listed); return listed.map((business) => <BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />); })()}</div></div> : null}
       </div> : <EmptyState className="mt-5" icon={Store} title={`Nothing matching this ${config.label.toLowerCase()} search yet`} description={`Try another category or broaden the search. Spotly will keep showing what is actually published in ${location.city || "your city"}.`} action={<Button onClick={() => { setFilter("all"); setCategory("all"); setQuery(""); }}>Clear filters</Button>} />}
     </section>
 
