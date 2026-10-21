@@ -396,3 +396,17 @@ test("Admin cannot approve an unsubmitted Driver or bypass payout verification",
   assert.match(application, /payoutBatch\.set\(driverRef, \{ payoutVerificationState: "pending"/);
   assert.match(admin, /payoutBatch\.set\(driverRef, \{ payoutVerificationState: nextPayoutState/);
 });
+
+test("Driver workspace delays transient missing-session errors and scrolls application errors into view", async () => {
+  const driver = await read("components/driver-app.js");
+  assert.match(driver, /attempt < 3/);
+  assert.match(driver, /err\.message !== "Sign in to continue\."/);
+  assert.match(driver, /errorRef\.current\?\.scrollIntoView/);
+  assert.match(driver, /ref=\{errorRef\} role="alert"/);
+});
+
+test("Ride booking scrolls quote and validation errors into view", async () => {
+  const ride = await read("components/ride-app.js");
+  assert.match(ride, /bookingErrorRef\.current\?\.scrollIntoView/);
+  assert.match(ride, /ref=\{bookingErrorRef\} role="alert"/);
+});

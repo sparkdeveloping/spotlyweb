@@ -123,6 +123,10 @@ export function RideApp() {
   }
 
   const [bookingStep, setBookingStep] = useState(0); const [bookingError, setBookingError] = useState("");
+  const bookingErrorRef = useRef(null);
+  useEffect(() => {
+    if (bookingError) bookingErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [bookingError]);
   const [city,setCity]=useState(settings?.launch?.primaryCity||"Harare");
   const [country,setCountry]=useState(settings?.launch?.primaryCountry==="MW"?"MW":"ZW");
   const [pickupText, setPickupText] = useState(""); const [dropoffText, setDropoffText] = useState(""); const [pickup, setPickup] = useState(null); const [dropoff, setDropoff] = useState(null);
@@ -190,7 +194,7 @@ export function RideApp() {
               <span className="block text-[10px] font-semibold uppercase tracking-wide">0{index+1}</span>{name}
             </button>)}
           </nav>
-          {bookingError ? <p role="alert" className="mt-5 rounded-xl border border-danger bg-[var(--danger-soft)] p-4 text-sm text-danger">{bookingError}</p> : null}
+          {bookingError ? <p ref={bookingErrorRef} role="alert" className="scroll-mt-28 mt-5 rounded-xl border border-danger bg-[var(--danger-soft)] p-4 text-sm text-danger">{bookingError}</p> : null}
           {bookingStep===0 ? <div className="mt-7 space-y-5">
             <div><h2 className="text-2xl font-semibold tracking-tight">Where should your Driver meet you?</h2><p className="mt-1 text-sm text-secondary">Search an address or use the map to confirm one exact pickup point.</p></div>
             <div className="grid gap-3 sm:grid-cols-2">
