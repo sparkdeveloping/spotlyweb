@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
-import { estimateRide, normalizeRidePoint, rideAvailability } from "@/lib/ride-server";
+import { estimateRide, normalizeRidePoint, rideAvailability, rideQuoteAvailability } from "@/lib/ride-server";
 import {validateRideTerritory} from "@/lib/ride-geography";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
 
@@ -20,12 +20,19 @@ export async function POST(request) {
     const { db } = getAdminServices();
     const settingsSnap = await db.collection("platformSettings").doc("global").get();
     const settings = settingsSnap.exists ? settingsSnap.data() : {};
-    const availability = rideAvailability(settings, pickup);
-    if (!availability.enabled) throw Object.assign(new Error(availability.reason), { status: 409 });
+    const quoteReadiness=rideQuoteAvailability(settings,pickup);
+    if(!quoteReadiness.enabled)throw Object.assign(new Error(quoteReadiness.reason),{status:409});
     validateRideTerritory(pickup,dropoff,settings.mobility||{});
     const route=await getVerifiedRideRoute(pickup,dropoff);
-    const quote = estimateRide({ pickup, dropoff, serviceType: body.serviceType, settings,route });
-    return Response.json({ ok: true, quote, serviceTypes: availability.config.pricing.serviceTypes, paymentMethods: availability.config.paymentMethods });
+    const quote=estimateRide({pickup,dropoff,serviceType:body.serviceType,settings,route});
+    // A quote is not an authorization to dispatch. Real bookings independently
+    // revalidate every launch gate and live payment before accepting requests.
+    const booking=rideAvailability(settings,pickup);
+    return Response.json({ok:true,quote,
+      bookingAvailable:booking.enabled,bookingReason:booking.enabled?"":booking.reason,
+      serviceTypes:quoteReadiness.config.pricing.serviceTypes,
+      paymentMethods:quoteReadiness.config.paymentMethods},
+      {headers:{"Cache-Control":"private, no-store"}});
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the pickup and destination." }, { status: 400 });
     return apiError(error);

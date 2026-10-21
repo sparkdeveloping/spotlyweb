@@ -125,7 +125,8 @@ function ToastProvider({ children }) {
   const toast = useCallback((message, options = {}) => {
     const normalized = typeof options === "string" ? { type: options } : options;
     const id = `${Date.now()}-${Math.random()}`;
-    const next = { id, message, type: normalized.type || "success", title: normalized.title || "Done" };
+    const kind=normalized.type||"success";
+    const next={id,message,type:kind,title:normalized.title||(kind==="error"?"Unable to continue":kind==="info"?"Notice":"Done")};
     setToasts((items) => [...items.slice(-3), next]);
     window.setTimeout(() => dismiss(id), normalized.duration || 3600);
     return id;
