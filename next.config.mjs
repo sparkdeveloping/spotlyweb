@@ -50,6 +50,14 @@ const nextConfig = {
       ]
     },
     {
+      source: "/auth/action",
+      headers: [
+        { key: "Referrer-Policy", value: "no-referrer" },
+        { key: "Cache-Control", value: "private, no-store" },
+        { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
       source: "/firebase-messaging-sw.js",
       headers: [
         { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
