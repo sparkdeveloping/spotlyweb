@@ -91,7 +91,29 @@ test("Premium discovery differentiates independent Assist from photo-less stale 
   const home=await read("components/admin-app.js");
   assert.match(experience,/assistBusinesses/);
   assert.match(experience,/Choose a restaurant, request a price check/);
-  assert.match(experience,/Independent directory · not yet orderable/);
+  assert.match(experience,/function DirectoryListingRow/);
+  assert.match(experience,/grid auto-rows-fr gap-3 md:grid-cols-2/);
+  assert.match(experience,/min-h-\[112px\]/);
+  assert.match(experience,/media.kind === "licensed-directory"/);
+  assert.match(experience,/Explore place details/);
+  assert.doesNotMatch(experience,/const image = assisted \? "" : media.src/);
   assert.match(experience,/Photo: The Menu/);
   assert.match(home,/items-center gap-4 px-5 py-3/);
+});
+
+test("The Menu editorial spotlight uses real source observations without indefinite guaranteed prices", async () => {
+  const { THEMENU_RESTAURANT_SPOTLIGHTS, themenuPriceLabel } = await import("../lib/themenu-curated-spotlights.js");
+  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS.length, 2);
+  const asOf = Date.parse("2026-10-21T23:00:00Z");
+  for (const item of THEMENU_RESTAURANT_SPOTLIGHTS) {
+    assert.equal(new URL(item.listingUrl).hostname, "themenu.co.zw");
+    assert.match(themenuPriceLabel(item, asOf), /Listed at US\$/);
+    assert.equal(themenuPriceLabel(item, Date.parse("2026-11-20T00:00:00Z")), null);
+  }
+  const page = await read("components/service-experience.js");
+  assert.match(page,/service==="eat" && \/harare\/i/);
+  assert.match(page,/THEMENU_RESTAURANT_SPOTLIGHTS\.map/);
+  assert.match(page,/not guaranteed Spotly checkout prices/);
+  assert.match(page,/independent Spotly Assist checkout is offered only where separately enabled/i);
+  assert.match(page,/Editorial food photo/);
 });

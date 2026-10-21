@@ -1,6 +1,6 @@
 # The Menu × Spotly: licensed-media and independently sourced menu rollout
 
-**Meeting reported:** 21 October 2026. TheMenu.co.zw representatives reportedly authorized Spotly to reuse photographs displayed on their site and currently published menu/pricing information. They confirmed information is current at the meeting date, **not indefinitely current**. This document records a founder-reported permission, not a signed license or a grant from every underlying photographer or merchant.
+**Permission evidence:** A signed, dated, one-page `THE MENU — OFFICIAL CONTENT USE AUTHORIZATION` was supplied privately to the project owner on 21 October 2026. It authorizes non-exclusive, royalty-free copying, storage, display and reasonable resizing/reformatting of The Menu's restaurant listings, menus, prices and photographs; attribution where practicable; no sublicense/resale; revocable with a 30-day takedown obligation. **Crucial limitation:** the grant extends only to material The Menu owns or has the ability to license; third-party Google Maps, photographer and merchant-owned photos need separate reuse rights. Keep the signed proof in the private rights register, not the public Git repository. Data and price freshness are not guaranteed.
 
 ## Safe implementation sequence
 
@@ -23,3 +23,10 @@
 ## Implementation in this PR
 
 `lib/themenu-source-policy.js` enforces photo source and rights attestation and exposes freshness status. `lib/marketplace-editorial.js` only renders approved partner images hosted through the allowed Spotly Firebase media origin. `components/service-experience.js` separates active Assist shops from passive directory entries and turns photo-less directory posters into concise cards. This PR **does not bulk-copy The Menu media, import its menus, change live Firebase records or enable ordering**. Those operations require the location-specific permission/evidence workflow above.
+
+
+## User-facing first slice, 21 October 2026
+- The first production-grade customer menu-discovery section references Doppio Zero Harare and Fishmonger with source-linked, date-stamped sample menu prices. These are editorial source listings, not products added to Spotly checkout.
+- Their public The Menu profiles link or credit photographs to **Facebook and Google Maps**. The permission statement explicitly excludes third-party rights not held by The Menu, so we do **not** rehost, silently hotlink or display those as Spotly-owned business photos.
+- The Bite hero uses a separately sourced editorial food photograph bundled in Spotly's existing licensed editorial asset set. It is labeled editorial, never presented as a photo of Fishmonger or Doppio Zero.
+- A proper bulk picture rollout requires The Menu to identify which photos it has sublicensable rights to (or the restaurant/photographer to grant separately), plus a vetted source-URL-to-location mapping. The importer from the previous milestone already supports rights-gated, branch-matched Firebase-hosted licensed media.
