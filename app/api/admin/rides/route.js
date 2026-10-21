@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { notifyUsers, operationalEligibility } from "@/lib/driver-delivery-server";
 import { dispatchRide, plainRide, rideSettings } from "@/lib/ride-server";
 import { safeText } from "@/lib/server-helpers";
+import {validateCoverageCollection} from "@/lib/mobility-coverage";
 
 export const runtime = "nodejs";
 const ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager", "driver_operations_coordinator", "dispatcher", "support_manager"];
@@ -57,6 +58,11 @@ export async function PATCH(request) {
     const currentSnap = await settingsRef.get();
     const current = currentSnap.exists ? currentSnap.data() : {};
     const mobility = current.mobility || {};
+    const validatedZones=body.cityGeofences===undefined?null:validateCoverageCollection(body.cityGeofences,{
+      enabledCountries:body.enabledCountries??mobility.enabledCountries??[],
+      enabledCities:body.enabledCities??mobility.enabledCities??[],
+      send:false
+    });
     if(body.ridesEnabled!==undefined&&body.ridesEnabled!==(mobility.ridesEnabled===true))
       throw Object.assign(new Error("Activate or pause Ride from Admin Mobility → Service Launch & Controls."),{status:409});
     const next = {
@@ -65,7 +71,7 @@ export async function PATCH(request) {
       ...(body.routingVerified!==undefined?{routingVerified:body.routingVerified}:{}),
       ...(body.dispatchSchedulerVerified!==undefined?{dispatchSchedulerVerified:body.dispatchSchedulerVerified}:{}),
       ...(body.enabledCountries!==undefined?{enabledCountries:body.enabledCountries}:{}),
-      ...(body.cityGeofences!==undefined?{cityGeofences:body.cityGeofences}:{}),
+      ...(validatedZones!==null?{cityGeofences:validatedZones}:{}),
       ...(body.maxSearchSeconds!==undefined?{maxSearchSeconds:body.maxSearchSeconds}:{}),
       ...(body.safetyToolkitEnabled !== undefined ? { safetyToolkitEnabled: body.safetyToolkitEnabled } : {}),
       ...(body.cashEnabled !== undefined ? { cashEnabled: body.cashEnabled } : {}),
