@@ -9,7 +9,7 @@
   "scripts": {
     "predev": "node scripts/firebase-project-preflight.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/firebase-project-preflight.mjs && node --test tests/v9-assist-research-menu.test.mjs tests/maptiler-geocoding.test.mjs tests/ride-quote-preview-v9.test.mjs tests/mapmap-routing-v9.test.mjs tests/mobility-service-coverage.test.mjs tests/driver-v8-production.test.mjs tests/v9-cross-site-experience.test.mjs tests/email-verification-v9.test.mjs tests/auth-session-stability-v9.test.mjs",
+    "prebuild": "node scripts/firebase-project-preflight.mjs && node --test tests/v9-assist-research-menu.test.mjs tests/maptiler-geocoding.test.mjs tests/ride-quote-preview-v9.test.mjs tests/mapmap-routing-v9.test.mjs tests/mobility-service-coverage.test.mjs tests/driver-v8-production.test.mjs tests/v9-cross-site-experience.test.mjs tests/ride-lab-distance-v9.test.mjs tests/email-verification-v9.test.mjs tests/auth-session-stability-v9.test.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

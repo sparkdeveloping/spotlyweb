@@ -13,6 +13,7 @@ import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {PinDropMap,RoadRouteMap} from "@/components/mobility-map";
+import { validateRideLabLocations } from "@/lib/ride-lab-validation";
 
 const rideTypes = [
   { id: "economy", label: "Economy", description: "Everyday rides", seats: "Up to 4" },
@@ -110,6 +111,10 @@ export function RideApp() {
   }, [authReady, user?.uid, user?.isAnonymous, loadRideLab]);
 
   async function testRide(action, rideId = "") {
+    if (action === "request") {
+      const validation = validateRideLabLocations(pickup, dropoff);
+      if (!validation.ok) { setRideLabError(validation.error); return; }
+    }
     setRideLabBusy(action); setRideLabError("");
     try {
       const body = action === "request" ? { action, pickup, dropoff, serviceType } : { action, rideId };
@@ -130,6 +135,8 @@ export function RideApp() {
   const [city,setCity]=useState(settings?.launch?.primaryCity||"Harare");
   const [country,setCountry]=useState(settings?.launch?.primaryCountry==="MW"?"MW":"ZW");
   const [pickupText, setPickupText] = useState(""); const [dropoffText, setDropoffText] = useState(""); const [pickup, setPickup] = useState(null); const [dropoff, setDropoff] = useState(null);
+  const rideLabLocationValidation = validateRideLabLocations(pickup, dropoff);
+  useEffect(() => { setRideLabError(""); }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, pickup?.country, dropoff?.country]);
   const [mapTarget,setMapTarget]=useState(null); const [serviceType, setServiceType] = useState("economy"); const [paymentMethod, setPaymentMethod] = useState("cash"); const [quote, setQuote] = useState(null); const [loading, setLoading] = useState(""); const [activeRide, setActiveRide] = useState(null); const [history, setHistory] = useState([]); const [cancelRide, setCancelRide] = useState(null); const [cancelReason, setCancelReason] = useState("");
   const load = useCallback(async ({ quiet = false } = {}) => { if (!user?.uid || user.isAnonymous) return; if (!quiet) setLoading("load"); try { const data = await authenticatedFetch("/api/customer/rides", { cache: "no-store" }); setActiveRide(data.activeRide || null); setHistory(data.rides || []); } catch (error) { if (!quiet) toast(error.message, { type: "error" }); } finally { if (!quiet) setLoading(""); } }, [user, toast]);
   useEffect(() => { load(); }, [load]);
@@ -240,8 +247,15 @@ export function RideApp() {
               <p className="mt-1 text-xs leading-5 text-secondary">No Driver dispatch, payment, cash, PIN, or operational verification. A second invited tester accepts in Driver Ride Lab. Refresh to view status and shadow location.</p></div>
               <Button size="sm" variant="outline" onClick={loadRideLab}><RefreshCw className="h-4 w-4"/>Refresh tests</Button>
             </div>
-            {pickup&&dropoff ? <Button className="mt-4 w-full" loading={rideLabBusy==="request"} disabled={Boolean(rideLabBusy)} onClick={()=>testRide("request")}>Create simulated Ride request</Button> :
-              <p className="mt-3 text-sm text-secondary">To create a new test request, go through pickup and destination first.</p>}
+            {pickup&&dropoff ? <>
+              <Button className="mt-4 w-full" loading={rideLabBusy==="request"} disabled={Boolean(rideLabBusy) || !rideLabLocationValidation.ok} onClick={()=>testRide("request")}>Create simulated Ride request</Button>
+              {rideLabLocationValidation.ok
+                ? <p className="mt-2 text-xs leading-5 text-secondary">Your two pins are {Math.round(rideLabLocationValidation.separationKm * 1000)} metres apart in a straight line. Ride Lab supports distinct pins at least 20 metres apart, up to 200 km. The fare preview uses driving distance.</p>
+                : <div role="alert" className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <p className="text-sm text-danger">{rideLabLocationValidation.error}</p>
+                    <button type="button" className="mt-2 text-xs font-semibold text-[var(--accent)] underline underline-offset-2" onClick={()=>{setBookingStep(1);setQuote(null);}}>Edit destination</button>
+                  </div>}
+            </> : <p className="mt-3 text-sm text-secondary">To create a new test request, go through pickup and destination first.</p>}
             {rideLabError?<p role="alert" className="mt-3 text-sm text-danger">{rideLabError}</p>:null}
             <div className="mt-4 space-y-3">{rideLabTrips.filter(ride=>ride.customerId===user?.uid).map(ride=><div key={ride.id} className="rounded-xl border bg-[var(--surface)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{String(ride.state).replaceAll("_"," ")}</p>

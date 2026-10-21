@@ -105,7 +105,9 @@ test("Ride Lab supports isolated two-account shadow requests, offers, test movem
   assert.match(route, /driver_assigned: "driver_to_pickup"/);
   assert.match(route, /driver_arrived_pickup: "in_trip"/);
   assert.match(route, /in_trip: "completed"/);
-  assert.match(route, /insideCountryBounds\(input\.pickup/);
+  assert.match(route, /validateRideLabLocations\(input\.pickup, input\.dropoff\)/);
+  const geography = await read("lib/ride-lab-validation.js");
+  assert.match(geography, /insideCountryBounds\(pickup, pickup\.country\)/);
   assert.match(route, /enforceRateLimit/);
   for (const liveCollection of ["rideTrips", "rideOffers", "driverPresence", "driverEarningsLedger"]) {
     assert.doesNotMatch(route, new RegExp(`db\\.collection\\("${liveCollection}"\\)`));
