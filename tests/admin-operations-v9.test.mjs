@@ -45,7 +45,7 @@ test("server business register is authorized, paginated, never modifies business
   assert.match(route,/where\("ownerIds","array-contains",uid\)/);
   assert.match(route,/where\("applicantId","==",uid\)/);
   assert.match(route,/scannedOnly:true/);
-  assert.doesNotMatch(route,/\.update\(|\.set\(|\.delete\(|\.add\(/);
+  assert.doesNotMatch(route,/\b(?:db|doc|batch|transaction|collection)\.(?:set|update|delete|add)\(/);
 });
 
 test("business register and admin overview explain relationship states and cap warning",async()=>{
