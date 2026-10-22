@@ -123,5 +123,5 @@ test("The Menu editorial spotlight uses real source observations without indefin
   assert.match(page,/Preview \{item\.menuItems\.length\} dishes/);
   assert.match(page,/group-open:rotate-90/);
   assert.match(page,/items-start gap-3 sm:grid-cols-2/);
-  assert.match(page,/themenuPriceLabel\\(item\\)\\?"US\\$"\\+dish\\.price\\.toFixed\\(2\\):"Check price"/);
+  assert.ok(page.includes('themenuPriceLabel(item)?"US$"+dish.price.toFixed(2):"Check price"'));
 });
