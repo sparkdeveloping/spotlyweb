@@ -73,7 +73,7 @@ export function AssistResearchImport() {
   return <AuthGate portal="admin" title="Sign in to Spotly Admin" sameOriginLogin><AdminAccess>
     <PortalShell portalId="admin" activeSection="marketplace">
       <main className="mx-auto max-w-[1040px] px-5 py-10">
-        <Link href="/admin/marketplace" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)]"><ArrowLeft className="h-4 w-4"/>Marketplace</Link>
+        <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/admin/marketplace" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)]"><ArrowLeft className="h-4 w-4"/>Marketplace</Link><Link href="/admin/themenu-images" className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--accent)]">Review The Menu images →</Link></div>
         <div className="mt-6 flex items-start gap-4">
           <span className="rounded-xl bg-[var(--accent-soft)] p-3 text-[var(--accent)]"><Database className="h-6 w-6"/></span>
           <div><p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Zimbabwe only</p>

@@ -1,0 +1,38 @@
+name: The Menu private image review
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Number of source restaurant pages (1-60)"
+        required: true
+        default: "20"
+        type: string
+  pull_request:
+    paths:
+      - "data/themenu/**"
+      - "lib/themenu-image-extractor.js"
+      - "scripts/themenu-image-catalog.mjs"
+      - ".github/workflows/themenu-image-review.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Extract source pages and private review copies
+        shell: bash
+        run: node scripts/themenu-image-catalog.mjs --limit "${{ github.event.inputs.limit || '20' }}" --review-copies
+      - name: Save private source review bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: themenu-source-image-review
+          path: artifacts/themenu-review/
+          retention-days: 7
+          if-no-files-found: error
