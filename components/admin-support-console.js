@@ -163,7 +163,7 @@ function ContextPanel({ context, conversation, currentUserId, onAssign, onOpenCo
       {conversation?.assignedToName ? <p className="mt-2 text-xs text-[var(--text-3)]">Owned by {conversation.assignedToName}</p> : <p className="mt-2 text-xs text-[var(--text-3)]">Anyone with Support access can pick this up.</p>}
     </section>
 
-    {business ? <section><div className="flex items-center gap-2"><Store className="h-4 w-4 text-[var(--admin)]" /><h3 className="text-sm font-semibold">Business</h3></div><div className="mt-3 rounded-[14px] border border-[var(--border-subtle)] p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{business.name || business.id}</p><div className="mt-2 flex flex-wrap gap-1.5"><StatusBadge status={business.status || "unknown"} />{business.verificationStatus ? <StatusBadge status={business.verificationStatus} /> : null}</div></div><Button asChild size="sm" variant="ghost"><Link href={`/support-view/${business.id}`} aria-label="Open business support view"><ArrowUpRight className="h-4 w-4" /></Link></Button></div></div></section> : null}
+    {business ? <section><div className="flex items-center gap-2"><Store className="h-4 w-4 text-[var(--admin)]" /><h3 className="text-sm font-semibold">Business</h3></div><div className="mt-3 rounded-[14px] border border-[var(--border-subtle)] p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{business.name || business.id}</p><div className="mt-2 flex flex-wrap gap-1.5"><StatusBadge status={business.status || "unknown"} />{business.verificationStatus ? <StatusBadge status={business.verificationStatus} /> : null}</div></div><div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="ghost"><Link href={`/support-view/${business.id}`} aria-label="Open business support view"><ArrowUpRight className="h-4 w-4" /></Link></Button><Button asChild size="sm" variant="outline"><Link href="/admin/business-register">Business register</Link></Button></div></div></div></section> : null}
 
     {(related.order || related.ride || related.parcel || related.delivery || related.claim || related.paymentIntent) ? <section><h3 className="text-sm font-semibold">Attached context</h3><div className="mt-3 grid gap-2"><RelatedObject label="Order / booking" item={related.order} kind={related.order?.transactionType} /><RelatedObject label="Ride" item={related.ride} kind="Ride" /><RelatedObject label="Send" item={related.parcel} kind="Send" /><RelatedObject label="Delivery" item={related.delivery} kind="Delivery" /><RelatedObject label="Business claim" item={related.claim} kind="Claim" /><RelatedObject label="Payment" item={related.paymentIntent} kind="Payment intent" /></div></section> : null}
 
@@ -188,6 +188,10 @@ export function AdminSupportConsole() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("active");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortOrder, setSortOrder] = useState("urgent_recent");
   const [reply, setReply] = useState("");
   const [internal, setInternal] = useState(false);
   const [files, setFiles] = useState([]);
@@ -240,15 +244,21 @@ export function AdminSupportConsole() {
       if (scope === "unassigned" && item.assignedTo) return false;
       if (scope === "urgent" && !["urgent", "high"].includes(item.priority) && item.status !== "escalated") return false;
       if (scope === "resolved" && !["resolved", "closed"].includes(item.status)) return false;
-      if (term && ![item.subject, item.requesterName, item.requesterEmail, item.lastMessage, item.category, item.id].filter(Boolean).join(" ").toLowerCase().includes(term)) return false;
+      if (categoryFilter !== "all" && (item.category || "general") !== categoryFilter) return false;
+      const when = lastActivityMs(item);
+      if (dateFrom && (!when || when < Date.parse(dateFrom+"T00:00:00Z"))) return false;
+      if (dateTo && (!when || when >= Date.parse(dateTo+"T00:00:00Z")+86400000)) return false;
+      if (term && ![item.subject, item.requesterName, item.requesterEmail, item.lastMessage, item.category, item.id, item.businessId, item.orderId].filter(Boolean).join(" ").toLowerCase().includes(term)) return false;
       return true;
     }).sort((a, b) => {
-      const unreadDiff = Number(b.unreadForSupport || 0) - Number(a.unreadForSupport || 0);
-      if (unreadDiff) return unreadDiff;
+      if (sortOrder === "oldest") return lastActivityMs(a) - lastActivityMs(b);
+      if (sortOrder === "recent") return lastActivityMs(b) - lastActivityMs(a);
       const urgentDiff = Number(["urgent", "high"].includes(b.priority) || b.status === "escalated") - Number(["urgent", "high"].includes(a.priority) || a.status === "escalated");
-      return urgentDiff || lastActivityMs(b) - lastActivityMs(a);
+      if (urgentDiff) return urgentDiff;
+      const unreadDiff = Number(b.unreadForSupport || 0) - Number(a.unreadForSupport || 0);
+      return unreadDiff || lastActivityMs(b) - lastActivityMs(a);
     });
-  }, [conversations, query, scope, user?.uid]);
+  }, [conversations, query, scope, user?.uid, categoryFilter, dateFrom, dateTo, sortOrder]);
 
   const counts = useMemo(() => ({
     active: conversations.filter((item) => ACTIVE_STATUSES.has(item.status || "open")).length,
@@ -302,12 +312,24 @@ export function AdminSupportConsole() {
   }
 
   const activeCount = counts.active;
+  const categories = [...new Set(conversations.map(item=>item.category||"general"))].sort();
+  const waitingOld = conversations.filter(item=>ACTIVE_STATUSES.has(item.status||"open") && (!item.assignedTo || Number(item.unreadForSupport||0)>0) && lastActivityMs(item) && Date.now()-lastActivityMs(item)>86400000).length;
   return <div className="v7-page-enter space-y-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div><p className="text-sm font-semibold text-[var(--admin)]">Support desk</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">Talk to customers without leaving Spotly.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Live conversations, internal notes, assignment, attached Spotly context and resolution history stay together.</p></div>
       <div className="flex items-center gap-2"><Badge tone={activeCount ? "warning" : "success"}>{activeCount} active</Badge><Badge tone={conversations.some((item) => Number(item.unreadForSupport || 0) > 0) ? "admin" : "neutral"}>{conversations.reduce((sum, item) => sum + Number(item.unreadForSupport || 0), 0)} unread</Badge></div>
     </div>
 
+    <section aria-label="Support triage" className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Support triage</h3><p className="mt-1 text-xs leading-5 text-secondary">Work urgent and unread requests first, assign an owner, then reply or leave an internal note. Investigate linked orders and businesses in Context before resolving.</p></div><Badge tone={waitingOld?"warning":"neutral"}>{waitingOld} potentially waiting over 24h</Badge></div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-xs font-semibold text-secondary">Category<NativeSelect className="mt-1 w-full text-sm" value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)}><option value="all">All categories</option>{categories.map(c=><option key={c} value={c}>{cleanLabel(c)}</option>)}</NativeSelect></label>
+        <label className="text-xs font-semibold text-secondary">Activity from (UTC)<input type="date" className="field-control mt-1 w-full text-sm" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label>
+        <label className="text-xs font-semibold text-secondary">Activity through (UTC)<input type="date" className="field-control mt-1 w-full text-sm" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label>
+        <label className="text-xs font-semibold text-secondary">Order<NativeSelect className="mt-1 w-full text-sm" value={sortOrder} onChange={e=>setSortOrder(e.target.value)}><option value="urgent_recent">Urgent / unread first</option><option value="recent">Most recent activity</option><option value="oldest">Oldest activity first</option></NativeSelect></label>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-secondary">{filtered.length} matching of {conversations.length} loaded conversations (subscription capped at 300; not a lifetime total).</p><Button size="sm" variant="outline" onClick={()=>{setCategoryFilter("all");setDateFrom("");setDateTo("");setSortOrder("urgent_recent");setQuery("");setScope("active");}}>Clear triage filters</Button></div>
+    </section>
     <div className="min-h-[720px] overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-1)] xl:grid xl:grid-cols-[330px_minmax(0,1fr)_320px]">
       <section className={cn("min-h-[720px] flex-col border-r border-[var(--border-subtle)] xl:flex", selectedId ? "hidden" : "flex")}>
         <div className="border-b border-[var(--border-subtle)] p-4"><SearchField value={query} onChange={setQuery} placeholder="Search conversations" label="Search support conversations" /><div className="mt-3 flex flex-wrap gap-1.5">{[

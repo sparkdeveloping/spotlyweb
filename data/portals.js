@@ -133,8 +133,10 @@ export const portals = {
     description: "Operate the platform, review risk, and manage access.",
     nav: [
       { group: "Operate", id: "home", label: "Home", icon: LayoutDashboard, href: "/" },
+      { group: "Operate", id: "guide", label: "How Admin works", icon: BookOpenCheck, href: "/guide" },
       { group: "Operate", id: "work", label: "Work", icon: ListChecks, href: "/work" },
       { group: "Operate", id: "marketplace", label: "Marketplace", icon: Store, href: "/marketplace" },
+      { group: "Operate", id: "business-register", label: "Business register", icon: Building2, href: "/business-register" },
       { group: "Operate", id: "mobility", label: "Ride & Send Launch", icon: Bike, href: "/mobility" },
       { group: "Operate", id: "money", label: "Money", icon: CreditCard, href: "/money" },
       { group: "Build", id: "growth", label: "Growth", icon: Compass, href: "/growth" },
