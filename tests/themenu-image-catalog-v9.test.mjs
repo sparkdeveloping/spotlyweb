@@ -10,6 +10,7 @@ const html=`<html><body><header><img src="/logo.svg" alt="Logo"></header>
 <h1>Fishmonger</h1><img src="/assets/photos/fishmonger.jpg" alt="Fishmonger" />
 <img data-src="/assets/menus/fishmonger/menu-2.jpg" alt="Fishmonger menu" />
 <img src="https://www.google.com/logo.jpg" alt="External" />
+<img src="/assets/photos/gavas-restaurant.jpg" alt="Recommended other venue" />
 <img src="/assets/photos/fishmonger.jpg" alt="Duplicate" />
 <p>Photo: <a href="https://www.google.com/">Google Maps</a> · Menu photos via Google Maps</p></body></html>`;
 
@@ -31,6 +32,7 @@ test("extractor resolves only safe HTTPS The Menu image assets, preserving exact
   assert.equal(refs[1].kind,"menu");
   assert.equal(refs[1].rightsStatus,"pending_provenance_review");
   assert.equal(refs[0].approvedForSpotly,false);
+  assert.equal(refs.some(item=>item.imageUrl.includes("gavas-restaurant")),false,"Do not assign recommendation photos to the wrong restaurant");
   assert.equal(safeTheMenuUrl("https://badthemenu.co.zw/photo.jpg"),null);
   assert.equal(safeTheMenuUrl("http://themenu.co.zw/photo.jpg"),null);
   assert.equal(safeTheMenuUrl("https://themenu.co.zw.evil.test/img.png"),null);
