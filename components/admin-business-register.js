@@ -69,6 +69,7 @@ export function AdminBusinessRegisterBody() {
   const [mode,setMode]=useState("list"),[response,setResponse]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState("");
   const [pages,setPages]=useState([]),[selected,setSelected]=useState(null);
   const [revision,setRevision]=useState(0);
+  const [advancedOpen,setAdvancedOpen]=useState(false);
   const requestIdRef=useRef(0);
   const resultRows=response?.rows||[];
   const people=response?.people||{};
@@ -86,6 +87,10 @@ export function AdminBusinessRegisterBody() {
   },[mode,lookupEmail,applied,pages,revision]);
   useEffect(()=>{fetchPage();return()=>{requestIdRef.current+=1;};},[fetchPage]);
   function apply(event){event?.preventDefault?.();setMode("list");setPages([]);setApplied({...filters});}
+  function useView(fields) {
+    const next={...EMPTY,...fields};
+    setFilters(next);setApplied(next);setMode("list");setPages([]);setLookupEmail("");
+  }
   function accountSearch(event){event?.preventDefault?.();if(!lookup.trim())return;setPages([]);setLookupEmail(lookup.trim().toLowerCase());setMode("account");}
   function reset(){setMode("list");setFilters(EMPTY);setApplied(EMPTY);setLookup("");setPages([]);setRevision(n=>n+1);}
   const summary=useMemo(()=>({pending:resultRows.filter(row=>["ownership","identity","launch"].includes(row.readiness.attention)).length,independent:resultRows.filter(row=>row.readiness.assist).length,created:resultRows.filter(row=>row.relationships?.includes("created")).length}),[resultRows]);
@@ -98,8 +103,22 @@ export function AdminBusinessRegisterBody() {
       </div>
       <form onSubmit={apply} className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Search and filters</h2><Button type="button" size="sm" variant="ghost" onClick={reset}><FilterX className="h-4 w-4"/>Reset all</Button></div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Labeled label="Name, category, ID or creator"><input className="field-control w-full text-sm" value={filters.q} onChange={e=>setFilters(f=>({...f,q:e.target.value}))} placeholder="Search businesses…"/></Labeled>
+        <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Quick business views">
+          {[
+            ["All businesses",{}],["Claims to review",{attention:"ownership"}],
+            ["Verification needed",{attention:"identity"}],["Launch review",{attention:"launch"}],
+            ["Active merchants",{commerce:"merchant_live"}],["Independent Assist",{commerce:"independent_assist"}],
+            ["Unclaimed directory",{attention:"unclaimed"}]
+          ].map(([title,fields])=><button key={title} type="button" onClick={()=>useView(fields)}
+            className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold transition hover:border-[var(--accent)] hover:text-[var(--accent)]">{title}</button>)}
+        </div>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="min-w-[220px] flex-1"><Labeled label="Search business name, city, record or creator"><input className="field-control w-full text-sm" value={filters.q} onChange={e=>setFilters(f=>({...f,q:e.target.value}))} placeholder="Search registered businesses…"/></Labeled></div>
+          <Button type="submit"><Search className="h-4 w-4"/>Search</Button>
+          <Button type="button" variant="outline" onClick={()=>setAdvancedOpen(v=>!v)} aria-expanded={advancedOpen}>{advancedOpen?"Hide advanced filters":"Advanced filters"}</Button>
+        </div>
+        {advancedOpen&&<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          
           <Labeled label="City"><input className="field-control w-full text-sm" value={filters.city} onChange={e=>setFilters(f=>({...f,city:e.target.value}))} placeholder="Any city"/></Labeled>
           <Select label="Ownership" value={filters.ownership} options={OPTIONS.ownership} onChange={v=>setFilters(f=>({...f,ownership:v}))}/>
           <Select label="Verification" value={filters.verification} options={OPTIONS.verification} onChange={v=>setFilters(f=>({...f,verification:v}))}/>
@@ -111,8 +130,8 @@ export function AdminBusinessRegisterBody() {
           <Labeled label="Created through (UTC)"><input type="date" value={filters.to} className="field-control w-full text-sm" onChange={e=>setFilters(f=>({...f,to:e.target.value}))}/></Labeled>
           <Select label="Sort by" value={filters.sort} options={OPTIONS.sort} onChange={v=>setFilters(f=>({...f,sort:v}))}/>
           <Select label="Direction" value={filters.direction} options={OPTIONS.direction} onChange={v=>setFilters(f=>({...f,direction:v}))}/>
-        </div>
-        <div className="mt-4 flex justify-end"><Button type="submit"><Search className="h-4 w-4"/>Apply filters</Button></div>
+        </div>}
+        {advancedOpen&&<div className="mt-4 flex justify-end"><Button type="submit"><Search className="h-4 w-4"/>Apply advanced filters</Button></div>}
       </form>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{mode==="account"?"Account relationships": "Business register"}{loading?<span className="ml-2 text-sm font-normal text-secondary">Loading…</span>:null}</h2><p className="mt-1 text-xs text-secondary">{mode==="account"?(response?.account?response.account.name+" · "+response.account.email:response?.note||"Account lookup"):"Results are paginated and server-filtered. Counts below cover this result page, not the entire database."}</p></div><div className="flex flex-wrap gap-2"><Tone value="claim_pending">{summary.pending} reviews in view</Tone><Tone value="independent_assist">{summary.independent} Assist in view</Tone><Button variant="outline" size="sm" disabled={!resultRows.length} onClick={()=>downloadCSV(resultRows)}><ArrowDownToLine className="h-4 w-4"/>Export visible results</Button></div></div>
       {error?<div role="alert" className="mt-4 rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] p-4 text-sm text-danger">{error}</div>:null}

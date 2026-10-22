@@ -54,6 +54,9 @@ test("business register and admin overview explain relationship states and cap w
   const guide=await read("components/admin-operations-guide.js");
   const nav=await read("data/portals.js");
   assert.match(body,/Business control centre/);
+  assert.match(body,/Claims to review/);
+  assert.match(body,/Advanced filters/);
+  assert.match(body,/useView\(fields\)/);
   assert.match(body,/createdBy/);
   assert.match(body,/Claims submitted by this account/);
   assert.match(body,/Created by is an audit identity, not proof of business ownership/);
