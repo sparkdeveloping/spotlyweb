@@ -1,3 +1,5 @@
+import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
+import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { openPlaceById } from "@/lib/open-marketplace-data";
@@ -14,8 +16,8 @@ export async function GET(request){
   await verifyAppCheckRequest(request,{required:false}); const rate=await enforceRateLimit(request,{key:"public-marketplace-business",limit:180,windowMs:60_000});
   const businessId=new URL(request.url).searchParams.get("businessId")||""; if(!businessId) throw Object.assign(new Error("Business ID is required."),{status:400});
   const {db}=getAdminServices(); const [businessSnapshot,branchSnapshot,productSnapshot]=await Promise.all([db.collection("businesses").doc(businessId).get(),db.collection("branches").where("businessId","==",businessId).limit(100).get(),db.collection("products").where("businessId","==",businessId).limit(1000).get()]);
-  const curated=openPlaceById(businessId); const source=businessSnapshot.exists?{...(curated||{}),...businessSnapshot.data()}:curated;
-  if(!source||!isMarketplaceDiscoverable(source)) throw Object.assign(new Error("This business is not publicly available."),{status:404});
+  const curated=openPlaceById(businessId); const source=businessSnapshot.exists?{...(curated||{}),...businessSnapshot.data()}:curated; const showUnclaimed=await unclaimedPublicationEnabled(db);
+  if(!source||!isMarketplaceDiscoverable(source)||!(businessSnapshot.exists?canShowDirectoryRecord(source,showUnclaimed):showUnclaimed)) throw Object.assign(new Error("This business is not publicly available."),{status:404});
   const business=publicBusinessRecord(businessId,{...source,curated:Boolean(curated)}); const trust=marketplaceTrust(source);
   let branches=branchSnapshot.docs.filter((doc)=>doc.data()?.public===true&&!["archived","removed"].includes(text(doc.data()?.status))).map(publicBranch);
   if(!trust.commerceVerified) branches=branches.map((branch)=>({...branch,fulfilment:[],pickup:{},paymentMethods:[],delivery:null}));

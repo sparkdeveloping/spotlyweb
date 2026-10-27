@@ -1,3 +1,5 @@
+import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
+import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { queryOpenPlaces, queryOpenProducts, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
@@ -20,16 +22,16 @@ export async function GET(request){
   const rate=await enforceRateLimit(request,{key:"public-search",limit:120,windowMs:60_000});
   const url=new URL(request.url),query=String(url.searchParams.get("q")||"").trim(),queryTokens=words(query),city=text(url.searchParams.get("city")),service=text(url.searchParams.get("service")),type=text(url.searchParams.get("type"));
   const max=Math.min(Math.max(Number(url.searchParams.get("limit")||40),1),80); const {db}=getAdminServices();
-  const [businessSnap,productSnap,branchSnap]=await Promise.all([db.collection("businesses").where("public","==",true).limit(700).get(),db.collection("products").where("published","==",true).limit(2000).get(),db.collection("branches").where("public","==",true).limit(1400).get()]);
-  const firestoreBusinesses=businessSnap.docs.filter((doc)=>isMarketplaceDiscoverable(doc.data())).map((doc)=>publicBusinessRecord(doc.id,doc.data()));
-  const open=queryOpenPlaces({city,q:query,service,limit:2500}).records.map((item)=>publicBusinessRecord(item.id,item));
+  const [businessSnap,productSnap,branchSnap,showUnclaimed]=await Promise.all([db.collection("businesses").where("public","==",true).limit(700).get(),db.collection("products").where("published","==",true).limit(2000).get(),db.collection("branches").where("public","==",true).limit(1400).get(),unclaimedPublicationEnabled(db)]);
+  const firestoreBusinesses=businessSnap.docs.filter((doc)=>isMarketplaceDiscoverable(doc.data()) && canShowDirectoryRecord(doc.data(),showUnclaimed)).map((doc)=>publicBusinessRecord(doc.id,doc.data()));
+  const open=(showUnclaimed?queryOpenPlaces({city,q:query,service,limit:2500}).records:[]).map((item)=>publicBusinessRecord(item.id,item));
   const businesses=mergeCuratedWithFirestore(open,firestoreBusinesses).filter((business)=>(!city||!text(business.city)||text(business.city)===city)&&serviceMatches(service,business));
   const businessMap=new Map(businesses.map((business)=>[business.id,business]));
   const records=[];
   for(const business of businesses)records.push(businessSearchRecord(business));
   for(const doc of productSnap.docs){const raw=doc.data()||{},business=businessMap.get(raw.businessId);if(!business||!marketplaceTrust(business).commerceVerified||raw.active===false||raw.available===false||text(raw.status)==="archived")continue;const item=publicMerchantProduct(doc.id,raw,business);if(serviceMatches(service,business,item))records.push(item);}
   for(const doc of branchSnap.docs){const raw=doc.data()||{},business=businessMap.get(raw.businessId);if(!business||["archived","removed"].includes(text(raw.status)))continue;records.push(branchRecord(doc,business));}
-  if(!type||type==="all"||type==="product")for(const product of queryOpenProducts({q:query,limit:Math.max(max,40)}).records)records.push(publicCanonicalProduct(product));
+  if(showUnclaimed&&(!type||type==="all"||type==="product"))for(const product of queryOpenProducts({q:query,limit:Math.max(max,40)}).records)records.push(publicCanonicalProduct(product));
   const filtered=records.filter((record)=>(!type||type==="all"||record.type===type)&&(!city||!record.city||text(record.city)===city)&&(!queryTokens.length||queryTokens.every((token)=>text(record.searchText).includes(token)))).map((record)=>({...record,_score:score(record,queryTokens)})).filter((record)=>!queryTokens.length||record._score>0).sort((a,b)=>b._score-a._score||String(a.title||"").localeCompare(String(b.title||""))).slice(0,max).map(({_score,...record})=>record);
   return Response.json({ok:true,results:filtered,total:filtered.length,dataAttribution:{openStreetMap:"© OpenStreetMap contributors",openFoodFacts:"Open Food Facts contributors",databaseLicense:"ODbL-1.0"}},{headers:{"Cache-Control":"public, max-age=15, stale-while-revalidate=45","X-RateLimit-Remaining":String(rate.remaining)}});
  }catch(error){return apiError(error);}

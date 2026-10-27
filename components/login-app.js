@@ -17,7 +17,8 @@ const destinations = {
   business: spotlyPortalUrl("business"),
   admin: spotlyPortalUrl("admin"),
   staff: spotlyPortalUrl("staff"),
-  driver: spotlyPortalUrl("driver")
+  driver: spotlyPortalUrl("driver"),
+  nxt: spotlyPortalUrl("nxt")
 };
 
 function Field({ label, icon: Icon, children }) {
@@ -113,10 +114,11 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
             ? "Sign in to continue your Driver application or active work."
             : portal === "admin"
               ? "Sign in to open authorized platform operations."
+              : portal === "nxt" ? "Sign in to your authorized NXT partner workspace."
               : "Sign in to see saved businesses, baskets, and pickup updates.";
 
-  const portalLabel = portal === "business" ? "Spotly Business" : portal === "staff" ? "Spotly Staff" : portal === "driver" ? "Spotly Driver" : portal === "admin" ? "Spotly Admin" : "Spotly";
-  const portalIntro = portal === "business" ? "Run today’s work, catalogue, team and locations from one clear workspace." : portal === "staff" ? "See your assigned work, priorities and support without digging through an admin system." : portal === "driver" ? "Know whether you are online, what work is available, what comes next and what you have earned." : portal === "admin" ? "Open the queues, exceptions and operating controls that need attention." : "Your saved places, orders, bookings, rides and activity stay connected to one account.";
+  const portalLabel = portal === "business" ? "Spotly Business" : portal === "staff" ? "Spotly Staff" : portal === "driver" ? "Spotly Driver" : portal === "admin" ? "Spotly Admin" : portal === "nxt" ? "Spotly × NXT" : "Spotly";
+  const portalIntro = portal === "business" ? "Run today’s work, catalogue, team and locations from one clear workspace." : portal === "staff" ? "See your assigned work, priorities and support without digging through an admin system." : portal === "driver" ? "Know whether you are online, what work is available, what comes next and what you have earned." : portal === "admin" ? "Open the queues, exceptions and operating controls that need attention." : portal === "nxt" ? "Private outreach, lead management and campaign operations for NXT Workforce." : "Your saved places, orders, bookings, rides and activity stay connected to one account.";
 
   return <main className="min-h-screen bg-[var(--background)] text-[var(--text)]">
     <header className="border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface)_94%,transparent)] backdrop-blur-xl">

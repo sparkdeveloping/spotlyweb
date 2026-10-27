@@ -1,3 +1,5 @@
+import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
+import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
@@ -24,12 +26,12 @@ export async function GET(request) {
     const requestedTokens = tokens(queryText);
     const { db } = getAdminServices();
 
-    const [snapshot, curatedResult] = await Promise.all([
+    const [snapshot, curatedResult, showUnclaimed] = await Promise.all([
       db.collection("businesses").where("public", "==", true).limit(700).get(),
-      Promise.resolve(queryOpenPlaces({ city, q: queryText, service, limit: 2500 }))
+      Promise.resolve(queryOpenPlaces({ city, q: queryText, service, limit: 2500 })), unclaimedPublicationEnabled(db)
     ]);
-    const firestore = snapshot.docs.filter((doc) => visible(doc.data())).map((doc) => publicBusinessRecord(doc.id, doc.data()));
-    const curated = curatedResult.records.map((item) => publicBusinessRecord(item.id, item));
+    const firestore = snapshot.docs.filter((doc) => visible(doc.data()) && canShowDirectoryRecord(doc.data(), showUnclaimed)).map((doc) => publicBusinessRecord(doc.id, doc.data()));
+    const curated = (showUnclaimed ? curatedResult.records : []).map((item) => publicBusinessRecord(item.id, item));
     const records = mergeCuratedWithFirestore(curated, firestore)
       .filter((item) => !city || !text(item.city) || text(item.city) === text(city))
       .filter((item) => !requestedTokens.length || requestedTokens.every((token) => searchable(item).includes(token)))

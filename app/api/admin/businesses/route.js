@@ -20,7 +20,7 @@ const createSchema = z.object({
   website: z.string().trim().max(500).optional().default(""),
   address: z.string().trim().max(500).optional().default(""),
   status: z.enum(["provisional", "draft"]).default("provisional"),
-  public: z.boolean().default(true)
+  public: z.boolean().default(false)
 });
 
 const TYPE_CAPABILITIES = {

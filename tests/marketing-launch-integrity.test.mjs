@@ -24,8 +24,9 @@ test("Admin exposes an intentional root-domain launch switch", () => {
   const admin = read("components/admin-legacy-sections.js");
   assert.match(admin, /Launch marketing page/);
   assert.match(admin, /updatePublicMode/);
-  assert.match(admin, /Preview root/);
-  assert.match(admin, /Preview marketplace/);
+  assert.match(admin, /Preview First Access/);
+  assert.match(admin, /Save &amp; publish settings/);
+  assert.match(admin, /Open live homepage/);
 });
 
 test("marketing page is Zimbabwe-first, conversion-oriented, animated and reduced-motion aware", () => {

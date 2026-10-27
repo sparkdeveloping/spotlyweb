@@ -1,3 +1,5 @@
+import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
+import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { openPlaceById } from "@/lib/open-marketplace-data";
@@ -14,8 +16,8 @@ export async function GET(request) {
     const rate=await enforceRateLimit(request,{key:"public-business-directory-detail",limit:180,windowMs:60_000});
     const businessId=new URL(request.url).searchParams.get("businessId")||""; if(!businessId) throw Object.assign(new Error("Business ID is required."),{status:400});
     const {db}=getAdminServices(); const snapshot=await db.collection("businesses").doc(businessId).get(); const curated=openPlaceById(businessId);
-    const source=snapshot.exists?snapshot.data():curated;
-    if(!source||!isMarketplaceDiscoverable(source)) throw Object.assign(new Error("That business listing is not publicly available."),{status:404});
+    const source=snapshot.exists?snapshot.data():curated; const showUnclaimed=await unclaimedPublicationEnabled(db);
+    if(!source||!isMarketplaceDiscoverable(source)||!(snapshot.exists?canShowDirectoryRecord(source,showUnclaimed):showUnclaimed)) throw Object.assign(new Error("That business listing is not publicly available."),{status:404});
     const business=publicBusinessRecord(businessId,{...(curated||{}),...(snapshot.exists?snapshot.data():{}),curated:Boolean(curated)});
     let branches=[];
     if(snapshot.exists){const branchSnapshot=await db.collection("branches").where("businessId","==",businessId).limit(250).get(); branches=branchSnapshot.docs.filter((doc)=>doc.data()?.public===true&&!["archived","removed"].includes(text(doc.data()?.status))).map(publicBranch);}

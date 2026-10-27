@@ -96,7 +96,7 @@ function preparedDirectory() {
       cities,
       branchIds,
       branchCount: branchIds.length,
-      public: true,
+      public: false,
       status: "provisional",
       claimStatus: "unclaimed",
       verificationStatus: "unverified",

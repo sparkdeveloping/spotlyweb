@@ -1,3 +1,5 @@
+import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
+import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { pickupAvailability } from "@/lib/pickup-availability";
@@ -251,6 +253,7 @@ export async function GET(request) {
     const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
     const itemLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 8), 48) : 24;
     const { db } = getAdminServices();
+    const showUnclaimed = await unclaimedPublicationEnabled(db);
 
     const [businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot] = await publicSeed(db);
     const assistSettings = (service === "eat" || service === "shop") ? (await db.collection("platformSettings").doc("global").get()).data() || {} : {};
@@ -258,14 +261,14 @@ export async function GET(request) {
       ? await db.collection("independentShoppingStores").where("status", "==", "published").limit(160).get()
       : { docs: [] };
     const availableSources = await filterSafeIndependentStores(db, assistedSnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
-    const independentStores = availableSources
+    const independentStores = (showUnclaimed ? availableSources : [])
       .filter((raw) => regionalServicePolicy(assistSettings.assistCoverage || {}, raw, service).available)
       .map((raw) => ({ source: raw, public: independentPublicStore(raw.id, raw) })).filter((entry) => entry.public)
       .filter(({ source }) => service === "eat" ? /restaurant|food|cafe|bakery|takeaway|chicken|pizza/i.test(source.category || "") : !/restaurant|food|cafe|bakery|takeaway|chicken|pizza/i.test(source.category || ""));
 
 
-    const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data())).map(businessRecord);
-    const curatedBusinesses = queryOpenPlaces({ city, service, limit: 2500 }).records.map((item) => publicBusinessRecord(item.id, item));
+    const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data()) && canShowDirectoryRecord(doc.data(),showUnclaimed)).map(businessRecord);
+    const curatedBusinesses = (showUnclaimed ? queryOpenPlaces({ city, service, limit: 2500 }).records : []).map((item) => publicBusinessRecord(item.id, item));
     const allBusinesses = mergeCuratedWithFirestore(curatedBusinesses, firestoreBusinesses);
     const branchMap = new Map();
     branchSnapshot.docs.forEach((doc) => {

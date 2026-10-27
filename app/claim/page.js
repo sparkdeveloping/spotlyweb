@@ -4,5 +4,5 @@ export const metadata = { title: "List or claim a business", description: "Find,
 
 export default async function ClaimPage({ searchParams }) {
   const params = await searchParams;
-  return <ClaimApp initialBusinessId={params?.business || ""} newBusiness={params?.new === "1"} initialName={params?.name || ""} initialDraftId={params?.draft || ""} />;
+  return <ClaimApp initialBusinessId={params?.business || ""} inviteToken={params?.invite || ""} newBusiness={params?.new === "1"} initialName={params?.name || ""} initialDraftId={params?.draft || ""} />;
 }

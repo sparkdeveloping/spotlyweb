@@ -8,7 +8,7 @@ import { Button, Card, ProgressBar, SearchField } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { useAuth } from "@/components/firebase-provider";
 import { deleteClaimDraft, deleteClaimEvidence, getPublicBranchesForBusiness, getBusiness, getClaimDraft, saveClaimDraft, searchBusinesses, track, uploadClaimEvidence } from "@/lib/firebase-services";
-import { authenticatedFetch } from "@/lib/api-client";
+import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { businessCategories, zimbabweCities } from "@/data/business-config";
 import { BUSINESS_ARCHETYPES, capabilitiesFor, inferBusinessType } from "@/data/business-archetypes";
 import { migrateLegacyState, readState, removeState, writeState } from "@/lib/browser-state";
@@ -100,7 +100,7 @@ function Choice({ active, onClick, title, description, icon: Icon }) {
 
 function Field({ label, children, className="" }) { return <label className={className}><span className="mb-2 block text-sm font-semibold">{label}</span>{children}</label>; }
 
-export function ClaimApp({ initialBusinessId = "", newBusiness = false, initialName = "", initialDraftId = "", businessJourney = false }) {
+export function ClaimApp({ initialBusinessId = "", inviteToken = "", newBusiness = false, initialName = "", initialDraftId = "", businessJourney = false }) {
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -144,10 +144,10 @@ export function ClaimApp({ initialBusinessId = "", newBusiness = false, initialN
       const transferred = restoreGuestClaim(window.localStorage);
       const local = transferred || migrateLegacyState("spotly-business-claim-draft-v2",user) || readState(DRAFT_KEY,user,null);
       if(active&&local)applyDraft(local);
-      if(initialBusinessId&&!local){const business=await getBusiness(initialBusinessId);if(active&&business){const locations=(await getPublicBranchesForBusiness(business.id)).filter(isClaimableExistingBranch);setSelected(business);setMode("claim");setBranches(locations);setSelectedBranchIds(locations.length===1?[locations[0].id]:[]);setForm((current)=>({...current,name:business.brandName||business.name,organizationName:business.organizationName||"",city:business.city||current.city,address:business.address||current.address,branchName:business.area||current.branchName,category:business.category||"Other",businessType:business.businessType||inferBusinessType(business),email:business.email||current.email,phone:business.phone||current.phone,website:business.website||"",description:business.description||""}));setStepIndex(1);}}
+      if(initialBusinessId&&!local){const invited=inviteToken ? await publicApiFetch(`/api/public/claim-invite?token=${encodeURIComponent(inviteToken)}`) : null;const business=invited?.business || await getBusiness(initialBusinessId);if(active&&business){const locations=(invited ? invited.branches : await getPublicBranchesForBusiness(business.id)).filter(isClaimableExistingBranch);setSelected(business);setMode("claim");setBranches(locations);setSelectedBranchIds(locations.length===1?[locations[0].id]:[]);setForm((current)=>({...current,name:business.brandName||business.name,organizationName:business.organizationName||"",city:business.city||current.city,address:business.address||current.address,branchName:business.area||current.branchName,category:business.category||"Other",businessType:business.businessType||inferBusinessType(business),email:business.email||current.email,phone:business.phone||current.phone,website:business.website||"",description:business.description||""}));setStepIndex(1);}}
     } catch { setError("The saved claim could not be restored."); }
     finally { if(active)setReady(true); }
-  })();return()=>{active=false;};},[applyDraft,initialBusinessId,initialDraftId,user]);
+  })();return()=>{active=false;};},[applyDraft,initialBusinessId,initialDraftId,inviteToken,user]);
 
   useEffect(()=>{if(user)setForm((current)=>({...current,applicantName:current.applicantName||user.displayName||"",email:current.email||user.email||"",phone:current.phone||user.phoneNumber||""}));},[user]);
 

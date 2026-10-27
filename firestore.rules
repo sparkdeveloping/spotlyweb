@@ -142,6 +142,13 @@ service cloud.firestore {
       allow write: if platformAdmin() || hasPermission("admin.configuration");
     }
 
+    // Partner CRM, call evidence and invitation tokens are server-only. The
+    // NXT portal checks roles in authenticated API handlers, not client rules.
+    match /nxtProspects/{id} { allow read, write: if false; }
+    match /nxtInteractions/{id} { allow read, write: if false; }
+    match /nxtEvidence/{id} { allow read, write: if false; }
+    match /nxtClaimInvites/{id} { allow read, write: if false; }
+
     match /platformSecrets/{id} { allow read, write: if false; }
 
     match /businesses/{businessId} {
