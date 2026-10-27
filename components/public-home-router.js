@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { Wrench } from "lucide-react";
+import { FirstAccessLanding, MaintenanceLanding } from "@/components/first-access-landing";
 import { Button } from "@/components/ui";
-import { usePlatform } from "@/components/firebase-provider";
+import { usePlatform, useAuth } from "@/components/firebase-provider";
 import { MarketplaceApp } from "@/components/marketplace-app";
 
 function PublicHomeLoading() {
@@ -19,7 +20,12 @@ function MaintenanceHome() {
 
 export function PublicHomeRouter() {
   const { settings, settingsReady } = usePlatform();
+  const { user, profile } = useAuth();
   if (!settingsReady) return <PublicHomeLoading />;
-  if (settings.launch?.publicMode === "maintenance") return <MaintenanceHome />;
+  if (settings.launch?.publicMode === "maintenance") return <MaintenanceLanding />;
+  if (["first_access", "coming-soon", "private-beta"].includes(settings.launch?.publicMode)) {
+    const betaEnabled = settings.launch?.privateBetaEnabled !== false && user && !user.isAnonymous && profile?.privateBeta === true;
+    return betaEnabled ? <MarketplaceApp basePath="/" /> : <FirstAccessLanding />;
+  }
   return <MarketplaceApp basePath="/" />;
 }

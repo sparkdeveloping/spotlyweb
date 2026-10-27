@@ -1,8 +1,10 @@
+import "@/app/first-access.css";
 import "./globals.css";
 import "./v7-experience.css";
 import "./admin-v8.css";
 import { AppProviders } from "@/components/providers";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
+import { CustomerLaunchGate } from "@/components/customer-launch-gate";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyafrica.com";
 
@@ -64,7 +66,7 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /></head>
       <body>
-        <AppProviders><ConnectivityBanner />{children}</AppProviders>
+        <AppProviders><ConnectivityBanner /><CustomerLaunchGate>{children}</CustomerLaunchGate></AppProviders>
       </body>
     </html>
   );

@@ -346,6 +346,12 @@ service cloud.firestore {
       allow read, delete: if platformAdmin() || hasPermission("content.*");
     }
 
+    // First-party acquisition counters and contact logs are server-controlled only.
+    // Agency members use the permission-checked Admin API; never client-side Firestore.
+    match /firstAccessMetrics/{id} { allow read, write: if false; }
+    match /firstAccessCampaignMetrics/{id} { allow read, write: if false; }
+    match /firstAccessTouchpoints/{id} { allow read, write: if false; }
+
     match /rateLimits/{limitId} { allow read, write: if false; }
 
     match /partnershipLeads/{leadId} {

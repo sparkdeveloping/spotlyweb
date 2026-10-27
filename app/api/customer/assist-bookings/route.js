@@ -1,3 +1,4 @@
+import { requireCustomerLaunchAccess } from "@/lib/customer-launch-server";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
@@ -28,6 +29,7 @@ function pick(d) {
 export async function POST(request) {
   try {
     const user=await authenticateRequest(request);
+    await requireCustomerLaunchAccess(user, getAdminServices().db);
     const input=schema.parse(await request.json());
     const rate=await enforceRateLimit(request,{key:"assist-bookings",limit:8,windowMs:60*60_000,identity:user.uid});
     const {db,messaging,auth}=getAdminServices();

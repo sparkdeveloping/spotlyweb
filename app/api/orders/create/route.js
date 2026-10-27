@@ -1,3 +1,4 @@
+import { requireCustomerLaunchAccess } from "@/lib/customer-launch-server";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
@@ -96,6 +97,7 @@ export async function POST(request) {
   try {
     const rate = await enforceRateLimit(request, { key: "customer-order-create", limit: 30, windowMs: 60_000 });
     const user = await authenticateRequest(request);
+    await requireCustomerLaunchAccess(user, getAdminServices().db);
     const body = schema.parse(await request.json());
     if (!user.email) throw Object.assign(new Error("Add and verify an email-and-password sign-in before ordering."), { status: 409 });
 

@@ -15,7 +15,8 @@ test("root domain is controlled by platform launch mode instead of hardwired com
   assert.match(router, /maintenance/);
   assert.match(router, /MarketplaceApp/);
   assert.match(router, /basePath="\/"/);
-  assert.doesNotMatch(router, /private-beta/);
+  assert.match(router, /first_access/);
+  assert.match(router, /privateBeta/);
   assert.doesNotMatch(router, /router\.replace\("\/marketplace"\)/);
 });
 

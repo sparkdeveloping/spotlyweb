@@ -1,8 +1,8 @@
 import { PublicHomeRouter } from "@/components/public-home-router";
 
 export const metadata = {
-  title: "Spotly · Ride, eat, shop, book and discover Zimbabwe",
-  description: "Use Spotly to discover verified Zimbabwean businesses, order for pickup or delivery, save places, track activity, and explore the services around your city."
+  title: "Spotly First Access · Your city, so much closer",
+  description: "Get Spotly First Access. Create your account, tell us what you’re most excited about, and be among the first in Zimbabwe to hear when your city opens up."
 };
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyafrica.com";

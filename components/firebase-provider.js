@@ -23,6 +23,7 @@ import { getToken } from "firebase/messaging";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebaseClient, getFirebaseMessaging } from "@/lib/firebase";
 import { clearUserSessionState } from "@/lib/browser-state";
+import { sharedSessionDecision } from "@/lib/auth-session-policy";
 import { portalForHostname, spotlyPortalUrl } from "@/lib/spotly-domains";
 import {
   DEFAULT_PLATFORM_SETTINGS,
@@ -119,11 +120,15 @@ export function FirebaseProvider({ children }) {
   const [driverProfile, setDriverProfile] = useState(null);
   const [driverApplication, setDriverApplication] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [verificationRevision, setVerificationRevision] = useState(0);
   const recaptchaRef = useRef(null);
   const sharedBootstrapAttemptedRef = useRef(false);
   const initialAuthResolvedRef = useRef(false);
   const interactiveAuthRef = useRef(false);
+  const authEventRef = useRef(0);
+  const sessionEstablishedAtRef = useRef(0);
 
   useEffect(() => {
     const client = getFirebaseClient();
@@ -131,86 +136,119 @@ export function FirebaseProvider({ children }) {
       setAuthReady(true);
       return undefined;
     }
-    return onAuthStateChanged(client.auth, async (nextUser) => {
+    const unsubscribe = onAuthStateChanged(client.auth, async (nextUser) => {
+      const event = ++authEventRef.current;
       setAuthError("");
       const initialEvent = !initialAuthResolvedRef.current;
       initialAuthResolvedRef.current = true;
 
       if (initialEvent && nextUser && !nextUser.isAnonymous) {
         if (interactiveAuthRef.current) {
-          // An explicit sign-in is authoritative. Do not let a stale global-sign-out tombstone
-          // immediately sign the user back out before the new shared session can be created.
           sharedBootstrapAttemptedRef.current = true;
         } else {
           try {
             const shared = await sharedBrowserSessionState();
-            if (shared.ok && shared.uid && shared.uid !== nextUser.uid) {
-              const restoredUser = await bootstrapSharedBrowserSession(client.auth);
-              if (restoredUser) return;
+            if (event !== authEventRef.current) return;
+            const action = sharedSessionDecision({ localUid: nextUser.uid, shared });
+            if (action === "switch") {
+              const restored = await bootstrapSharedBrowserSession(client.auth);
+              if (restored) { setSessionReady(true); return; }
             }
-            if (!shared.ok && ["signed_out", "expired"].includes(shared.reason)) {
+            if (action === "signout") {
+              // The signed_out tombstone is created by an explicit sign-out on another tab.
               await signOut(client.auth);
               return;
             }
-            if (!shared.ok && shared.reason === "missing") await persistSharedBrowserSession(nextUser).catch(() => false);
+            if (action === "ready") setSessionReady(true);
+            if (action === "renew") {
+              const ready = await persistSharedBrowserSession(nextUser).catch(() => false);
+              if (event !== authEventRef.current) return;
+              setSessionReady(ready);
+              if (ready) sessionEstablishedAtRef.current = Date.now();
+            }
           } catch {
-            // Existing Firebase sessions remain usable when the shared-session endpoint is temporarily unavailable.
+            // A shared-session outage is not evidence that the local Firebase account is invalid.
           }
         }
       }
 
-      if (!nextUser && !sharedBootstrapAttemptedRef.current) {
+      if (!nextUser && !sharedBootstrapAttemptedRef.current && !interactiveAuthRef.current) {
         sharedBootstrapAttemptedRef.current = true;
         try {
-          const restoredUser = await bootstrapSharedBrowserSession(client.auth);
-          if (restoredUser) return; // signInWithCustomToken triggers this observer again with the restored user.
+          const restored = await bootstrapSharedBrowserSession(client.auth);
+          if (restored) { setSessionReady(true); return; }
         } catch {
-          // Shared SSO is a convenience layer. If it is unavailable, normal Firebase sign-in still works.
+          // Normal Firebase sign-in remains available when cross-domain bootstrap fails.
         }
       }
-
-      setUser(nextUser);
-      if (nextUser) {
+      if (event !== authEventRef.current) return;
+      if (nextUser && !nextUser.isAnonymous) {
         try {
-          if (!nextUser.isAnonymous) await ensureUserProfile(nextUser);
-          track("auth_session_started", { provider_count: nextUser.providerData.length, anonymous: nextUser.isAnonymous });
+          await ensureUserProfile(nextUser);
+          if (event !== authEventRef.current) return;
+          track("auth_session_started", { provider_count: nextUser.providerData.length, anonymous: false });
         } catch (error) {
+          if (event !== authEventRef.current) return;
           setAuthError(error.message);
         }
-      } else {
+      } else if (nextUser?.isAnonymous) {
+        setSessionReady(false);
+      }
+      if (event !== authEventRef.current) return;
+      setUser(nextUser);
+      if (!nextUser) {
+        setSessionReady(false);
         setProfile(null);
         setMemberships([]);
         setStaffProfile(null);
         setDriverProfile(null);
         setDriverApplication(null);
       }
-      setAuthReady(true);
+      // An interactive sign-in owns the final readiness transition after its
+      // session-cookie write, so screens never briefly show a logged-out state.
+      if (!interactiveAuthRef.current) setAuthReady(true);
     });
+    return () => {
+      authEventRef.current += 1;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
     if (!user?.uid || user.isAnonymous) return undefined;
     let reconciling = false;
     async function reconcileSharedSession() {
-      if (reconciling || document.visibilityState === "hidden") return;
+      if (reconciling || interactiveAuthRef.current || document.visibilityState === "hidden" ||
+          Date.now() - sessionEstablishedAtRef.current < 8000) return;
       reconciling = true;
       try {
         const shared = await sharedBrowserSessionState();
-        const client = getFirebaseClient();
-        if (!client?.auth.currentUser) return;
-        if (shared.ok && shared.uid && shared.uid !== client.auth.currentUser.uid) {
-          sharedBootstrapAttemptedRef.current = false;
-          await signOut(client.auth);
+        const current = getFirebaseClient()?.auth?.currentUser;
+        if (!current || current.isAnonymous || interactiveAuthRef.current) return;
+        const action = sharedSessionDecision({ localUid: current.uid, shared,
+          interactive: interactiveAuthRef.current, recentlyEstablished: Date.now() - sessionEstablishedAtRef.current < 8000 });
+        if (action === "switch") {
+          // Swap identities atomically: do not briefly render an anonymous workspace.
+          const restored = await bootstrapSharedBrowserSession(getFirebaseClient().auth);
+          if (restored) setSessionReady(true);
           return;
         }
-        if (!shared.ok && ["signed_out", "expired"].includes(shared.reason)) {
+        if (action === "signout") {
+          // Honor explicit global sign-out, but not a missing or expired session cookie.
           sharedBootstrapAttemptedRef.current = true;
-          await signOut(client.auth);
+          setSessionReady(false);
+          await signOut(getFirebaseClient().auth);
           return;
         }
-        if (!shared.ok && shared.reason === "missing") await persistSharedBrowserSession(client.auth.currentUser).catch(() => false);
+        if (action === "renew") {
+          const ready = await persistSharedBrowserSession(current).catch(() => false);
+          setSessionReady(ready);
+          if (ready) sessionEstablishedAtRef.current = Date.now();
+          return;
+        }
+        if (action === "ready") setSessionReady(true);
       } catch {
-        // Do not destroy a valid local session because a session-health request temporarily failed.
+        // Network failures must not sign the user out or discard active forms.
       } finally {
         reconciling = false;
       }
@@ -274,6 +312,8 @@ export function FirebaseProvider({ children }) {
     const client = getFirebaseClient();
     if (!client) throw new Error("Firebase is not configured.");
     interactiveAuthRef.current = true;
+    setSessionReady(false);
+    setAuthReady(false);
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const activeUser = client.auth.currentUser;
@@ -282,14 +322,26 @@ export function FirebaseProvider({ children }) {
         : await createUserWithEmailAndPassword(client.auth, normalizedEmail, password);
       if (displayName) await updateProfile(result.user, { displayName });
       await ensureUserProfile(result.user, { displayName });
+      // Creating the account must not claim email delivery succeeded when Firebase declined it.
+      // Send before cross-domain SSO: a temporary session issue must not prevent the link.
+      let verificationEmailSent = false;
+      try {
+        await sendEmailVerification(result.user, { url: spotlyPortalUrl("customer", "/account") });
+        verificationEmailSent = true;
+      } catch {
+        // Signup remains valid. The in-app verification banner offers a real resend action.
+      }
       await persistSharedBrowserSession(result.user, { required: true });
-      await sendEmailVerification(result.user, { url: spotlyPortalUrl("customer", "/account") }).catch(() => {});
+      sessionEstablishedAtRef.current = Date.now();
+      setSessionReady(true);
+      setUser(result.user);
       await track("sign_up", { method: "password" });
-      return result.user;
+      return { user: result.user, verificationEmailSent };
     } catch (error) {
       throw new Error(friendlyAuthError(error));
     } finally {
       interactiveAuthRef.current = false;
+      setAuthReady(true);
     }
   }, []);
 
@@ -297,13 +349,36 @@ export function FirebaseProvider({ children }) {
     const client = getFirebaseClient();
     if (!client) throw new Error("Firebase is not configured.");
     interactiveAuthRef.current = true;
+    setSessionReady(false);
+    setAuthReady(false);
     try {
       const result = await signInWithEmailAndPassword(client.auth, email.trim().toLowerCase(), password);
       await ensureUserProfile(result.user);
       await persistSharedBrowserSession(result.user, { required: true });
+      sessionEstablishedAtRef.current = Date.now();
+      setSessionReady(true);
+      setUser(result.user);
       await track("login", { method: "password" });
       return result.user;
     } catch (error) {
+      throw new Error(friendlyAuthError(error));
+    } finally {
+      interactiveAuthRef.current = false;
+      setAuthReady(true);
+    }
+  }, []);
+
+  const ensureSharedSession = useCallback(async () => {
+    const current = getFirebaseClient()?.auth?.currentUser;
+    if (!current || current.isAnonymous) throw new Error("Sign in to continue.");
+    interactiveAuthRef.current = true;
+    try {
+      await persistSharedBrowserSession(current, { required: true });
+      sessionEstablishedAtRef.current = Date.now();
+      setSessionReady(true);
+      return true;
+    } catch (error) {
+      setSessionReady(false);
       throw new Error(friendlyAuthError(error));
     } finally {
       interactiveAuthRef.current = false;
@@ -311,12 +386,70 @@ export function FirebaseProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    const client = getFirebaseClient();
-    const activeUser = client?.auth?.currentUser || user;
-    clearUserSessionState(activeUser);
-    await clearSharedBrowserSession();
-    if (client) await signOut(client.auth);
+    interactiveAuthRef.current = true;
+    setSessionReady(false);
+    try {
+      const client = getFirebaseClient();
+      const activeUser = client?.auth?.currentUser || user;
+      clearUserSessionState(activeUser);
+      await clearSharedBrowserSession();
+      if (client) await signOut(client.auth);
+      setUser(null);
+    } finally {
+      interactiveAuthRef.current = false;
+      setAuthReady(true);
+    }
   }, [user]);
+
+  const sendVerificationEmail = useCallback(async () => {
+    const current = getFirebaseClient()?.auth?.currentUser;
+    if (!current || current.isAnonymous || !current.email) {
+      throw new Error("Sign in with an email address to request verification.");
+    }
+    try {
+      await current.reload();
+      setVerificationRevision((previous) => previous + 1);
+      if (current.emailVerified) return { alreadyVerified: true };
+      await sendEmailVerification(current, { url: spotlyPortalUrl("customer", "/account") });
+      return { alreadyVerified: false };
+    } catch (error) {
+      throw new Error(friendlyAuthError(error));
+    }
+  }, []);
+
+  const refreshEmailVerification = useCallback(async () => {
+    const current = getFirebaseClient()?.auth?.currentUser;
+    if (!current || current.isAnonymous) throw new Error("Sign in to check your email verification.");
+    try {
+      await current.reload();
+      // The Ride Lab and other protected API routes read the refreshed email_verified token claim.
+      await current.getIdToken(true);
+      setVerificationRevision((previous) => previous + 1);
+      return current.emailVerified === true;
+    } catch (error) {
+      throw new Error(friendlyAuthError(error));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.uid || !user?.email || user.isAnonymous || user.emailVerified) return undefined;
+    let lastRefresh = 0;
+    function refreshOnReturn() {
+      if (document.visibilityState !== "visible" || !getFirebaseClient()?.auth?.currentUser) return;
+      const now = Date.now();
+      if (now - lastRefresh < 30000) return;
+      lastRefresh = now;
+      refreshEmailVerification().catch(() => {
+        // Manual verification status refresh remains available in the banner.
+      });
+    }
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+    };
+  }, [user?.uid, user?.email, user?.isAnonymous, user?.emailVerified, refreshEmailVerification]);
 
   const resetPassword = useCallback(async (email) => {
     const client = getFirebaseClient();
@@ -407,10 +540,14 @@ export function FirebaseProvider({ children }) {
     driverProfile,
     driverApplication,
     authReady,
+    sessionReady,
     authError,
     createAccount,
     signIn,
     logout,
+    ensureSharedSession,
+    sendVerificationEmail,
+    refreshEmailVerification,
     resetPassword,
     linkProvider,
     addPassword,
@@ -418,7 +555,7 @@ export function FirebaseProvider({ children }) {
     enablePushNotifications,
     ensureAnonymousSession,
     hasRole
-  }), [user, profile, memberships, staffProfile, driverProfile, driverApplication, authReady, authError, createAccount, signIn, logout, resetPassword, linkProvider, addPassword, beginPhoneLink, enablePushNotifications, ensureAnonymousSession, hasRole]);
+  }), [user, profile, memberships, staffProfile, driverProfile, driverApplication, authReady, sessionReady, authError, verificationRevision, createAccount, signIn, logout, ensureSharedSession, sendVerificationEmail, refreshEmailVerification, resetPassword, linkProvider, addPassword, beginPhoneLink, enablePushNotifications, ensureAnonymousSession, hasRole]);
 
   return <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>;
 }

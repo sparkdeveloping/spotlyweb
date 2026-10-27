@@ -1,3 +1,4 @@
+import { requireCustomerLaunchAccess } from "@/lib/customer-launch-server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
@@ -49,7 +50,8 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const user = await authenticateRequest(request); await enforceRateLimit(request, { key: "customer_parcels_mutation", limit: 15, windowMs: 10 * 60_000, identity: user.uid });
+    const user = await authenticateRequest(request);
+    await requireCustomerLaunchAccess(user, getAdminServices().db); await enforceRateLimit(request, { key: "customer_parcels_mutation", limit: 15, windowMs: 10 * 60_000, identity: user.uid });
     const body = schema.parse(await request.json()); const { db, messaging } = getAdminServices();
     if (body.action === "cancel") {
       const ref = db.collection("parcelJobs").doc(body.parcelJobId); let assignedDriverId = null; let number = ""; let orderId = null; let paymentStatus = "";

@@ -3,9 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound, LoaderCircle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { useAuth } from "@/components/firebase-provider";
@@ -31,21 +31,42 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const { toast } = useToast();
-  const { user, authReady, createAccount, signIn, resetPassword } = useAuth();
+  const { user, authReady, sessionReady, ensureSharedSession, createAccount, signIn, resetPassword } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const portal = destinations[initialPortal] ? initialPortal : "customer";
   const next = safeSpotlyDestination(searchParams.get("next"), destinations[portal]);
 
+  const navigateToWorkspace = useCallback(() => {
+    setRedirecting(true);
+    if (/^https?:/i.test(next)) window.location.replace(next);
+    else router.replace(next);
+  }, [next, router]);
+
   useEffect(() => {
-    if (!loading && authReady && user && !user.isAnonymous && mode !== "link") {
-      if (/^https?:/i.test(next)) window.location.replace(next);
-      else router.replace(next);
+    // A Firebase user is not proof that its cross-subdomain session cookie
+    // has been established. Never navigate during a pending login.
+    if (!redirecting && !loading && authReady && sessionReady && user && !user.isAnonymous) {
+      navigateToWorkspace();
     }
-  }, [authReady, loading, user, mode, next, router]);
+  }, [authReady, sessionReady, loading, redirecting, user, navigateToWorkspace]);
+
+  async function continueSignedIn() {
+    if (loading || redirecting) return;
+    setLoading(true);
+    try {
+      await ensureSharedSession();
+      navigateToWorkspace();
+    } catch (error) {
+      toast(error.message || "Spotly could not restore your session. Please try again.", { type: "error", title: "Session not ready" });
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -53,8 +74,11 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
     try {
       if (mode === "signup") {
         if (!acceptedTerms) throw new Error("Confirm that you agree to the Spotly terms and privacy notice.");
-        await createAccount({ email, password, displayName });
-        toast("Your Spotly account is ready. We also sent an email verification link.", { title: "Welcome to Spotly" });
+        const signup = await createAccount({ email, password, displayName });
+        toast(signup.verificationEmailSent
+          ? "Account created. Check your email for a verification link. You can resend it from your Spotly workspace."
+          : "Account created, but we could not send the verification email. Use Resend verification email in your Spotly workspace.",
+          { title: "Verify your email", type: signup.verificationEmailSent ? "success" : "info", duration: 10000 });
       } else if (mode === "reset") {
         await resetPassword(email);
         setResetSent(true);
@@ -64,8 +88,7 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
         await signIn({ email, password });
         toast("You are securely signed in.", { title: "Welcome back" });
       }
-      if (/^https?:/i.test(next)) window.location.replace(next);
-      else router.replace(next);
+      navigateToWorkspace();
     } catch (error) {
       toast(error.message, { type: "error", title: "Sign-in issue" });
     } finally {
@@ -79,7 +102,7 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
       ? "Create one Spotly account, then continue directly into your Driver application."
       : portal === "business"
         ? "Create one Spotly account, then continue the business claim or setup you started."
-        : "Create one account for orders, pickup updates, and any workspaces you are later invited to use."
+        : "Create one account for orders, pickup updates, and invited workspaces. We will ask you to verify your email after signup."
     : mode === "reset"
       ? "Enter the email used for your Spotly account."
       : portal === "business"
@@ -104,7 +127,7 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
       <section className="relative hidden overflow-hidden border-r border-[var(--border-subtle)] px-8 py-12 lg:flex lg:flex-col lg:justify-between xl:px-12">
         <div className="relative z-10 max-w-xl"><p className="text-sm font-semibold text-[var(--accent)]">{portalLabel}</p><h1 className="mt-4 text-[52px] font-semibold leading-[1] tracking-[-.06em]">One account. The right next step.</h1><p className="mt-5 max-w-lg text-base leading-7 text-[var(--text-2)]">{portalIntro}</p></div>
         <div className="relative z-10 mt-12 max-w-xl">
-          <div className="grid grid-cols-3 gap-2">{[["eat","Eat"],["shop","Shop"],["book","Book"],["events","Events"],["ride","Ride"],["send","Send"]].map(([service,label]) => <div key={service} className="flex items-center gap-2 rounded-[16px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface)_82%,transparent)] p-3 backdrop-blur"><span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[var(--accent-soft)] text-[var(--accent)]"><ServiceGlyph service={service} className="h-4 w-4" /></span><span className="text-xs font-semibold">{label}</span></div>)}</div>
+          <div className="grid grid-cols-3 gap-2">{[["eat","Bite"],["shop","Shopper"],["book","Book"],["events","Live"],["ride","Ride"],["send","Send"]].map(([service,label]) => <div key={service} className="flex items-center gap-2 rounded-[16px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface)_82%,transparent)] p-3 backdrop-blur"><span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[var(--accent-soft)] text-[var(--accent)]"><ServiceGlyph service={service} className="h-4 w-4" /></span><span className="text-xs font-semibold">{label}</span></div>)}</div>
           <div className="mt-6 border-y border-[var(--border-subtle)] py-4 text-sm leading-6 text-[var(--text-2)]"><span className="font-semibold text-[var(--text)]">Secure continuity:</span> sign in once and Spotly restores the account, workspace and activity you are allowed to use.</div>
         </div>
         <ServiceArtwork service={portal === "driver" ? "ride" : portal === "business" ? "shop" : "send"} className="absolute -right-16 top-16 h-72 w-72 opacity-[.08]" />
@@ -113,7 +136,7 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
       <section className="flex items-center px-4 py-10 sm:px-8 lg:px-10">
         <div className="mx-auto w-full max-w-md">
           <p className="text-sm font-semibold text-[var(--accent)]">Secure access</p><h2 className="mt-2 text-[34px] font-semibold tracking-[-.05em]">{title}</h2><p className="mt-3 text-sm leading-6 text-[var(--text-2)]">{description}</p>
-          {user && !user.isAnonymous ? <div className="mt-8"><div className="flex items-center gap-3 border-y border-[var(--border-subtle)] py-4"><span className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[var(--accent-soft)] text-[var(--accent)]"><UserRound className="h-5 w-5" /></span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{user.displayName || user.email}</p><p className="mt-1 text-xs text-[var(--text-3)]">Already signed in</p></div><Check className="h-5 w-5 text-[var(--success)]" /></div><p className="mt-5 text-sm leading-6 text-[var(--text-2)]">Continue to the workspace you requested. Spotly will still apply that workspace’s access rules.</p><Button className="mt-5 w-full" onClick={() => /^https?:/i.test(next) ? window.location.assign(next) : router.push(next)}>Continue<ArrowRight className="h-4 w-4" /></Button></div> : <>
+          {!authReady || redirecting ? <div role="status" aria-live="polite" className="mt-8 flex min-h-48 items-center justify-center gap-3 rounded-2xl bg-[var(--surface-2)] p-6 text-sm font-medium text-secondary"><LoaderCircle className="h-5 w-5 animate-spin" />{redirecting ? "Opening your Spotly workspace…" : "Restoring your Spotly session…"}</div> : user && !user.isAnonymous ? <div className="mt-8"><div className="flex items-center gap-3 border-y border-[var(--border-subtle)] py-4"><span className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[var(--accent-soft)] text-[var(--accent)]"><UserRound className="h-5 w-5" /></span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{user.displayName || user.email}</p><p className="mt-1 text-xs text-[var(--text-3)]">Already signed in</p></div><Check className="h-5 w-5 text-[var(--success)]" /></div><p className="mt-5 text-sm leading-6 text-[var(--text-2)]">Continue to the workspace you requested. Spotly will still apply that workspace’s access rules.</p><Button loading={loading} disabled={loading} className="mt-5 w-full" onClick={continueSignedIn}>{sessionReady ? "Continue" : "Restore session & continue"}<ArrowRight className="h-4 w-4" /></Button></div> : <>
             <div className="mt-7 grid grid-cols-2 rounded-[12px] bg-[var(--surface-2)] p-1">{[["signin", "Sign in"], ["signup", "Create account"]].map(([value, label]) => <button type="button" key={value} onClick={() => { setMode(value); setResetSent(false); }} className={`rounded-[10px] px-4 py-2.5 text-sm font-semibold transition ${mode === value ? "bg-[var(--surface)] text-[var(--accent-strong)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text)]"}`}>{label}</button>)}</div>
             <AnimatePresence mode="wait"><motion.form key={mode} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: .2 }} onSubmit={submit} className="mt-6 space-y-4">
               {mode === "signup" ? <Field label="Full name" icon={UserRound}><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required autoComplete="name" className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Your full name" /></Field> : null}

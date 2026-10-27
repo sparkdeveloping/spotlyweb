@@ -1,15 +1,35 @@
 "use client";
 import Link from "next/link";
 import {useCallback,useEffect,useState} from "react";
-import {CarFront,Package,RefreshCw,ShieldAlert,CheckCircle2} from "lucide-react";
+import {CarFront,Package,RefreshCw,ShieldAlert,CheckCircle2,UserPlus,X,Search} from "lucide-react";
 import {authenticatedFetch} from "@/lib/api-client";
-import {Badge,Button,Card,PageSkeleton} from "@/components/ui";
+import {Badge,Button,Card,Modal,PageSkeleton} from "@/components/ui";
 
 export function AdminMobilityLaunch({openRide,openSend}){
  const [data,setData]=useState(null),[error,setError]=useState("");
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(""),[confirm,setConfirm]=useState({});
  const [routeStatus,setRouteStatus]=useState(null),[routeProbe,setRouteProbe]=useState(null),[routeBusy,setRouteBusy]=useState("");
  const [lab,setLab]=useState(null),[labInput,setLabInput]=useState(""),[labBusy,setLabBusy]=useState(false),[labError,setLabError]=useState("");
+ const [pickerOpen,setPickerOpen]=useState(false),[search,setSearch]=useState(""),[searching,setSearching]=useState(false),[searchResults,setSearchResults]=useState([]),[searchError,setSearchError]=useState("");
+ const selectedTesters=labInput.split(/[\n,;]+/).map(item=>item.trim().toLowerCase()).filter(Boolean);
+ function updateTester(email,selected){
+   const next=new Set(selectedTesters);
+   if(selected)next.add(email.trim().toLowerCase());else next.delete(email.trim().toLowerCase());
+   setLabInput([...next].sort().join("\n"));
+ }
+ useEffect(()=>{
+   if(!pickerOpen||search.trim().length<2){setSearchResults([]);setSearchError("");return undefined;}
+   let active=true;
+   const timer=window.setTimeout(async()=>{
+     setSearching(true);setSearchError("");
+     try{
+       const result=await authenticatedFetch("/api/admin/ride-lab/testers?q="+encodeURIComponent(search.trim()),{cache:"no-store"});
+       if(active)setSearchResults(result.accounts||[]);
+     }catch(err){if(active)setSearchError(err.message||"Account search failed.");}
+     finally{if(active)setSearching(false);}
+   },350);
+   return()=>{active=false;window.clearTimeout(timer);};
+ },[pickerOpen,search]);
  const loadLab=useCallback(async()=>{
    try{
      const result=await authenticatedFetch("/api/admin/ride-lab",{cache:"no-store"});
@@ -72,9 +92,13 @@ export function AdminMobilityLaunch({openRide,openSend}){
     <Badge tone="info">No customer bookings enabled</Badge>
    </div>
    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,.8fr)]">
-     <label className="text-sm font-semibold">Invited tester emails · one per line
-       <textarea className="field-control mt-2 min-h-32 w-full" value={labInput} onChange={e=>setLabInput(e.target.value)} placeholder="tester@example.com" autoCapitalize="none" autoComplete="off"/>
-     </label>
+     <div>
+       <div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">Invited Spotly testers <span className="text-secondary">({selectedTesters.length}/30)</span></p><Button type="button" size="sm" variant="outline" onClick={()=>setPickerOpen(true)}><UserPlus className="h-4 w-4"/>Find account</Button></div>
+       <div className="mt-3 min-h-32 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+         {selectedTesters.length?<ul aria-label="Selected Ride Lab testers" className="flex flex-wrap gap-2">{selectedTesters.map(email=><li key={email} className="inline-flex max-w-full items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium"><span className="break-all">{email}</span><button type="button" aria-label={"Remove "+email} onClick={()=>updateTester(email,false)} className="rounded-md p-1 text-secondary hover:text-danger"><X className="h-3.5 w-3.5"/></button></li>)}</ul>:<p className="py-5 text-center text-sm text-secondary">No testers selected. Find a registered Spotly account to invite.</p>}
+       </div>
+       <p className="mt-2 text-xs leading-5 text-secondary">Only verified accounts can use Ride Lab. Review selections, then save; choosing someone does not grant access until saved.</p>
+     </div>
      <div className="rounded-xl bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">Last test positions</p>
        {(lab?.recentPositions||[]).length?<div className="mt-3 max-h-40 space-y-2 overflow-y-auto">{lab.recentPositions.slice(0,8).map(row=><p key={row.id} className="text-xs text-secondary">{row.country} · {Number(row.lat).toFixed(4)}, {Number(row.lng).toFixed(4)} · {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "No timestamp"}</p>)}</div>:<p className="mt-2 text-xs text-secondary">No test locations yet.</p>}
        <p className="mt-4 text-sm font-semibold">Recent simulated test rides</p>
@@ -82,6 +106,21 @@ export function AdminMobilityLaunch({openRide,openSend}){
        <p className="mt-3 text-xs text-secondary">Requires a verified email. Inviting does not approve a Driver, grant operational capabilities, or enable production booking.</p>
      </div>
    </div>
+   <Modal open={pickerOpen} onClose={()=>setPickerOpen(false)} title="Invite Spotly accounts" description="Search existing accounts. Only verified emails can join simulated Ride Lab tests." size="md">
+     <div className="p-5">
+       <label className="block text-sm font-semibold" htmlFor="ride-lab-account-search">Search name or email</label>
+       <div className="mt-2 flex items-center gap-2 rounded-xl border border-[var(--border)] px-3"><Search className="h-4 w-4 text-secondary"/><input id="ride-lab-account-search" autoComplete="off" autoCapitalize="none" className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Start typing a registered name or email…"/></div>
+       <div className="mt-3 max-h-72 space-y-2 overflow-y-auto" aria-live="polite">
+         {searching?<p className="p-3 text-sm text-secondary">Searching registered accounts…</p>:search.trim().length<2?<p className="p-3 text-sm text-secondary">Enter at least two characters to find an account.</p>:searchResults.length?searchResults.map(account=><div key={account.email} className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3">
+           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-sm font-semibold text-[var(--accent)]">{(account.name||account.email).slice(0,1).toUpperCase()}</span>
+           <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{account.name}</p><p className="break-all text-xs text-secondary">{account.email}</p><p className={account.verified?"text-xs text-success":"text-xs text-warning"}>{account.verified?"Verified email":"Email verification required"}</p></div>
+           <Button type="button" size="sm" variant="outline" disabled={!account.verified||selectedTesters.length>=30&&!selectedTesters.includes(account.email)} onClick={()=>updateTester(account.email,!selectedTesters.includes(account.email))}>{selectedTesters.includes(account.email)?"Remove":"Select"}</Button>
+         </div>):<p className="p-3 text-sm text-secondary">No matching accounts found. Ask the tester to sign up and verify their email first.</p>}
+       </div>
+       {searchError&&<p role="alert" className="mt-2 text-xs text-danger">{searchError}</p>}
+       <div className="mt-4 flex justify-end"><Button onClick={()=>setPickerOpen(false)}>Done selecting</Button></div>
+     </div>
+   </Modal>
    {labError&&<p role="alert" className="mt-3 text-sm text-danger">{labError}</p>}
    <div className="mt-4 flex flex-wrap gap-2"><Button disabled={!lab||labBusy} loading={labBusy} onClick={saveLab}>Save Ride Lab invitations</Button><Button variant="outline" onClick={loadLab}>Refresh test locations</Button></div>
   </Card>
