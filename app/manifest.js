@@ -31,6 +31,12 @@ const MANIFESTS = {
     short_name: "Admin",
     description: "Operate Spotly marketplace, delivery, finance, risk and platform administration.",
     theme_color: "#28466F"
+  },
+  nxt: {
+    name: "Spotly × NXT Workforce",
+    short_name: "Spotly NXT",
+    description: "Private partner workspace for NXT outreach, follow-ups, business onboarding, and launch campaigns.",
+    theme_color: "#28466F"
   }
 };
 
