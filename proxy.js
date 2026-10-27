@@ -32,7 +32,7 @@ const PRODUCT_LOCAL_SECTIONS = Object.fromEntries(
 // These routes must stay on whichever Spotly origin is currently serving the page.
 // /login is intentionally local so a subdomain can recover auth without bouncing away.
 const ORIGIN_LOCAL_PREFIXES = [
-  "/api", "/_next", "/brand", "/lottie", "/icons", "/favicon", "/manifest", "/firebase-messaging-sw.js", "/apple-touch-icon.png"
+  "/api", "/_next", "/brand", "/lottie", "/icons", "/favicon", "/manifest", "/manifest.webmanifest", "/firebase-messaging-sw.js", "/apple-touch-icon.png"
 ];
 
 // Customer/global destinations always live on the customer origin. Portal-specific
