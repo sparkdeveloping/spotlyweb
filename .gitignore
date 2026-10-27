@@ -9,8 +9,12 @@ npm-debug.log*
 coverage
 
 # Firebase Admin
+# Ignore untracked JSON credentials while explicitly allowing safe tracked data.
 *.json
 !package*.json
+!/data/themenu/image-candidates-2026-10-21.json
+# .firebaserc is a public project selector, not a service-account key.
+
 
 .env
 .env.local
