@@ -1,31 +1,81 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
-import starter from "@/data/nxt-outreach-starter.json";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { requireNxt, noStore, audit } from "@/lib/nxt-server";
 import { cleanProspect } from "@/lib/nxt-policy";
-export const runtime="nodejs";
-const schema=z.object({action:z.enum(["preview","import"]),offset:z.number().int().min(0).max(10000).default(0),confirm:z.boolean().optional()}).strict();
-export async function POST(request){
- try{
-  const actor=await authenticateRequest(request);requireNxt(actor,"import");
-  const body=schema.parse(await request.json());const rows=starter.rows;
-  if(body.action==="preview")return noStore({ok:true,total:rows.length,withPhone:rows.filter(r=>r.phone).length,categories:Object.entries(rows.reduce((a,r)=>(a[r.category]=(a[r.category]||0)+1,a),{})).sort((a,b)=>b[1]-a[1]),note:starter.publicationPolicy});
-  if(body.confirm!==true)throw Object.assign(new Error("Import requires explicit confirmation."),{status:400});
-  await enforceRateLimit(request,{key:"nxt_import",limit:20,windowMs:60_000,identity:actor.uid});
-  const {db}=getAdminServices();const part=rows.slice(body.offset,body.offset+80);
-  const refs=part.map(r=>db.collection("nxtProspects").doc(`nxt-${r.sourceId}`));
-  const existing=refs.length?await db.getAll(...refs):[];
-  const batch=db.batch();let inserted=0;
-  part.forEach((r,i)=>{
-   if(existing[i]?.exists)return;
-   // NXT prospects are private research records, not customer-visible businesses.
-   batch.create(refs[i],{...cleanProspect(r),sourceId:r.sourceId,source:"spotly_outreach_workbook_2026_10_27",sourceNote:r.sourceNote,
-    assigneeUid:"",status:"new",public:false,claimStatus:"unclaimed",verificationStatus:"unverified",createdBy:actor.uid,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});inserted++;
-  });
-  if(inserted)await batch.commit();
-  await audit(db,actor,"nxt.workbook_import","nxtProspects","2026-10-27",{offset:body.offset,examined:part.length,created:inserted});
-  return noStore({ok:true,inserted,examined:part.length,nextOffset:body.offset+part.length,hasMore:body.offset+part.length<rows.length,total:rows.length});
- }catch(e){return apiError(e);}
+
+export const runtime = "nodejs";
+
+// Source spreadsheets contain outreach contact data and must never be bundled
+// into a public source repository. The NXT manager selects the private export
+// in their browser and sends bounded batches through this authenticated API.
+const textFields = [
+  "category", "description", "city", "address", "phone", "email",
+  "website", "contactName", "contactRole", "sourceNote", "priority", "nextAction"
+];
+const rowSchema = z.object({
+  sourceId: z.string().trim().regex(/^IB-[0-9]{4,8}$/),
+  name: z.string().trim().min(1).max(240),
+  ...Object.fromEntries(textFields.map(key => [key, z.string().max(1500).optional()]))
+});
+const schema = z.object({
+  action: z.literal("import"),
+  offset: z.number().int().min(0).max(10000),
+  total: z.number().int().min(1).max(10000),
+  confirm: z.literal(true),
+  rows: z.array(rowSchema).min(1).max(80)
+}).strict().refine(
+  value => value.offset + value.rows.length <= value.total &&
+    new Set(value.rows.map(row => row.sourceId)).size === value.rows.length,
+  { message: "Invalid or duplicate source IDs in the upload batch." }
+);
+
+export async function POST(request) {
+  try {
+    const actor = await authenticateRequest(request);
+    requireNxt(actor, "import");
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > 150000) {
+      return noStore({ ok: false, error: "Upload batches must be under 150 KB." }, 413);
+    }
+    const body = schema.parse(await request.json());
+    await enforceRateLimit(request, { key: "nxt_import", limit: 20, windowMs: 60_000, identity: actor.uid });
+
+    const { db } = getAdminServices();
+    const refs = body.rows.map(row => db.collection("nxtProspects").doc(`nxt-${row.sourceId}`));
+    const existing = await db.getAll(...refs);
+    const batch = db.batch();
+    let inserted = 0;
+    body.rows.forEach((row, index) => {
+      if (existing[index]?.exists) return;
+      // Import creates private research records, never published businesses or
+      // approved ownership claims. Repeating a batch leaves existing rows alone.
+      batch.create(refs[index], {
+        ...cleanProspect(row),
+        sourceId: row.sourceId,
+        source: "spotly_outreach_workbook_2026_10_27",
+        assigneeUid: "",
+        status: "new",
+        public: false,
+        claimStatus: "unclaimed",
+        verificationStatus: "unverified",
+        createdBy: actor.uid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+      inserted++;
+    });
+    if (inserted) await batch.commit();
+    await audit(db, actor, "nxt.workbook_import", "nxtProspects", "2026-10-27", {
+      offset: body.offset, examined: body.rows.length, created: inserted
+    });
+    const nextOffset = body.offset + body.rows.length;
+    return noStore({
+      ok: true, inserted, examined: body.rows.length, nextOffset,
+      hasMore: nextOffset < body.total, total: body.total
+    });
+  } catch (error) {
+    return apiError(error);
+  }
 }
