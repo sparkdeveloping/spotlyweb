@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-21",
+  "source": "The Menu (themenu.co.zw)",
+  "basis": "Read-only listing and two restaurant pages",
+  "copyrightNote": "Image references collected for review. No asset reuse authorized solely by appearing on this page; require photo rights and verified source URLs.",
+  "listingCandidates": [
+    {
+      "name": "Haefelis Bulawayo",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/haefelis-bulawayo.html",
+      "imageFilename": "haefelis-bulawayo-cover.jpg",
+      "listingText": "Haefelis Bulawayo · Casual dining · CBD, Bulawayo · ★ 4.0 (3,620) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Queen of Hearts",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/queen-of-hearts.html",
+      "imageFilename": "queen-of-hearts.jpg",
+      "listingText": "Queen of Hearts · Breakfast · Highlands, Harare · ★ 4.2 (3,473) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Mozambik Bulawayo",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/mozambik-bulawayo.html",
+      "imageFilename": "mozambik-bulawayo.jpg",
+      "listingText": "Mozambik Bulawayo · Portuguese, Fish · Suburbs, Bulawayo · ★ 4.8 (2,804) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Gavas Restaurant",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/gavas-restaurant.html",
+      "imageFilename": "gavas-restaurant.jpg",
+      "listingText": "Gavas Restaurant · Fish, Grill · Belgravia, Harare · ★ 4.3 (2,679) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "The Jam Tree",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/the-jam-tree.html",
+      "imageFilename": "the-jam-tree.jpg",
+      "listingText": "The Jam Tree · Grill, Burgers · Mount Pleasant, Harare · ★ 4.2 (2,638) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Pomona Food Court",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/pomona-food-court.html",
+      "imageFilename": "pomona-food-court.jpg",
+      "listingText": "Pomona Food Court · Casual · Harare · ★ 4.0 (2,572) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Chop Chop Grill House",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/chop-chop-grill-house.html",
+      "imageFilename": "chop-chop-grill-house.jpg",
+      "listingText": "Chop Chop Grill House · Grill, Fish · Avenues, Harare · ★ 4.1 (2,504) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "The Three Monkeys Restaurant &amp; Bar, Victoria Falls",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/the-three-monkeys-restaurant-bar-victoria-falls.html",
+      "imageFilename": "the-three-monkeys-restaurant-bar-victoria-falls.jpg",
+      "listingText": "The Three Monkeys Restaurant & Bar · Bar & Drinks, Fish · Victoria Falls · ★ 4.5 (2,281) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "The Victoria Falls Hotel",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/the-victoria-falls-hotel.html",
+      "imageFilename": "the-victoria-falls-hotel.jpg",
+      "listingText": "The Victoria Falls Hotel · Casual dining · Victoria Falls · ★ 4.6 (2,149) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "The Boma - Dinner &amp; Drum Show",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/the-boma-dinner-drum-show.html",
+      "imageFilename": "the-boma-dinner-drum-show.jpg",
+      "listingText": "The Boma · Casual dining · Victoria Falls · ★ 4.4 (1,754) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "The Smokehouse Bulawayo",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/the-smokehouse-bulawayo.html",
+      "imageFilename": "the-smokehouse-bulawayo.jpg",
+      "listingText": "The Smokehouse Bulawayo · Fish, Seafood · Ilanda, Bulawayo · ★ 4.4 (1,719) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "St Elmo's",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/st-elmo-s.html",
+      "imageFilename": "st-elmo-s.jpg",
+      "listingText": "St Elmo's · Fish, Seafood · Belgravia, Harare · ★ 4.2 (1,603) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Pariah State Avondale",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/pariah-state-avondale.html",
+      "imageFilename": "pariah-state-avondale.jpg",
+      "listingText": "Pariah State Avondale · African, Grill · Avondale, Harare · ★ 4.0 (1,558) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Paula's Place",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/paula-s-place.html",
+      "imageFilename": "paula-s-place.jpg",
+      "listingText": "Paula's Place · Fish · Eastlea, Harare · ★ 4.2 (1,528) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Mozambik Honeybear Greystone Park",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/mozambik-honeybear-greystone-park.html",
+      "imageFilename": "mozambik-honeybear-greystone-park-garden.jpg",
+      "listingText": "Mozambik Honeybear Greystone Park · Portuguese, Fish · Greystone Park, Harare · ★ 4.7 (1,409) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Coimbra Restaurant",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/coimbra-restaurant.html",
+      "imageFilename": "coimbra-restaurant.jpg",
+      "listingText": "Coimbra Restaurant · Fish · Avenues, Harare · ★ 4.2 (1,299) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    },
+    {
+      "name": "Cresta Churchill",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/cresta-churchill.html",
+      "imageFilename": "cresta-churchill.jpg",
+      "listingText": "Cresta Churchill · Casual dining, Fish · Hillside, Bulawayo · ★ 4.1 (1,247) · ›",
+      "imageCandidates": [],
+      "rightsStatus": "pending_provenance_review",
+      "imagePublished": false
+    }
+  ],
+  "detailedPages": [
+    {
+      "restaurant": "Doppio Zero Harare",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/doppio-zero-harare.html",
+      "imageCandidates": [
+        {
+          "filename": "doppio-zero-harare-reel.jpg",
+          "alt": "The dining room at dusk: orange velvet chairs, marble tables, hanging plants under woven pendant lights and a garden with string lights beyond the windows",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/doppio-zero-harare.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "doppio-zero-harare-reel.jpg",
+          "alt": "“Harare, we here”: the opening reel, inside the restaurant",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/doppio-zero-harare.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "zaytoon-restaurant.jpg",
+          "alt": "Zaytoon Restaurant",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/doppio-zero-harare.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "casa-mia-ristorante-pizzeria.jpg",
+          "alt": "Casa Mia Ristorante Pizzeria",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/doppio-zero-harare.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "the-three-monkeys-harare.jpg",
+          "alt": "The Three Monkeys Harare",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/doppio-zero-harare.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "caf-pistachio.jpg",
+          "alt": "Café Pistachio",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/doppio-zero-harare.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        }
+      ],
+      "creditedSource": "Facebook (Doppio Zero Harare)",
+      "photoRightsConfirmed": false
+    },
+    {
+      "restaurant": "Fishmonger",
+      "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+      "imageCandidates": [
+        {
+          "filename": "fishmonger.jpg",
+          "alt": "Fishmonger",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "m2.jpg",
+          "alt": "Fishmonger menu",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "m3.jpg",
+          "alt": "Fishmonger menu",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "fishmonger-prawn-special.jpg",
+          "alt": "Prawn Special flyer, Fishmonger",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "m2.jpg",
+          "alt": "Fishmonger menu",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "m3.jpg",
+          "alt": "Fishmonger menu",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "m6.jpg",
+          "alt": "Fishmonger menu",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "shangri-la-restaurant-chisipite.jpg",
+          "alt": "Shangri-La Restaurant (Chisipite)",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "organikks-ndizvo.jpg",
+          "alt": "Organikks Ndizvo",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "sabai-thai.jpg",
+          "alt": "Sabai Thai",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        },
+        {
+          "filename": "you-real-restaurant.jpg",
+          "alt": "You Real Restaurant",
+          "sourcePage": "https://themenu.co.zw/listings/restaurants/fishmonger.html",
+          "verifiedImageUrl": null,
+          "rightsStatus": "pending_provenance_review",
+          "approvedForSpotly": false
+        }
+      ],
+      "creditedSource": "Google Maps; special flyer from Fishmonger",
+      "photoRightsConfirmed": false
+    }
+  ],
+  "stats": {
+    "listingCandidates": 17,
+    "detailedPages": 2,
+    "imageRefs": 17
+  }
+}
+
