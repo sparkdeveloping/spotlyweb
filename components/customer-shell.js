@@ -70,8 +70,8 @@ export function CustomerShell({
       <div className="customer-shell-grid mx-auto flex h-[72px] max-w-[1320px] items-center gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-4 lg:min-w-[350px]">
           <Link href="/" onClick={(event) => activate("home", event)} className="flex shrink-0 items-center gap-2.5" aria-label="Spotly home">
-            <Image src="/api/branding/assets/primary_symbol_color.svg" alt="" width={38} height={38} priority className="h-9 w-9" />
-            <span className="hidden text-[17px] font-semibold tracking-[-.03em] sm:block">Spotly</span>
+            <Image src="/api/branding/assets/primary_horizontal_on_light.svg" alt="Spotly" width={150} height={57} priority className="h-11 w-[118px] object-contain dark:rounded-lg dark:bg-white" />
+            
           </Link>
           <Link href="/search" onClick={(event) => { if (onSearch) { event.preventDefault(); onSearch(); } }} className="hidden h-11 min-w-0 flex-1 items-center gap-2.5 rounded-[12px] border border-[var(--border-subtle)] bg-[var(--surface-2)] px-3.5 text-left text-sm text-[var(--text-3)] transition hover:border-[var(--border)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] lg:flex">
             <Search className="h-[18px] w-[18px] shrink-0" />
