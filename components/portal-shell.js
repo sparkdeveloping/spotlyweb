@@ -75,7 +75,7 @@ function PortalSwitcher({ portal, compact = false }) {
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <Image src={portal.logo} alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-[12px] object-cover" priority />
+        <Image src={portal.logo} alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-[12px] object-contain" priority />
         <span className={cn("min-w-0 flex-1", compact && "lg:hidden")}><span className="block truncate text-sm font-semibold">{portal.name}</span><span className="block truncate text-xs text-secondary">{portal.label} workspace</span></span><ChevronDown className={cn("h-4 w-4 shrink-0 text-tertiary transition", open && "rotate-180", compact && "lg:hidden")} />
       </button>
 
@@ -97,7 +97,7 @@ function PortalSwitcher({ portal, compact = false }) {
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-3 rounded-[10px] p-2.5 transition hover:bg-[var(--surface-2)]"
               >
-                <Image src={item.logo} alt="" width={40} height={40} className="h-10 w-10 rounded-[10px] object-cover" />
+                <Image src={item.logo} alt="" width={40} height={40} className="h-10 w-10 rounded-[10px] object-contain" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{item.name}</span>
                   <span className="block truncate text-xs text-secondary">{item.description}</span>

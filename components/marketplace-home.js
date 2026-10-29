@@ -96,7 +96,7 @@ function ServiceTile({ service, size = "small", onSelect }) {
     <span className="spotly-path-line" aria-hidden="true" />
     <ServiceArtwork service={service.key} compact={size === "small"} className={cn("absolute opacity-[.94] transition-transform duration-300 motion-safe:group-hover:scale-[1.035]", size === "hero" ? "-right-1 top-1 sm:right-4 sm:top-4" : size === "medium" ? "-right-5 -top-3 scale-[.82]" : "-right-5 -top-4 scale-[.72]")} />
     <span className="relative z-10 flex h-full min-h-[inherit] flex-col justify-between">
-      <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[color-mix(in_srgb,var(--service-foreground)_14%,transparent)] backdrop-blur"><ServiceGlyph service={service.key} className="h-5 w-5" /></span>
+      <span className="flex h-11 w-24 items-center justify-center rounded-[12px] bg-white/95 px-1 shadow-md"><Image src={`/api/branding/assets/${({eat:"bite",shop:"shopper",events:"live"}[service.key] || service.key)}_horizontal_on_light.svg`} alt="" width={760} height={250} unoptimized className="h-9 w-20 object-contain" /></span>
       <span className={cn("block", size === "hero" ? "max-w-[55%]" : "max-w-[72%]")}><strong className={cn("block tracking-[-.045em]", size === "hero" ? "text-[31px] sm:text-[38px]" : size === "medium" ? "text-[23px]" : "text-[18px]")}>{service.label}</strong><span className={cn("mt-1 block text-[color-mix(in_srgb,var(--service-foreground)_76%,transparent)]", size === "hero" ? "text-sm" : "text-xs")}>{service.subtitle}</span></span>
     </span>
   </motion.button>;

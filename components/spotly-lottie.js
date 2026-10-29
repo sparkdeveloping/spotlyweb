@@ -3,6 +3,8 @@
 import { useReducedMotion, useInView } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
+import { CalendarDays, CheckCircle2, Compass, MapPinned, ShieldCheck, Store, Truck, WalletCards } from "lucide-react";
+const EMPTY_ICONS = {"driver-online": Truck,"route-delivery": MapPinned,"storefront": Store,"business-store": Store,"calendar-schedule": CalendarDays,"analytics-rise": WalletCards,"verification-shield": ShieldCheck,"success-check": CheckCircle2};
 import { bundledLottieAsset } from "@/lib/generated/lottie-assets";
 
 const animationCache = new Map();
@@ -130,12 +132,11 @@ export function SpotlyLottie({
 }
 
 export function LottieEmptyState({ name, title, description, action, className, tone = "accent" }) {
-  const toneClass = tone === "business" ? "bg-business-soft" : tone === "driver" ? "bg-driver-soft" : tone === "admin" ? "bg-admin-soft" : "bg-[var(--accent-soft)]";
+  const toneClass = tone === "business" ? "bg-business-soft text-business" : tone === "driver" ? "bg-driver-soft text-driver" : tone === "admin" ? "bg-admin-soft text-admin" : "bg-[var(--accent-soft)] text-[var(--accent)]";
+  const Illustration = EMPTY_ICONS[name] || Compass;
   return (
     <div className={cn("flex min-h-[280px] flex-col items-center justify-center px-5 py-10 text-center", className)}>
-      <span className={cn("flex h-24 w-24 items-center justify-center rounded-[24px]", toneClass)}>
-        <SpotlyLottie name={name} mode="loop" className="h-20 w-20" />
-      </span>
+      <span className={cn("flex h-20 w-20 items-center justify-center rounded-[22px]", toneClass)} aria-hidden="true"><Illustration className="h-9 w-9" strokeWidth={1.7} /></span>
       <h3 className="mt-5 text-lg font-semibold tracking-[-0.02em]">{title}</h3>
       {description && <p className="mt-2 max-w-md text-sm leading-6 text-secondary">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
