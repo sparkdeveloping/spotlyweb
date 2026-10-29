@@ -18,7 +18,7 @@ export const metadata = {
   applicationName: "Spotly",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/brand/spotly.svg", type: "image/svg+xml" }, { url: "/icons/spotly-192.png", sizes: "192x192", type: "image/png" }],
+    icon: [{ url: "/api/branding/assets/primary_symbol_color.svg", type: "image/svg+xml" }, { url: "/icons/spotly-192.png", sizes: "192x192", type: "image/png" }],
     apple: "/apple-touch-icon.png"
   },
   openGraph: {

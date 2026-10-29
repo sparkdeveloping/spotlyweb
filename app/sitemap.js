@@ -12,6 +12,7 @@ export default async function sitemap() {
     { path: "/live", changeFrequency: "daily", priority: 0.85 },
     { path: "/ride", changeFrequency: "weekly", priority: 0.7 },
     { path: "/send", changeFrequency: "weekly", priority: 0.7 },
+    { path: "/branding", changeFrequency: "monthly", priority: 0.45 },
     { path: "/support", changeFrequency: "weekly", priority: 0.7 },
     { path: "/drive", changeFrequency: "weekly", priority: 0.65 },
     { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },

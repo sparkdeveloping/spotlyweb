@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "GT Walsheim Pro", "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --color-canvas: var(--surface);
   --color-grouped: var(--grouped);
   --color-subtle: var(--surface-2);
@@ -61,6 +61,16 @@
   --border-strong: #9aa6b5;
   --divider: #d8dee7;
 
+  --brand-primary: #6657D9;
+  --brand-business: #10C981;
+  --brand-driver: #2F80FF;
+  --brand-bite: #FF8A00;
+  --brand-shopper: #10C981;
+  --brand-book: #7C3AED;
+  --brand-live: #FF2D6F;
+  --brand-ride: #2F80FF;
+  --brand-send: #A855F7;
+  --brand-navy: #0B0F1E;
   --accent: #6657d9;
   --accent-hover: #5949ca;
   --accent-active: #4f3fbd;
@@ -457,12 +467,12 @@ input:-webkit-autofill:focus {
   box-shadow: 0 10px 28px rgba(17, 24, 39, 0.12);
 }
 
-.spotly-service-ride { background: linear-gradient(145deg, #5142c4 0%, #7467e7 100%); }
-.spotly-service-eat { background: linear-gradient(145deg, #9e4928 0%, #c8663d 100%); }
-.spotly-service-shop { background: linear-gradient(145deg, #24594a 0%, #3f816e 100%); }
-.spotly-service-book { background: linear-gradient(145deg, #365d8d 0%, #4e7fba 100%); }
-.spotly-service-events { background: linear-gradient(145deg, #684188 0%, #8f62b5 100%); }
-.spotly-service-send { background: linear-gradient(145deg, #765a28 0%, #a37f3d 100%); }
+.spotly-service-ride { background: linear-gradient(145deg, #1558B0 0%, #1D4ED8 100%); }
+.spotly-service-eat { background: linear-gradient(145deg, #A34D00 0%, #873500 100%); }
+.spotly-service-shop { background: linear-gradient(145deg, #08734B 0%, #075A3F 100%); }
+.spotly-service-book { background: linear-gradient(145deg, #7C3AED 0%, #4C1D95 100%); }
+.spotly-service-events { background: linear-gradient(145deg, #BE185D 0%, #9D174D 100%); }
+.spotly-service-send { background: linear-gradient(145deg, #7E22CE 0%, #6B21A8 100%); }
 
 .spotly-service-orbit {
   pointer-events: none;
@@ -583,9 +593,17 @@ input:-webkit-autofill:focus {
 }
 
 /* Service-mode hero surfaces share the same identity as the Home canvas. */
-.service-surface-ride { background: linear-gradient(145deg, #5142c4 0%, #7467e7 100%); }
-.service-surface-eat { background: linear-gradient(145deg, #9e4928 0%, #c8663d 100%); }
-.service-surface-shop { background: linear-gradient(145deg, #24594a 0%, #3f816e 100%); }
-.service-surface-book { background: linear-gradient(145deg, #365d8d 0%, #4e7fba 100%); }
-.service-surface-events { background: linear-gradient(145deg, #684188 0%, #8f62b5 100%); }
-.service-surface-send { background: linear-gradient(145deg, #765a28 0%, #a37f3d 100%); }
+.service-surface-ride { background: linear-gradient(145deg, #1558B0 0%, #1D4ED8 100%); }
+.service-surface-eat { background: linear-gradient(145deg, #A34D00 0%, #873500 100%); }
+.service-surface-shop { background: linear-gradient(145deg, #08734B 0%, #075A3F 100%); }
+.service-surface-book { background: linear-gradient(145deg, #7C3AED 0%, #4C1D95 100%); }
+.service-surface-events { background: linear-gradient(145deg, #BE185D 0%, #9D174D 100%); }
+.service-surface-send { background: linear-gradient(145deg, #7E22CE 0%, #6B21A8 100%); }
+
+/* Official identity hues paired with high-contrast surfaces for readable service tiles. */
+.spotly-service-tile.spotly-service-ride { border-top: 4px solid #2F80FF; }
+.spotly-service-tile.spotly-service-eat { border-top: 4px solid #FF8A00; }
+.spotly-service-tile.spotly-service-shop { border-top: 4px solid #10C981; }
+.spotly-service-tile.spotly-service-book { border-top: 4px solid #7C3AED; }
+.spotly-service-tile.spotly-service-events { border-top: 4px solid #FF2D6F; }
+.spotly-service-tile.spotly-service-send { border-top: 4px solid #A855F7; }

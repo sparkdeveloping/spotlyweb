@@ -12,13 +12,13 @@ const MANIFESTS = {
     name: "Spotly Business",
     short_name: "Business",
     description: "Run your Spotly business, locations, orders, team, delivery and Money.",
-    theme_color: "#147A4A"
+    theme_color: "#10C981"
   },
   driver: {
     name: "Spotly Driver",
     short_name: "Driver",
     description: "Manage Spotly delivery offers, active deliveries, earnings and Driver support.",
-    theme_color: "#2563EB"
+    theme_color: "#2F80FF"
   },
   staff: {
     name: "Spotly Staff",
@@ -45,6 +45,7 @@ export default async function manifest() {
   const host = (requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "spotlyafrica.com").split(":")[0];
   const portal = portalForHostname(host);
   const product = MANIFESTS[portal] || MANIFESTS.customer;
+  const symbol = portal === "business" ? "business" : portal === "driver" ? "driver" : "primary";
   return {
     ...product,
     id: "/",
@@ -53,7 +54,7 @@ export default async function manifest() {
     display: "standalone",
     background_color: "#ffffff",
     icons: [
-      { src: "/icons/spotly-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: `/api/branding/assets/${symbol}_symbol_color.svg`, sizes: "any", type: "image/svg+xml", purpose: "any" },
       { src: "/icons/spotly-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/spotly-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
     ]
