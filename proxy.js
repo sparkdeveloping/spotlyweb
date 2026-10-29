@@ -38,7 +38,7 @@ const ORIGIN_LOCAL_PREFIXES = [
 // Customer/global destinations always live on the customer origin. Portal-specific
 // /support is intentionally not listed because Business and Driver own clean /support routes.
 const CUSTOMER_HOST_PREFIXES = [
-  "/account", "/marketplace", "/privacy", "/terms", "/payment", "/claim", "/drive",
+  "/branding", "/account", "/marketplace", "/privacy", "/terms", "/payment", "/claim", "/drive",
   "/ride", "/eat", "/shop", "/book", "/events", "/send", "/saved", "/search", "/place", "/item", "/order"
 ];
 

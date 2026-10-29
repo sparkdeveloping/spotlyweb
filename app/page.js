@@ -11,7 +11,7 @@ const structuredData = {
   "@type": "Organization",
   name: "Spotly",
   url: appUrl,
-  logo: `${appUrl}/icons/spotly-512.png`,
+  logo: `${appUrl}/api/branding/assets/primary_symbol_color.svg`,
   areaServed: "Zimbabwe",
   description: "A Zimbabwe-first city platform for discovering businesses, ordering, delivery, bookings, events, and future mobility services."
 };

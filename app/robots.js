@@ -3,7 +3,7 @@ export default function robots() {
   return {
     rules: {
       userAgent: "*",
-      allow: ["/", "/eat", "/shop", "/book", "/events", "/ride", "/send", "/marketplace", "/place/", "/item/", "/support", "/drive", "/privacy", "/terms"],
+      allow: ["/", "/eat", "/shop", "/book", "/events", "/ride", "/send", "/marketplace", "/place/", "/item/", "/support", "/drive", "/privacy", "/terms", "/branding"],
       disallow: ["/admin", "/business", "/driver", "/staff", "/account", "/activity", "/saved", "/notifications", "/referrals", "/payment", "/login", "/api", "/claim/drafts", "/claim/status"]
     },
     sitemap: `${base}/sitemap.xml`
