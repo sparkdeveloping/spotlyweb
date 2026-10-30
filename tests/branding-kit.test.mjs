@@ -8,12 +8,17 @@ const match = source.match(/const compressedArtwork = "([A-Za-z0-9+/=]+)"/);
 test("official source vectors load for all Spotly identities",()=>{
   assert.ok(match);
   const art = JSON.parse(inflateSync(Buffer.from(match[1],"base64")).toString("utf8"));
-  assert.equal(Object.keys(art).length,12);
+  assert.equal(Object.keys(art).length,21);
   for(const id of ["primary","business","driver"]){
     assert.match(art[id+"_symbol_color.svg"],/<svg\b/);
     assert.match(art[id+"_horizontal_on_light.svg"],/<svg\b/);
   }
   for(const id of ["bite","shopper","book","live","ride","send"])assert.match(art[id+"_horizontal_on_light.svg"],/<svg\b/);
+  for(const id of ["primary","business","driver","bite","shopper","book","live","ride","send"]){
+    assert.match(art[id+"_horizontal_on_dark.svg"],/<svg\b/);
+    assert.match(art[id+"_horizontal_on_dark.svg"],/fill="#FFFFFF"/);
+    assert.doesNotMatch(art[id+"_horizontal_on_dark.svg"],/fill="#0B0F1E"/);
+  }
   assert.ok(Object.values(art).every(s=>!/<script|<foreignObject|onload=/i.test(s)));
 });
 test("partner download emits valid ZIP headers and directory",()=>{

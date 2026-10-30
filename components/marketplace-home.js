@@ -23,7 +23,6 @@ import {
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
 import { cn } from "@/lib/cn";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
-import { ServiceIdentity } from "@/components/service-identity";
 import { serviceIdentity } from "@/lib/service-identity";
 import { marketplaceMedia } from "@/lib/marketplace-editorial";
 import { marketplaceTier } from "@/lib/marketplace-ranking";
@@ -92,7 +91,7 @@ function ServiceTile({ service, onSelect, enabled = true, city }) {
   const reduce = useReducedMotion();
   const identity = serviceIdentity(service.key);
   return <motion.button type="button" onClick={() => onSelect(service.key)} whileHover={reduce ? undefined : { y: -4 }} whileTap={reduce ? undefined : { scale: .985 }} data-service={service.key} className="experience-service-tile group" aria-label={`${identity.name}: ${enabled ? service.subtitle : `Not available in ${city} yet`}`}>
-    <ServiceIdentity service={service.key} decorative />
+    <span className="experience-service-name" aria-hidden="true">{identity.label}</span>
     <ServiceArtwork service={service.key} compact className="experience-tile-art" priority={service.key === "eat"} />
     <span className="experience-tile-copy"><strong>{identity.detail}</strong><span>{enabled ? service.subtitle : `Not available in ${city} yet`}</span></span>
     <span className="experience-tile-arrow" aria-hidden="true"><ArrowUpRight className="h-4 w-4" /></span>

@@ -1,18 +1,16 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { serviceIdentity, SERVICE_IDENTITIES } from "@/lib/service-identity";
 import { publicProductRoute } from "@/lib/spotly-products";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
+import { BrandLockup } from "@/components/brand-lockup";
 
 export function ServiceIdentity({ service, className, decorative = false }) {
   const identity = serviceIdentity(service);
-  return <span className={cn("experience-identity", className)}>
-    <Image src={`/api/branding/assets/${identity.asset}_horizontal_on_light.svg`} alt={decorative ? "" : identity.name} width={760} height={250} unoptimized />
-  </span>;
+  return <BrandLockup asset={identity.asset} alt={decorative ? "" : identity.name} width={760} height={250} className={cn("experience-identity", className)} />;
 }
 
 function navigate(event, handler, service) {

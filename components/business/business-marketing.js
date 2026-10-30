@@ -158,8 +158,8 @@ export function BusinessMarketingPage({ loginHref }) {
     <header className="sticky top-0 z-40 border-b bg-[color-mix(in_srgb,var(--background)_92%,transparent)] backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-4 px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-3" aria-label="Spotly Business home"><Image src="/api/branding/assets/business_symbol_color.svg" alt="" width={40} height={40} className="h-10 w-10" /><span className="font-bold tracking-tight">Spotly Business</span></Link>
-        <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Business marketing"><a href="#business-types" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">For your business</a><a href="#how-it-works" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">How it works</a><a href="#features" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">What you get</a></nav>
-        <div className="ml-auto flex items-center gap-2 md:ml-3"><Button asChild variant="ghost" className="hidden sm:inline-flex"><Link href={signInHref}>Sign in</Link></Button><Button asChild><Link href={claimHref}>Find my business<ArrowRight className="h-4 w-4" /></Link></Button></div>
+        <nav className="ml-auto hidden items-center gap-1 lg:flex" aria-label="Business marketing"><a href="#business-types" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">For your business</a><a href="#how-it-works" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">How it works</a><a href="#features" className="rounded-xl px-3 py-2 text-sm font-semibold text-secondary hover:bg-grouped">What you get</a></nav>
+        <div className="ml-auto flex items-center gap-2 lg:ml-3"><Button asChild variant="ghost" className="hidden sm:inline-flex"><Link href={signInHref}>Sign in</Link></Button><Button asChild><Link href={claimHref}>Find my business<ArrowRight className="h-4 w-4" /></Link></Button></div>
       </div>
     </header>
 

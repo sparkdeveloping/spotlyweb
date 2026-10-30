@@ -301,7 +301,10 @@ html.dark [data-service="events"] { --world-ink: #ffa9c3; --world-surface: #321b
 .experience-customer .customer-topbar { top: 12px; width: min(calc(100% - 32px), 1288px); margin: 12px auto 0; border: 1px solid var(--experience-keyline); border-radius: 24px; background: var(--experience-glass); box-shadow: var(--experience-shadow); backdrop-filter: blur(20px) saturate(1.3); }
 .experience-customer .customer-shell-grid { height: 68px; padding-inline: 18px; gap: 12px; }
 .experience-main-logo { width: 126px; height: 48px; }
-html.dark .experience-main-logo { background: #fff; border-radius: 12px; padding: 4px; }
+.experience-brand-lockup { display: inline-block; max-width: 100%; flex-shrink: 0; }
+.experience-brand-lockup img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.experience-brand-lockup .experience-logo-dark, html.dark .experience-brand-lockup .experience-logo-light { display: none; }
+html.dark .experience-brand-lockup .experience-logo-dark { display: block; }
 .experience-customer .customer-topbar nav a { min-width: 86px; border-radius: 15px; }
 .experience-customer .customer-topbar nav a > span:first-child:has(+ svg) { border-radius: 15px; }
 .experience-customer > main { padding-top: 32px; outline: none; }
@@ -312,6 +315,8 @@ html.dark .experience-main-logo { background: #fff; border-radius: 12px; padding
 .experience-customer .customer-mobile-nav > a > span:first-child:not(:last-child):not(:has(svg)) { border-radius: 18px; }
 
 .experience-eyebrow { font-size: 12px; line-height: 1.5; font-weight: 650; letter-spacing: .025em; color: var(--accent-strong); }
+.experience-careers-hero { background: var(--background); }
+.experience-careers-kicker { display: flex; align-items: center; gap: 9px; color: var(--accent-strong); font-size: 13px; font-weight: 650; letter-spacing: .025em; }
 .experience-home-heading { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; }
 .experience-home-heading h1 { margin-top: 8px; font-size: clamp(34px, 4.4vw, 54px); font-weight: 650; letter-spacing: -.055em; line-height: 1.1; }
 .experience-home-heading h1 span { color: var(--accent); }
@@ -330,13 +335,12 @@ html.dark .experience-main-logo { background: #fff; border-radius: 12px; padding
 .experience-service-tile::before { content: ""; position: absolute; z-index: -1; width: 230px; height: 230px; border-radius: 50%; right: -60px; top: 20px; background: radial-gradient(circle, var(--world-glow), transparent 70%); opacity: .8; }
 .experience-identity { display: block; width: 192px; max-width: 100%; flex-shrink: 0; }
 .experience-identity img { width: 100%; height: auto; aspect-ratio: 760 / 250; object-fit: contain; }
-.experience-service-tile > .experience-identity { position: relative; z-index: 2; width: 152px; }
-html.dark .experience-identity { border-radius: 14px; background: #fff; padding: 3px 8px; }
+.experience-service-name { position: relative; z-index: 2; display: block; color: var(--world-ink); font-size: 30px; font-weight: 750; line-height: 1.2; letter-spacing: -.055em; }
 .experience-art { display: block; width: 100%; height: 100%; }
 .experience-art-image { display: block; width: 100%; height: 100%; object-fit: contain; }
 .experience-art-fallback { display: grid; width: 100%; height: 100%; place-items: center; color: var(--world-ink, var(--accent)); border-radius: 30%; background: color-mix(in srgb, var(--world-glow, var(--accent-soft)) 40%, transparent); }
 .experience-tile-art { position: absolute; z-index: 0; width: 210px; height: 210px; right: -2px; top: 41px; transform: rotate(-5deg); transition: transform .55s var(--experience-ease); }
-.experience-tile-copy { position: relative; z-index: 1; display: block; width: 53%; margin-top: 60px; }
+.experience-tile-copy { position: relative; z-index: 1; display: block; width: 53%; margin-top: 74px; }
 .experience-tile-copy strong { display: block; color: var(--world-ink); font-size: clamp(19px, 1.6vw, 23px); letter-spacing: -.035em; line-height: 1.15; font-weight: 650; }
 .experience-tile-copy > span { display: block; margin-top: 9px; color: var(--world-ink); font-size: 12px; line-height: 1.45; }
 .experience-tile-arrow { position: absolute; z-index: 2; bottom: 16px; right: 16px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: color-mix(in srgb, var(--world-ink) 7%, var(--world-surface)); color: var(--world-ink); border: 1px solid color-mix(in srgb, var(--world-ink) 15%, transparent); }
@@ -455,9 +459,9 @@ html.dark .experience-identity { border-radius: 14px; background: #fff; padding:
   .experience-atlas-label > span { display: none; }
   .experience-service-atlas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .experience-service-tile { min-height: 222px; border-radius: 22px; padding: 13px; }
-  .experience-service-tile > .experience-identity { width: 140px; max-width: 100%; }
+  .experience-service-name { font-size: 25px; }
   .experience-tile-art { top: 48px; right: 2px; width: 133px; height: 133px; transform: rotate(-4deg); }
-  .experience-tile-copy { width: calc(100% - 12px); margin-top: 114px; }
+  .experience-tile-copy { width: calc(100% - 12px); margin-top: 132px; }
   .experience-tile-copy strong { display: none; }
   .experience-tile-copy > span { max-width: 118px; margin-top: 0; padding-right: 10px; font-size: 11px; line-height: 1.4; }
   .experience-tile-arrow { bottom: 12px; right: 10px; width: 26px; height: 26px; }
