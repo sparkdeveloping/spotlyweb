@@ -33,8 +33,8 @@ export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
   { key: "eat", label: "Bite", subtitle: "Food around you", icon: UtensilsCrossed, tone: "eat" },
   { key: "shop", label: "Shopper", subtitle: "Find what you need", icon: ShoppingBag, tone: "shop" },
-  { key: "book", label: "Book", subtitle: "Services & places", icon: Sparkles, tone: "book" },
-  { key: "events", label: "Live", subtitle: "What’s happening", icon: CalendarDays, tone: "events" },
+  { key: "book", label: "Book", subtitle: "Appointments & services", icon: CalendarDays, tone: "book" },
+  { key: "events", label: "Live", subtitle: "Events & tickets", icon: Ticket, tone: "events" },
   { key: "send", label: "Send", subtitle: "Move a package", icon: Package, tone: "send" }
 ];
 
