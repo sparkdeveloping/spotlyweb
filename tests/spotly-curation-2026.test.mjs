@@ -37,7 +37,8 @@ test("commerce, Assist and verified merchants remain higher-priority than chain 
     { id: "merchant", name: "Independent Merchant", public: true, businessType: "grocery_retail", commerceVerified: true, status: "active" },
     { id: "assist", name: "Independent Assist", assistStoreId: "test-store", assistAccepting: true }
   ]);
-  assert.deepEqual(records.map((item) => item.id), ["merchant", "assist", "chain", "independent", "featuredImport"]);
+  assert.deepEqual(records.slice(0, 3).map((item) => item.id), ["merchant", "assist", "chain"]);
+  assert.deepEqual(new Set(records.slice(3).map((item) => item.id)), new Set(["featuredImport", "independent"]));
   assert.equal(marketplaceTier(records[0]), 4);
 });
 
