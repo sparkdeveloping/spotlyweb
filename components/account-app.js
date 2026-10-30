@@ -8,6 +8,7 @@ import { AuthGate } from "@/components/auth-gate";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Button, Card, ListRow, Modal, StatusBadge } from "@/components/ui";
+import { ThemeMenu } from "@/components/theme-menu";
 import { deleteSavedItem, saveSavedItem, saveUserPreferences, saveUserProfileDetails, subscribeSavedItems } from "@/lib/firebase-services";
 import { workspaceAccess as resolveWorkspaceAccess } from "@/lib/workspaces";
 import { BUILD_INFO, buildLabel } from "@/lib/build-info";
@@ -197,7 +198,7 @@ export function AccountApp() {
               </AccountSection>
 
               <AccountSection id="preferences" icon={Store} title="Preferences" description="These defaults make Spotly faster without limiting what each business can offer.">
-                <div className="space-y-6"><ChoiceGroup label="Currency & region" value={preferredCurrency} onChange={setPreferredCurrency} options={(settings.commerce?.currencies || ["USD", "ZWG"]).map((item) => ({ value: item, label: item === "ZWG" ? "ZiG" : item }))} /><ChoiceGroup label="Default fulfilment" value={defaultFulfilment} onChange={setDefaultFulfilment} options={[{ value: "pickup", label: "Pickup" }, { value: "delivery", label: "Delivery when available" }]} /><ChoiceGroup label="Language" value={language} onChange={setLanguage} options={[{ value: "English", label: "English" }, { value: "ChiShona", label: "ChiShona · coming", disabled: true }, { value: "isiNdebele", label: "isiNdebele · coming", disabled: true }]} /><div className="flex justify-end"><Button onClick={savePreferences} loading={loading === "preferences"}>Save preferences</Button></div></div>
+                <div className="space-y-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Appearance</p><p className="mt-1 text-xs text-secondary">Choose Light, Dark or System for this browser.</p></div><ThemeMenu /></div><ChoiceGroup label="Currency & region" value={preferredCurrency} onChange={setPreferredCurrency} options={(settings.commerce?.currencies || ["USD", "ZWG"]).map((item) => ({ value: item, label: item === "ZWG" ? "ZiG" : item }))} /><ChoiceGroup label="Default fulfilment" value={defaultFulfilment} onChange={setDefaultFulfilment} options={[{ value: "pickup", label: "Pickup" }, { value: "delivery", label: "Delivery when available" }]} /><ChoiceGroup label="Language" value={language} onChange={setLanguage} options={[{ value: "English", label: "English" }, { value: "ChiShona", label: "ChiShona · coming", disabled: true }, { value: "isiNdebele", label: "isiNdebele · coming", disabled: true }]} /><div className="flex justify-end"><Button onClick={savePreferences} loading={loading === "preferences"}>Save preferences</Button></div></div>
               </AccountSection>
 
               <AccountSection id="notifications" icon={BellRing} title="Notifications" description="Choose which updates deserve your attention.">

@@ -6,6 +6,7 @@ import { queryOpenPlaces, queryOpenProducts, mergeCuratedWithFirestore } from "@
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 import { publicBusinessRecord, publicCanonicalProduct, publicMerchantProduct } from "@/lib/marketplace-public";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
+import { marketplaceRank } from "@/lib/marketplace-ranking";
 
 export const runtime = "nodejs";
 const text=(value)=>String(value||"").trim().toLowerCase();
@@ -14,7 +15,16 @@ const words=(value)=>text(value).replace(/[^a-z0-9\s-]/g," ").replace(/\s+/g," "
 function businessSearchRecord(business){const profile=marketplaceProfile(business);return {...business,type:"business",entityId:business.id,title:business.name,subtitle:[profile.displayCategory,business.area||business.city].filter(Boolean).join(" · "),displayCategory:profile.displayCategory,vertical:profile.vertical,cardMode:profile.cardMode,image:business.coverImage||business.image||business.logoUrl||"",href:`/?business=${encodeURIComponent(business.id)}`,searchText:[business.name,business.brandName,profile.displayCategory,business.category,...(business.categories||[]),business.city,business.area,business.address,...(business.tags||[]),...(business.searchTerms||[])].filter(Boolean).join(" ")};}
 function branchRecord(doc,business){const item=doc.data()||{};return{id:doc.id,type:"place",entityId:doc.id,businessId:item.businessId||"",businessName:business?.name||"",title:item.branchName||item.name||item.displayName||business?.name||"Place",subtitle:[item.suburb||item.area,item.city].filter(Boolean).join(" · "),description:item.address||"",city:item.city||business?.city||"",area:item.suburb||item.area||business?.area||"",address:item.address||"",image:business?.coverImage||business?.image||"",href:`/?business=${encodeURIComponent(item.businessId||"")}`,business,searchText:[item.branchName,item.name,item.displayName,item.address,item.suburb,item.area,item.city,business?.name].filter(Boolean).join(" ")};}
 function serviceMatches(service,business={},result={}){ return serviceMatchesMarketplaceBusiness(service, { ...business, category: business.category || result.category }); }
-function score(record,queryTokens){if(!queryTokens.length)return record.type==="business"?20:record.catalogReference?15:12;const haystack=text(record.searchText);const title=text(record.title);let value=0;for(const token of queryTokens){if(title===token)value+=50;else if(title.startsWith(token))value+=30;else if(title.includes(token))value+=20;if(haystack.includes(token))value+=8;}if(record.commerceVerified)value+=4;if(record.catalogReference)value-=1;return value;}
+function score(record,queryTokens){
+  // Keep exact matches ahead of merchandising. No synthetic stars or reviews.
+  const ranked = record.type === "business" ? marketplaceRank(record) : record.type === "place" && record.business ? marketplaceRank(record.business) : null;
+  if(!queryTokens.length) return record.type==="business" ? 20+ranked.tier*12+ranked.score : record.catalogReference?15:12;
+  const haystack=text(record.searchText); const title=text(record.title);let value=0;
+  for(const token of queryTokens){if(title===token)value+=50;else if(title.startsWith(token))value+=30;else if(title.includes(token))value+=20;if(haystack.includes(token))value+=8;}
+  if(ranked) value+=ranked.tier*2+Math.max(-20,Math.min(10,ranked.score/3));
+  if(record.catalogReference)value-=1;
+  return value;
+}
 
 export async function GET(request){
  try{

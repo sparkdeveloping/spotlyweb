@@ -80,10 +80,12 @@ test("conversion and high-frequency workflows use semantic Lottie motion", () =>
   assert.match(account, /marketplace-discover/);
 });
 
-test("shared empty states extend motion across operations without animating warning states", () => {
+test("shared empty states remain useful without animation or warning motion", () => {
   const ui = read("components/ui.js");
-  for (const animation of ["review-pending", "money-flow", "team-collaboration", "support-chat", "analytics-rise", "calendar-schedule"]) {
-    assert.match(ui, new RegExp(animation));
-  }
+  const state = ui.slice(ui.indexOf("export function EmptyState"), ui.indexOf("export function ListRow"));
+  assert.match(state, /<h3/);
+  assert.match(state, /description/);
+  assert.match(state, /action/);
+  assert.doesNotMatch(state, /repeat: Infinity|SpotlyLottie|animate=/);
   assert.doesNotMatch(ui, /AlertTriangle:\s*"/);
 });

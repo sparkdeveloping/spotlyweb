@@ -92,7 +92,7 @@ test("Premium discovery differentiates independent Assist from photo-less stale 
   assert.match(experience,/assistBusinesses/);
   assert.match(experience,/Choose a restaurant, request a price check/);
   assert.match(experience,/function DirectoryListingRow/);
-  assert.match(experience,/grid auto-rows-fr gap-3 md:grid-cols-2/);
+  assert.match(experience,/grid[^"]*grid-cols-1[^"]*auto-rows-fr/);
   assert.match(experience,/min-h-\[112px\]/);
   assert.match(experience,/media.kind === "licensed-directory"/);
   assert.match(experience,/Explore place details/);
@@ -119,7 +119,7 @@ test("The Menu editorial spotlight uses real source observations without indefin
   assert.match(page,/THEMENU_RESTAURANT_SPOTLIGHTS\.map/);
   assert.match(page,/not guaranteed Spotly checkout prices/);
   assert.match(page,/independent Spotly Assist checkout is offered only where separately enabled/i);
-  assert.match(page,/Editorial food photo/);
+  assert.doesNotMatch(page,/src="\/marketplace\/editorial\/eat\.webp"/);
   assert.match(page,/Preview \{item\.menuItems\.length\} dishes/);
   assert.match(page,/group-open:rotate-90/);
   assert.match(page,/items-start gap-3 sm:grid-cols-2/);

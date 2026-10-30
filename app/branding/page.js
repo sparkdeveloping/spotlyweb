@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandLockup } from "@/components/brand-lockup";
 import { BRAND_COLORS } from "@/lib/spotly-brand-assets";
 
 export const metadata = {
@@ -28,7 +29,7 @@ export default function BrandingPage(){
   return <main className="min-h-screen bg-[var(--background)] text-[var(--text)]">
     <header className="border-b border-[var(--border-subtle)] bg-[var(--surface)]">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
-        <Link href="/" aria-label="Spotly home" className="rounded-lg bg-white px-2"><img src={url("primary_horizontal_on_light")} alt="Spotly" width={164} height={68} className="h-12 w-auto" /></Link>
+        <Link href="/" aria-label="Spotly home"><BrandLockup className="h-12 w-[126px]" /></Link>
         <nav className="flex items-center gap-4 text-sm font-semibold"><Link href="/">Home</Link><Link href="/support">Contact</Link></nav>
       </div>
     </header>

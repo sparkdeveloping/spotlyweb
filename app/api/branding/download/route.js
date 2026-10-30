@@ -14,7 +14,7 @@ USAGE
 - Leave clear space around the symbol, at least 12% of its width.
 - Do not stretch, recolor, redraw, or distort the approved artwork.
 - Use Business and Driver identities only for the corresponding product.
-- These horizontal SVGs are on-light versions; ensure contrast.
+- Choose the matching on-light or on-dark SVG for the background.
 - Obtain written approval before implying sponsorship or endorsement.
 - For print, custom formats and colorways: https://spotlyafrica.com/support
 

@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LoaderCircle, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { SpotlyLottie } from "@/components/spotly-lottie";
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -28,7 +27,7 @@ export function Button({ children, variant = "primary", size = "md", className, 
     icon: "h-11 w-11 rounded-[12px]"
   };
   const isDisabled = Boolean(disabled || loading);
-  const classes = cn("inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition-transform duration-150 motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 motion-safe:active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--control-bg-disabled)] disabled:text-[var(--control-text-disabled)] disabled:opacity-100", variants[variant] || variants.primary, sizes[size], className);
+  const classes = cn("experience-button inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition-transform duration-150 motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 motion-safe:active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--control-bg-disabled)] disabled:text-[var(--control-text-disabled)] disabled:opacity-100", variants[variant] || variants.primary, sizes[size], className);
 
   if (asChild && isValidElement(children)) {
     const childProps = {
@@ -65,7 +64,7 @@ const cardVariants = {
 };
 
 export function Card({ children, className, elevated = false, variant = elevated ? "raised" : "bordered", ...props }) {
-  return <div className={cn("rounded-[16px]", cardVariants[variant] || cardVariants.bordered, className)} {...props}>{children}</div>;
+  return <div className={cn("experience-card rounded-[16px]", cardVariants[variant] || cardVariants.bordered, className)} {...props}>{children}</div>;
 }
 
 export function SectionCard({ title, description, action, children, className, variant = "bordered", padded = false, contentClassName }) {
@@ -157,10 +156,11 @@ export function StatusBadge({ status }) {
 
 export function SearchField({ value, onChange, placeholder = "Search", className, onFocus, onKeyDown, shortcut, label = "Search", inputProps = {} }) {
   return (
-    <label className={cn("flex h-[50px] items-center gap-3 rounded-[12px] border border-[var(--control-border)] bg-[var(--control-bg)] px-4 text-[var(--control-text)] transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]", className)}>
+    <label className={cn("experience-search-field flex h-[50px] items-center gap-3 rounded-[12px] border border-[var(--control-border)] bg-[var(--control-bg)] px-4 text-[var(--control-text)] transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]", className)}>
       <span className="sr-only">{label}</span>
       <Search className="h-5 w-5 shrink-0 text-tertiary" aria-hidden="true" />
       <input
+        type="search"
         aria-label={label}
         value={value}
         onChange={(event) => onChange?.(event.target.value)}
@@ -171,7 +171,7 @@ export function SearchField({ value, onChange, placeholder = "Search", className
         {...inputProps}
       />
       {value ? (
-        <button type="button" aria-label="Clear search" className="rounded-lg p-1 text-tertiary hover:bg-[var(--surface-2)]" onClick={() => onChange?.("")}><X className="h-4 w-4" /></button>
+        <button type="button" aria-label="Clear search" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-tertiary hover:bg-[var(--surface-2)]" onClick={() => onChange?.("")}><X className="h-4 w-4" /></button>
       ) : shortcut ? <kbd className="hidden rounded-lg border bg-[var(--surface-2)] px-2 py-1 text-[11px] text-tertiary sm:block">{shortcut}</kbd> : null}
     </label>
   );
@@ -493,7 +493,7 @@ export function Overlay({ open, onClose, title, description, children, mode = "m
             animate={animate}
             exit={exit}
             transition={{ type: "spring", stiffness: 330, damping: 32 }}
-            className={cn("surface absolute z-10 flex max-h-[94dvh] flex-col overflow-hidden shadow-elevated", panelClass, className)}
+            className={cn("experience-overlay-panel surface absolute z-10 flex max-h-[94dvh] flex-col overflow-hidden shadow-elevated", panelClass, className)}
           >
             {!hideHeader && (
               <div className="flex min-h-16 items-center justify-between gap-4 border-b px-5">
@@ -517,60 +517,11 @@ export function Modal({ open, onClose, title, description, children, size = "md"
   return <Overlay open={open} onClose={onClose} title={title} description={description} size={size} closeOnBackdrop={closeOnBackdrop}>{children}</Overlay>;
 }
 
-const EMPTY_STATE_LOTTIES = {
-  Search: "search-nearby",
-  PackageSearch: "search-nearby",
-  ShoppingBasket: "empty-basket",
-  ShoppingBag: "empty-basket",
-  Store: "storefront-open",
-  Building2: "storefront-open",
-  BriefcaseBusiness: "storefront-open",
-  MapPin: "location-pin",
-  Bell: "notification-bell",
-  BellRing: "notification-bell",
-  Inbox: "notification-bell",
-  Mail: "notification-bell",
-  Truck: "route-delivery",
-  Bike: "driver-online",
-  PackageCheck: "route-delivery",
-  CheckCircle2: "success-burst",
-  BadgeCheck: "verified-business",
-  ShieldCheck: "verified-business",
-  LockKeyhole: "verified-business",
-  UserRoundCheck: "verified-business",
-  FileCheck2: "review-pending",
-  ClipboardList: "review-pending",
-  FileText: "review-pending",
-  BookOpen: "review-pending",
-  WalletCards: "money-flow",
-  Landmark: "money-flow",
-  Banknote: "money-flow",
-  ReceiptText: "money-flow",
-  UsersRound: "team-collaboration",
-  UserPlus: "team-collaboration",
-  Handshake: "team-collaboration",
-  MessageCircle: "support-chat",
-  Headphones: "support-chat",
-  LifeBuoy: "support-chat",
-  HelpCircle: "support-chat",
-  BarChart3: "analytics-rise",
-  Target: "analytics-rise",
-  BadgePercent: "analytics-rise",
-  Sparkles: "analytics-rise",
-  CalendarDays: "calendar-schedule",
-  Clock3: "calendar-schedule",
-  MonitorSmartphone: "kiosk-scan"
-};
-
-export function EmptyState({ icon: Icon, lottie, title, description, action, className }) {
-  const iconName = Icon?.displayName || Icon?.name || "";
-  const animation = lottie || EMPTY_STATE_LOTTIES[iconName];
-  return (
-    <div className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
-      {false && animation ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-20 w-20 items-center justify-center rounded-[24px] bg-[var(--accent-soft)]"><SpotlyLottie name={animation} mode="loop" className="h-[72px] w-[72px]" fallback={Icon ? <Icon className="h-6 w-6 text-[var(--accent)]" /> : null} /></motion.div> : Icon ? <motion.div initial={{ opacity: 0, y: 6, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }} className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Icon className="h-6 w-6" /></motion.div> : null}
-      <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, delay: 0.04 }}><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 max-w-sm text-sm leading-6 text-secondary">{description}</p>{action && <div className="mt-5">{action}</div>}</motion.div>
-    </div>
-  );
+export function EmptyState({ icon: Icon, title, description, action, className }) {
+  return <div className={cn("experience-empty flex flex-col items-center justify-center px-6 py-12 text-center", className)}>
+    {Icon ? <span className="experience-empty-icon" aria-hidden="true"><Icon className="h-6 w-6" /></span> : null}
+    <div><h3 className="text-lg font-semibold">{title}</h3>{description ? <p className="mt-2 max-w-md text-sm leading-6 text-secondary">{description}</p> : null}{action ? <div className="mt-5">{action}</div> : null}</div>
+  </div>;
 }
 
 export function ListRow({ icon: Icon, title, subtitle, trailing, onClick, href, className, ariaLabel }) {

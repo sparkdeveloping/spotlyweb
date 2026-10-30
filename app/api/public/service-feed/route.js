@@ -8,6 +8,8 @@ import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketpla
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
+import { marketplaceRank, compareMarketplaceBusinesses } from "@/lib/marketplace-ranking";
+import { categorizeMarketplaceProduct } from "@/lib/marketplace-product-taxonomy";
 import { independentPublicStore, independentShoppingFlags } from "@/lib/independent-shopping";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
@@ -95,6 +97,7 @@ function itemRecord(doc, business, service) {
     title: item.name || "Offering",
     description: item.description || "",
     category: item.category || "General",
+    categoryPath: categorizeMarketplaceProduct({ name: item.name, categoryPath: item.categoryPath || [item.category] }).path,
     image: item.image || business?.coverImage || business?.image || business?.logoUrl || "",
     brand: item.brand || "",
     variant: item.variant || "",
@@ -212,21 +215,14 @@ function itemMatchesService(service, item = {}, business = {}) {
   return service === "eat" ? matchesService("eat", business) : service === "shop" ? matchesService("shop", business) : false;
 }
 
-function trustAdjustedRating(business = {}) {
-  const rating = Math.max(0, Math.min(5, Number(business.rating || 0)));
-  const count = Math.max(0, Number(business.reviewCount || 0));
-  if (!rating || count <= 0) return 4.1;
-  const prior = 4.1;
-  const priorWeight = 6;
-  return (prior * priorWeight + rating * Math.min(count, 250)) / (priorWeight + Math.min(count, 250));
-}
-
+// Commerce readiness is a strict tier. Editorial recognition is only a tie-breaker
+// within that tier. Reported closures require re-verification rather than implied availability.
 function sortBusinesses(a, b) {
-  return Number(b.isFeatured) - Number(a.isFeatured)
-    || Number(b.operational?.openNow) - Number(a.operational?.openNow)
-    || Number(String(b.verificationStatus || "").toLowerCase() === "verified") - Number(String(a.verificationStatus || "").toLowerCase() === "verified")
-    || trustAdjustedRating(b) - trustAdjustedRating(a)
-    || String(a.name).localeCompare(String(b.name), "en", { sensitivity: "base" });
+  const ar = marketplaceRank(a), br = marketplaceRank(b);
+  if (ar.tier !== br.tier) return br.tier - ar.tier;
+  if (ar.editorial.branchReviewRequired !== br.editorial.branchReviewRequired) return Number(ar.editorial.branchReviewRequired) - Number(br.editorial.branchReviewRequired);
+  return Number(Boolean(b.operational?.openNow)) - Number(Boolean(a.operational?.openNow))
+    || compareMarketplaceBusinesses(a, b);
 }
 
 function sortItems(service, a, b) {

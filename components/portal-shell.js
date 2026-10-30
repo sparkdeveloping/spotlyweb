@@ -33,7 +33,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { portals } from "@/data/portals";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
-import { useTheme } from "@/components/providers";
+import { ThemeMenu } from "@/components/theme-menu";
 import { useAuth } from "@/components/firebase-provider";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { Badge, Overlay } from "@/components/ui";
@@ -113,40 +113,6 @@ function PortalSwitcher({ portal, compact = false }) {
   );
 }
 
-function ThemeMenu() {
-  const { theme, setTheme } = useTheme();
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useOutsideClick(ref, () => setOpen(false));
-  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Laptop;
-  const options = [
-    { value: "system", label: "System", icon: Laptop },
-    { value: "light", label: "Light", icon: Sun },
-    { value: "dark", label: "Dark", icon: Moon }
-  ];
-
-  return (
-    <div ref={ref} className="relative">
-      <button aria-label="Appearance" onClick={() => setOpen((value) => !value)} className="surface flex h-11 w-11 items-center justify-center rounded-[12px] hover:bg-[var(--surface-2)]"><Icon className="h-5 w-5" /></button>
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-44 rounded-[16px] p-2 shadow-elevated">
-            {options.map((option) => {
-              const OptionIcon = option.icon;
-              return (
-                <button key={option.value} onClick={() => { setTheme(option.value); setOpen(false); }} className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm hover:bg-[var(--surface-2)]">
-                  <OptionIcon className="h-4 w-4" />
-                  <span className="flex-1 text-left font-medium">{option.label}</span>
-                  {theme === option.value && <Check className="h-4 w-4 text-[var(--accent)]" />}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 function notificationTime(value, nowMs = 0) {
   if (!value) return "Just now";
@@ -309,7 +275,7 @@ function Sidebar({ portal, activeSection, mobileOpen, onMobileClose, footer = tr
             <p className={cn("px-3 pb-2 pt-1 text-[11px] font-semibold tracking-[0.08em] text-tertiary", collapsed && "lg:sr-only")}>{group.label}</p>
             <div className="space-y-1">{group.items.map((item) => {
               const Icon = item.icon; const active = activeSection === item.id;
-              return <Link key={item.id} href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined} className={cn("relative flex min-h-11 items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition", collapsed && "lg:justify-center lg:px-0", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : item.emphasis ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}>
+              return <Link key={item.id} href={item.href} aria-current={active ? "page" : undefined} onClick={onMobileClose} title={collapsed ? item.label : undefined} className={cn("relative flex min-h-11 items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition", collapsed && "lg:justify-center lg:px-0", active ? "text-[var(--accent-strong)] dark:text-[var(--accent)]" : item.emphasis ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-secondary hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}>
                 {active && <motion.span layoutId={`sidebar-${portal.id}`} className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.08, duration: 0.34 }} />}
                 <Icon className="relative h-5 w-5 shrink-0" /><span className={cn("relative flex-1", collapsed && "lg:hidden")}>{item.label}</span>{item.badge ? <Badge className={cn("relative min-w-6 justify-center px-1.5", collapsed && "lg:absolute lg:right-0 lg:top-0 lg:min-w-4 lg:px-1 lg:text-[9px]")} tone={active ? "accent" : "neutral"}>{item.badge}</Badge> : null}
               </Link>;
@@ -332,7 +298,7 @@ function MobileBottomNav({ portal, activeSection, onOpenCommand }) {
   return (
     <>
       <nav className="surface safe-bottom fixed inset-x-2 bottom-2 z-30 flex min-h-[68px] items-start justify-around rounded-[24px] border border-[var(--border)] px-2 pt-2 shadow-elevated backdrop-blur-2xl lg:hidden" aria-label="Mobile navigation">
-        {primary.map((item) => { const Icon = item.icon; const active = item.id === activeSection; return <Link key={item.id} href={item.href} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-[10px] px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-[var(--on-danger)]">{item.badge}</span> : null}</Link>; })}
+        {primary.map((item) => { const Icon = item.icon; const active = item.id === activeSection; return <Link key={item.id} href={item.href} aria-current={active ? "page" : undefined} className={cn("relative flex min-w-14 flex-col items-center gap-1 rounded-[10px] px-2 py-1.5 text-[11px] font-medium", active ? "text-[var(--accent)]" : "text-tertiary")}><Icon className="h-5 w-5" /><span className="max-w-[70px] truncate">{item.label}</span>{item.badge ? <span className="absolute right-1 top-0 min-w-4 rounded-full bg-danger px-1 text-center text-[9px] font-bold text-[var(--on-danger)]">{item.badge}</span> : null}</Link>; })}
         <button type="button" onClick={() => setMoreOpen(true)} className={cn("flex min-w-14 flex-col items-center gap-1 rounded-[10px] px-2 py-1.5 text-[11px] font-medium", remaining.some((item) => item.id === activeSection) ? "text-[var(--accent)]" : "text-tertiary")}><MoreHorizontal className="h-5 w-5" /><span>More</span></button>
       </nav>
       <Overlay open={moreOpen} onClose={() => setMoreOpen(false)} title="More" description={`More destinations in ${portal.name}.`} mode="sheet" label="More navigation">
@@ -410,7 +376,8 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
   }, []);
 
   return (
-    <div data-workspace={portal.id} className="min-h-screen bg-[var(--grouped)]">
+    <div data-workspace={portal.id} className="experience-workspace min-h-screen bg-[var(--grouped)]">
+      <a href="#spotly-main" className="experience-skip-link">Skip to content</a>
       {!hideSidebar && <Sidebar portal={portal} activeSection={resolvedActiveSection} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} footer={footer} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />}
       <div className={cn(!hideSidebar && (sidebarCollapsed ? "lg:pl-[88px]" : "lg:pl-[278px]"), "transition-[padding] duration-200")}>
         <header className={cn("surface sticky top-0 z-30 flex h-[72px] items-center gap-3 border-x-0 border-t-0 px-4 sm:px-6", hideSidebar && "justify-between")}>
@@ -432,7 +399,7 @@ export function PortalShell({ portalId, activeSection, children, hideSidebar = f
         </header>
         <EmailVerificationBanner />
         {attentionNotification && <div className="border-b bg-[var(--accent-soft)] px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-[1600px] flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-[var(--accent-strong)]">New activity · {attentionNotification.title || "Spotly update"}</p><p className="mt-0.5 line-clamp-2 text-xs leading-5 text-secondary">{attentionNotification.body || "Open this update for details."}</p></div><div className="flex gap-2">{attentionNotification.href && <button type="button" onClick={async () => { await readNotification(attentionNotification.id); window.location.href = canonicalSpotlyUrl(attentionNotification.href, notificationWorkspace(attentionNotification)); }} className="rounded-[10px] bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--on-accent)]">View update</button>}<button type="button" onClick={() => readNotification(attentionNotification.id)} className="rounded-[10px] border bg-[var(--surface)] px-3 py-2 text-xs font-semibold">Dismiss</button></div></div></div>}
-        <main key={pathname} className={cn("portal-gradient min-h-[calc(100vh-4.5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
+        <main id="spotly-main" tabIndex={-1} key={pathname} className={cn("portal-gradient min-h-[calc(100vh-4.5rem)]", !hideSidebar && "pb-24 lg:pb-8")}>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}>
             {children}
           </motion.div>
