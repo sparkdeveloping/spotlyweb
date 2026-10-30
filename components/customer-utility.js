@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -93,7 +93,12 @@ export function CustomerSearchView({
   onExplore
 }) {
   const filters = ["all", "business", "product", "service", "event", "place"];
-  const visible = filter === "all" ? results : results.filter((item) => item.type === filter);
+  const [productCategory, setProductCategory] = useState("all");
+  useEffect(() => setProductCategory("all"), [query]);
+  const productCategories = [...new Set(results.filter((item) => item.type === "product").map((item) => item.categories?.[1] || item.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const effectiveProductCategory = productCategories.includes(productCategory) ? productCategory : "all";
+  const typed = filter === "all" ? results : results.filter((item) => item.type === filter);
+  const visible = filter === "product" && effectiveProductCategory !== "all" ? typed.filter((item) => (item.categories || [item.category]).includes(effectiveProductCategory)) : typed;
   return <section className="v7-page-enter mx-auto max-w-[1040px]">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="max-w-2xl"><p className="text-sm font-semibold text-[var(--accent)]">Search{service ? ` · ${serviceLabel}` : ""}</p><h1 className="mt-2 text-[34px] font-semibold tracking-[-.05em] sm:text-[44px]">Find anything on Spotly.</h1><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Businesses, products, services, events and places in {location.city} share one search.</p></div>
@@ -102,6 +107,7 @@ export function CustomerSearchView({
 
     <div className="sticky top-[84px] z-20 mt-6 rounded-[16px] bg-[color-mix(in_srgb,var(--background)_88%,transparent)] py-2 backdrop-blur-xl"><SearchField value={query} onChange={onQuery} label="Search Spotly" placeholder={service ? `Search ${serviceLabel.toLowerCase()}…` : "Try chicken, massage, airport, groceries…"} inputProps={{ autoFocus: true, autoComplete: "off" }} className="h-14 rounded-[16px] bg-[var(--surface)] shadow-card" /></div>
 
+    {filter === "product" && productCategories.length > 1 ? <div aria-label="Product categories" className="mt-4 flex flex-wrap gap-2"><button type="button" aria-pressed={effectiveProductCategory === "all"} onClick={() => setProductCategory("all")} className={cn("rounded-full border px-3 py-2 text-xs font-semibold", effectiveProductCategory === "all" ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]" : "border-[var(--border)] text-[var(--text-2)]")}>All products</button>{productCategories.map((name) => <button key={name} type="button" aria-pressed={effectiveProductCategory === name} onClick={() => setProductCategory(name)} className={cn("rounded-full border px-3 py-2 text-xs font-semibold", effectiveProductCategory === name ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]" : "border-[var(--border)] text-[var(--text-2)]")}>{name}</button>)}</div> : null}
     {service ? <div className="mt-3 flex"><button type="button" onClick={onClearService} className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-soft)] px-3 py-2 text-xs font-semibold text-[var(--accent-strong)]">Searching {serviceLabel}<X className="h-3.5 w-3.5" /></button></div> : null}
 
     {!query.trim() ? <div className="mt-8 space-y-9">
