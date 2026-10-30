@@ -30,6 +30,7 @@ import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 import { marketplaceMedia, marketplaceMediaSet } from "@/lib/marketplace-editorial";
 import { MarketplaceDesignedCover } from "@/components/marketplace-designed-cover";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
+import { marketplaceEditorial } from "@/lib/marketplace-curation";
 import { THEMENU_RESTAURANT_SPOTLIGHTS, themenuPriceLabel } from "@/lib/themenu-curated-spotlights";
 
 const SERVICE_CONFIG = {
@@ -142,6 +143,7 @@ function ServiceSkeleton() {
 
 function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, onOpen, service, currency }) {
   const profile = marketplaceProfile(business);
+  const editorial = profile.service === "shop" ? marketplaceEditorial(business) : null;
   const [assistExplained, setAssistExplained] = useState(false);
   const assisted = Boolean(business.assistStoreId);
   const media = assignedMedia || mediaForBusiness(business);
@@ -161,6 +163,7 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
       </div>
       <div className={cn("p-4", !commerce && "pb-3")}>
         <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="truncate text-[17px] font-semibold tracking-[-.025em]">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{business.area || business.city ? ` · ${business.area || business.city}` : ""}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div>
+        {editorial?.signal === "established_retail_brand" ? <p className="mt-2 text-[11px] text-[var(--text-3)]">Established chain · Spotly editorial, not customer reviews</p> : editorial?.branchReviewRequired ? <p className="mt-2 text-[11px] font-semibold text-[var(--text-2)]">Branch information needs re-verification</p> : null}
         {assistedBooking ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Ask Spotly to check your preferred time</div> : null}
         {assisted ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Menu prices estimated · Spotly confirms before payment</div> : null}
         {commerce ? <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-[var(--text-2)]">
@@ -184,6 +187,7 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
  */
 function DirectoryListingRow({ business, favorite, onFavorite, onOpen }) {
   const profile = marketplaceProfile(business);
+  const editorial = profile.service === "shop" ? marketplaceEditorial(business) : null;
   const media = marketplaceMedia(business);
   // Only show actual location-matched/licensed imagery. An unrelated editorial
   // category photo is not a photograph of a named shop or restaurant.
@@ -197,7 +201,7 @@ function DirectoryListingRow({ business, favorite, onFavorite, onOpen }) {
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-semibold tracking-[-.02em] text-[var(--text)]">{business.name}</span>
         <span className="mt-1 block truncate text-xs text-secondary">{profile.displayCategory}{business.area||business.city?` · ${business.area||business.city}`:""}</span>
-        <span className="mt-2 block text-[11px] font-medium text-[var(--text-3)]">{licensed ? "Source photo: The Menu" : "Explore place details"}</span>
+        <span className="mt-2 block text-[11px] font-medium text-[var(--text-3)]">{editorial?.branchReviewRequired ? "Spotly guide: branch needs re-verification" : editorial?.signal === "established_retail_brand" ? "Established chain · Spotly editorial, not a customer rating" : licensed ? "Source photo: The Menu" : "Explore place details"}</span>
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-secondary transition group-hover:translate-x-0.5" aria-hidden="true" />
     </button>
