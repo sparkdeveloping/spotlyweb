@@ -33,7 +33,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { portals } from "@/data/portals";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
-import { useTheme } from "@/components/providers";
+import { ThemeMenu } from "@/components/theme-menu";
 import { useAuth } from "@/components/firebase-provider";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 import { Badge, Overlay } from "@/components/ui";
@@ -113,40 +113,6 @@ function PortalSwitcher({ portal, compact = false }) {
   );
 }
 
-function ThemeMenu() {
-  const { theme, setTheme } = useTheme();
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useOutsideClick(ref, () => setOpen(false));
-  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Laptop;
-  const options = [
-    { value: "system", label: "System", icon: Laptop },
-    { value: "light", label: "Light", icon: Sun },
-    { value: "dark", label: "Dark", icon: Moon }
-  ];
-
-  return (
-    <div ref={ref} className="relative">
-      <button aria-label="Appearance" onClick={() => setOpen((value) => !value)} className="surface flex h-11 w-11 items-center justify-center rounded-[12px] hover:bg-[var(--surface-2)]"><Icon className="h-5 w-5" /></button>
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="surface absolute right-0 top-[calc(100%+8px)] z-50 w-44 rounded-[16px] p-2 shadow-elevated">
-            {options.map((option) => {
-              const OptionIcon = option.icon;
-              return (
-                <button key={option.value} onClick={() => { setTheme(option.value); setOpen(false); }} className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm hover:bg-[var(--surface-2)]">
-                  <OptionIcon className="h-4 w-4" />
-                  <span className="flex-1 text-left font-medium">{option.label}</span>
-                  {theme === option.value && <Check className="h-4 w-4 text-[var(--accent)]" />}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 function notificationTime(value, nowMs = 0) {
   if (!value) return "Just now";

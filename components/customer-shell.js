@@ -4,9 +4,10 @@ import { EmailVerificationBanner } from "@/components/email-verification-banner"
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, CircleUserRound, Heart, Home, MapPin, Search, TimerReset } from "lucide-react";
+import { CircleUserRound, Heart, Home, MapPin, Search, TimerReset } from "lucide-react";
 import { useEffect } from "react";
 import { motion } from "framer-motion";
+import { ThemeMenu } from "@/components/theme-menu";
 import { NotificationBell } from "@/components/notification-center";
 import { cn } from "@/lib/cn";
 import { spotlyPortalUrl } from "@/lib/spotly-domains";
@@ -104,7 +105,7 @@ export function CustomerShell({
             <MapPin className="h-4 w-4 text-[var(--accent)]" />
             <span className="truncate">{locationLabel}</span>
           </button> : <span className="hidden max-w-[170px] items-center gap-2 rounded-[12px] px-3 py-2 text-sm font-semibold text-[var(--text-2)] lg:flex"><MapPin className="h-4 w-4 text-[var(--accent)]" /><span className="truncate">{locationLabel}</span></span>}
-          {user && !user.isAnonymous ? <NotificationBell workspace="customer" /> : <Link href="/login" className="flex h-11 w-11 items-center justify-center rounded-[12px] text-[var(--text-2)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]" aria-label="Notifications"><Bell className="h-5 w-5" /></Link>}
+          {user && !user.isAnonymous ? <NotificationBell workspace="customer" /> : <ThemeMenu />}
           <Link href={user && !user.isAnonymous ? "/account" : "/login?next=%2F"} className={cn("flex h-11 items-center gap-2 rounded-[12px] p-1.5 pr-2.5 transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]", current === "profile" && "bg-[var(--accent-soft)] text-[var(--accent-strong)]")} aria-label={user && !user.isAnonymous ? "Open profile" : "Sign in"}>
             <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[var(--accent)] text-[11px] font-bold text-[var(--on-accent)]">{user && !user.isAnonymous ? initials(profile, user) : <CircleUserRound className="h-5 w-5" />}</span>
             <span className="hidden max-w-24 truncate text-sm font-semibold xl:block">{user && !user.isAnonymous ? profile?.displayName?.split(" ")[0] || "Profile" : "Sign in"}</span>

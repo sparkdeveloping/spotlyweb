@@ -92,7 +92,7 @@ test("Premium discovery differentiates independent Assist from photo-less stale 
   assert.match(experience,/assistBusinesses/);
   assert.match(experience,/Choose a restaurant, request a price check/);
   assert.match(experience,/function DirectoryListingRow/);
-  assert.match(experience,/grid auto-rows-fr gap-3 md:grid-cols-2/);
+  assert.match(experience,/grid[^"]*grid-cols-1[^"]*auto-rows-fr/);
   assert.match(experience,/min-h-\[112px\]/);
   assert.match(experience,/media.kind === "licensed-directory"/);
   assert.match(experience,/Explore place details/);
