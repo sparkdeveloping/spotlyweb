@@ -2,67 +2,110 @@
 
 30 October 2026 · Feature branch: `feat/spotly-premium-experience-2026`
 
-**Status: implemented locally, awaiting permission to push for preview. Not ready for production release.**
+**Published for visual review. Production is unchanged. This is not a production release sign-off.**
 
-Code commit: `42722a342c75849ea32ff9be292c9ae503a20c66`. Baseline main: `8e9ab9a92091a48bace80489d192a0f3c83b05d5`.
+- Preview: https://spotlyweb-mlmpr1r7d-sparkdevelopings-projects.vercel.app/marketplace
+- Careers: https://spotlyweb-mlmpr1r7d-sparkdevelopings-projects.vercel.app/careers
+- Draft PR: https://github.com/sparkdeveloping/spotlyweb/pull/27
+- Tested runtime commit: `0f99f56430ac54fe0c71fe147144f414a3e4f39e`
+- Runtime source tree: `b14dfa04361c9fc652ab2a156450420b5dae8d31`
+- Ready Vercel deployment: `dpl_B1B6fCCBv59TAaCFLs1mTTw1yjj8`
+- Baseline main/production commit: `8e9ab9a92091a48bace80489d192a0f3c83b05d5`
+
+The user authorized feature-branch publication and previews. No main merge or production promotion was performed. A documentation-only commit may follow the tested runtime commit above.
 
 ## What changed
 
-- Balanced six-service Home composition, useful search, approved service lockups, original dimensional illustrations and truthful unavailable-service labels.
-- A common service-entrance component for Bite, Shopper, Book, Live, Ride and Send, with immediate task controls rather than a splash screen. Blue Ride and violet Send now follow the approved palette.
-- Floating customer navigation with existing five mobile destinations, current-page semantics, focus treatment, safe-area support, and skip links scoped to actual content landmarks.
-- Contextual service switching with canonical links, preserved modified-click behavior, and a fresh discovery component when changing services so a previous service’s inventory does not flash beneath a new identity.
-- Illustrated search shortcuts, compact loading status, useful inventory-empty/filter-empty states, real retry without changing the search term, larger discovery save/clear targets, and 16px mobile search inputs to avoid focus zoom.
-- First Access uses the same artwork family while preserving account creation, attribution, consent and waitlist submission. Its created-account display state now rerenders deliberately while the existing ref continues protecting retry behavior.
-- Shared cards, controls, overlays and empty states; quieter operational shell and visible active navigation. No operational information architecture or permission model was replaced.
-- Fixed Home’s undefined category helper using the existing taxonomy; repaired a missing `Link` import in the existing Admin First Access screen.
-- Removed the unused duplicate Tailwind TypeScript config and generated Next TypeScript declaration, which blocked the project’s JavaScript-only check.
+- Balanced six-service Home composition with original dimensional illustrations, useful search, neutral availability copy and meaningful empty-city actions.
+- Common task-first entrances for Bite, Shopper, Book, Live, Ride and Send. Ride uses blue and Send uses violet; existing forms and service gates remain.
+- Floating customer navigation, current-page semantics, safe-area support, keyboard focus treatment and skip links to actual content landmarks.
+- Canonical service switching, preserved modified-click behavior and fresh feeds when switching so previous inventory does not flash under another identity.
+- Useful search shortcuts; distinct loading, no-inventory, no-match and error/retry states; larger filter/clear/save targets; 16px mobile search inputs.
+- First Access uses the same artwork family. Existing account creation, attribution, consent and waitlist submission remain. Created-account display state now rerenders while its ref continues protecting retry behavior.
+- Shared cards, buttons, overlays, empty states and a quieter operational shell. Existing navigation groups, access decisions and data behavior remain.
+- Shared accessible appearance controls reuse the existing preference. Escape closes the chooser and returns focus to its trigger.
+- Explicit grid columns prevent content and loading placeholders from widening mobile discovery/detail pages. Business headings sit on a reading surface clear of fallback-cover labels.
+- Business and Driver marketing navigation moves to the wider breakpoint to make room for tablet header actions.
+- Fixed Home's undefined category helper through the existing taxonomy and Admin First Access's missing `Link` import. Removed unused tracked TypeScript config/declarations that blocked the JavaScript-only check.
 
-## What was preserved
+## Follow-up polish requested during preview review
 
-No database/schema/rule, API route, payment/refund, financial, dispatch, PIN, geofence, role/access or launch-control implementation was changed. Stable service IDs, canonical/legacy URL helpers, data queries, merchant inventory, authentication/session bridge and existing forms remain in place. No live order, payment, ride, parcel request, business approval or driver-availability change was made. No production settings were changed.
+The owner supplied `SpotlyBrandingKit(4).zip` after identifying white logo plates in dark mode. The curated module now includes nine exact on-dark SVGs: primary, Business, Driver and all six services. Their bytes were compared with the attachment. No logo shapes, lettering or source service colors were redrawn/recolored. No commercial font binaries were added.
 
-The approved logos remain original server-served vectors. No font software was added. Six transparent artwork families ship as local 320px/640px WebP files with a static icon fallback; no renderer or runtime dependency was introduced.
+A shared logo component selects the correct source vector through CSS, aligning the first paint with the page theme. Customer headers and service entrances have transparent logo containers. Only the six Home cards shorten visible names to Bite, Shopper, Ride, Book, Live and Send; full service identities remain on entrances. Accessible card names retain the Spotly context.
 
-## Verification completed
+Careers uses the public Spotly palette instead of the internal Staff palette. Its white gradient wash and pill are gone. Its header uses the approved mark instead of the old letter-S placeholder. The partner download includes both background variants with accurate instructions.
+
+## Preserved behavior
+
+No database, schema, rule, payment/refund, finance, quote, dispatch, PIN, geofence, role/access or launch-control implementation changed. Stable service IDs, merchant inventory, public feeds, authentication/session handling and existing forms remain. Branding-download instructions and presentation assets changed; no transaction API behavior changed.
+
+No account, waitlist request, order, payment, reservation, ride, parcel request, business approval or driver-availability change was submitted during QA. No production settings or credentials changed. No production tokens were transferred into the preview.
+
+The twelve illustrations are local transparent 320px/640px WebP assets, under 550KB combined, with an icon error fallback. No new renderer, runtime dependency or Firebase query was introduced for this art. Font binaries in the attached kit were not added to the repository or review archive.
+
+## Automated verification
 
 | Check | Result |
 | --- | --- |
-| `npm run check:js` | Pass after removing unused TS files |
-| `npm run firebase:preflight` | Correct `spotly-africa` project; local privileged credentials, push and App Check values are unavailable |
-| `npm run prebuild` | 113 tests pass |
-| Focused design/system/motion checks | 17 tests pass |
-| Full `npm test` | 540 tests: 523 pass, 17 fail; every failure also exists on baseline |
-| Full baseline test comparison | Baseline: 537 tests, 518 pass, 19 fail; no new failing test names |
-| Component lint | Zero errors in redesigned presentation components; two existing dependency warnings in `marketplace-app` |
-| Full lint comparison | 43 errors / 32 warnings remain, down from baseline 69 errors / 32 warnings |
-| Next.js SWC | 13 changed components compile using the installed Next compiler |
-| Tailwind / PostCSS | Global Tailwind compiles; experience stylesheet parses |
-| New service color pairs | All 12 light/dark reading-surface pairs meet 4.5:1 |
-| Artwork budgets | All 12 files have expected dimensions/alpha; tile files <30KB each, entrance files <80KB each; family <550KB |
-| `git diff --check` | Pass |
-| `npm run audit:launch` | Existing public map-config rate-limit/App Check findings; unresolved |
-| `npm run check:theme` | Existing unclassified routes and fixed palette/media-token findings remain; not green |
+| Actual Vercel preview production build | **Pass / READY**; Next 16.2.10 compiled and generated 206 static pages |
+| `npm run prebuild` | **113 pass**, zero failures |
+| `npm run check:js` | **Pass** |
+| Full test suite, sequential TAP run | **540 total: 523 pass, 17 fail** |
+| Baseline comparison | Baseline 537 total: 518 pass, 19 fail; every remaining failing name also fails on baseline |
+| Full lint | **43 errors / 31 warnings** remain; baseline 69 errors / 32 warnings |
+| Changed presentation component lint | Zero errors; existing marketplace hook and branding-gallery image warnings remain |
+| Service reading surfaces | All 12 light/dark foreground/background pairs meet 4.5:1 |
+| Illustration budgets | Expected alpha/dimensions; 320px files <30KB each, 640px files <80KB each |
+| Dark vectors | All nine byte-for-byte identical to supplied kit; curated-vector tests pass |
+| `git diff --check` | **Pass** |
+| Firebase preflight | Correct `spotly-africa`; local privileged, push and App Check values unavailable |
+| Launch audit | Existing public map-config distributed-rate-limit/App Check findings remain |
+| Theme audit | Existing unclassified-route and fixed-palette/media-token findings remain; not green |
 
-Compilation and source tests are not a substitute for browser or transaction testing.
+Local Next builds hit this sandbox's `uv_resident_set_memory` limitation. The Vercel build succeeded without changing working application or security settings to compensate. Compilation/source tests do not certify transactions or restricted roles.
 
-## Browser evidence and limits
+## Browser coverage
 
-Production was inspected read-only in the connected browser’s existing customer/admin session. Observed Home, all six service entrances, Search, Admin Home, Business portfolio, Driver Home and Staff Home. Existing private-beta and broad account permissions limit what can be inferred about other roles. Driver state was not changed. Production screenshots were used internally; none are presented as evidence of the rebuilt UI.
+Final-runtime width measurements use the document's actual client/scroll widths.
 
-**The rebuilt UI has not been verified in a browser. No rebuilt desktop/mobile screenshots or Core Web Vitals measurements are available yet.**
+| Surface | Observed result | Scope |
+| --- | --- | --- |
+| Home | Six loaded illustrations, shorter names, transparent logo; no overflow at 1440px | Final runtime; light/dark desktop screenshots |
+| Bite | Approved dark identity directly on its surface; 80 real directory places; 16px search; client/scroll width both 390px | Final runtime; light/dark mobile screenshots |
+| Careers | Dark hero `rgb(11,13,18)` with no background image; transparent purple kicker; no overflow at 1440px | Final runtime; dark desktop screenshot |
+| Appearance | Real Light/Dark switching works; pressed/expanded states, outside dismissal, Escape/focus checked | Final switching; fuller keyboard checks on preceding preview |
+| Shopper / Book / Live | Correct identities and real feeds; Live had 11 directory venues and zero published events | Earlier branch previews; final polish does not change feeds |
+| Discovery search | Unmatched Bite query produced no-match state; clearing restored real feed | Earlier branch preview |
+| Global search | “7 Arts” in Events returned one actual directory result at 360px | Earlier branch preview |
+| Empty city | Gwanda produced honest Book no-inventory state and change-city/search actions | Earlier branch preview; no launch setting changed |
+| Ride / Send | Pickup progression disabled without a verified point; Send unavailable in Harare | Earlier guest checks at 390/360px; no request submitted |
+| Directory detail | Opened 7 Arts through Live; discovery-only notice/attribution retained; detail width 360px after grid fix | Commit `8b96e83`; same detail implementation in final runtime |
+| First Access | Selector changed to Shopper; empty Continue produced valid-email alert | Earlier preview at 390px; no signup/consent submission |
+| Activity / Saved | Guest sign-in states; constrained 360px layout | Earlier branch preview |
+| Account / Admin / Staff / NXT | Required guest authentication gates rendered | Preview guest inspection only |
+| Business / Driver | Public marketing rendered; production auth destinations identified and not followed | Final tablet header adjustment still needs browser confirmation |
 
-The managed local preview daemon is unavailable. Both normal Turbopack and webpack production-build attempts stop because this sandbox cannot provide Node’s `uv_resident_set_memory` measurement. The project requests Node 22; this workspace runs Node 24.22.1. No working application code or security setting was changed to compensate.
+Final-runtime screenshots in the review package:
 
-A Vercel preview is the next verification surface, but automatic approval review rejected the feature-branch push twice. The remote exactly matches the supplied public repository, GitHub reports admin/push permission, and the existing production deployment identifies the same repository and baseline commit. Nevertheless, the reviewer requires explicit user authorization for this source/asset upload. No alternative upload route was used to bypass that rejection.
+- `screenshots/Home_Desktop_Light.jpg` — 1440×900
+- `screenshots/Home_Desktop_Dark.jpg` — 1440×900
+- `screenshots/Bite_Mobile_Light.jpg` — 390×844
+- `screenshots/Bite_Mobile_Dark.jpg` — 390×844
+- `screenshots/Careers_Desktop_Dark.jpg` — 1440×900
 
-- Actual new preview URL: **none — not deployed**.
-- Pull request URL: **none — branch not pushed**.
-- Current production deployment remains `dpl_45ntpKfgeky6es8dXtPweHYmAMmG`, built from the unchanged baseline commit.
+The browser connection stopped responding during the final 360px viewport pass. A subsequent snapshot request also did not respond. No alternate session, production credentials or browser-state transfer was used to work around it. Final 360px/768px coverage, marketing-header breakpoint checks, Careers light/mobile screenshots and a final device reset could not be confirmed. Earlier checks at these sizes do not replace final coverage.
+
+## Remaining release gates
+
+1. Restore browser connectivity and finish final 360px/768px responsive/keyboard checks, including Business/Driver headers, all six service identities, First Access and Careers in both themes.
+2. Authenticate suitable test users on an approved preview/test origin. Production sessions are origin-scoped and do not prove preview auth or restricted-role behavior. Some preview sign-in links point to production domains.
+3. Verify cart, checkout/reservation progression, Saved/Activity persistence, account/support submissions and restricted Business, Driver, Admin, Staff and NXT workflows in a controlled test environment. Do not create live work solely for visual QA.
+4. Measure Core Web Vitals, layout shifts and midrange mobile interaction performance. No performance score, real-device audit, forced-image-failure browser test or complete reduced-motion browser test is claimed.
+5. Triage existing test, lint, theme and launch failures. Some concern authentication, routing and launch guards; baseline status does not prove they are harmless.
+6. Obtain separate explicit approval before merging main or promoting production.
 
 ## Remaining full-suite failures
-
-These are observed pre-existing failures, not assertions that the underlying feature is broken or harmless. Several concern authentication, routing and launch guards; they need triage before production approval.
 
 - Admin V8 has eight outcome-based primary destinations
 - Admin curation imports only approved data classes and preserves claimed records
@@ -82,17 +125,8 @@ These are observed pre-existing failures, not assertions that the underlying fea
 - service switching uses canonical service URLs while Ride and Send remain gated
 - workbook is staged privately and does not import into businesses automatically
 
-## Required preview work before release readiness
+## Production and rollback
 
-1. With explicit user permission, push only this feature branch to `sparkdeveloping/spotlyweb`, create a draft PR, and let the existing Vercel integration build a **preview** of the exact commit.
-2. Verify the actual deployment state and browser-rendered Home, six services, First Access, Search, details, Cart, checkout progression, Saved/Activity, account and support. Capture desktop, tablet and mobile evidence in both themes; test keyboard focus, reduced motion, artwork fallback and overflow.
-3. Inspect Business, Driver, Admin, Staff, Careers and NXT with appropriately authorized preview sessions. An existing production session is not proof of preview authentication or restricted-role behavior.
-4. Run controlled authentication/onboarding, search, reservation/checkout, business access and driver-operation regression scenarios in an authorized test environment. Do not transact against live customer/driver records merely for visual QA.
-5. Measure actual Core Web Vitals, loading layout shifts and midrange mobile interaction performance. Resolve remaining automated failures or document evidence for deliberately retired assertions.
-6. Rewrite the release report with actual URLs, screenshots, exact tested commit and any remaining limitations. Request separate explicit production approval only then.
+The production deployment list was checked again: current production is still `dpl_45ntpKfgeky6es8dXtPweHYmAMmG`, on the original main commit. No rules deployment, migration, production promotion or main merge occurred.
 
-## Rollback and production boundary
-
-No merge to `main`, production promotion, production setting change, rules deployment or schema migration is authorized or performed. Production is still on its original commit and deployment. The reviewable presentation commits can be reverted independently if an eventual approved release needs rollback.
-
-The attached patch applies to the exact baseline. The source archive excludes Git metadata, installed dependencies, credentials and generated local build files. The implementation is substantial progress across the shared system and service entrances; deeper workflows and device-specific polish remain subject to preview verification.
+The draft PR contains the complete reviewable source. The review package contains screenshots, audit notes and this verification record; implementation remains on the GitHub feature branch. Presentation commits can be reverted independently if an eventual separately approved release needs rollback.

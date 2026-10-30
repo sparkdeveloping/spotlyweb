@@ -1,6 +1,6 @@
 # Spotly experience audit and implementation direction
 
-Audit date: 30 October 2026. Baseline: `main` at `8e9ab9a`. Working branch: `feat/spotly-premium-experience-2026`. Production is isolated from this work. No release is authorized.
+Audit date: 30 October 2026. Baseline: `main` at `8e9ab9a`. Working branch: `feat/spotly-premium-experience-2026`. Production is isolated from this work. No production release is authorized; feature previews were subsequently approved.
 
 ## Evidence and limits
 
@@ -68,7 +68,7 @@ Navigation: floating light/dark material with an opaque base, thin keyline, shal
 - Typography: existing licensed-font-aware system stack; no commercial font distribution. Display 32–56px, section 22–30px, body 14–16px, metadata 12–13px. Body leading at least 1.5. Avoid tiny product labels.
 - Geometry: existing four-size spacing rhythm, 44px minimum interactive targets, 14px controls, 20px cards, 28–32px feature compositions. Dense operational tables keep their existing geometry.
 - Materials: solid reading surfaces; selective translucency only in navigation and overlays; no nested glass cards. Shared soft shadow and keyline tokens.
-- Color: official logos/colors unchanged. Service tints and deeper foregrounds are derived UI colors with AA contrast; branding hues are not automatically text colors. Dark mode gets independent surfaces and the existing official vectors on deliberate light identity surfaces.
+- Color: official logos/colors unchanged. Service tints and deeper foregrounds are derived UI colors with AA contrast; branding hues are not automatically text colors. Dark mode gets independent surfaces and the owner-supplied official on-dark vectors directly on those surfaces. Home cards use concise service names; full entrance lockups remain.
 - Motion: 140ms press, 200ms state, 320–420ms spring selection. Hover transforms only for fine pointers. Existing `MotionConfig reducedMotion="user"` plus CSS reduction. No perpetual artwork animation or animation-dependent content visibility.
 - States: textual load status, unambiguous errors with retry, helpful inventory-empty and filtered-empty alternatives, persistent existing success/transaction feedback.
 - Assets: local transparent WebP, small tile and larger entrance variants, intrinsic dimensions, lazy loading away from the lead artwork, icon fallback on image failure. No new renderer or dependency; no extra Firebase queries for art.
@@ -84,3 +84,7 @@ Navigation: floating light/dark material with an opaque base, thin keyline, shal
 7. Record actual URLs, screenshots, checks and explicit auth/transaction/device limitations. No merge, production promotion, live settings changes or rules/schema deployment. Rollback remains the unchanged production commit/deployment; eventual approved release can revert the reviewable presentation commits.
 
 Representative designs are implemented components, not a parallel mock application. Audit coverage is evidence-based; completing these shared changes does not certify every permission and transaction branch.
+
+## Preview follow-up
+
+Public previews and a draft PR were approved and published after this audit. Browser checks exposed mobile directory/detail sizing and fallback-cover heading problems; those presentation issues were repaired. The owner supplied the full branding kit and requested shorter Home-card names, transparent dark logos and Careers polish. These refinements use exact kit SVGs and preserve full identities elsewhere. The verification report records actual URLs, screenshots, tested commits and remaining device/auth/transaction limits.
