@@ -25,7 +25,7 @@ test("Book and Live remain unambiguous in fallback icons and Home service names"
     readFile(new URL("components/service-artwork.js", ROOT), "utf8"),
     readFile(new URL("components/marketplace-home.js", ROOT), "utf8")
   ]);
-  assert.match(glyphs, /book: CalendarClock2/);
+  assert.match(glyphs, /book: CalendarClock/);
   assert.match(glyphs, /events: Ticket/);
   assert.match(home, /Appointments & services/);
   assert.match(home, /Events & tickets/);
