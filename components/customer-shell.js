@@ -4,7 +4,8 @@ import { EmailVerificationBanner } from "@/components/email-verification-banner"
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CircleUserRound, Heart, Home, MapPin, Search, TimerReset } from "lucide-react";
+import { CircleUserRound, MapPin, Search } from "lucide-react";
+import { SpotlyNavIcon } from "@/components/spotly-navigation-icons";
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { ThemeMenu } from "@/components/theme-menu";
@@ -15,11 +16,11 @@ import { spotlyPortalUrl } from "@/lib/spotly-domains";
 import { productServiceId } from "@/lib/spotly-products";
 
 const navItems = [
-  { id: "home", label: "Home", icon: Home, href: "/" },
-  { id: "search", label: "Search", icon: Search, href: "/search" },
-  { id: "activity", label: "Activity", icon: TimerReset, href: "/activity" },
-  { id: "saved", label: "Saved", icon: Heart, href: "/saved" },
-  { id: "profile", label: "Profile", icon: CircleUserRound, href: "/account" }
+  { id: "home", label: "Home", href: "/" },
+  { id: "search", label: "Search", href: "/search" },
+  { id: "activity", label: "Activity", href: "/activity" },
+  { id: "saved", label: "Saved", href: "/saved" },
+  { id: "profile", label: "Profile", href: "/account" }
 ];
 
 function initials(profile, user) {
@@ -89,10 +90,10 @@ export function CustomerShell({
 
         <nav className="hidden flex-1 items-center justify-center gap-1 md:flex" aria-label="Primary customer navigation">
           {navItems.filter((item) => ["home", "activity", "saved"].includes(item.id)).map((item) => {
-            const Icon = item.icon; const active = selected === item.id;
+            const active = selected === item.id;
             return <Link key={item.id} href={item.href} aria-current={active ? "page" : undefined} onClick={(event) => activate(item.id, event)} className={cn("relative flex h-11 min-w-[92px] items-center justify-center gap-2 rounded-[12px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]", active ? "text-[var(--accent)]" : "text-[var(--text-2)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]")}>
               {active ? <motion.span layoutId="customer-primary-nav" className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.12, duration: 0.42 }} /> : null}
-              <Icon className="relative h-[18px] w-[18px]" strokeWidth={active ? 2.2 : 1.9} />
+              <SpotlyNavIcon name={item.id} className="relative h-[19px] w-[19px]" />
               <span className="relative">{item.label}</span>
               {item.id === "activity" && activityCount > 0 ? <span className="relative flex min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-bold leading-none text-[var(--on-accent)]">{Math.min(activityCount, 99)}</span> : null}
             </Link>;
@@ -127,9 +128,9 @@ export function CustomerShell({
     </footer> : null}
 
     <nav className="customer-mobile-nav safe-bottom fixed inset-x-2 bottom-2 z-40 grid h-[68px] grid-cols-5 items-start rounded-[24px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_94%,transparent)] px-1.5 pt-1.5 shadow-elevated backdrop-blur-2xl md:hidden" aria-label="Mobile customer navigation">
-      {navItems.map((item) => { const Icon = item.icon; const active = selected === item.id; return <Link key={item.id} href={item.href} aria-current={active ? "page" : undefined} onClick={(event) => activate(item.id, event)} className={cn("relative flex min-w-0 flex-col items-center gap-1 rounded-[12px] px-1 py-1.5 text-[10px] font-semibold transition", active ? "text-[var(--accent)]" : "text-[var(--text-3)]")}>
+      {navItems.map((item) => { const active = selected === item.id; return <Link key={item.id} href={item.href} aria-current={active ? "page" : undefined} onClick={(event) => activate(item.id, event)} className={cn("relative flex min-w-0 flex-col items-center gap-1 rounded-[12px] px-1 py-1.5 text-[10px] font-semibold transition", active ? "text-[var(--accent)]" : "text-[var(--text-3)]")}>
         {active ? <motion.span layoutId="customer-mobile-nav" className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.12, duration: 0.42 }} /> : null}
-        <span className="relative"><Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.9} />{item.id === "activity" && activityCount > 0 ? <span className="absolute -right-2 -top-1 flex min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-[var(--on-accent)]">{Math.min(activityCount, 9)}</span> : null}</span>
+        <span className="relative"><SpotlyNavIcon name={item.id} className="h-5 w-5" />{item.id === "activity" && activityCount > 0 ? <span className="absolute -right-2 -top-1 flex min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-[var(--on-accent)]">{Math.min(activityCount, 9)}</span> : null}</span>
         <span className="relative truncate">{item.label}</span>
       </Link>; })}
     </nav>
