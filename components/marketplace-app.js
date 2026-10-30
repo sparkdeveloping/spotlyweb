@@ -494,6 +494,7 @@ function BusinessDetailView({
   const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) || branches[0] || null;
   const profile = marketplaceProfile(business);
   const commerceVerified = profile.cardMode === "commerce";
+  const hasCoverMedia = Boolean(marketplaceMedia(business).src);
   const capabilityTitle = !commerceVerified ? "About this business" : isPickup ? (archetype.id === "restaurant_food" ? "Order from this location" : "Shop this location") : archetype.id === "ticketing_events" ? "Choose an event or ticket" : archetype.id === "appointments_services" ? "Choose a service" : archetype.id === "accommodation_activities" ? "Choose a listing" : "Explore this business";
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -506,24 +507,21 @@ function BusinessDetailView({
     return () => { active = false; };
   }, [business?.id]);
 
-  return <section className="pb-8">
+  return <section className="min-w-0 pb-8">
     <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]"><ArrowLeft className="h-4 w-4" />Back</button>
 
     <div className="mt-4 overflow-hidden rounded-[var(--radius-feature)] bg-[var(--surface)]">
-      <div className="relative min-h-[220px] overflow-hidden bg-[var(--surface-2)] sm:min-h-[300px]">
-        <BusinessVisual business={business} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-5 text-[var(--media-text)] sm:p-7">
+      {hasCoverMedia ? <div className="relative aspect-[16/7] min-h-[180px] max-h-[360px] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} /></div> : null}
+      <div className="p-5 sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0">{profile.displayCategory}</Badge>
-            <MarketplaceTrustBadge business={business} />{Number(business.rating || 0) > 0 ? <Badge className="bg-[var(--media-surface)] text-[var(--media-ink)] ring-0"><Star className="mr-1 h-3.5 w-3.5 fill-current" />{Number(business.rating).toFixed(1)}{Number(business.reviewCount || 0) > 0 ? ` · ${business.reviewCount}` : ""}</Badge> : null}
+            <Badge>{profile.displayCategory}</Badge>
+            <MarketplaceTrustBadge business={business} />{Number(business.rating || 0) > 0 ? <Badge><Star className="mr-1 h-3.5 w-3.5 fill-current" />{Number(business.rating).toFixed(1)}{Number(business.reviewCount || 0) > 0 ? ` · ${business.reviewCount}` : ""}</Badge> : null}
           </div>
           <div className="mt-3 flex items-end justify-between gap-4">
-            <div className="min-w-0"><h1 className="text-3xl font-semibold tracking-[-.045em] sm:text-5xl">{business.name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[color-mix(in_srgb,var(--media-text)_82%,transparent)] sm:text-base">{business.description || `${archetype.label} on Spotly.`}</p></div>
-            <Button size="icon" variant="outline" onClick={() => onFavorite(business.id)} aria-label={favorite ? "Remove from saved" : "Save business"} className="shrink-0 border-[color-mix(in_srgb,var(--media-surface)_40%,transparent)] bg-[var(--media-surface)] text-[var(--media-ink)] hover:opacity-95"><Heart className={cn("h-5 w-5", favorite && "fill-[var(--danger)] text-[var(--danger)]")} /></Button>
+            <div className="min-w-0"><h1 className="break-words text-3xl font-semibold tracking-[-.045em] sm:text-5xl">{business.name}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)] sm:text-base">{business.description || `${archetype.label} on Spotly.`}</p></div>
+            <Button size="icon" variant="outline" onClick={() => onFavorite(business.id)} aria-label={favorite ? "Remove from saved" : "Save business"} className="shrink-0"><Heart className={cn("h-5 w-5", favorite && "fill-[var(--danger)] text-[var(--danger)]")} /></Button>
           </div>
         </div>
-      </div>
 
       <div className="grid border-t border-[var(--border-subtle)] sm:grid-cols-3">
         <div className="border-b border-[var(--border-subtle)] p-4 sm:border-b-0 sm:border-r sm:p-5"><p className="text-xs font-semibold text-[var(--text-3)]">Experience</p><p className="mt-2 text-sm font-semibold">{archetype.shortLabel}</p></div>
@@ -534,8 +532,8 @@ function BusinessDetailView({
 
     <MarketplaceTrustNotice business={business} className="mt-4" />
 
-    <div className="mt-6 grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <div>
+    <div className="mt-6 grid grid-cols-1 gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0">
         {businessDetailLoading ? <div className="border-b border-[var(--border-subtle)] pb-6" aria-busy="true"><div className="v7-skeleton h-5 w-44 rounded-[10px]"/><div className="mt-4 flex gap-2 overflow-hidden">{[0,1,2].map((item) => <div key={item} className="v7-skeleton h-[78px] min-w-[210px] rounded-[16px]" />)}</div></div> : branchError ? <div role="alert" className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[var(--danger-soft)] p-4 text-sm text-[var(--on-danger-soft)]">{branchError}</div> : branches.length ? <div className="border-b border-[var(--border-subtle)] pb-6"><div className="flex items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 text-[var(--accent)]" /><div><h2 className="font-semibold">Choose the exact {locationNoun}</h2><p className="mt-1 text-sm leading-6 text-[var(--text-2)]">Prices and availability can differ by location.</p></div></div><div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1">{branches.map((branch) => { const active = branch.id === selectedBranchId; const availability = pickupAvailability(branch); return <button key={branch.id} type="button" onClick={() => onBranchChange(branch.id)} className={cn("min-w-[210px] rounded-[16px] border px-4 py-3 text-left", active ? "border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[color-mix(in_srgb,var(--accent)_18%,transparent)]" : "bg-[var(--surface)] hover:border-[var(--border-strong)]")}><span className="block text-sm font-semibold">{branch.branchName || branch.name || `Main ${locationNoun}`}</span><span className="mt-1 block text-xs text-[var(--text-3)]">{branch.city || "Zimbabwe"}{branch.address ? ` · ${branch.address}` : ""}</span>{isPickup ? <span className={cn("mt-2 block text-xs font-semibold", availability.available ? "text-success" : "text-warning")}>{availability.available ? `Earliest ${availability.earliest.date} ${availability.earliest.slot.label}` : availability.reason}</span> : null}</button>; })}</div></div> : <LottieEmptyState name="location-pin" title="No customer location is published" description="This business needs a public location before online activity can begin." />}
 
         <div className="mt-7">
