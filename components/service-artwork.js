@@ -3,11 +3,11 @@
 import Image from "next/image";
 import { useState } from "react";
 import { useReducedMotion } from "framer-motion";
-import { CalendarClock2, CarFront, Package, ShoppingBag, Sparkles, Ticket, UtensilsCrossed } from "lucide-react";
+import { CalendarClock, CarFront, Package, ShoppingBag, Sparkles, Ticket, UtensilsCrossed } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { serviceIdentity } from "@/lib/service-identity";
 
-const iconMap = { eat: UtensilsCrossed, shop: ShoppingBag, book: CalendarClock2, events: Ticket, ride: CarFront, send: Package };
+const iconMap = { eat: UtensilsCrossed, shop: ShoppingBag, book: CalendarClock, events: Ticket, ride: CarFront, send: Package };
 
 export function ServiceGlyph({ service, className }) {
   const Icon = iconMap[service] || Sparkles;
