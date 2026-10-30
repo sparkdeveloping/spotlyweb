@@ -38,7 +38,7 @@ test('V7 Home only claims repeat behavior from real completed history', () => {
   assert.doesNotMatch(source, /Search nearby/);
   assert.doesNotMatch(source, />Open ↗</);
   assert.doesNotMatch(source, /Search all of Spotly/);
-  assert.match(source, /Popular in \$\{location\.city\}/);
+  assert.match(source, /Explore \$\{location\.city\}/);
   assert.match(source, /Based on your interests/);
 });
 
@@ -46,7 +46,8 @@ test('V7 service identity includes every Spotly service with reduced-motion supp
   const source = read('components/service-artwork.js');
   for (const service of ['eat', 'shop', 'book', 'events', 'ride', 'send']) assert.match(source, new RegExp(`${service}:`));
   assert.match(source, /useReducedMotion/);
-  assert.match(source, /spotly-steam/);
+  assert.doesNotMatch(source, /repeat: Infinity/);
+  assert.match(source, /onError/);
 });
 
 test('V7 utility surfaces provide designed new and empty states', () => {

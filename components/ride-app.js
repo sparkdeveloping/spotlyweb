@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Banknote, CarFront, CheckCircle2, ChevronRight, Clock3, CreditCard, LocateFixed, LoaderCircle, MapPin, Navigation, Phone, RefreshCw, Search, ShieldCheck, UsersRound, X } from "lucide-react";
 import { saveRideGuestDraft, consumeRideGuestDraft } from "@/lib/ride-guest-draft";
 import { CustomerShell } from "@/components/customer-shell";
-import { ServiceArtwork } from "@/components/service-artwork";
+import { ServiceEntrance, ServiceSwitcher } from "@/components/service-identity";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Badge, Button, Card, EmptyState, Modal, StatusBadge } from "@/components/ui";
@@ -137,6 +137,7 @@ export function RideApp() {
   const [city,setCity]=useState(settings?.launch?.primaryCity||"Harare");
   const [country,setCountry]=useState(settings?.launch?.primaryCountry==="MW"?"MW":"ZW");
   const [pickupText, setPickupText] = useState(""); const [dropoffText, setDropoffText] = useState(""); const [pickup, setPickup] = useState(null); const [dropoff, setDropoff] = useState(null);
+  const [mapTarget,setMapTarget]=useState(null); const [serviceType, setServiceType] = useState("economy"); const [paymentMethod, setPaymentMethod] = useState("cash"); const [quote, setQuote] = useState(null); const [loading, setLoading] = useState(""); const [activeRide, setActiveRide] = useState(null); const [history, setHistory] = useState([]); const [cancelRide, setCancelRide] = useState(null); const [cancelReason, setCancelReason] = useState("");
   const rideLabLocationValidation = validateRideLabLocations(pickup, dropoff);
   useEffect(() => { setRideLabError(""); }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, pickup?.country, dropoff?.country]);
   useEffect(() => {
@@ -156,8 +157,8 @@ export function RideApp() {
     if (pickup && dropoff) saveRideGuestDraft(window.sessionStorage, { pickup, dropoff, serviceType });
     window.location.assign("/login?portal=customer&mode=" + encodeURIComponent(mode) + "&next=%2Fride");
   }
-  const [mapTarget,setMapTarget]=useState(null); const [serviceType, setServiceType] = useState("economy"); const [paymentMethod, setPaymentMethod] = useState("cash"); const [quote, setQuote] = useState(null); const [loading, setLoading] = useState(""); const [activeRide, setActiveRide] = useState(null); const [history, setHistory] = useState([]); const [cancelRide, setCancelRide] = useState(null); const [cancelReason, setCancelReason] = useState("");
-  const load = useCallback(async ({ quiet = false } = {}) => { if (!user?.uid || user.isAnonymous) return; if (!quiet) setLoading("load"); try { const data = await authenticatedFetch("/api/customer/rides", { cache: "no-store" }); setActiveRide(data.activeRide || null); setHistory(data.rides || []); } catch (error) { if (!quiet) toast(error.message, { type: "error" }); } finally { if (!quiet) setLoading(""); } }, [user, toast]);
+
+  const load = useCallback(async ({ quiet = false } = {}) => { if (!user?.uid || user.isAnonymous) return; if (!quiet) setLoading("load"); try { const data = await authenticatedFetch("/api/customer/rides", { cache: "no-store" }); setActiveRide(data.activeRide || null); setHistory(data.rides || []); } catch (error) { if (!quiet) toast(error.message, { type: "error" }); } finally { if (!quiet) setLoading(""); } }, [user, toast, setLoading, setActiveRide, setHistory]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!cashEnabled && paynowEnabled) setPaymentMethod("paynow"); else if (cashEnabled && paymentMethod === "paynow" && !paynowEnabled) setPaymentMethod("cash"); }, [cashEnabled, paynowEnabled, paymentMethod]);
   useEffect(() => { if (!activeRide?.id) return undefined; const timer = window.setInterval(async () => { try { const data = await authenticatedFetch(`/api/customer/rides?rideId=${encodeURIComponent(activeRide.id)}`, { cache: "no-store" }); const next = data.ride || null; setActiveRide(["completed", "cancelled", "failed"].includes(next?.state) ? null : next); if (["completed", "cancelled", "failed"].includes(next?.state)) load({ quiet: true });
@@ -195,23 +196,20 @@ export function RideApp() {
   if (activeRide) return <CustomerShell immersive><ActiveRide ride={activeRide} onRefresh={() => load({ quiet: true })} onCancel={setCancelRide} /></CustomerShell>;
 
   if (!ridesEnabled && !previewOpen) return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
-    <section className="mx-auto max-w-4xl py-8 sm:py-16">
-      <div className="grid items-center gap-8 md:grid-cols-[1fr_300px]">
-        <div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Ride</p><h1 className="mt-3 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">Ride is coming to {city} carefully, not halfway.</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-2)]">The ride request, Driver dispatch, trip lifecycle and operations system are installed. Customer requests open only when approved Driver coverage and local support are ready.</p><div className="mt-7 flex flex-wrap gap-3"><Button asChild><Link href="/">Explore what is live</Link></Button><Button variant="outline" onClick={()=>setPreviewOpen(true)}>Preview a fare</Button>{rideLabAllowed?<Button variant="outline" onClick={()=>{setPreviewOpen(true);setBookingStep(3);}}>Open my test rides</Button>:null}<Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button></div></div>
-        <div className="relative min-h-[250px] overflow-hidden rounded-[24px] bg-[linear-gradient(145deg,#5142c4,#7567e8)] p-6 text-[var(--service-foreground)]"><ServiceArtwork service="ride" className="absolute inset-0 h-full w-full" /><div className="relative z-10 flex h-full min-h-[200px] items-end"><div><p className="text-xs font-semibold uppercase tracking-[.12em] text-[color-mix(in_srgb,var(--service-foreground)_70%,transparent)]">Not yet available here</p><p className="mt-2 text-xl font-semibold">We will only switch this on when the full ride is ready.</p></div></div></div>
-      </div>
-    </section>
+    <ServiceSwitcher service="ride" />
+    <div className="mt-5"><ServiceEntrance service="ride" title={`A new way to move around ${city}.`} description={`Ride isn’t available in ${city} yet. Requests will open when local Driver coverage and support are ready. You can explore a fare estimate in the meantime.`} status="Not available here yet">
+      <div className="flex flex-wrap gap-3"><Button onClick={()=>setPreviewOpen(true)}>Preview a fare</Button><Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button>{rideLabAllowed?<Button variant="outline" onClick={()=>{setPreviewOpen(true);setBookingStep(3);}}>Open my test rides</Button>:null}</div>
+    </ServiceEntrance></div>
+
   </CustomerShell>;
 
   return <CustomerShell current="home" user={user} profile={profile} locationLabel={city} mainClassName="max-w-[1180px]">
       {resumeNotice && <p role="status" className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] p-4 text-sm text-[var(--text)]">{resumeNotice}</p>}
       {!ridesEnabled ? <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">Fare preview only. Ride booking is still disabled until approved Drivers, dispatch and local support are verified.</div> : null}
-      <section className="mx-auto grid max-w-3xl gap-6 pb-10">
+      <ServiceSwitcher service="ride" />
+      <section className="mx-auto mt-5 grid max-w-3xl gap-6 pb-10">
         <div>
-          <div className="relative overflow-hidden rounded-[24px] bg-[linear-gradient(145deg,#5142c4,#7567e8)] px-5 py-7 text-[var(--service-foreground)] sm:px-7 sm:py-9">
-            <ServiceArtwork service="ride" className="absolute right-0 top-0 h-full w-[45%] opacity-90" />
-            <div className="relative z-10 max-w-xl"><p className="text-sm font-semibold text-[color-mix(in_srgb,var(--service-foreground)_75%,transparent)]">Ride</p><h1 className="mt-2 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">Where to?</h1><p className="mt-3 text-sm leading-6 text-[color-mix(in_srgb,var(--service-foreground)_80%,transparent)]">Set the exact pickup and destination. Spotly shows the estimate before any Driver is requested.</p></div>
-          </div>
+          <ServiceEntrance service="ride" compact title="Where to?" description="Choose your pickup and destination. See the estimate before requesting a Driver." />
 
           <nav aria-label="Ride booking steps" className="mt-6 grid grid-cols-4 gap-2">
             {["Pickup", "Destination", "Vehicle", "Review"].map((name,index)=><button type="button" key={name}
@@ -298,7 +296,7 @@ export function RideApp() {
               This is an informational road-based estimate, not an available booking. {quote.bookingReason||"SpotlyRide is not accepting bookings yet."}
            </p>:null}
            {quote.bookingAvailable===true && (!authReady || !user?.uid || user.isAnonymous)
-             ? <div className="mt-5 space-y-3"><p className="text-sm text-secondary">Ready to request your ride? Sign in or create your Spotly account. Your two selected locations will be restored after you return, and we'll refresh your fare.</p>
+             ? <div className="mt-5 space-y-3"><p className="text-sm text-secondary">Ready to request your ride? Sign in or create your Spotly account. Your two selected locations will be restored after you return, and we’ll refresh your fare.</p>
                  <div className="grid gap-2 sm:grid-cols-2"><Button onClick={()=>continueToAccount("signin")} disabled={!authReady}>Sign in to continue</Button><Button variant="outline" onClick={()=>continueToAccount("signup")} disabled={!authReady}>Create an account</Button></div>
                </div>
              : <Button className="mt-5 w-full" onClick={requestRide} loading={loading === "request"}

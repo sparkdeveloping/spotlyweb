@@ -21,7 +21,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Badge, Button, EmptyState, SearchField } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
-import { ServiceGlyph } from "@/components/service-artwork";
+import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
 import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 
 const typeMeta = {
@@ -67,7 +67,7 @@ function SearchResult({ result, onOpen, saved, onSave }) {
 }
 
 function IntentTile({ item, onClick }) {
-  return <button type="button" onClick={onClick} className="flex min-h-20 items-center gap-3 rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] px-4 text-left transition hover:border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] hover:bg-[var(--surface-hover)]"><span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[var(--accent-soft)] text-[var(--accent)]"><ServiceGlyph service={item.icon} /></span><span className="min-w-0 flex-1 text-sm font-semibold">{item.label}</span><ArrowRight className="h-4 w-4 text-[var(--text-3)]" /></button>;
+  return <button type="button" onClick={onClick} data-service={item.service} className="experience-intent flex items-center gap-3 rounded-[20px] border px-4 text-left transition hover:shadow-card"><ServiceArtwork service={item.icon} compact /><span className="min-w-0 flex-1 text-sm font-semibold">{item.label}</span><ArrowRight className="h-4 w-4 shrink-0 text-[var(--world-ink)]" aria-hidden="true" /></button>;
 }
 
 export function CustomerSearchView({

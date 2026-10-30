@@ -119,7 +119,7 @@ test("The Menu editorial spotlight uses real source observations without indefin
   assert.match(page,/THEMENU_RESTAURANT_SPOTLIGHTS\.map/);
   assert.match(page,/not guaranteed Spotly checkout prices/);
   assert.match(page,/independent Spotly Assist checkout is offered only where separately enabled/i);
-  assert.match(page,/Editorial food photo/);
+  assert.doesNotMatch(page,/src="\/marketplace\/editorial\/eat\.webp"/);
   assert.match(page,/Preview \{item\.menuItems\.length\} dishes/);
   assert.match(page,/group-open:rotate-90/);
   assert.match(page,/items-start gap-3 sm:grid-cols-2/);

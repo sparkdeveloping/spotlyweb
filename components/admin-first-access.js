@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, BadgeCheck, CalendarDays, Check, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Filter, Mail, MessageCircle, Phone, RefreshCw, Search, ShieldCheck, TrendingUp, UsersRound, X } from "lucide-react";
 import { useAuth } from "@/components/firebase-provider";
