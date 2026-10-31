@@ -1,5 +1,7 @@
 "use client";
 
+import { BusinessPhoto } from "@/components/business-photo";
+
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -99,7 +101,7 @@ function FeaturedBusinesses({ ids }) {
   useEffect(() => { let active = true; getFeaturedBusinesses(ids).then((value) => active && setItems(value)).finally(() => active && setLoading(false)); return () => { active = false; }; }, [ids]);
   if (loading) return <div className="grid gap-3 sm:grid-cols-3">{[0,1,2].map((item) => <div key={item} className="h-36 animate-pulse rounded-xl bg-[var(--surface-2)]" />)}</div>;
   if (!items.length) return <div className="grid gap-3 md:grid-cols-3">{[[ShoppingBasket,"basket-add","Groceries & essentials","Find everyday products from verified participating locations."],[MapPin,"location-pin","Exact locations","Know which branch you are ordering from and what it supports."],[Truck,"route-delivery","Pickup or delivery","Choose the fulfilment option actually enabled by that location."]].map(([Icon,lottie,title,copy],index)=><motion.div key={title} initial={{ opacity:0,y:12 }} whileInView={{ opacity:1,y:0 }} viewport={{ once:true }} transition={{ delay:index*.06 }} className="rounded-2xl border bg-[var(--surface)] p-5"><MotionGlyph icon={Icon} lottieName={lottie} delay={index*.06} /><h3 className="mt-4 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-secondary">{copy}</p></motion.div>)}</div>;
-  return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{items.map((business) => <Link href={`/marketplace?business=${business.id}`} key={business.id} className="rounded-xl border bg-[var(--surface)] p-4 transition hover:border-violet/30"><div className="flex items-center gap-3">{business.logoUrl || business.image ? <Image src={business.logoUrl || business.image} alt="" width={52} height={52} className="h-13 w-13 rounded-lg object-cover" /> : <span className="flex h-13 w-13 items-center justify-center rounded-lg bg-violet-soft text-violet"><Store className="h-5 w-5" /></span>}<div className="min-w-0"><h3 className="truncate font-semibold">{business.name}</h3><p className="mt-1 truncate text-sm text-secondary">{[business.category, business.city].filter(Boolean).join(" · ")}</p></div></div><p className="mt-4 text-sm font-semibold text-violet">View business<ArrowRight className="ml-1 inline h-4 w-4" /></p></Link>)}</div>;
+  return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{items.map((business) => <Link href={`/marketplace?business=${business.id}`} key={business.id} className="rounded-xl border bg-[var(--surface)] p-4 transition hover:border-violet/30"><div className="flex items-center gap-3"><span className="relative h-13 w-13 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-2)]"><BusinessPhoto business={business} sizes="52px" labelMode="none" /></span><div className="min-w-0"><h3 className="truncate font-semibold">{business.name}</h3><p className="mt-1 truncate text-sm text-secondary">{[business.category, business.city].filter(Boolean).join(" · ")}</p></div></div><p className="mt-4 text-sm font-semibold text-violet">View business<ArrowRight className="ml-1 inline h-4 w-4" /></p></Link>)}</div>;
 }
 
 

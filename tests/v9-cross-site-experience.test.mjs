@@ -21,7 +21,8 @@ test("real commerce takes priority over stale popularity, ratings or paid featur
 
 test("no editorial images point to unshipped assets, and generic directory logos cannot impersonate merchants", () => {
   const food = marketplaceMedia({ id: "cafe", category: "Restaurants", businessType: "restaurant_food" });
-  assert.equal(food.src, "/marketplace/editorial/eat.webp");
+  assert.equal(food.family, "restaurant-interior");
+  assert.match(food.src, /\/marketplace\/photography\/restaurant-interior-768\.webp$/);
   assert.equal(food.kind, "editorial");
   const research = marketplaceMedia({ name: "Brand", source: { type: "spotly_assist_research" }, logoUrl: "https://example.com/logo.png" });
   assert.notEqual(research.kind, "merchant");
@@ -76,18 +77,18 @@ test("Admin capability cards use a legible two-column layout, not four cards acr
   assert.doesNotMatch(source.slice(start, start + 300), /xl:grid-cols-4/);
 });
 
-test("directory cards use a designed non-branded visual and provide a real Assist handoff", async () => {
+test("directory cards use described photographs and preserve the real Assist handoff", async () => {
   const [cover, home, service, app] = await Promise.all([
-    read("components/marketplace-designed-cover.js"),
+    read("components/business-photo.js"),
     read("components/marketplace-home.js"),
     read("components/service-experience.js"),
     read("components/marketplace-app.js")
   ]);
-  assert.match(cover, /Illustrative category card/);
-  for (const source of [home, service, app]) assert.match(source, /MarketplaceDesignedCover/);
+  assert.match(cover, /Illustrative photo/);
+  for (const source of [home, service, app]) assert.match(source, /BusinessPhoto/);
   assert.match(home, /assistStoreId/);
   assert.match(home, /shop-for-me\?store=/);
-  assert.match(home, /Editorial photo credits/);
+  assert.match(home, /Illustrative photographs are identified/);
 });
 
 test("Ride Lab supports isolated two-account shadow requests, offers, test movement and state transitions", async () => {

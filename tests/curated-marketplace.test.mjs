@@ -142,7 +142,8 @@ test("customer UI tells the truth about trust, catalogue and generic photography
   assert.match(trustUi, /Listed on Spotly/);
   assert.match(trustUi, /Own this business\? Claim it/);
   assert.match(trustUi, /does not show merchant pickup, live stock, cash or booking controls/);
-  assert.match(marketplace, /Editorial category image/);
+  assert.match(marketplace, /BusinessPhoto/);
+  assert.match(read("components/business-photo.js"), /Illustrative photo/);
   assert.match(search, /Catalogue identity · store stock and price not confirmed/);
   assert.match(home, /Spotly includes useful city listings alongside verified commerce businesses/);
   assert.match(home, /Directory listing/);

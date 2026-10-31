@@ -1,5 +1,7 @@
 "use client";
 
+import { BusinessPhoto } from "@/components/business-photo";
+
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -52,7 +54,7 @@ function SearchResult({ result, onOpen, saved, onSave }) {
   return <motion.article layout initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="group flex items-center gap-2 border-b border-[var(--border-subtle)] last:border-0">
     <button type="button" onClick={() => onOpen(result)} className="flex min-w-0 flex-1 gap-4 py-4 text-left sm:py-5">
       <span className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-[var(--surface-2)] text-[var(--accent)] sm:h-[72px] sm:w-[72px]">
-        {result.image ? <Image src={result.image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.03]" sizes="72px" /> : <Icon className="h-6 w-6" />}
+        {["business", "place"].includes(result.type) ? <BusinessPhoto business={result.business || result} sizes="72px" labelMode="none" /> : result.image ? <Image src={result.image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.03]" sizes="72px" /> : <Icon className="h-6 w-6" />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold tracking-[-.02em]">{result.title || result.name}</span>{result.type === "business" ? <MarketplaceTrustBadge business={result} compact /> : result.catalogReference ? <Badge tone="info">Product reference</Badge> : <Badge tone="neutral">{meta.label.slice(0, -1)}</Badge>}</span>
@@ -125,7 +127,7 @@ const savedIcons = { event: Ticket, service: Sparkles, product: ShoppingBag, pla
 
 function SavedRow({ item, business, onOpen, onRemove }) {
   const Icon = savedIcons[item.type] || Store;
-  return <article className="group border-b border-[var(--border-subtle)] last:border-0"><div className="flex items-center gap-3 py-3.5"><button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left"><span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[var(--surface-2)] text-[var(--accent)]">{item.image || item.coverImage || item.logoUrl ? <Image src={item.image || item.coverImage || item.logoUrl} alt="" fill className="object-cover" sizes="56px" /> : <Icon className="h-5 w-5" />}</span><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{item.title || item.name || "Saved item"}</span><span className="mt-1 block line-clamp-1 text-xs text-[var(--text-3)]">{item.subtitle || item.description || [item.area, item.city].filter(Boolean).join(" · ") || typeMeta[item.type]?.label}</span></span><ArrowRight className="h-4 w-4 text-[var(--text-3)]" /></button><button type="button" onClick={onRemove} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-[var(--text-3)] opacity-70 transition hover:bg-[var(--surface-hover)] hover:text-[var(--danger)] group-hover:opacity-100" aria-label="Remove from Saved"><Trash2 className="h-4 w-4" /></button></div></article>;
+  return <article className="group border-b border-[var(--border-subtle)] last:border-0"><div className="flex items-center gap-3 py-3.5"><button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left"><span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[var(--surface-2)] text-[var(--accent)]">{business || (item.type === "place" && item.businessId) ? <BusinessPhoto business={item.business || { ...item, category: item.category || item.metadata?.category, photoFamily: item.photoFamily || item.metadata?.photoFamily }} sizes="56px" labelMode="none" /> : item.image || item.coverImage || item.logoUrl ? <Image src={item.image || item.coverImage || item.logoUrl} alt="" fill className="object-cover" sizes="56px" /> : <Icon className="h-5 w-5" />}</span><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{item.title || item.name || "Saved item"}</span><span className="mt-1 block line-clamp-1 text-xs text-[var(--text-3)]">{item.subtitle || item.description || [item.area, item.city].filter(Boolean).join(" · ") || typeMeta[item.type]?.label}</span></span><ArrowRight className="h-4 w-4 text-[var(--text-3)]" /></button><button type="button" onClick={onRemove} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-[var(--text-3)] opacity-70 transition hover:bg-[var(--surface-hover)] hover:text-[var(--danger)] group-hover:opacity-100" aria-label="Remove from Saved"><Trash2 className="h-4 w-4" /></button></div></article>;
 }
 
 export function CustomerSavedView({ user, businessEntries = [], savedItems = [], onOpenBusiness, onOpenSavedItem, onRemoveBusiness, onRemoveItem, onExplore, loginHref }) {

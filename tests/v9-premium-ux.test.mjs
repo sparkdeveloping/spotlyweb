@@ -86,7 +86,7 @@ test("Licensed independent-menu photos have explicit provenance, branch attestat
   assert.equal(partnerMenuFreshness({},now).state,"unverified");
 });
 
-test("Premium discovery differentiates independent Assist from photo-less stale directory cards", async () => {
+test("Premium discovery preserves independent Assist and gives directory businesses photographs", async () => {
   const experience=await read("components/service-experience.js");
   const home=await read("components/admin-app.js");
   assert.match(experience,/assistBusinesses/);
@@ -97,7 +97,7 @@ test("Premium discovery differentiates independent Assist from photo-less stale 
   assert.match(experience,/media.kind === "licensed-directory"/);
   assert.match(experience,/Explore place details/);
   assert.doesNotMatch(experience,/const image = assisted \? "" : media.src/);
-  assert.match(experience,/Photo: The Menu/);
+  assert.match(await read("components/business-photo.js"),/Photo: The Menu/);
   assert.match(home,/items-center gap-4 px-5 py-3/);
 });
 

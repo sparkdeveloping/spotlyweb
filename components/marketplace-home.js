@@ -1,6 +1,7 @@
 "use client";
 
-import Image from "next/image";
+import { BusinessPhoto } from "@/components/business-photo";
+
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -27,7 +28,6 @@ import { serviceIdentity } from "@/lib/service-identity";
 import { marketplaceMedia } from "@/lib/marketplace-editorial";
 import { marketplaceTier } from "@/lib/marketplace-ranking";
 import { marketplaceEditorial } from "@/lib/marketplace-curation";
-import { MarketplaceDesignedCover } from "@/components/marketplace-designed-cover";
 
 export const MARKETPLACE_SERVICES = [
   { key: "ride", label: "Ride", subtitle: "Get anywhere", icon: CarFront, tone: "ride" },
@@ -59,10 +59,7 @@ function interestMatchesBusiness(interests = [], business = {}) {
 }
 
 function MarketplaceImage({ business, sizes = "(max-width: 768px) 72vw, 292px" }) {
-  const media = marketplaceMedia(business);
-  const profile = marketplaceProfile(business);
-  if (!media.src) return <MarketplaceDesignedCover business={business} compact />;
-  return <><Image src={media.src} alt="" fill sizes={sizes} className="object-cover transition duration-300 motion-safe:group-hover:scale-[1.025]" />{media.kind === "editorial" ? <span title="Editorial category image — not supplied by this business" aria-label="Editorial category image" className="absolute bottom-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/45 text-[var(--media-text)] backdrop-blur"><Info className="h-3 w-3" /></span> : null}</>;
+  return <BusinessPhoto business={business} sizes={sizes} labelMode="icon" className="transition duration-300 motion-safe:group-hover:scale-[1.025]" />;
 }
 
 function MarketplaceRailCard({ item, onOpen }) {
@@ -180,7 +177,7 @@ export function MarketplaceHome({
     {interestMatches.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Based on your interests" description="Using the interests you chose during Spotly setup" action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{interestMatches.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
     {readyNow.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Ready on Spotly" description="Services with active merchant commerce or explicitly enabled Assist — not just directory profiles" action="Explore" onAction={onSearch}/><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{readyNow.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness}/>)}</div></section> : null}
-    {nearby.length ? <p className="mt-7 max-w-2xl text-xs leading-5 text-[var(--text-3)]">Spotly shows usable services first and independent city listings separately. A category photograph is illustrative, never a claim of merchant participation. <a href="/marketplace/editorial/ATTRIBUTION.md" className="underline underline-offset-2">Editorial photo credits</a>.</p> : null}
+    {nearby.length ? <p className="mt-7 max-w-2xl text-xs leading-5 text-[var(--text-3)]">Spotly shows usable services first and independent city listings separately. Illustrative photographs are identified on the image.</p> : null}
 
     {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Discover near you" : `Explore ${location.city}`} description={location.coordinates ? "Ranked by actual service readiness, then relevance and proximity" : "Verified and usable services first, followed by useful city listings"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 

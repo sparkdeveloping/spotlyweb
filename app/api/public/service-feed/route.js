@@ -1,3 +1,4 @@
+import { publicBusinessPhotoFields } from "@/lib/business-photo-fields";
 import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
 import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
@@ -129,8 +130,9 @@ function itemRecord(doc, business, service) {
       city: business.city,
       area: business.area,
       address: business.address,
-      coverImage: business.coverImage,
-      image: business.image,
+      ...publicBusinessPhotoFields(business),
+      source: business.source,
+      sourceTags: business.sourceTags,
       logoUrl: business.logoUrl,
       verificationStatus: business.verificationStatus,
       businessType: business.businessType,
