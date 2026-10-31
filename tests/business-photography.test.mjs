@@ -72,6 +72,8 @@ test("approved real photos win while logos, old generics, low-resolution and mis
   assert.equal(marketplaceMedia({ ...base, coverImage: "https://cdn.example.com/logo.png", logoUrl: "https://cdn.example.com/logo.png" }).kind, "editorial");
   assert.equal(marketplaceMedia({ id: "other", coverImage: "https://cdn.example.com/branch.jpg", imageProvenance: { approved: true, businessId: "merchant", rightsStatus: "licensed" } }).kind, "editorial");
   assert.equal(marketplaceMedia({ ...base, source: { type: "openstreetmap", rightsStatus: "open_odbl" }, coverImage: "https://cdn.example.com/branch.jpg" }).kind, "editorial");
+  assert.equal(marketplaceMedia({ ...base, source: { type: "openstreetmap", rightsStatus: "open_odbl" }, coverImage: "https://cdn.example.com/branch.jpg", imageProvenance: { approved: true, businessId: "merchant", rightsStatus: "licensed" } }).kind, "merchant", "A photo's own approved license does not overwrite map attribution");
+  assert.equal(marketplaceMedia({ ...base, source: { type: "themenu_partner", rightsStatus: "licensed" }, coverImage: "https://firebasestorage.googleapis.com/pending.jpg" }).kind, "editorial", "A directory source label alone is not permission to publish a photo");
 });
 
 test("public media serialization preserves photo evidence without leaking unrelated fields or granting permission", () => {
@@ -81,7 +83,12 @@ test("public media serialization preserves photo evidence without leaking unrela
   assert.equal(fields.imageProvenance.businessId, "b1");
   assert.equal(fields.imageProvenance.width, 1600);
   assert.equal(fields.imageProvenance.position, "60% 40%");
-  assert.equal(fields.partnerMedia.usageApproved, false);
+  assert.equal(fields.partnerMedia, null, "Unapproved photo URLs remain private");
+  assert.doesNotMatch(JSON.stringify(fields), /themenu\.co\.zw|firebasestorage/);
+  const licensed = { ...original, source: { type: "themenu_partner", rightsStatus: "licensed" }, partnerMedia: { ...original.partnerMedia, usageApproved: true } };
+  const published = publicBusinessPhotoFields(licensed);
+  assert.equal(published.partnerMedia.storedUrl, original.partnerMedia.storedUrl);
+  assert.equal(marketplaceMedia({ id: "b1", ...licensed, ...published }).kind, "licensed-directory");
   assert.doesNotMatch(JSON.stringify(fields), /private|ownerEmail|usageAgreement|internalNotes/);
   assert.equal(publicBusinessPhotoFields({}).imageProvenance.approved, false);
   assert.equal(publicBusinessPhotoFields({ imageProvenance: { position: "999% 40%" } }).imageProvenance.position, "50% 50%");
