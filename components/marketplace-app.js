@@ -1,5 +1,7 @@
 "use client";
 
+import { BusinessPhoto } from "@/components/business-photo";
+
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -24,8 +26,8 @@ import { CustomerTransactionModal, OfferDetailModal, TransactionSummary } from "
 import { MarketplaceTrustBadge, MarketplaceTrustNotice } from "@/components/marketplace-trust-ui";
 import { AssistActivitySection } from "@/components/assist-activity-section";
 import { marketplaceMedia } from "@/lib/marketplace-editorial";
+import { businessPhotoFamily } from "@/lib/business-photography";
 import { rankMarketplaceBusinesses } from "@/lib/marketplace-ranking";
-import { MarketplaceDesignedCover } from "@/components/marketplace-designed-cover";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { CustomerSavedView, CustomerSearchView } from "@/components/customer-utility";
 import { ServiceDiscoveryView } from "@/components/service-experience";
@@ -87,11 +89,8 @@ function LocationControl({ value, cities, supportedAreas, onChange, onLocate, lo
   return <div className="space-y-5"><div><p className="text-sm font-semibold">City</p><EntityPicker value={value.city} onChange={(city) => onChange({ ...value, city, area: "", coordinates: null })} options={cities.map((city) => ({ value: city, label: city, description: "Spotly city" }))} title="Choose your city" searchPlaceholder="Search cities" allowClear={false} className="mt-2" /></div><div><p className="text-sm font-semibold">Area or suburb</p>{areas.length ? <EntityPicker value={value.area} onChange={(area) => onChange({ ...value, area })} options={[{ value: "", label: `All areas in ${value.city}`, description: "Show the whole city" }, ...areas.map((area) => ({ value: area, label: area, description: value.city }))]} title={`Choose an area in ${value.city}`} searchPlaceholder="Search areas" allowClear={false} className="mt-2" /> : <input className="field-control mt-2 h-12 w-full" value={value.area} onChange={(event) => onChange({ ...value, area: event.target.value })} placeholder={`Area or suburb in ${value.city}`} />}</div><div className="border-t border-[var(--border-subtle)] pt-4"><Button variant="outline" onClick={onLocate} loading={locating}><LocateFixed className="h-4 w-4" />Use my current location</Button><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Precise location lets Spotly say “near you” honestly. Otherwise discovery stays city-level.</p></div></div>;
 }
 
-function BusinessVisual({ business }) {
-  const media = marketplaceMedia(business);
-  const profile = marketplaceProfile(business);
-  if (!media.src) return <MarketplaceDesignedCover business={business} />;
-  return <><Image src={media.src} alt="" fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />{media.kind === "editorial" ? <span title="Editorial category image — not supplied by this business" className="absolute bottom-3 right-3 rounded-full bg-black/45 px-2 py-1 text-[9px] font-semibold text-[var(--media-text)] backdrop-blur">Editorial</span> : null}</>;
+function BusinessVisual({ business, sizes = "(max-width: 768px) 100vw, 420px", priority = false }) {
+  return <BusinessPhoto business={business} sizes={sizes} priority={priority} />;
 }
 
 function BusinessCard({ business, favorite, onFavorite, onOpen, distance }) {
@@ -511,7 +510,7 @@ function BusinessDetailView({
     <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]"><ArrowLeft className="h-4 w-4" />Back</button>
 
     <div className="mt-4 overflow-hidden rounded-[var(--radius-feature)] bg-[var(--surface)]">
-      {hasCoverMedia ? <div className="relative aspect-[16/7] min-h-[180px] max-h-[360px] overflow-hidden bg-[var(--surface-2)]"><BusinessVisual business={business} /></div> : null}
+      {hasCoverMedia ? <div className="relative isolate h-[230px] w-full overflow-hidden bg-[var(--surface-2)] sm:h-[330px] lg:h-[380px]"><BusinessVisual business={business} priority sizes="(max-width: 768px) 100vw, (max-width: 1440px) 94vw, 1280px" /></div> : null}
       <div className="p-5 sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
             <Badge>{profile.displayCategory}</Badge>
@@ -1045,7 +1044,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
         type: result.type, entityId, businessId: result.businessId || result.business?.id || null,
         title: result.title || result.name, subtitle: result.subtitle || result.description || "", image: result.image || "",
         href: result.href || "", city: result.city || "", area: result.area || "", address: result.address || "",
-        metadata: { category: result.category || "", itemType: result.itemType || "", currency: result.currency || "", price: result.price ?? null }
+        metadata: { category: result.category || "", itemType: result.itemType || "", currency: result.currency || "", price: result.price ?? null, ...(result.type === "place" && result.businessId ? { photoFamily: businessPhotoFamily(result.business || result) } : {}) }
       });
       toast(saved ? "Removed from Saved." : "Saved for later.", { title: saved ? "Removed" : "Saved" });
     } catch (error) { toast(error.message, { type: "error", title: "Saved could not be updated" }); }

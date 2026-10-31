@@ -60,9 +60,8 @@ test("public marketplace serialization preserves source taxonomy signals", () =>
   assert.match(source, /aliases:/);
 });
 
-test("unsafe generic retail media is replaced by designed fallback", () => {
-  const source = fs.readFileSync("lib/marketplace-editorial.js", "utf8");
-  assert.match(source, /return \[\];/);
-  assert.match(source, /kind: "designed"/);
-  assert.match(source, /semantically safe editorial image/);
+test("retail photography is resolved by specific structured shop type", async () => {
+  const { businessPhotoFamily } = await import("../lib/business-photography.js");
+  assert.equal(businessPhotoFamily({ name: "Toy Shop", sourceTags: { shop: "toys" } }), "toys");
+  assert.equal(businessPhotoFamily({ name: "Book Shop", sourceTags: { shop: "books" } }), "bookshop");
 });

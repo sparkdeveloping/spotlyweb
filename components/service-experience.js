@@ -1,5 +1,7 @@
 "use client";
 
+import { BusinessPhoto } from "@/components/business-photo";
+
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -28,7 +30,6 @@ import { ServiceEntrance, ServiceSwitcher } from "@/components/service-identity"
 import { ServiceArtwork } from "@/components/service-artwork";
 import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 import { marketplaceMedia, marketplaceMediaSet } from "@/lib/marketplace-editorial";
-import { MarketplaceDesignedCover } from "@/components/marketplace-designed-cover";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { marketplaceEditorial } from "@/lib/marketplace-curation";
 import { THEMENU_RESTAURANT_SPOTLIGHTS, themenuPriceLabel } from "@/lib/themenu-curated-spotlights";
@@ -155,10 +156,8 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
   return <article className={cn("group relative overflow-hidden rounded-[var(--radius-card)] border bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card", commerce ? "border-[var(--border-subtle)]" : "border-[color-mix(in_srgb,var(--border-subtle)_80%,transparent)]")}>
     <button type="button" onClick={() => assisted ? window.location.assign("/shop-for-me?store=" + encodeURIComponent(business.assistStoreId)) : assistedBooking ? window.location.assign("/assist/book?business=" + encodeURIComponent(business.id)) : onOpen(business)} className="block w-full text-left">
       <div className={cn("relative overflow-hidden", commerce ? "aspect-[16/10] bg-[var(--surface-2)]" : "aspect-[16/9] bg-[var(--surface-2)]")}>
-        {image ? <Image src={image} alt="" fill className="object-cover transition duration-300 group-hover:scale-[1.025]" sizes="(max-width: 768px) 100vw, 33vw" /> : <MarketplaceDesignedCover business={business} />}
+        <BusinessPhoto business={business} media={media} sizes="(max-width: 768px) 100vw, 420px" labelMode="icon" className="transition duration-300 motion-safe:group-hover:scale-[1.025]" />
         {image ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" /> : null}
-        {image && media.kind === "licensed-directory" ? <span title="Licensed directory photograph supplied by The Menu; not a claim of merchant affiliation." className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-semibold text-[var(--on-accent)] backdrop-blur">Photo: The Menu</span> : null}
-        {image && media.kind === "editorial" ? <span title="Editorial category image — not supplied by this business" aria-label="Editorial category image" className="absolute bottom-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-black/45 text-[var(--media-text)] backdrop-blur"><Info className="h-3.5 w-3.5" /></span> : null}
         {commerce && image ? <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}<MarketplaceTrustBadge business={business} compact />{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div> : null}
       </div>
       <div className={cn("p-4", !commerce && "pb-3")}>
@@ -189,14 +188,12 @@ function DirectoryListingRow({ business, favorite, onFavorite, onOpen }) {
   const profile = marketplaceProfile(business);
   const editorial = profile.service === "shop" ? marketplaceEditorial(business) : null;
   const media = marketplaceMedia(business);
-  // Only show actual location-matched/licensed imagery. An unrelated editorial
-  // category photo is not a photograph of a named shop or restaurant.
+  // Actual business photos and clearly described illustrative photos share one resolver.
   const licensed = media.kind === "licensed-directory";
-  const image = licensed ? media.src : "";
   return <article className="group flex h-full min-w-0 min-h-[112px] items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)] p-3.5 transition-colors hover:border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] hover:bg-[var(--surface-hover)] sm:gap-4">
     <button type="button" onClick={()=>onOpen(business)} className="flex min-w-0 flex-1 items-center gap-3.5 text-left sm:gap-4">
       <span className="relative flex h-[78px] w-[78px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]">
-        {image?<Image src={image} alt={`Photo of ${business.name}; source: The Menu`} fill sizes="78px" className="object-cover"/>:<Store className="h-6 w-6" aria-hidden="true"/>}
+        <BusinessPhoto business={business} media={media} sizes="78px" labelMode="none" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-semibold tracking-[-.02em] text-[var(--text)]">{business.name}</span>
@@ -436,7 +433,7 @@ export function ServiceDiscoveryView({
 
     </section>
 
-    {featured.length > 0 && !query ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-8"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Featured on Spotly</p><h2 className="mt-1 text-xl font-semibold tracking-[-.03em]">Worth a look</h2></div><span className="text-xs text-[var(--text-3)]">Published businesses</span></div><div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto pb-2">{featured.map((business) => <button type="button" key={business.id} onClick={() => onOpenBusiness(business)} className="w-[230px] shrink-0 text-left"><div className="relative aspect-[1.4/1] overflow-hidden rounded-[var(--radius-card)] bg-[var(--surface-2)]">{imageForBusiness(business) ? <Image src={imageForBusiness(business)} alt="" fill className="object-cover transition duration-300 hover:scale-[1.02]" sizes="230px" /> : <div className="flex h-full items-center justify-center text-[var(--accent)]"><Store className="h-7 w-7" /></div>}</div><p className="mt-3 truncate text-sm font-semibold">{business.name}</p><p className="mt-1 truncate text-xs text-[var(--text-3)]">{marketplaceProfile(business).displayCategory} · {business.area || business.city}</p></button>)}</div></section> : null}
+    {featured.length > 0 && !query ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-8"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Featured on Spotly</p><h2 className="mt-1 text-xl font-semibold tracking-[-.03em]">Worth a look</h2></div><span className="text-xs text-[var(--text-3)]">Published businesses</span></div><div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto pb-2">{featured.map((business) => <button type="button" key={business.id} onClick={() => onOpenBusiness(business)} className="w-[230px] shrink-0 text-left"><div className="relative aspect-[1.4/1] overflow-hidden rounded-[var(--radius-card)] bg-[var(--surface-2)]"><BusinessPhoto business={business} sizes="230px" labelMode="icon" className="transition duration-300 motion-safe:group-hover:scale-[1.02]" /></div><p className="mt-3 truncate text-sm font-semibold">{business.name}</p><p className="mt-1 truncate text-xs text-[var(--text-3)]">{marketplaceProfile(business).displayCategory} · {business.area || business.city}</p></button>)}</div></section> : null}
 
     {hasInventory || loading ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">Across {config.label}</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">{config.items}</h2><p className="mt-1 text-sm text-[var(--text-3)]">{loading ? "Refreshing published offerings…" : `${feed.totalItems || 0} published ${feed.totalItems === 1 ? "offering" : "offerings"}`}</p></div><SortControl value={sort} onChange={setSort} events={service === "events"} /></div>

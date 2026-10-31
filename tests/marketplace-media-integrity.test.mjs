@@ -1,53 +1,34 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { marketplaceMedia, marketplaceMediaSet } from "../lib/marketplace-editorial.js";
 
-const screenshotRestaurants = [
-  "Afrotopia Café @ The Gallery",
-  "Alo Alo Restaurant",
-  "Amanzi",
-  "Antonio's Avondale",
-  "Aroma Cafe",
-  "B&B Sports Bar"
-].map((name, index) => ({ id: `restaurant-${index}`, name, category: index === 5 ? "Nightlife" : "Restaurants", businessType: "restaurant_food", city: "Harare" }));
-
-test("merchant-approved marketplace media always wins over editorial fallback", () => {
-  const media = marketplaceMedia({ id: "ok", name: "OK Zimbabwe", category: "Groceries", businessType: "grocery_retail", coverImage: "https://cdn.example.com/ok.jpg" });
-  assert.equal(media.src, "https://cdn.example.com/ok.jpg");
+test("merchant-owned business photography wins over the generated family", () => {
+  const media = marketplaceMedia({ id: "ok", name: "OK Zimbabwe", category: "Groceries", coverImage: "https://cdn.example.com/branch.jpg", source: { rightsStatus: "merchant_owned" } });
+  assert.equal(media.src, "https://cdn.example.com/branch.jpg");
   assert.equal(media.kind, "merchant");
   assert.equal(media.generated, false);
 });
-
-test("unclaimed listings use shipped, attributed category images rather than missing editorial-pack assets", () => {
-  for (const [record, asset] of [
-    [{ id: "food", name: "Cafe", category: "Restaurants", businessType: "restaurant_food" }, "eat.webp"],
-    [{ id: "grocery", name: "Grocery", category: "Groceries", businessType: "grocery_retail" }, "groceries.webp"]
-  ]) {
+test("unclaimed business types have appropriate shipped pictures, including specialist shops", () => {
+  for (const [record, family] of [[{ category: "Restaurants", sourceTags: { amenity: "cafe" } }, "cafe"], [{ category: "Groceries", sourceTags: { shop: "supermarket" } }, "supermarket"], [{ category: "Pharmacy" }, "pharmacy"]]) {
     const media = marketplaceMedia(record);
+    assert.equal(media.family, family);
     assert.equal(media.kind, "editorial");
-    assert.match(media.src, new RegExp(asset.replace(".", "\\.")));
-    assert.ok(fs.existsSync(new URL(`../public${media.src}`, import.meta.url)), media.src);
+    assert.ok(existsSync(new URL(`../public${media.src}`, import.meta.url)), media.src);
   }
-  const unsupported = marketplaceMedia({ id: "pharm", name: "Pharmacy", category: "Pharmacy" });
-  assert.equal(unsupported.kind, "designed");
-  assert.equal(unsupported.src, "");
-  assert.equal(marketplaceMedia({ name: "Research listing", source: { type: "spotly_assist_research" }, logoUrl: "https://example.com/logo.jpg" }).kind, "designed");
 });
-
-test("editorial set avoids repeating an image when only one licensed category image ships", () => {
-  const assigned = marketplaceMediaSet(screenshotRestaurants);
-  const images = screenshotRestaurants.map((record) => assigned.get(record.id)?.src).filter(Boolean);
-  assert.equal(images.length, 1);
-  assert.match(images[0], /eat\.webp/);
+test("repeated business categories retain pictures rather than becoming blank cards", () => {
+  const records = ["A", "B", "C", "D", "E", "F"].map(id => ({ id, category: "Restaurants" }));
+  const assigned = marketplaceMediaSet(records);
+  assert.equal(assigned.size, 6);
+  assert.ok(records.every(record => assigned.get(record.id).src === marketplaceMedia(record).src));
 });
-
-test("marketplace UI identifies generic editorial media instead of implying it is merchant photography", () => {
-  const service = fs.readFileSync(new URL("../components/service-experience.js", import.meta.url), "utf8");
-  const home = fs.readFileSync(new URL("../components/marketplace-home.js", import.meta.url), "utf8");
-  const app = fs.readFileSync(new URL("../components/marketplace-app.js", import.meta.url), "utf8");
-  assert.match(service, /Editorial category image/);
-  assert.match(home, /Editorial category image/);
-  assert.match(app, /Editorial category image/);
-  assert.doesNotMatch(service, /marketplace\/editorial\/eat\.webp/);
+test("all customer business surfaces share picture selection, disclosure and failure recovery", () => {
+  for (const path of ["components/service-experience.js", "components/marketplace-home.js", "components/marketplace-app.js", "components/customer-utility.js", "components/coming-soon-app.js"]) {
+    assert.match(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"), /BusinessPhoto/, path);
+  }
+  const component = readFileSync(new URL("../components/business-photo.js", import.meta.url), "utf8");
+  assert.match(component, /Illustrative photo/);
+  assert.match(component, /not a photograph of this specific business or branch/);
+  assert.match(component, /onError/);
 });
