@@ -68,6 +68,7 @@ test("approved real photos win while logos, old generics, low-resolution and mis
   assert.equal(marketplaceMedia({ ...base, coverImage: "https://cdn.example.com/branch.jpg" }).kind, "merchant");
   assert.equal(marketplaceMedia({ ...base, coverImage: "https://cdn.example.com/branch.jpg", imageProvenance: { width: 240, height: 160 } }).kind, "editorial");
   assert.equal(marketplaceMedia({ ...base, coverImage: "/marketplace/editorial/groceries.webp" }).kind, "editorial");
+  assert.equal(marketplaceMedia({ ...base, image: businessPhotography(base).src }).kind, "editorial", "A resolved category photo stays illustrative after API serialization");
   assert.equal(marketplaceMedia({ ...base, coverImage: "https://cdn.example.com/brand.svg" }).kind, "editorial");
   assert.equal(marketplaceMedia({ ...base, coverImage: "https://cdn.example.com/logo.png", logoUrl: "https://cdn.example.com/logo.png" }).kind, "editorial");
   assert.equal(marketplaceMedia({ id: "other", coverImage: "https://cdn.example.com/branch.jpg", imageProvenance: { approved: true, businessId: "merchant", rightsStatus: "licensed" } }).kind, "editorial");
