@@ -5,16 +5,16 @@ import { createHash } from "node:crypto";
 
 const ROOT = new URL("../", import.meta.url);
 const ASSETS = Object.freeze({
-  "book-320.webp": { bytes: 16618, sha256: "df12e83d3af370f6758ad65b211196b1af23bd729d0d08dee4768ee5651132cd" },
-  "book-640.webp": { bytes: 43796, sha256: "3a670dc410a70e9576e8b58a5f3fb3986073b40a62f69f676595a9743e7392e3" },
-  "live-320.webp": { bytes: 28276, sha256: "4647abbfb6c86263302a1cdcdbdfea1ffbd15092118f91c1ad2041d5a8bad935" },
-  "live-640.webp": { bytes: 78552, sha256: "53db648d8d051b81811e88fa84e32aa423378c3fc731662ef7e010fea073b2c8" }
+  "book-320.webp": { bytes: 16644, sha256: "f82095e4cb922b6416de27e9ecd83b8528dbbc439ec46f2fc82aabd5d3dd668f" },
+  "book-640.webp": { bytes: 44746, sha256: "738911f2fe8b8b93ec5362aa0a19a6c5a29f5a890b51baad711a326a23a0e9dc" },
+  "live-320.webp": { bytes: 29232, sha256: "219425339753dae00d74f63d4016f3a45685a0fae0fb2cf693974c370b83cbed" },
+  "live-640.webp": { bytes: 78986, sha256: "28ba7c2aebbbe506a14e7e8287198c1378c145d165b3e9c5e85de4241a5fe83d" }
 });
 
 test("approved Book and Live illustrations are actually committed, not just described", async () => {
   for (const [filename, expected] of Object.entries(ASSETS)) {
     const data = await readFile(new URL(`public/experience/services/${filename}`, ROOT));
-    assert.equal(data.length, expected.bytes, `${filename}: expected approved optimized artwork (check ZIP)`);
+    assert.equal(data.length, expected.bytes, `${filename}: expected integrated optimized artwork`);
     const hash = createHash("sha256").update(data).digest("hex");
     assert.equal(hash, expected.sha256, `${filename}: replace old illustration with approved artwork`);
   }
