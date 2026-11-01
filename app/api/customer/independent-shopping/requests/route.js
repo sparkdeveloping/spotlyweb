@@ -9,11 +9,11 @@ import { notifyRoleAudience } from "@/lib/notification-server";
 import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
 import { canonicalIndependentSource, directoryShoppingStore } from "@/lib/directory-shopping-server";
 import { independentStoreRequestSafe } from "@/lib/assist-store-safety";
-import { catalogueService } from "@/lib/spotly-catalogue";
+import { catalogueService, refreshDirectoryCatalogue } from "@/lib/spotly-catalogue";
 import { independentPaymentEnabled } from "@/lib/assist-money";
 
 export const runtime = "nodejs";
-const selectionSchema = z.object({ itemId: z.string().min(2).max(80), quantity: z.number().int().min(1).max(10) }).strict();
+const selectionSchema = z.object({ itemId: z.string().min(2).max(80), quantity: z.number().int().min(1).max(10), choices: z.array(z.object({ group: z.string().min(1).max(60), value: z.string().min(1).max(120) }).strict()).max(6).optional() }).strict();
 const schema = z.object({
   requestId: z.string().regex(/^[a-zA-Z0-9_-]{12,70}$/),
   storeId: z.string().regex(/^[A-Za-z0-9_-]{3,360}$/),
@@ -122,6 +122,7 @@ export async function POST(request) {
         throw Object.assign(new Error("This location has changed availability. Refresh before submitting."), { status: 409 });
       }
       if (!currentStore.exists) tx.create(storeRef, { ...rawStore, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      else if (rawStore.catalogueOrigin === "spotly_reference" && refreshDirectoryCatalogue(active,rawStore) !== active && active.catalogueVersion !== rawStore.catalogueVersion) tx.set(storeRef, {items:rawStore.items,catalogueOrigin:rawStore.catalogueOrigin,catalogueVersion:rawStore.catalogueVersion,catalogueScope:rawStore.catalogueScope,updatedAt:FieldValue.serverTimestamp()}, {merge:true});
       tx.create(ref, requestRecord);
       return { idempotent: false, record: requestRecord };
     });

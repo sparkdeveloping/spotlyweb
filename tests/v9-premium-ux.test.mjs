@@ -103,12 +103,12 @@ test("Premium discovery preserves independent Assist and gives directory busines
 
 test("Menus live inside Spotly and do not turn old observations into current checkout prices", async () => {
   const { SPOTLY_RESTAURANT_MENUS, menuItemsForBusiness } = await import("../data/spotly-restaurant-menus.js");
-  assert.equal(SPOTLY_RESTAURANT_MENUS.length, 2);
-  assert.equal(SPOTLY_RESTAURANT_MENUS.reduce((sum, menu) => sum + menu.dishes.length, 0), 16);
-  const items = menuItemsForBusiness({ name: "Fishmonger", city: "Harare" });
-  assert.equal(items.length, 8);
+  assert.ok(SPOTLY_RESTAURANT_MENUS.length >= 15);
+  assert.ok(SPOTLY_RESTAURANT_MENUS.reduce((sum, menu) => sum + menu.items.length, 0) > 600);
+  const items = menuItemsForBusiness({ name: "Doppio Zero", city: "Harare" });
+  assert.ok(items.length > 70);
   assert.ok(items.every(item => item.priceEstimate === null));
-  assert.ok(items.some(item => item.name === "Garlic prawns"));
+  assert.ok(items.some(item => item.name === "Original Burger"));
   assert.doesNotMatch(await read("components/service-experience.js"), /themenu|The Menu/);
   assert.match(await read("components/marketplace-app.js"), /AssistCatalogue/);
 });

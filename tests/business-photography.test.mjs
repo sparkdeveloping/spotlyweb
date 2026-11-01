@@ -41,7 +41,7 @@ test("structured category evidence beats misleading names and broad archetypes",
   ]) assert.equal(businessPhotoFamily(record), family, record.name);
 });
 
-test("known food identities refine food imagery without changing a cafe, bar or non-food business", () => {
+test("known outlet identity beats conflicting food, cafe and retail imports while distinct non-food premises stay distinct", () => {
   const food = (name, cuisine = "") => ({ name, businessType: "restaurant_food", sourceTags: { amenity: "fast_food", cuisine } });
   assert.equal(businessPhotoFamily(food("Chicken Inn")), "fried-chicken");
   assert.equal(businessPhotoFamily(food("Pizza Inn")), "pizza");
@@ -50,7 +50,10 @@ test("known food identities refine food imagery without changing a cafe, bar or 
   assert.equal(businessPhotoFamily(food("Local kitchen", "african")), "restaurant");
   assert.equal(businessPhotoFamily(food("Local kitchen", "international")), "takeaway");
   assert.equal(businessPhotoFamily({ ...food("Chicken Inn"), sourceTags: { amenity: "bar" } }), "bar");
-  assert.equal(businessPhotoFamily({ ...food("Pizza Inn"), sourceTags: { shop: "supermarket" } }), "supermarket");
+  assert.equal(businessPhotoFamily({ ...food("Pizza Inn"), sourceTags: { shop: "supermarket" } }), "pizza");
+  assert.equal(businessPhotoFamily({ ...food("Chicken Inn", "pizza;burger"), brandName: "Simbisa" }), "fried-chicken");
+  assert.equal(businessPhotoFamily({ ...food("Chicken Inn"), sourceTags: { amenity: "cafe" }, photoFamily: "pizza" }), "fried-chicken");
+  assert.equal(businessPhotoFamily({ name: "Pizza Inn Pharmacy", sourceTags: { amenity: "pharmacy" } }), "pharmacy");
 });
 
 test("business pictures remain stable through sorting, pagination, repeated categories and Saved", () => {
