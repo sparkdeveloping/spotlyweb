@@ -15,7 +15,7 @@ const initial = {
   category: "Restaurant", directoryBusinessId: "", status: "draft", priceCheckMethod: "in_person", country: "ZW", assistAccepting: true
 };
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-offset-2 focus:outline-[var(--accent)]";
-const money = (value) => new Intl.NumberFormat("en-ZW", { style: "currency", currency: "USD" }).format(Number(value || 0));
+const money = (value) => value == null ? "Price to confirm" : new Intl.NumberFormat("en-ZW", { style: "currency", currency: "USD" }).format(Number(value));
 
 function Editor() {
   const [form, setForm] = useState(initial);
@@ -106,7 +106,7 @@ function Editor() {
       <section id="independent-store-editor" className="rounded-2xl border bg-[var(--surface)] p-5 sm:p-7">
         <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]"><Store className="h-5 w-5"/></span>
         <h2 className="mt-4 text-xl font-semibold">{form.id ? "Edit independent location" : "Research a location"}</h2>
-        <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Use only original factual menu information you independently obtained. Do not paste menus, photographs, logos, creative descriptions or website-scraped content.</p>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Maintain factual item names and prices that you have confirmed with this location. Unpriced customer requests remain visible in Assist Operations.</p>
         <form onSubmit={save} className="mt-6 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             {[["name","Store name"],["city","City"],["area","Area"],["address","Street address"],["category","Category"],["directoryBusinessId","Existing directory ID (optional)"]].map(([key,label]) => <label key={key} className="block text-xs font-semibold">{label}<input required={["name","city","address"].includes(key)} value={form[key]} onChange={(e) => setForm((v) => ({ ...v, [key]: e.target.value }))} className={field}/></label>)}
@@ -127,7 +127,7 @@ function Editor() {
       </section>
     </div>
     <section className="rounded-2xl border bg-[var(--surface)] p-5 sm:p-7">
-      <div className="flex items-start gap-3"><ClipboardList className="mt-1 h-5 w-5 text-[var(--accent)]"/><div><h2 className="text-xl font-semibold">Price confirmation requests</h2><p className="mt-2 text-sm text-[var(--text-2)]">These are enquiries only. Do not buy items or dispatch a Driver from this screen. No payments have been collected.</p></div></div>
+      <div className="flex items-start gap-3"><ClipboardList className="mt-1 h-5 w-5 text-[var(--accent)]"/><div><h2 className="text-xl font-semibold">Price confirmation requests</h2><p className="mt-2 text-sm text-[var(--text-2)]">Review requested items and confirm the exact location and quote in Assist Operations. Customer payment and funded shopper fulfilment follow their own recorded stages.</p></div></div>
       <div className="mt-5 space-y-3">{requests.map((item) => <article key={item.id} className="rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><p className="font-semibold">{item.storeName} · {item.contactName}</p><span className="text-xs text-[var(--text-2)]">{item.state}</span></div><p className="mt-2 text-xs text-[var(--text-2)]">{item.contactPhone} · {item.deliveryAddress}</p><p className="mt-2 text-sm">Estimate: <strong>{money(item.estimate?.totalEstimate)}</strong> · {item.paymentStatus} · {item.dispatchStatus}</p></article>)}
         {!requests.length && <p className="rounded-xl bg-[var(--surface-2)] p-5 text-sm text-[var(--text-2)]">No open quote requests, or your role cannot access the queue.</p>}
       </div>
@@ -141,7 +141,7 @@ export function AdminIndependentShoppingApp() {
   return <AuthGate portal="admin" title="Sign in to Spotly Admin"><AdminAccess><PortalShell portalId="admin" activeSection="marketplace">
     <main className="mx-auto max-w-[1250px] px-5 py-10 sm:px-8">
       <Link href="/marketplace" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)] hover:text-[var(--accent)]"><ArrowLeft className="h-4 w-4"/>Marketplace operations</Link>
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[var(--accent)]">Off-by-default pilot</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Independent shopping</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Curate independent price estimates without touching verified merchants, products or orders.</p></div><Link href="https://spotlyafrica.com/shop-for-me" className="text-sm font-semibold text-[var(--accent)]">View customer preview</Link></div>
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[var(--accent)]">Spotly Assist catalogue</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Independent shopping</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Curate independent price estimates without touching verified merchants, products or orders.</p></div><Link href="https://spotlyafrica.com/shop-for-me" className="text-sm font-semibold text-[var(--accent)]">View customer preview</Link></div>
       <div className="my-7 flex items-start gap-3 rounded-xl border border-amber-300/40 bg-amber-50 p-4 text-sm text-amber-900"><ShieldAlert className="mt-0.5 h-5 w-5 shrink-0"/><p>Listings are not partnerships. Publishing a location does not enable the pilot. Existing merchant checkout, Driver dispatch and payout systems are unchanged. Do not collect payment or shop until a separately approved release enables them.</p></div>
       {!allowed ? <div className="mt-10 rounded-2xl border bg-[var(--surface)] p-8"><LockKeyhole className="h-8 w-8"/><h2 className="mt-4 font-semibold">Administrator access required</h2><p className="mt-2 text-sm text-[var(--text-2)]">Your assigned role does not include marketplace administration.</p></div> : <Editor/>}
     </main>

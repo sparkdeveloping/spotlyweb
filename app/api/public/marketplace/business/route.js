@@ -5,6 +5,9 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { openPlaceById } from "@/lib/open-marketplace-data";
 import { publicBusinessRecord, plainDate } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
+import { publicBusinessGroup } from "@/lib/business-group-server";
+import { directoryShoppingStore } from "@/lib/directory-shopping-server";
+import { independentShoppingFlags } from "@/lib/independent-shopping";
 
 export const runtime = "nodejs";
 const text=(value)=>String(value||"").trim().toLowerCase();
@@ -18,7 +21,14 @@ export async function GET(request){
   const {db}=getAdminServices(); const [businessSnapshot,branchSnapshot,productSnapshot]=await Promise.all([db.collection("businesses").doc(businessId).get(),db.collection("branches").where("businessId","==",businessId).limit(100).get(),db.collection("products").where("businessId","==",businessId).limit(1000).get()]);
   const curated=openPlaceById(businessId); const source=businessSnapshot.exists?{...(curated||{}),...businessSnapshot.data()}:curated; const showUnclaimed=await unclaimedPublicationEnabled(db);
   if(!source||!isMarketplaceDiscoverable(source)||!(businessSnapshot.exists?canShowDirectoryRecord(source,showUnclaimed):showUnclaimed)) throw Object.assign(new Error("This business is not publicly available."),{status:404});
-  const business=publicBusinessRecord(businessId,{...source,curated:Boolean(curated)}); const trust=marketplaceTrust(source);
+  const business=await publicBusinessGroup(db,businessId,{...source,curated:Boolean(curated)},showUnclaimed); const trust=marketplaceTrust(source);
+  if (business.assistRequestAvailable) {
+    const config = (await db.collection("platformSettings").doc("global").get()).data() || {};
+    const flags = independentShoppingFlags(config);
+    const found = flags.browseEnabled ? await directoryShoppingStore(db, {businessId,branchId:branchSnapshot.docs.find(doc=>doc.data()?.public===true&&!["archived","removed"].includes(text(doc.data()?.status)))?.id || "",settings:config,source}) : null;
+    business.assistRequestAvailable = Boolean(found?.store);
+    business.assistCatalogue = found?.store ? {store:found.store,requestEnabled:flags.requestEnabled} : null;
+  }
   let branches=branchSnapshot.docs.filter((doc)=>doc.data()?.public===true&&!["archived","removed"].includes(text(doc.data()?.status))).map(publicBranch);
   if(!trust.commerceVerified) branches=branches.map((branch)=>({...branch,fulfilment:[],pickup:{},paymentMethods:[],delivery:null}));
   if(!branches.length&&business.coordinates)branches=[{id:`${businessId}-place`,businessId,branchName:business.area||business.city||"Location",name:business.name,city:business.city,area:business.area,suburb:business.suburb,address:business.address,phone:business.phone,status:"listed",public:true,fulfilment:[],openingHours:business.openingHours||{},specialHours:[],pickup:{},paymentMethods:[],acceptedCurrencies:[],delivery:null,location:{lat:business.latitude,lng:business.longitude},curated:true}];

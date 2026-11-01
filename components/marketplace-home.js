@@ -68,14 +68,14 @@ function MarketplaceRailCard({ item, onOpen }) {
   const editorial = profile.service === "shop" ? marketplaceEditorial(business) : null;
   const hasImage = Boolean(marketplaceMedia(business).src);
   const placeSuffix = distance !== null ? ` · ${distance.toFixed(1)} km` : business.area ? ` · ${business.area}` : business.city ? ` · ${business.city}` : "";
-  return <button type="button" onClick={() => business.assistStoreId && business.assistAccepting !== false ? window.location.assign(`/shop-for-me?store=${encodeURIComponent(business.assistStoreId)}`) : onOpen(business)} className="group w-[244px] shrink-0 text-left sm:w-[286px]">
+  return <button type="button" onClick={() => onOpen(business)} className="group w-[244px] shrink-0 text-left sm:w-[286px]">
     <div className="relative aspect-[1.36/1] overflow-hidden rounded-[16px] bg-[var(--surface-2)]">
       <MarketplaceImage business={business} />
       {hasImage ? <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" /> : null}
       {profile.cardMode === "commerce" && business.isFeatured ? <span className="absolute left-3 top-3 rounded-full bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text)] shadow-sm backdrop-blur">Featured</span> : null}
     </div>
     <div className="mt-3 flex items-start gap-3">
-      <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3><p className="mt-1 truncate text-xs text-[var(--text-3)]">{profile.displayCategory}{placeSuffix}</p><p className="mt-1 text-[11px] font-medium text-[var(--text-3)]">{profile.cardMode === "commerce" ? "Available on Spotly" : business.assistStoreId && business.assistAccepting !== false ? "Shop through Spotly Assist · independent listing" : editorial?.branchReviewRequired ? "Branch needs re-verification" : editorial?.signal === "established_retail_brand" ? "Established retail chain · Spotly guide" : "Directory listing"}</p></div>
+      <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-semibold tracking-[-.02em]">{business.name}</h3>{business.groupedLocations?.length > 1 ? <p className="mt-1 text-xs font-semibold text-[var(--accent)]">{business.groupedLocations.length} locations</p> : null}<p className="mt-1 truncate text-xs text-[var(--text-3)]">{profile.displayCategory}{placeSuffix}</p><p className="mt-1 text-[11px] font-medium text-[var(--text-3)]">{profile.cardMode === "commerce" ? "Available on Spotly" : (business.assistStoreId || business.assistRequestAvailable) && business.assistAccepting !== false ? "Shop through Spotly Assist · independent listing" : editorial?.branchReviewRequired ? "Branch needs re-verification" : editorial?.signal === "established_retail_brand" ? "Established retail chain · Spotly guide" : business.assistRequestAvailable ? "Order with Spotly" : "Directory listing"}</p></div>
       <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-3)]" />
     </div>
   </button>;

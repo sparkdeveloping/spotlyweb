@@ -1,3 +1,5 @@
+import { canonicalIndependentSource } from "@/lib/directory-shopping-server";
+import { catalogueService } from "@/lib/spotly-catalogue";
 import {randomInt} from "node:crypto";
 import {FieldValue} from "firebase-admin/firestore";
 import {z} from "zod";
@@ -90,13 +92,14 @@ export async function POST(request){
     const storeSnap=await tx.get(storeRef);if(!storeSnap.exists)fail("The store is no longer available.");
     const store=storeSnap.data();
     const business=store.directoryBusinessId?await tx.get(db.collection("businesses").doc(store.directoryBusinessId)):null;
-    const branch=store.sourceResearchBatchId&&store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
-    if(!independentStoreSafe(store,business?.exists?business.data():null,branch?.exists?branch.data():null)||
-       !regionalServicePolicy(settings.assistCoverage||{},store,"eat").available)
+    const branch=store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
+    if(!independentStoreSafe(store,canonicalIndependentSource(business,store.directoryBusinessId),branch?.exists?branch.data():null)||
+       !regionalServicePolicy(settings.assistCoverage||{},store,catalogueService(store)).available)
       fail("Store ownership, launch or region availability has changed.");
     const now=FieldValue.serverTimestamp();
     const jobData={requestId:ref.id,driverId:input.driverId,storeId:record.storeId,storeName:record.storeName,
-      storeAddress:String(store.address||""),deliveryAddress:String(record.deliveryAddress||""),
+      storeAddress:String(record.finalQuote?.collectionAddress||record.collectionAddress||store.address||""),
+      sourceBusinessId:record.sourceBusinessId||store.directoryBusinessId||null,directoryBranchId:record.directoryBranchId||store.directoryBranchId||null,deliveryAddress:String(record.deliveryAddress||""),
       contactPhone:String(record.contactPhone||""),
       state:"assigned",currency:"USD",authorizedSpend:Number(record.finalQuote.merchandiseTotal),
       financeFloatReference:float.data().externalReference,financeFloatVerifiedBy:float.data().verifiedBy,

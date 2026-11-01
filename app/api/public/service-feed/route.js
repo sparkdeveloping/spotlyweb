@@ -1,3 +1,4 @@
+import { groupMarketplaceBusinesses } from "@/lib/business-groups";
 import { publicBusinessPhotoFields } from "@/lib/business-photo-fields";
 import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
 import { canShowDirectoryRecord } from "@/lib/nxt-policy";
@@ -351,7 +352,8 @@ export async function GET(request) {
       ...itemsAll.map((item) => item.category)
     ].filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "en", { sensitivity: "base" }));
 
-    const sortedBusinesses = [...businesses].sort(sortBusinesses).slice(0, 80);
+    const groupedBusinesses = groupMarketplaceBusinesses([...businesses].sort(sortBusinesses));
+    const sortedBusinesses = groupedBusinesses.sort(sortBusinesses).slice(0, 120);
     const items = itemsAll.slice(offset, offset + itemLimit);
     const facets = {
       openNow: businesses.filter((business) => business.operational?.openNow).length,
@@ -372,7 +374,7 @@ export async function GET(request) {
       items,
       categories,
       facets,
-      totalBusinesses: businesses.length,
+      totalBusinesses: groupedBusinesses.length,
       totalItems: itemsAll.length,
       nextOffset: offset + items.length < itemsAll.length ? offset + items.length : null
     }, {

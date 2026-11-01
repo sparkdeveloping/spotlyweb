@@ -1,3 +1,5 @@
+import { canonicalIndependentSource } from "@/lib/directory-shopping-server";
+import { catalogueService } from "@/lib/spotly-catalogue";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
@@ -80,10 +82,10 @@ export async function POST(request){
          if(!storeSnap.exists)throw Object.assign(new Error("This shopping location is no longer available."),{status:409});
          const store=storeSnap.data();
          const settings=settingsSnap.data()||{};
-         if(!independentShoppingFlags(settings).requestEnabled||!regionalServicePolicy(settings.assistCoverage||{},store,"eat").available)throw Object.assign(new Error("Spotly Assist requests are paused in this area."),{status:409});
+         if(!independentShoppingFlags(settings).requestEnabled||!regionalServicePolicy(settings.assistCoverage||{},store,catalogueService(store)).available)throw Object.assign(new Error("Spotly Assist requests are paused in this area."),{status:409});
          const canon=store.directoryBusinessId?await tx.get(db.collection("businesses").doc(store.directoryBusinessId)):null;
-         const branch=store.sourceResearchBatchId&&store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
-         if(!independentStoreSafe(store,canon?.exists?canon.data():null,branch?.exists?branch.data():null)){
+         const branch=store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
+         if(!independentStoreSafe(store,canonicalIndependentSource(canon,store.directoryBusinessId),branch?.exists?branch.data():null)){
            throw Object.assign(new Error("This restaurant has changed availability or ownership. Spotly must recheck the request."),{status:409});
          }
        }

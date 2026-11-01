@@ -32,7 +32,7 @@ import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 import { marketplaceMedia, marketplaceMediaSet } from "@/lib/marketplace-editorial";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { marketplaceEditorial } from "@/lib/marketplace-curation";
-import { THEMENU_RESTAURANT_SPOTLIGHTS, themenuPriceLabel } from "@/lib/themenu-curated-spotlights";
+
 
 const SERVICE_CONFIG = {
   eat: {
@@ -146,25 +146,25 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
   const profile = marketplaceProfile(business);
   const editorial = profile.service === "shop" ? marketplaceEditorial(business) : null;
   const [assistExplained, setAssistExplained] = useState(false);
-  const assisted = Boolean(business.assistStoreId);
+  const assisted = Boolean(business.assistStoreId || business.assistRequestAvailable);
   const media = assignedMedia || mediaForBusiness(business);
   const image = media.src;
   const operation = business.operational || {};
   const commerce = profile.cardMode === "commerce";
-  const assistedBooking = service === "book" && !commerce && !assisted && business.assistAccepting !== false;
-  const action = marketplaceActionLabel(business, service);
+  const assistedBooking = service === "book" && !commerce && !assisted && business.assistBookingAvailable === true;
+  const action = assisted ? (business.groupedLocations?.length > 1 ? "Choose location" : service === "eat" ? "Choose items" : "Shop with Spotly") : marketplaceActionLabel(business, service);
   return <article className={cn("group relative overflow-hidden rounded-[var(--radius-card)] border bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card", commerce ? "border-[var(--border-subtle)]" : "border-[color-mix(in_srgb,var(--border-subtle)_80%,transparent)]")}>
-    <button type="button" onClick={() => assisted ? window.location.assign("/shop-for-me?store=" + encodeURIComponent(business.assistStoreId)) : assistedBooking ? window.location.assign("/assist/book?business=" + encodeURIComponent(business.id)) : onOpen(business)} className="block w-full text-left">
+    <button type="button" onClick={() => onOpen(business)} className="block w-full text-left">
       <div className={cn("relative overflow-hidden", commerce ? "aspect-[16/10] bg-[var(--surface-2)]" : "aspect-[16/9] bg-[var(--surface-2)]")}>
         <BusinessPhoto business={business} media={media} sizes="(max-width: 768px) 100vw, 420px" labelMode="icon" className="transition duration-300 motion-safe:group-hover:scale-[1.025]" />
         {image ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" /> : null}
         {commerce && image ? <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}<MarketplaceTrustBadge business={business} compact />{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div> : null}
       </div>
       <div className={cn("p-4", !commerce && "pb-3")}>
-        <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="truncate text-[17px] font-semibold tracking-[-.025em]">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{business.area || business.city ? ` · ${business.area || business.city}` : ""}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div>
+        <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="truncate text-[17px] font-semibold tracking-[-.025em]">{business.name}</h3>{business.groupedLocations?.length > 1 ? <p className="mt-1 text-xs font-semibold text-[var(--accent)]">{business.groupedLocations.length} locations · Choose a branch</p> : null}<p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{business.area || business.city ? ` · ${business.area || business.city}` : ""}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div>
         {editorial?.signal === "established_retail_brand" ? <p className="mt-2 text-[11px] text-[var(--text-3)]">Established chain · Spotly editorial, not customer reviews</p> : editorial?.branchReviewRequired ? <p className="mt-2 text-[11px] font-semibold text-[var(--text-2)]">Branch information needs re-verification</p> : null}
         {assistedBooking ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Ask Spotly to check your preferred time</div> : null}
-        {assisted ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Menu prices estimated · Spotly confirms before payment</div> : null}
+        {assisted ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Choose items · Price confirmed before payment</div> : null}
         {commerce ? <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-[var(--text-2)]">
           {operation.deliveryAvailable ? <span className="inline-flex items-center gap-1.5"><Truck className="h-3.5 w-3.5" />Delivery{operation.deliveryFeeFrom > 0 ? ` from ${formatCurrency(operation.deliveryFeeFrom, currency || "USD")}` : ""}</span> : null}
           {operation.pickupAvailable ? <span className="inline-flex items-center gap-1.5"><PackageCheck className="h-3.5 w-3.5" />{pickupTimeLabel(operation.earliestPickup) || "Pickup"}</span> : null}
@@ -196,9 +196,9 @@ function DirectoryListingRow({ business, favorite, onFavorite, onOpen }) {
         <BusinessPhoto business={business} media={media} sizes="78px" labelMode="none" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-semibold tracking-[-.02em] text-[var(--text)]">{business.name}</span>
+        <span className="block truncate text-[15px] font-semibold tracking-[-.02em] text-[var(--text)]">{business.name}</span>{business.groupedLocations?.length > 1 ? <span className="mt-1 block text-xs font-semibold text-[var(--accent)]">{business.groupedLocations.length} locations</span> : null}
         <span className="mt-1 block truncate text-xs text-secondary">{profile.displayCategory}{business.area||business.city?` · ${business.area||business.city}`:""}</span>
-        <span className="mt-2 block text-[11px] font-medium text-[var(--text-3)]">{editorial?.branchReviewRequired ? "Spotly guide: branch needs re-verification" : editorial?.signal === "established_retail_brand" ? "Established chain · Spotly editorial, not a customer rating" : licensed ? "Source photo: The Menu" : "Explore place details"}</span>
+        <span className="mt-2 block text-[11px] font-medium text-[var(--text-3)]">{editorial?.branchReviewRequired ? "Spotly guide: branch needs re-verification" : editorial?.signal === "established_retail_brand" ? "Established chain · Spotly editorial, not a customer rating" : licensed ? "Business photograph" : "Explore place details"}</span>
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-secondary transition group-hover:translate-x-0.5" aria-hidden="true" />
     </button>
@@ -350,11 +350,11 @@ export function ServiceDiscoveryView({
   const visibleItems = useMemo(() => sortItems(itemFilterMatches, sort, service, currency), [itemFilterMatches, sort, service, currency]);
   const commerceBusinesses = useMemo(() => visibleBusinesses.filter((business) => marketplaceProfile(business).cardMode === "commerce"), [visibleBusinesses]);
   const assistBusinesses = useMemo(() => visibleBusinesses.filter((business) =>
-    marketplaceProfile(business).cardMode !== "commerce" && Boolean(business.assistStoreId) &&
+    marketplaceProfile(business).cardMode !== "commerce" && Boolean(business.assistStoreId || business.assistRequestAvailable) &&
     business.assistAccepting !== false), [visibleBusinesses]);
   const directoryBusinesses = useMemo(() => visibleBusinesses.filter((business) =>
     marketplaceProfile(business).cardMode !== "commerce" &&
-    !(business.assistStoreId && business.assistAccepting !== false)), [visibleBusinesses]);
+    !((business.assistStoreId || business.assistRequestAvailable) && business.assistAccepting !== false)), [visibleBusinesses]);
   const featured = commerceBusinesses.filter((business) => business.isFeatured).slice(0, 4);
   const completedOrder = orders.find((order) => COMPLETE_ORDER_STATUSES.has(String(order.status || "").toLowerCase()) && order.businessId && visibleBusinesses.some((business) => business.id === order.businessId));
   const recentBusiness = completedOrder ? visibleBusinesses.find((business) => business.id === completedOrder.businessId) : null;
@@ -395,28 +395,7 @@ export function ServiceDiscoveryView({
 
       {loading ? <div className="mt-5"><ServiceSkeleton /></div> : error && !feed.businesses.length ? <EmptyState className="mt-5" icon={Search} title={`${config.label} is temporarily unavailable`} description="Spotly could not refresh this service right now. Your other services and Activity are still available." action={<Button variant="outline" onClick={() => setRefreshKey((value) => value + 1)}>Try again</Button>} /> : visibleBusinesses.length ? <div className="mt-6 space-y-10">
         {commerceBusinesses.length ? <div><div className="mb-4 flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Available on Spotly</p><h3 className="mt-1 text-lg font-semibold tracking-[-.025em]">Ready for {service === "book" ? "booking" : service === "events" ? "tickets" : service === "eat" ? "ordering" : "shopping"}</h3></div><span className="text-xs text-[var(--text-3)]">Verified commerce</span></div><div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed = commerceBusinesses.slice(0, 12); const media = marketplaceMediaSet(listed); return listed.map((business) => <BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />); })()}</div></div> : null}
-        {assistBusinesses.length ? <div><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Assist · independent shopping</p><h3 className="mt-1 text-lg font-semibold">{service === "shop" ? "Request a price check from a local shop" : "Choose a restaurant, request a price check"}</h3><p className="mt-2 max-w-2xl text-xs leading-5 text-secondary">Spotly shops independently. Independent businesses have not been represented as participating merchants; prices are estimates until confirmed for your request.</p></div><span className="text-xs font-medium text-secondary">Assisted requests</span></div><div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed=assistBusinesses.slice(0,12);const media=marketplaceMediaSet(listed);return listed.map(business=><BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness}/>); })()}</div></div> : null}
-        {service==="eat" && /harare/i.test(location.city||"") && !query && <section aria-label="Source menus from The Menu" className="overflow-hidden rounded-[24px] border border-[var(--border-subtle)] bg-[var(--surface)]">
-          <div className="grid gap-0 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="experience-menu-art" data-service="eat"><ServiceArtwork service="eat" compact /><span>Menus around you</span></div>
-            <div className="p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--accent)]">New · Restaurant menu discovery</p>
-              <h3 className="mt-2 text-xl font-semibold tracking-[-.035em]">Explore menus around Harare</h3>
-              <p className="mt-2 text-sm leading-6 text-secondary">Independent restaurant information sourced from <a href="https://themenu.co.zw/" target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">The Menu</a> under a content-use permission. Prices are source listings, not guaranteed Spotly checkout prices or claims of restaurant affiliation.</p>
-              <div className="mt-5 grid items-start gap-3 sm:grid-cols-2">{THEMENU_RESTAURANT_SPOTLIGHTS.map(item=><div key={item.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)] p-4">
-                <p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.category} · {item.area}</p>
-                <p className="mt-3 text-sm text-[var(--text)]">{item.menuHighlight}</p><p className="mt-1 text-xs font-medium text-secondary">{themenuPriceLabel(item)||"Check the source for current prices"}</p>
-                <details className="group mt-4 border-t border-[var(--border)] pt-3">
-                  <summary className="cursor-pointer list-none text-xs font-semibold text-[var(--accent)]">Preview {item.menuItems.length} dishes and source-listed prices <span aria-hidden="true" className="ml-1 inline-block transition-transform group-open:rotate-90">›</span></summary>
-                  <ul className="mt-3 divide-y divide-[var(--border-subtle)]">{item.menuItems.map(dish=><li key={dish.name} className="flex items-start justify-between gap-3 py-2 text-xs"><span className="min-w-0 leading-5">{dish.name}</span><span className="shrink-0 font-semibold tabular-nums">{themenuPriceLabel(item)?"US$"+dish.price.toFixed(2):"Check price"}</span></li>)}</ul>
-                  <p className="mt-2 text-[11px] leading-5 text-secondary">Illustrative source listing, not verified stock or a Spotly sales offer. Prices require reconfirmation.</p>
-                </details>
-                <a href={item.listingUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent)] hover:underline">Open The Menu’s source listing <ArrowRight className="h-3.5 w-3.5"/></a>
-              </div>)}</div>
-              <p className="mt-3 text-xs leading-5 text-[var(--text-3)]">The Menu information captured 21 October 2026. Confirm availability and price directly before purchase; independent Spotly Assist checkout is offered only where separately enabled.</p>
-            </div>
-          </div>
-        </section>}
+        {assistBusinesses.length ? <div><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Assist · independent shopping</p><h3 className="mt-1 text-lg font-semibold">{service === "shop" ? "Shop local stores with Spotly" : "Choose your meal. Spotly handles the order."}</h3><p className="mt-2 max-w-2xl text-xs leading-5 text-secondary">Spotly shops independently. Choose items in Spotly. We confirm the price and availability, you approve and pay, then a shopper buys and delivers on your behalf.</p></div><span className="text-xs font-medium text-secondary">Assisted requests</span></div><div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed=assistBusinesses;const media=marketplaceMediaSet(listed);return listed.map(business=><BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness}/>); })()}</div></div> : null}
         {directoryBusinesses.length ? <section aria-label="More places to explore" className="border-t border-[var(--border-subtle)] pt-8">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--accent)]">Explore the city</p>
