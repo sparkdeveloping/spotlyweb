@@ -24,8 +24,14 @@ export function retailItemsForBusiness(record = {}) {
   if ((record.country || "ZW") !== "ZW") return [];
   const categories = TYPES[businessPhotoFamily(record)];
   if (!categories) return [];
+  const family = businessPhotoFamily(record);
+  // An electrical aisle is relevant to electrical retailers, not a mobile-phone
+  // shop. A bakery must not inherit a competing bakery's branded loaves.
+  if (family === "electronics" && record.sourceTags?.shop !== "electrical" && !/\belectrosales\b/i.test(record.name || "")) return [];
+  const bakeryBrand = family === "bakery" ? /\blobel/i.test(record.name || "") ? /lobel/i : /\bproton\b/i.test(record.name || "") ? /proton/i : null : null;
+  if (family === "bakery" && !bakeryBrand) return [];
   const retailer = matchingRetailer(record);
-  return SPOTLY_RETAIL_PRODUCTS.filter(item => categories.test(item.category)).map(item => ({...item,reference:retailer ? item.references.find(reference=>retailer.test(reference.label)) || item.reference : item.reference}))
+  return SPOTLY_RETAIL_PRODUCTS.filter(item => categories.test(item.category) && (!bakeryBrand || bakeryBrand.test(item.brand))).map(item => ({...item,reference:retailer ? item.references.find(reference=>retailer.test(reference.label)) || item.reference : item.reference}))
     .sort((a,b)=>Number(Boolean(retailer?.test(b.reference.label)))-Number(Boolean(retailer?.test(a.reference.label))));
 }
 export function retailCatalogueScope(record = {}, items = []) {

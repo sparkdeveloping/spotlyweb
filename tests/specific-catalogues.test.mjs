@@ -81,6 +81,10 @@ test("retail references keep exact categories and source evidence without claimi
   const meat=retailItemsForBusiness({...bon,name:"Local butcher",sourceTags:{shop:"butcher"}});
   assert.ok(meat.some(item=>/Irvines.*1Kg/i.test(item.name)));assert.ok(meat.every(item=>/meat|poultry/i.test(item.category)));
   assert.deepEqual(retailItemsForBusiness({...bon,name:"Clothing boutique",sourceTags:{shop:"clothes"}}),[]);
+  assert.deepEqual(retailItemsForBusiness({...bon,name:"Econet",sourceTags:{shop:"mobile_phone"}}),[]);
+  const bakery=retailItemsForBusiness({...bon,name:"Lobels Bakery",sourceTags:{shop:"bakery"}});
+  assert.ok(bakery.length);assert.ok(bakery.every(item=>/Lobels/.test(item.brand)));
+  assert.deepEqual(retailItemsForBusiness({...bon,name:"Independent Bakery",sourceTags:{shop:"bakery"}}),[]);
   assert.equal(directoryIntakeStore(bon.id,bon).catalogueScope,"product_library");
 });
 
