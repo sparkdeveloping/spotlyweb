@@ -32,7 +32,7 @@ import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 import { marketplaceMedia, marketplaceMediaSet } from "@/lib/marketplace-editorial";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { marketplaceEditorial } from "@/lib/marketplace-curation";
-import { THEMENU_RESTAURANT_SPOTLIGHTS, themenuPriceLabel } from "@/lib/themenu-curated-spotlights";
+
 
 const SERVICE_CONFIG = {
   eat: {
@@ -146,30 +146,30 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
   const profile = marketplaceProfile(business);
   const editorial = profile.service === "shop" ? marketplaceEditorial(business) : null;
   const [assistExplained, setAssistExplained] = useState(false);
-  const assisted = Boolean(business.assistStoreId);
+  const assisted = Boolean(business.assistStoreId || business.assistRequestAvailable);
   const media = assignedMedia || mediaForBusiness(business);
   const image = media.src;
   const operation = business.operational || {};
   const commerce = profile.cardMode === "commerce";
-  const assistedBooking = service === "book" && !commerce && !assisted && business.assistAccepting !== false;
-  const action = marketplaceActionLabel(business, service);
+  const assistedBooking = service === "book" && !commerce && !assisted && business.assistBookingAvailable === true;
+  const action = assisted ? (business.groupedLocations?.length > 1 ? "Choose location" : service === "eat" ? "Choose items" : "Shop with Spotly") : marketplaceActionLabel(business, service);
   return <article className={cn("group relative overflow-hidden rounded-[var(--radius-card)] border bg-[var(--surface)] transition duration-200 hover:-translate-y-0.5 hover:shadow-card", commerce ? "border-[var(--border-subtle)]" : "border-[color-mix(in_srgb,var(--border-subtle)_80%,transparent)]")}>
-    <button type="button" onClick={() => assisted ? window.location.assign("/shop-for-me?store=" + encodeURIComponent(business.assistStoreId)) : assistedBooking ? window.location.assign("/assist/book?business=" + encodeURIComponent(business.id)) : onOpen(business)} className="block w-full text-left">
+    <button type="button" onClick={() => onOpen(business)} className="block w-full text-left">
       <div className={cn("relative overflow-hidden", commerce ? "aspect-[16/10] bg-[var(--surface-2)]" : "aspect-[16/9] bg-[var(--surface-2)]")}>
         <BusinessPhoto business={business} media={media} sizes="(max-width: 768px) 100vw, 420px" labelMode="icon" className="transition duration-300 motion-safe:group-hover:scale-[1.025]" />
         {image ? <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" /> : null}
         {commerce && image ? <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">{business.isFeatured ? <Badge className="bg-[var(--surface)]/95 text-[var(--text)] ring-0">Featured</Badge> : null}<MarketplaceTrustBadge business={business} compact />{operation.openNow ? <Badge className="bg-[var(--success)] text-[var(--on-success)] ring-0">Open now</Badge> : null}{business.promotion ? <Badge className="bg-[var(--accent)] text-[var(--on-accent)] ring-0">{business.promotion.name || "Offer"}</Badge> : null}</div> : null}
       </div>
       <div className={cn("p-4", !commerce && "pb-3")}>
-        <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="truncate text-[17px] font-semibold tracking-[-.025em]">{business.name}</h3><p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{business.area || business.city ? ` · ${business.area || business.city}` : ""}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div>
+        <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="truncate text-[17px] font-semibold tracking-[-.025em]">{business.name}</h3>{business.groupedLocations?.length > 1 ? <p className="mt-1 text-xs font-semibold text-[var(--accent)]">{business.groupedLocations.length} locations · Choose a branch</p> : null}<p className="mt-1 truncate text-sm text-[var(--text-3)]">{profile.displayCategory}{business.area || business.city ? ` · ${business.area || business.city}` : ""}</p></div><ChevronRight className="mt-1 h-5 w-5 text-[var(--text-3)]" /></div>
         {editorial?.signal === "established_retail_brand" ? <p className="mt-2 text-[11px] text-[var(--text-3)]">Established chain · Spotly editorial, not customer reviews</p> : editorial?.branchReviewRequired ? <p className="mt-2 text-[11px] font-semibold text-[var(--text-2)]">Branch information needs re-verification</p> : null}
         {assistedBooking ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Ask Spotly to check your preferred time</div> : null}
-        {assisted ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Menu prices estimated · Spotly confirms before payment</div> : null}
+        {assisted ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Choose items · Price confirmed before payment</div> : null}
         {commerce ? <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-[var(--text-2)]">
           {operation.deliveryAvailable ? <span className="inline-flex items-center gap-1.5"><Truck className="h-3.5 w-3.5" />Delivery{operation.deliveryFeeFrom > 0 ? ` from ${formatCurrency(operation.deliveryFeeFrom, currency || "USD")}` : ""}</span> : null}
           {operation.pickupAvailable ? <span className="inline-flex items-center gap-1.5"><PackageCheck className="h-3.5 w-3.5" />{pickupTimeLabel(operation.earliestPickup) || "Pickup"}</span> : null}
           {operation.locationCount ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{operation.locationCount} {operation.locationCount === 1 ? "location" : "locations"}</span> : null}
-        </div> : <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{assisted ? "Assisted purchase · not a partner" : assistedBooking ? "Booking request · subject to confirmation" : "Directory listing · commerce not enabled"}</span><span className="font-semibold text-[var(--accent)]">{assisted ? "Request items" : assistedBooking ? "Request time" : action} <span aria-hidden="true">→</span></span></div>}
+        </div> : <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{assisted ? "Spotly shops on your behalf" : assistedBooking ? "Booking request · subject to confirmation" : "Directory listing · commerce not enabled"}</span><span className="font-semibold text-[var(--accent)]">{assistedBooking ? "Request time" : action} <span aria-hidden="true">→</span></span></div>}
         {commerce ? <div className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)]">{action}<ArrowRight className="h-3.5 w-3.5" /></div> : null}
       </div>
     </button>
@@ -196,9 +196,9 @@ function DirectoryListingRow({ business, favorite, onFavorite, onOpen }) {
         <BusinessPhoto business={business} media={media} sizes="78px" labelMode="none" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-semibold tracking-[-.02em] text-[var(--text)]">{business.name}</span>
+        <span className="block truncate text-[15px] font-semibold tracking-[-.02em] text-[var(--text)]">{business.name}</span>{business.groupedLocations?.length > 1 ? <span className="mt-1 block text-xs font-semibold text-[var(--accent)]">{business.groupedLocations.length} locations</span> : null}
         <span className="mt-1 block truncate text-xs text-secondary">{profile.displayCategory}{business.area||business.city?` · ${business.area||business.city}`:""}</span>
-        <span className="mt-2 block text-[11px] font-medium text-[var(--text-3)]">{editorial?.branchReviewRequired ? "Spotly guide: branch needs re-verification" : editorial?.signal === "established_retail_brand" ? "Established chain · Spotly editorial, not a customer rating" : licensed ? "Source photo: The Menu" : "Explore place details"}</span>
+        <span className="mt-2 block text-[11px] font-medium text-[var(--text-3)]">{editorial?.branchReviewRequired ? "Spotly guide: branch needs re-verification" : editorial?.signal === "established_retail_brand" ? "Established chain · Spotly editorial, not a customer rating" : licensed ? "Business photograph" : "Explore place details"}</span>
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-secondary transition group-hover:translate-x-0.5" aria-hidden="true" />
     </button>
@@ -279,6 +279,7 @@ export function ServiceDiscoveryView({
   const [feed, setFeed] = useState({ businesses: [], items: [], categories: [], facets: {}, totalBusinesses: 0, totalItems: 0, nextOffset: null });
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingBusinesses, setLoadingBusinesses] = useState(false);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("all");
   const [productDepartment, setProductDepartment] = useState("all");
@@ -301,7 +302,7 @@ export function ServiceDiscoveryView({
       setLoading(true);
       setError("");
       try {
-        const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, limit: 24 });
+        const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, category, limit: 24 });
         if (!active) return;
         setFeed(result);
         if (query.trim().length >= 2) track(result.totalItems || result.totalBusinesses ? "service_search_results" : "service_search_zero_results", { service, query_length: query.trim().length, item_count: Number(result.totalItems || 0), business_count: Number(result.totalBusinesses || 0), city: location.city || "" });
@@ -313,7 +314,7 @@ export function ServiceDiscoveryView({
       }
     }, query ? 220 : 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [service, location.city, location.area, query, config.label, refreshKey]);
+  }, [service, location.city, location.area, query, config.label, refreshKey, category]);
 
   async function loadMore() {
     if (feed.nextOffset == null || loadingMore) return;
@@ -328,12 +329,19 @@ export function ServiceDiscoveryView({
     }
   }
 
+  async function loadMoreBusinesses() {
+    if (feed.nextBusinessOffset == null || loadingBusinesses) return;
+    setLoadingBusinesses(true);
+    try { const result = await loadServiceFeed(service,{city:location.city,area:location.area,query,category,businessOffset:feed.nextBusinessOffset,limit:24}); setFeed(current=>({...current,businesses:[...new Map([...current.businesses,...result.businesses].map(item=>[item.id,item])).values()],nextBusinessOffset:result.nextBusinessOffset})); } catch(failure) {setError(failure.message);} finally {setLoadingBusinesses(false);}
+  }
+
   const categoryOptions = useMemo(() => {
+    if (service === "shop" && feed.businessCategories?.length) return feed.businessCategories;
     if (service !== "shop") return (feed.categories || []).map((label) => ({ key: label, label }));
     const seen = new Map();
     for (const business of feed.businesses || []) { const profile = marketplaceProfile(business); if (!seen.has(profile.vertical)) seen.set(profile.vertical, profile.displayCategory); }
     return [...seen].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [feed.businesses, feed.categories, service]);
+  }, [feed.businesses, feed.categories, feed.businessCategories, service]);
   const productDepartments = useMemo(() => service !== "shop" ? [] : [...new Set(feed.items.map((item) => item.categoryPath?.[1] || item.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [feed.items, service]);
   const businessVertical = useMemo(() => new Map(feed.businesses.map((business) => [business.id, marketplaceProfile(business).vertical])), [feed.businesses]);
   const itemFilterMatches = useMemo(() => feed.items
@@ -345,16 +353,16 @@ export function ServiceDiscoveryView({
   const visibleBusinesses = useMemo(() => feed.businesses.filter((business) => filterBusiness(business, filter)).filter((business) => {
     if (category === "all") return true;
     if (service === "shop") return marketplaceProfile(business).vertical === category;
-    return [business.category, ...(business.categories || [])].includes(category) || itemBusinessIds.has(business.id);
+    return marketplaceProfile(business).displayCategory === category || [business.category, ...(business.categories || [])].includes(category) || itemBusinessIds.has(business.id);
   }).filter((business) => !["deals", "today", "tonight", "weekend", "free"].includes(filter) || itemBusinessIds.has(business.id)), [feed.businesses, filter, category, itemBusinessIds, service]);
   const visibleItems = useMemo(() => sortItems(itemFilterMatches, sort, service, currency), [itemFilterMatches, sort, service, currency]);
   const commerceBusinesses = useMemo(() => visibleBusinesses.filter((business) => marketplaceProfile(business).cardMode === "commerce"), [visibleBusinesses]);
   const assistBusinesses = useMemo(() => visibleBusinesses.filter((business) =>
-    marketplaceProfile(business).cardMode !== "commerce" && Boolean(business.assistStoreId) &&
+    marketplaceProfile(business).cardMode !== "commerce" && Boolean(business.assistStoreId || business.assistRequestAvailable) &&
     business.assistAccepting !== false), [visibleBusinesses]);
   const directoryBusinesses = useMemo(() => visibleBusinesses.filter((business) =>
     marketplaceProfile(business).cardMode !== "commerce" &&
-    !(business.assistStoreId && business.assistAccepting !== false)), [visibleBusinesses]);
+    !((business.assistStoreId || business.assistRequestAvailable) && business.assistAccepting !== false)), [visibleBusinesses]);
   const featured = commerceBusinesses.filter((business) => business.isFeatured).slice(0, 4);
   const completedOrder = orders.find((order) => COMPLETE_ORDER_STATUSES.has(String(order.status || "").toLowerCase()) && order.businessId && visibleBusinesses.some((business) => business.id === order.businessId));
   const recentBusiness = completedOrder ? visibleBusinesses.find((business) => business.id === completedOrder.businessId) : null;
@@ -366,7 +374,7 @@ export function ServiceDiscoveryView({
       : [{ key: "all", label: "All" }, { key: "delivery", label: `Delivery${feed.facets?.delivery ? ` ${feed.facets.delivery}` : ""}` }, { key: "pickup", label: `Pickup${feed.facets?.pickup ? ` ${feed.facets.pickup}` : ""}` }, { key: "open", label: `Open now${feed.facets?.openNow ? ` ${feed.facets.openNow}` : ""}` }, { key: "deals", label: `Deals${feed.facets?.deals ? ` ${feed.facets.deals}` : ""}` }];
   const hasPreciseLocation = Boolean(location.area || location.latitude || location.lat);
   const localityLabel = hasPreciseLocation ? "Around your selected location" : `Discover ${location.city || "your city"}`;
-  const hasInventory = feed.businesses.length > 0 || feed.items.length > 0;
+  const hasInventory = feed.items.length > 0 || (feed.businesses.length > 0 && !assistBusinesses.length);
   const isFiltered = Boolean(query.trim() || category !== "all" || productDepartment !== "all" || filter !== "all");
 
   return <div className="v7-page-enter experience-discovery pb-8" data-service={service}>
@@ -387,36 +395,15 @@ export function ServiceDiscoveryView({
     {recentBusiness ? <section className="mt-5 flex flex-col gap-3 border-y border-[var(--border-subtle)] py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-control)] bg-[var(--accent-soft)] text-[var(--accent)]"><Clock3 className="h-5 w-5" /></span><div><p className="text-xs font-semibold text-[var(--accent)]">Again</p><p className="mt-1 text-sm font-semibold">{service === "book" ? "Return to" : service === "events" ? "See what’s new from" : "Order again from"} {recentBusiness.name}</p></div></div><div className="flex gap-2"><Button size="sm" onClick={() => onOpenBusiness(recentBusiness)}>Open</Button><Button size="sm" variant="ghost" onClick={onActivity}>Activity</Button></div></section> : null}
 
     <section className="mt-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{localityLabel}</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">{query ? `Results for “${query}”` : config.businesses}</h2><p className="mt-1 text-sm text-[var(--text-3)]">{loading ? "Finding published places…" : `${visibleBusinesses.length} ${visibleBusinesses.length === 1 ? "place" : "places"}${commerceBusinesses.length ? ` · ${commerceBusinesses.length} available on Spotly` : " · directory discovery"}`}</p></div><div className="experience-filter-chips no-scrollbar flex max-w-full gap-2 overflow-x-auto pb-1">{filterOptions.map((option) => <button key={option.key} type="button" aria-pressed={filter === option.key} onClick={() => setFilter(option.key)} className={cn("shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition", filter === option.key ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--border-subtle)] bg-transparent text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{option.label}</button>)}</div></div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{localityLabel}</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">{query ? `Results for “${query}”` : config.businesses}</h2><p className="mt-1 text-sm text-[var(--text-3)]">{loading ? "Finding published places…" : `${visibleBusinesses.length} ${visibleBusinesses.length === 1 ? "place" : "places"}${commerceBusinesses.length ? ` · ${commerceBusinesses.length} available on Spotly` : assistBusinesses.length ? " · order with Spotly" : " · directory discovery"}`}</p></div><div className="experience-filter-chips no-scrollbar flex max-w-full gap-2 overflow-x-auto pb-1">{filterOptions.map((option) => <button key={option.key} type="button" aria-pressed={filter === option.key} onClick={() => setFilter(option.key)} className={cn("shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition", filter === option.key ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--border-subtle)] bg-transparent text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{option.label}</button>)}</div></div>
 
-      {categoryOptions.length ? <div aria-label="Types of places" className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1"><button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === "all" ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>All categories</button>{categoryOptions.slice(0, 24).map((item) => <button type="button" key={item.key} aria-pressed={category === item.key} onClick={() => setCategory(item.key)} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === item.key ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{item.label}</button>)}</div> : null}
+      {categoryOptions.length ? <div aria-label="Types of places" className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1"><button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === "all" ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>All categories</button>{categoryOptions.map((item) => <button type="button" key={item.key} aria-pressed={category === item.key} onClick={() => setCategory(item.key)} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === item.key ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{item.label}</button>)}</div> : null}
 
       {service === "shop" && productDepartments.length > 1 ? <div className="no-scrollbar mt-3 flex items-center gap-2 overflow-x-auto pb-1" aria-label="Product departments"><span className="shrink-0 text-xs font-semibold text-[var(--text-3)]">Products</span><button type="button" aria-pressed={productDepartment === "all"} onClick={() => setProductDepartment("all")} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold", productDepartment === "all" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface-2)] text-[var(--text-2)]")}>All</button>{productDepartments.slice(0, 16).map((name) => <button type="button" key={name} aria-pressed={productDepartment === name} onClick={() => setProductDepartment(name)} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold", productDepartment === name ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface-2)] text-[var(--text-2)]")}>{name}</button>)}</div> : null}
 
       {loading ? <div className="mt-5"><ServiceSkeleton /></div> : error && !feed.businesses.length ? <EmptyState className="mt-5" icon={Search} title={`${config.label} is temporarily unavailable`} description="Spotly could not refresh this service right now. Your other services and Activity are still available." action={<Button variant="outline" onClick={() => setRefreshKey((value) => value + 1)}>Try again</Button>} /> : visibleBusinesses.length ? <div className="mt-6 space-y-10">
         {commerceBusinesses.length ? <div><div className="mb-4 flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Available on Spotly</p><h3 className="mt-1 text-lg font-semibold tracking-[-.025em]">Ready for {service === "book" ? "booking" : service === "events" ? "tickets" : service === "eat" ? "ordering" : "shopping"}</h3></div><span className="text-xs text-[var(--text-3)]">Verified commerce</span></div><div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed = commerceBusinesses.slice(0, 12); const media = marketplaceMediaSet(listed); return listed.map((business) => <BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness} />); })()}</div></div> : null}
-        {assistBusinesses.length ? <div><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Assist · independent shopping</p><h3 className="mt-1 text-lg font-semibold">{service === "shop" ? "Request a price check from a local shop" : "Choose a restaurant, request a price check"}</h3><p className="mt-2 max-w-2xl text-xs leading-5 text-secondary">Spotly shops independently. Independent businesses have not been represented as participating merchants; prices are estimates until confirmed for your request.</p></div><span className="text-xs font-medium text-secondary">Assisted requests</span></div><div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed=assistBusinesses.slice(0,12);const media=marketplaceMediaSet(listed);return listed.map(business=><BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness}/>); })()}</div></div> : null}
-        {service==="eat" && /harare/i.test(location.city||"") && !query && <section aria-label="Source menus from The Menu" className="overflow-hidden rounded-[24px] border border-[var(--border-subtle)] bg-[var(--surface)]">
-          <div className="grid gap-0 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="experience-menu-art" data-service="eat"><ServiceArtwork service="eat" compact /><span>Menus around you</span></div>
-            <div className="p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--accent)]">New · Restaurant menu discovery</p>
-              <h3 className="mt-2 text-xl font-semibold tracking-[-.035em]">Explore menus around Harare</h3>
-              <p className="mt-2 text-sm leading-6 text-secondary">Independent restaurant information sourced from <a href="https://themenu.co.zw/" target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">The Menu</a> under a content-use permission. Prices are source listings, not guaranteed Spotly checkout prices or claims of restaurant affiliation.</p>
-              <div className="mt-5 grid items-start gap-3 sm:grid-cols-2">{THEMENU_RESTAURANT_SPOTLIGHTS.map(item=><div key={item.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)] p-4">
-                <p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.category} · {item.area}</p>
-                <p className="mt-3 text-sm text-[var(--text)]">{item.menuHighlight}</p><p className="mt-1 text-xs font-medium text-secondary">{themenuPriceLabel(item)||"Check the source for current prices"}</p>
-                <details className="group mt-4 border-t border-[var(--border)] pt-3">
-                  <summary className="cursor-pointer list-none text-xs font-semibold text-[var(--accent)]">Preview {item.menuItems.length} dishes and source-listed prices <span aria-hidden="true" className="ml-1 inline-block transition-transform group-open:rotate-90">›</span></summary>
-                  <ul className="mt-3 divide-y divide-[var(--border-subtle)]">{item.menuItems.map(dish=><li key={dish.name} className="flex items-start justify-between gap-3 py-2 text-xs"><span className="min-w-0 leading-5">{dish.name}</span><span className="shrink-0 font-semibold tabular-nums">{themenuPriceLabel(item)?"US$"+dish.price.toFixed(2):"Check price"}</span></li>)}</ul>
-                  <p className="mt-2 text-[11px] leading-5 text-secondary">Illustrative source listing, not verified stock or a Spotly sales offer. Prices require reconfirmation.</p>
-                </details>
-                <a href={item.listingUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent)] hover:underline">Open The Menu’s source listing <ArrowRight className="h-3.5 w-3.5"/></a>
-              </div>)}</div>
-              <p className="mt-3 text-xs leading-5 text-[var(--text-3)]">The Menu information captured 21 October 2026. Confirm availability and price directly before purchase; independent Spotly Assist checkout is offered only where separately enabled.</p>
-            </div>
-          </div>
-        </section>}
+        {assistBusinesses.length ? <div><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Spotly Assist · independent shopping</p><h3 className="mt-1 text-lg font-semibold">{service === "shop" ? "Shop local stores with Spotly" : "Choose your meal. Spotly handles the order."}</h3><p className="mt-2 max-w-2xl text-xs leading-5 text-secondary">Spotly shops independently. Choose items in Spotly. We confirm the price and availability, you approve and pay, then a shopper buys and delivers on your behalf.</p></div><span className="text-xs font-medium text-secondary">Assisted requests</span></div><div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{(() => { const listed=assistBusinesses;const media=marketplaceMediaSet(listed);return listed.map(business=><BusinessCard key={business.id} business={business} media={media.get(business.id)} service={service} currency={currency} favorite={favorites.includes(business.id)} onFavorite={onToggleFavorite} onOpen={onOpenBusiness}/>); })()}</div></div> : null}
         {directoryBusinesses.length ? <section aria-label="More places to explore" className="border-t border-[var(--border-subtle)] pt-8">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--accent)]">Explore the city</p>
@@ -432,6 +419,8 @@ export function ServiceDiscoveryView({
       </div>}
 
     </section>
+
+    {feed.nextBusinessOffset != null ? <div className="mt-6 flex justify-center"><Button variant="outline" loading={loadingBusinesses} onClick={loadMoreBusinesses}>Show more businesses</Button></div> : null}
 
     {featured.length > 0 && !query ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-8"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Featured on Spotly</p><h2 className="mt-1 text-xl font-semibold tracking-[-.03em]">Worth a look</h2></div><span className="text-xs text-[var(--text-3)]">Published businesses</span></div><div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto pb-2">{featured.map((business) => <button type="button" key={business.id} onClick={() => onOpenBusiness(business)} className="w-[230px] shrink-0 text-left"><div className="relative aspect-[1.4/1] overflow-hidden rounded-[var(--radius-card)] bg-[var(--surface-2)]"><BusinessPhoto business={business} sizes="230px" labelMode="icon" className="transition duration-300 motion-safe:group-hover:scale-[1.02]" /></div><p className="mt-3 truncate text-sm font-semibold">{business.name}</p><p className="mt-1 truncate text-xs text-[var(--text-3)]">{marketplaceProfile(business).displayCategory} · {business.area || business.city}</p></button>)}</div></section> : null}
 

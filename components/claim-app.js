@@ -57,7 +57,7 @@ function BusinessSearch({ onSelect, initialName = "" }) {
     setLoading(true); setError(""); setSearched(false);
     const timer = window.setTimeout(async () => {
       try {
-        const found = await searchBusinesses(normalized, 20);
+        const found = await searchBusinesses(normalized, 20, { locations: true });
         if (sequence !== searchSequence.current) return;
         setResults(found); setSearched(true); setActiveIndex(-1);
       } catch {

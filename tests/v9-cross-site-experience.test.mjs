@@ -87,7 +87,8 @@ test("directory cards use described photographs and preserve the real Assist han
   assert.match(cover, /Illustrative photo/);
   for (const source of [home, service, app]) assert.match(source, /BusinessPhoto/);
   assert.match(home, /assistStoreId/);
-  assert.match(home, /shop-for-me\?store=/);
+  assert.match(home, /onOpen\(business\)/);
+  assert.match(app, /AssistCatalogue/);
   assert.match(home, /Illustrative photographs are identified/);
 });
 

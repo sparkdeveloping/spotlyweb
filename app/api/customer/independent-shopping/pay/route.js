@@ -1,3 +1,5 @@
+import { canonicalIndependentSource } from "@/lib/directory-shopping-server";
+import { catalogueService } from "@/lib/spotly-catalogue";
 import {randomUUID} from "node:crypto";
 import {FieldValue} from "firebase-admin/firestore";
 import {z} from "zod";
@@ -45,10 +47,10 @@ export async function POST(request){
    const store=storeSnap.data();
    if(!independentPaymentEnabled(config,store)||!independentShoppingFlags(config).requestEnabled)
       fail("Independent purchase payments are not enabled. Your quote can be reviewed without payment.",503);
-   if(!regionalServicePolicy(config.assistCoverage||{},store,"eat").available)fail("Spotly Assist is not operating in this area.");
+   if(!regionalServicePolicy(config.assistCoverage||{},store,catalogueService(store)).available)fail("Spotly Assist is not operating in this area.");
    const b=store.directoryBusinessId?await tx.get(db.collection("businesses").doc(store.directoryBusinessId)):null;
-   const loc=store.sourceResearchBatchId&&store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
-   if(!independentStoreSafe(store,b?.exists?b.data():null,loc?.exists?loc.data():null))fail("This independently sourced location is not currently eligible.");
+   const loc=store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
+   if(!independentStoreSafe(store,canonicalIndependentSource(b,store.directoryBusinessId),loc?.exists?loc.data():null))fail("This independently sourced location is not currently eligible.");
    if(d.paymentIntentReference){
     const old=await tx.get(db.collection("paymentIntents").doc(d.paymentIntentReference));
     if(!old.exists||old.data().model!=="independent_shopping"||old.data().customerId!==user.uid)

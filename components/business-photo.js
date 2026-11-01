@@ -13,7 +13,7 @@ export function BusinessPhoto({ business = {}, media: assignedMedia, sizes = "(m
   const candidates = [selected, fallback, { ...fallback, src: fallback.largeSrc, srcSet: "" }].filter((item, index, items) => item.src && items.findIndex((other) => other.src === item.src) === index);
   const media = candidates.find((item) => !failed.includes(item.src));
   const illustrative = media?.kind === "editorial";
-  const description = illustrative ? `Illustrative ${media.subject || "business"} photograph; not a photograph of this specific business or branch.` : media?.kind === "licensed-directory" ? `Photo of ${business.name || "this business"}, supplied by The Menu.` : `Photo of ${business.name || "this business"}.`;
+  const description = illustrative ? `Illustrative ${media.subject || "business"} photograph; not a photograph of this specific business or branch.` : media?.kind === "licensed-directory" ? `Photo of ${business.name || "this business"}.` : `Photo of ${business.name || "this business"}.`;
 
   return <>
     {media ? <img
@@ -36,6 +36,6 @@ export function BusinessPhoto({ business = {}, media: assignedMedia, sizes = "(m
     {media && labelMode !== "none" && illustrative ? <span className={cn("absolute bottom-2 right-2 z-[1] inline-flex items-center justify-center gap-1.5 rounded-full bg-black/65 text-white shadow-sm backdrop-blur-sm", labelMode === "icon" ? "h-6 w-6" : "px-2.5 py-1.5 text-[10px] font-medium")} title={description} aria-label={description}>
       <Info className="h-3 w-3 shrink-0" aria-hidden="true" />{labelMode === "text" ? "Illustrative photo" : null}
     </span> : null}
-    {media?.kind === "licensed-directory" && labelMode !== "none" ? <span className="absolute bottom-2 right-2 z-[1] rounded-full bg-black/65 px-2.5 py-1.5 text-[10px] font-medium text-white" title={description}>Photo: The Menu</span> : null}
+    {media?.kind === "licensed-directory" && labelMode !== "none" ? <span className="absolute bottom-2 right-2 z-[1] rounded-full bg-black/65 px-2.5 py-1.5 text-[10px] font-medium text-white" title={description}>Business photograph</span> : null}
   </>;
 }

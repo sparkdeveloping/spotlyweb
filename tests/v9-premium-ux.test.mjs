@@ -76,7 +76,7 @@ test("Licensed independent-menu photos have explicit provenance, branch attestat
       storedUrl:"https://firebasestorage.googleapis.com/v0/b/spotly-africa.appspot.com/o/menu.jpg"}
   };
   assert.equal(approvedTheMenuPhoto(photo)?.kind,"licensed-directory");
-  assert.equal(marketplaceMedia(photo).kind,"licensed-directory");
+  assert.equal(marketplaceMedia(photo).kind,"editorial");
   assert.equal(approvedTheMenuPhoto({...photo, partnerMedia:{...photo.partnerMedia,usageApproved:false}}),null);
   assert.equal(approvedTheMenuPhoto({...photo, partnerMedia:{...photo.partnerMedia,sourceUrl:"https://fake-themenu.co.zw/"}}),null);
   assert.equal(approvedTheMenuPhoto({...photo, partnerMedia:{...photo.partnerMedia,storedUrl:"https://unknown.example/photo.jpg"}}),null);
@@ -90,38 +90,25 @@ test("Premium discovery preserves independent Assist and gives directory busines
   const experience=await read("components/service-experience.js");
   const home=await read("components/admin-app.js");
   assert.match(experience,/assistBusinesses/);
-  assert.match(experience,/Choose a restaurant, request a price check/);
+  assert.match(experience,/Choose your meal/);
   assert.match(experience,/function DirectoryListingRow/);
   assert.match(experience,/grid[^"]*grid-cols-1[^"]*auto-rows-fr/);
   assert.match(experience,/min-h-\[112px\]/);
   assert.match(experience,/media.kind === "licensed-directory"/);
   assert.match(experience,/Explore place details/);
   assert.doesNotMatch(experience,/const image = assisted \? "" : media.src/);
-  assert.match(await read("components/business-photo.js"),/Photo: The Menu/);
+  assert.doesNotMatch(await read("components/business-photo.js"),/The Menu/);
   assert.match(home,/items-center gap-4 px-5 py-3/);
 });
 
-test("The Menu editorial spotlight uses real source observations without indefinite guaranteed prices", async () => {
-  const { THEMENU_RESTAURANT_SPOTLIGHTS, themenuPriceLabel } = await import("../lib/themenu-curated-spotlights.js");
-  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS.length, 2);
-  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[0].menuItems.length, 8);
-  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[1].menuItems.length, 8);
-  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[0].menuItems.find(dish=>dish.name==="Margherita pizza").price,12);
-  assert.equal(THEMENU_RESTAURANT_SPOTLIGHTS[1].menuItems.find(dish=>dish.name==="Garlic prawns").price,12);
-  const asOf = Date.parse("2026-10-21T23:00:00Z");
-  for (const item of THEMENU_RESTAURANT_SPOTLIGHTS) {
-    assert.equal(new URL(item.listingUrl).hostname, "themenu.co.zw");
-    assert.match(themenuPriceLabel(item, asOf), /Listed at US\$/);
-    assert.equal(themenuPriceLabel(item, Date.parse("2026-11-20T00:00:00Z")), null);
-  }
-  const page = await read("components/service-experience.js");
-  assert.match(page,/service==="eat" && \/harare\/i/);
-  assert.match(page,/THEMENU_RESTAURANT_SPOTLIGHTS\.map/);
-  assert.match(page,/not guaranteed Spotly checkout prices/);
-  assert.match(page,/independent Spotly Assist checkout is offered only where separately enabled/i);
-  assert.doesNotMatch(page,/src="\/marketplace\/editorial\/eat\.webp"/);
-  assert.match(page,/Preview \{item\.menuItems\.length\} dishes/);
-  assert.match(page,/group-open:rotate-90/);
-  assert.match(page,/items-start gap-3 sm:grid-cols-2/);
-  assert.ok(page.includes('themenuPriceLabel(item)?"US$"+dish.price.toFixed(2):"Check price"'));
+test("Menus live inside Spotly and do not turn old observations into current checkout prices", async () => {
+  const { SPOTLY_RESTAURANT_MENUS, menuItemsForBusiness } = await import("../data/spotly-restaurant-menus.js");
+  assert.equal(SPOTLY_RESTAURANT_MENUS.length, 2);
+  assert.equal(SPOTLY_RESTAURANT_MENUS.reduce((sum, menu) => sum + menu.dishes.length, 0), 16);
+  const items = menuItemsForBusiness({ name: "Fishmonger", city: "Harare" });
+  assert.equal(items.length, 8);
+  assert.ok(items.every(item => item.priceEstimate === null));
+  assert.ok(items.some(item => item.name === "Garlic prawns"));
+  assert.doesNotMatch(await read("components/service-experience.js"), /themenu|The Menu/);
+  assert.match(await read("components/marketplace-app.js"), /AssistCatalogue/);
 });

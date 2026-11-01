@@ -88,8 +88,8 @@ test("public media serialization preserves photo evidence without leaking unrela
   assert.doesNotMatch(JSON.stringify(fields), /themenu\.co\.zw|firebasestorage/);
   const licensed = { ...original, source: { type: "themenu_partner", rightsStatus: "licensed" }, partnerMedia: { ...original.partnerMedia, usageApproved: true } };
   const published = publicBusinessPhotoFields(licensed);
-  assert.equal(published.partnerMedia.storedUrl, original.partnerMedia.storedUrl);
-  assert.equal(marketplaceMedia({ id: "b1", ...licensed, ...published }).kind, "licensed-directory");
+  assert.equal(published.partnerMedia, null);
+  assert.equal(marketplaceMedia({ id: "b1", ...licensed, ...published }).kind, "editorial");
   assert.doesNotMatch(JSON.stringify(fields), /private|ownerEmail|usageAgreement|internalNotes/);
   assert.equal(publicBusinessPhotoFields({}).imageProvenance.approved, false);
   assert.equal(publicBusinessPhotoFields({ imageProvenance: { position: "999% 40%" } }).imageProvenance.position, "50% 50%");

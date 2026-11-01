@@ -71,7 +71,7 @@ test("quote offering and acceptance both recheck canonical ownership",()=>{
  for(const file of [
    "app/api/admin/assist-shopping/actions/route.js",
    "app/api/customer/independent-shopping/requests/respond/route.js"
- ]) assert.match(read(file),/independentStoreSafe/);
+ ]) assert.match(read(file),/independentStore(?:Request)?Safe/);
 });
 test("public and request endpoints enforce canonical availability",()=>{
   for(const file of [

@@ -1,3 +1,4 @@
+import { groupMarketplaceBusinesses } from "@/lib/business-groups";
 import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server";
 import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
@@ -11,7 +12,7 @@ export const runtime = "nodejs";
 
 function text(value) { return String(value || "").trim().toLowerCase(); }
 function tokens(value) { return text(value).replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").split(" ").filter((item) => item.length >= 2).slice(0, 8); }
-function searchable(record = {}) { return [record.name, record.brandName, record.category, ...(record.categories || []), record.city, record.area, record.suburb, record.address, ...(record.tags || [])].filter(Boolean).join(" ").toLowerCase(); }
+function searchable(record = {}) { return [record.name, record.brandName, record.category, ...(record.categories || []), record.city, record.area, record.suburb, record.address, ...(record.tags || []), ...(record.groupedLocations || []).flatMap(location=>[location.name,location.branchName,location.address])].filter(Boolean).join(" ").toLowerCase(); }
 function visible(record = {}) { return isMarketplaceDiscoverable(record); }
 
 export async function GET(request) {
@@ -32,7 +33,7 @@ export async function GET(request) {
     ]);
     const firestore = snapshot.docs.filter((doc) => visible(doc.data()) && canShowDirectoryRecord(doc.data(), showUnclaimed)).map((doc) => publicBusinessRecord(doc.id, doc.data()));
     const curated = (showUnclaimed ? curatedResult.records : []).map((item) => publicBusinessRecord(item.id, item));
-    const records = mergeCuratedWithFirestore(curated, firestore)
+    const records = groupMarketplaceBusinesses(mergeCuratedWithFirestore(curated, firestore))
       .filter((item) => !city || !text(item.city) || text(item.city) === text(city))
       .filter((item) => !requestedTokens.length || requestedTokens.every((token) => searchable(item).includes(token)))
       .sort((a, b) => compareMarketplaceBusinesses(a, b))

@@ -18,6 +18,7 @@ export async function GET(request) {
           state: entry.state,
           contactName: entry.contactName, contactPhone: entry.contactPhone,
           deliveryAddress: entry.deliveryAddress, notes: entry.notes,
+          items: entry.items || [], collectionAddress: entry.collectionAddress || "", sourceBusinessId: entry.sourceBusinessId || "",
           estimate: entry.estimate, finalQuote: entry.finalQuote || null, customerMessage: entry.customerMessage || "",
           createdAt: entry.createdAt?.toDate?.()?.toISOString?.() || null,
           paymentStatus: entry.paymentStatus, dispatchStatus: entry.dispatchStatus,

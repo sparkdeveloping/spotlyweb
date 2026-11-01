@@ -1,8 +1,10 @@
+import { canonicalIndependentSource } from "@/lib/directory-shopping-server";
+import { catalogueService } from "@/lib/spotly-catalogue";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { notifyUser } from "@/lib/notification-server";
-import { independentStoreSafe } from "@/lib/assist-store-safety";
+import { independentStoreRequestSafe } from "@/lib/assist-store-safety";
 export const runtime = "nodejs";
 const roles = ["super_admin","platform_admin","operations_manager"];
 const schema = z.object({
@@ -12,7 +14,10 @@ const schema = z.object({
  shoppingFee: z.number().finite().min(0).max(1000000).optional(),
  deliveryFee: z.number().finite().min(0).max(1000000).optional(),
  expiresInMinutes: z.number().int().min(5).max(180).optional(),
- note: z.string().trim().max(800).default("")
+ note: z.string().trim().max(800).default(""),
+ collectionAddress: z.string().trim().max(400).optional(),
+ locationVerified: z.boolean().optional(),
+ financeReady: z.boolean().optional()
 }).strict();
 const round = x => Math.round(x * 100) / 100;
 export async function POST(request) {
@@ -26,15 +31,17 @@ export async function POST(request) {
      const snap = await tx.get(ref);
      if(!snap.exists) throw Object.assign(new Error("Shopping request not found."),{status:404});
      const record=snap.data();
+     let reviewedStore = null;
      if(body.action==="offer_quote"){
        const storeSnap=await tx.get(db.collection("independentShoppingStores").doc(record.storeId));
        if(!storeSnap.exists)throw Object.assign(new Error("This restaurant is no longer available for independent shopping."),{status:409});
        const store=storeSnap.data();
        const canonical=store.directoryBusinessId?await tx.get(db.collection("businesses").doc(store.directoryBusinessId)):null;
-       const branch=store.sourceResearchBatchId&&store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
-       if(!independentStoreSafe(store,canonical?.exists?canonical.data():null,branch?.exists?branch.data():null)){
+       const branch=store.directoryBranchId?await tx.get(db.collection("branches").doc(store.directoryBranchId)):null;
+       if(!independentStoreRequestSafe(store,canonicalIndependentSource(canonical,store.directoryBusinessId),branch?.exists?branch.data():null)){
          throw Object.assign(new Error("The restaurant is claimed or Spotly Assist is disabled. Do not send a new quote."),{status:409});
        }
+       reviewedStore = {ref:storeSnap.ref, data:store};
      }
      if(!["pending_manual_quote","contacting_store","quote_offered"].includes(record.state)){
        throw Object.assign(new Error("The request is no longer available for this action."),{status:409});
@@ -49,7 +56,11 @@ export async function POST(request) {
          throw Object.assign(new Error("Confirm merchandise and fee amounts before quoting."),{status:422});
        }
        if(body.note.trim().length<12)throw Object.assign(new Error("Document who confirmed the actual prices and fees."),{status:422});
+       const address = body.collectionAddress || reviewedStore.data.address || "";
+       if (reviewedStore.data.catalogueMode === "quote_first" && (body.locationVerified !== true || address.trim().length < 10)) throw Object.assign(new Error("Confirm the exact collection location and street address before offering this quote."), {status:422});
+       patch.collectionAddress = address;
        patch.finalQuote={
+         collectionAddress: address, directoryBranchId: reviewedStore.data.directoryBranchId || null, collectionLocationName: reviewedStore.data.branchName || reviewedStore.data.name,
          merchandiseTotal:round(body.merchandiseTotal),
          shoppingFee:round(body.shoppingFee),
          deliveryFee:round(body.deliveryFee),
@@ -66,6 +77,7 @@ export async function POST(request) {
        patch.customerMessage=body.note||"Spotly cannot arrange this purchase right now.";
      }
      state=patch.state;
+     if (body.action === "offer_quote" && reviewedStore.data.catalogueMode === "quote_first") tx.update(reviewedStore.ref, { address: patch.collectionAddress, collectionAddressVerified:true, operationalReviewed:true, operationalReviewedBy:actor.uid, operationalReviewedAt:FieldValue.serverTimestamp(), ...(body.financeReady === true ? { financeReady:true, financeReviewedBy:actor.uid, financeReviewedAt:FieldValue.serverTimestamp() } : {}), updatedAt:FieldValue.serverTimestamp() });
      tx.update(ref,patch);
      tx.create(db.collection("independentShoppingRequestEvents").doc(),{
        requestId:body.id,actorId:actor.uid,actorType:"admin",
