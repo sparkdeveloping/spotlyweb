@@ -37,7 +37,7 @@ export function routeHarness(root, injected = {}) {
     '@/lib/customer-launch-server': { requireCustomerLaunchAccess:async()=>{} },
     '@/lib/directory-publication-server': {unclaimedPublicationEnabled:async()=>true},
     '@/lib/notification-server': {notifyRoleAudience:async()=>{},notifyUser:async()=>{}},
-    '@/lib/paynow-server': {createPaynow:async()=>({createPayment:()=>({add(){}}),send:async()=>{counters.payments++;return{success:true,pollUrl:'https://www.paynow.co.zw/Interface/CheckPayment/?guid=mock',redirectUrl:'https://www.paynow.co.zw/Payment/Confirm?mock=1'};}})},
+    '@/lib/paynow-server': {paynowCredentialsConfigured:async()=>true,createPaynow:async()=>({createPayment:()=>({add(){}}),send:async()=>{counters.payments++;return{success:true,pollUrl:'https://www.paynow.co.zw/Interface/CheckPayment/?guid=mock',redirectUrl:'https://www.paynow.co.zw/Payment/Confirm?mock=1'};}})},
     ...injected
   };
   const esmToCommonJS = ({types:t})=>({visitor:{

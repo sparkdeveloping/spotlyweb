@@ -353,7 +353,11 @@ export async function GET(request) {
     ].filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "en", { sensitivity: "base" }));
 
     const groupedBusinesses = groupMarketplaceBusinesses([...businesses].sort(sortBusinesses));
-    const sortedBusinesses = groupedBusinesses.sort(sortBusinesses).slice(0, 120);
+    const category = url.searchParams.get("category") || "all";
+    const businessCategories = [...new Map(groupedBusinesses.map(business=>{const profile=marketplaceProfile(business);return [profile.vertical,{key:profile.vertical,label:profile.displayCategory}];})).values()].sort((a,b)=>a.label.localeCompare(b.label));
+    const categoryBusinesses = groupedBusinesses.filter(business=>category === "all" || (service === "shop" ? marketplaceProfile(business).vertical === category : marketplaceProfile(business).displayCategory === category || [business.category,...(business.categories||[])].includes(category)));
+    const businessOffset = Math.max(0,Math.floor(Number(url.searchParams.get("businessOffset")) || 0));
+    const sortedBusinesses = categoryBusinesses.sort(sortBusinesses).slice(businessOffset,businessOffset+48);
     const items = itemsAll.slice(offset, offset + itemLimit);
     const facets = {
       openNow: businesses.filter((business) => business.operational?.openNow).length,
@@ -371,10 +375,12 @@ export async function GET(request) {
       area: url.searchParams.get("area") || "",
       query,
       businesses: sortedBusinesses,
+      businessCategories,
+      nextBusinessOffset: businessOffset + sortedBusinesses.length < categoryBusinesses.length ? businessOffset + sortedBusinesses.length : null,
       items,
       categories,
       facets,
-      totalBusinesses: groupedBusinesses.length,
+      totalBusinesses: categoryBusinesses.length,
       totalItems: itemsAll.length,
       nextOffset: offset + items.length < itemsAll.length ? offset + items.length : null
     }, {

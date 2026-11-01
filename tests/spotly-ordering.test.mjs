@@ -16,7 +16,7 @@ test('all directory chains are grouped without replacing their branch identities
  const groups=groupMarketplaceBusinesses(places.records);
  assert.equal(new Set(groups.map(businessGroupKey)).size,groups.length);
  const local=groupMarketplaceBusinesses(places.records.filter(item=>item.city==='Harare'));
- for(const name of ['Bon Marché','Pick n Pay','Chicken Inn']){
+ for(const name of ['Bon Marché','Pick n Pay','Chicken Inn','OK','SPAR']){
   const matches=local.filter(item=>item.name===name);
   assert.equal(matches.length,1,name);assert.ok(matches[0].groupedLocations.length>1,name);
   assert.ok(matches[0].groupedLocations.every(location=>places.records.some(item=>item.id===location.id)));
@@ -109,4 +109,23 @@ test('shopper assignment retains each accepted quote address when later quotes u
   const response=await assign.POST(h.request({action:'assign',requestId:id,driverId,note:'Assign vetted shopper to accepted quote'}));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
   assert.equal(h.records.get('assistIndependentShoppingJobs/'+id).storeAddress,address);
  }
+});
+
+test('Admin configuration validates the full purchase setup and preserves unrelated settings',async()=>{
+ const h=routeHarness(root);h.records.set('platformSettings/global',{launch:{primaryCity:'Harare'},independentShopping:{shoppingFeeEstimate:2}});h.setActor({uid:'platform-admin',profile:{roles:['platform_admin']}});
+ const route=h.load('app/api/admin/assist-configuration/route.js');
+ const body={browseEnabled:true,requestEnabled:true,paymentCollectionEnabled:true,enabled:true,providerReviewed:false,driverDispatchEnabled:true,manualFloatAttestationEnabled:true,refundReconciliationEnabled:true,closeoutEnabled:true};
+ assert.equal((await route.PATCH(h.request(body))).status,422);
+ assert.equal((await route.PATCH(h.request({...body,providerReviewed:true}))).status,200);
+ assert.equal(h.records.get('platformSettings/global').launch.primaryCity,'Harare');assert.equal(h.records.get('platformSettings/global').independentShopping.shoppingFeeEstimate,2);
+ assert.ok([...h.records.keys()].some(key=>key.startsWith('auditLogs/')));
+});
+
+test('service discovery pages through every group and filters categories across the full directory',async()=>{
+ const h=routeHarness(root);h.records.set('platformSettings/global',{verification:{publishUnclaimed:true}});
+ const feed=h.load('app/api/public/service-feed/route.js');let offset=0,seen=new Set(),total=0;
+ do { const response=await feed.GET(new Request('https://spotly.example/api?service=shop&city=Harare&businessOffset='+offset));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));const data=await response.json();total=data.totalBusinesses;for(const business of data.businesses){assert.equal(seen.has(business.id),false,business.id);seen.add(business.id);}offset=data.nextBusinessOffset; } while(offset!==null);
+ assert.equal(seen.size,total);assert.ok(total>100);
+ const filtered=await (await feed.GET(new Request('https://spotly.example/api?service=shop&city=Harare&category=supermarket'))).json();
+ assert.ok(filtered.businesses.length>0);assert.ok(filtered.businessCategories.some(item=>item.key==='pharmacy'));assert.equal(filtered.businesses.filter(item=>item.name==='Pick n Pay').length,1);
 });

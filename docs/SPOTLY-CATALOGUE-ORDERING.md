@@ -15,6 +15,8 @@ The catalogue distinguishes unknown amounts (`null`, “Price to confirm”) fro
 5. Captured funds, independently confirmed shopper float and a vetted available shopper are required before assignment. Each shopper job retains its accepted quote’s collection address even if another quote later changes the shared store.
 6. Existing substitution approval, spending limits, private receipts, delivery PIN, cancellation, refund and finance-close stages remain in use.
 
+Assist Operations → Service settings provides audited platform administrator controls for catalogue browsing, request intake, payment review/collection, shopper fulfilment, float attestation, refunds and closeout. Payment collection cannot be enabled without configured Paynow USD and the corresponding reviewed workflow settings.
+
 Platform browse/request switches, regional pauses and payment/fulfilment readiness flags still apply. The release does not attest real operating capacity, make test purchases, collect money or auto-dispatch shoppers. Pending ownership claims and regulated categories are excluded from automatic independent shopping intake.
 
 ## Validation

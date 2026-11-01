@@ -169,7 +169,7 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
           {operation.deliveryAvailable ? <span className="inline-flex items-center gap-1.5"><Truck className="h-3.5 w-3.5" />Delivery{operation.deliveryFeeFrom > 0 ? ` from ${formatCurrency(operation.deliveryFeeFrom, currency || "USD")}` : ""}</span> : null}
           {operation.pickupAvailable ? <span className="inline-flex items-center gap-1.5"><PackageCheck className="h-3.5 w-3.5" />{pickupTimeLabel(operation.earliestPickup) || "Pickup"}</span> : null}
           {operation.locationCount ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{operation.locationCount} {operation.locationCount === 1 ? "location" : "locations"}</span> : null}
-        </div> : <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{assisted ? "Assisted purchase · not a partner" : assistedBooking ? "Booking request · subject to confirmation" : "Directory listing · commerce not enabled"}</span><span className="font-semibold text-[var(--accent)]">{assisted ? "Request items" : assistedBooking ? "Request time" : action} <span aria-hidden="true">→</span></span></div>}
+        </div> : <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{assisted ? "Spotly shops on your behalf" : assistedBooking ? "Booking request · subject to confirmation" : "Directory listing · commerce not enabled"}</span><span className="font-semibold text-[var(--accent)]">{assistedBooking ? "Request time" : action} <span aria-hidden="true">→</span></span></div>}
         {commerce ? <div className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)]">{action}<ArrowRight className="h-3.5 w-3.5" /></div> : null}
       </div>
     </button>
@@ -279,6 +279,7 @@ export function ServiceDiscoveryView({
   const [feed, setFeed] = useState({ businesses: [], items: [], categories: [], facets: {}, totalBusinesses: 0, totalItems: 0, nextOffset: null });
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingBusinesses, setLoadingBusinesses] = useState(false);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("all");
   const [productDepartment, setProductDepartment] = useState("all");
@@ -301,7 +302,7 @@ export function ServiceDiscoveryView({
       setLoading(true);
       setError("");
       try {
-        const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, limit: 24 });
+        const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, category, limit: 24 });
         if (!active) return;
         setFeed(result);
         if (query.trim().length >= 2) track(result.totalItems || result.totalBusinesses ? "service_search_results" : "service_search_zero_results", { service, query_length: query.trim().length, item_count: Number(result.totalItems || 0), business_count: Number(result.totalBusinesses || 0), city: location.city || "" });
@@ -313,7 +314,7 @@ export function ServiceDiscoveryView({
       }
     }, query ? 220 : 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [service, location.city, location.area, query, config.label, refreshKey]);
+  }, [service, location.city, location.area, query, config.label, refreshKey, category]);
 
   async function loadMore() {
     if (feed.nextOffset == null || loadingMore) return;
@@ -328,12 +329,19 @@ export function ServiceDiscoveryView({
     }
   }
 
+  async function loadMoreBusinesses() {
+    if (feed.nextBusinessOffset == null || loadingBusinesses) return;
+    setLoadingBusinesses(true);
+    try { const result = await loadServiceFeed(service,{city:location.city,area:location.area,query,category,businessOffset:feed.nextBusinessOffset,limit:24}); setFeed(current=>({...current,businesses:[...new Map([...current.businesses,...result.businesses].map(item=>[item.id,item])).values()],nextBusinessOffset:result.nextBusinessOffset})); } catch(failure) {setError(failure.message);} finally {setLoadingBusinesses(false);}
+  }
+
   const categoryOptions = useMemo(() => {
+    if (service === "shop" && feed.businessCategories?.length) return feed.businessCategories;
     if (service !== "shop") return (feed.categories || []).map((label) => ({ key: label, label }));
     const seen = new Map();
     for (const business of feed.businesses || []) { const profile = marketplaceProfile(business); if (!seen.has(profile.vertical)) seen.set(profile.vertical, profile.displayCategory); }
     return [...seen].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [feed.businesses, feed.categories, service]);
+  }, [feed.businesses, feed.categories, feed.businessCategories, service]);
   const productDepartments = useMemo(() => service !== "shop" ? [] : [...new Set(feed.items.map((item) => item.categoryPath?.[1] || item.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [feed.items, service]);
   const businessVertical = useMemo(() => new Map(feed.businesses.map((business) => [business.id, marketplaceProfile(business).vertical])), [feed.businesses]);
   const itemFilterMatches = useMemo(() => feed.items
@@ -345,7 +353,7 @@ export function ServiceDiscoveryView({
   const visibleBusinesses = useMemo(() => feed.businesses.filter((business) => filterBusiness(business, filter)).filter((business) => {
     if (category === "all") return true;
     if (service === "shop") return marketplaceProfile(business).vertical === category;
-    return [business.category, ...(business.categories || [])].includes(category) || itemBusinessIds.has(business.id);
+    return marketplaceProfile(business).displayCategory === category || [business.category, ...(business.categories || [])].includes(category) || itemBusinessIds.has(business.id);
   }).filter((business) => !["deals", "today", "tonight", "weekend", "free"].includes(filter) || itemBusinessIds.has(business.id)), [feed.businesses, filter, category, itemBusinessIds, service]);
   const visibleItems = useMemo(() => sortItems(itemFilterMatches, sort, service, currency), [itemFilterMatches, sort, service, currency]);
   const commerceBusinesses = useMemo(() => visibleBusinesses.filter((business) => marketplaceProfile(business).cardMode === "commerce"), [visibleBusinesses]);
@@ -366,7 +374,7 @@ export function ServiceDiscoveryView({
       : [{ key: "all", label: "All" }, { key: "delivery", label: `Delivery${feed.facets?.delivery ? ` ${feed.facets.delivery}` : ""}` }, { key: "pickup", label: `Pickup${feed.facets?.pickup ? ` ${feed.facets.pickup}` : ""}` }, { key: "open", label: `Open now${feed.facets?.openNow ? ` ${feed.facets.openNow}` : ""}` }, { key: "deals", label: `Deals${feed.facets?.deals ? ` ${feed.facets.deals}` : ""}` }];
   const hasPreciseLocation = Boolean(location.area || location.latitude || location.lat);
   const localityLabel = hasPreciseLocation ? "Around your selected location" : `Discover ${location.city || "your city"}`;
-  const hasInventory = feed.businesses.length > 0 || feed.items.length > 0;
+  const hasInventory = feed.items.length > 0 || (feed.businesses.length > 0 && !assistBusinesses.length);
   const isFiltered = Boolean(query.trim() || category !== "all" || productDepartment !== "all" || filter !== "all");
 
   return <div className="v7-page-enter experience-discovery pb-8" data-service={service}>
@@ -387,9 +395,9 @@ export function ServiceDiscoveryView({
     {recentBusiness ? <section className="mt-5 flex flex-col gap-3 border-y border-[var(--border-subtle)] py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-control)] bg-[var(--accent-soft)] text-[var(--accent)]"><Clock3 className="h-5 w-5" /></span><div><p className="text-xs font-semibold text-[var(--accent)]">Again</p><p className="mt-1 text-sm font-semibold">{service === "book" ? "Return to" : service === "events" ? "See what’s new from" : "Order again from"} {recentBusiness.name}</p></div></div><div className="flex gap-2"><Button size="sm" onClick={() => onOpenBusiness(recentBusiness)}>Open</Button><Button size="sm" variant="ghost" onClick={onActivity}>Activity</Button></div></section> : null}
 
     <section className="mt-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{localityLabel}</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">{query ? `Results for “${query}”` : config.businesses}</h2><p className="mt-1 text-sm text-[var(--text-3)]">{loading ? "Finding published places…" : `${visibleBusinesses.length} ${visibleBusinesses.length === 1 ? "place" : "places"}${commerceBusinesses.length ? ` · ${commerceBusinesses.length} available on Spotly` : " · directory discovery"}`}</p></div><div className="experience-filter-chips no-scrollbar flex max-w-full gap-2 overflow-x-auto pb-1">{filterOptions.map((option) => <button key={option.key} type="button" aria-pressed={filter === option.key} onClick={() => setFilter(option.key)} className={cn("shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition", filter === option.key ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--border-subtle)] bg-transparent text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{option.label}</button>)}</div></div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{localityLabel}</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">{query ? `Results for “${query}”` : config.businesses}</h2><p className="mt-1 text-sm text-[var(--text-3)]">{loading ? "Finding published places…" : `${visibleBusinesses.length} ${visibleBusinesses.length === 1 ? "place" : "places"}${commerceBusinesses.length ? ` · ${commerceBusinesses.length} available on Spotly` : assistBusinesses.length ? " · order with Spotly" : " · directory discovery"}`}</p></div><div className="experience-filter-chips no-scrollbar flex max-w-full gap-2 overflow-x-auto pb-1">{filterOptions.map((option) => <button key={option.key} type="button" aria-pressed={filter === option.key} onClick={() => setFilter(option.key)} className={cn("shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition", filter === option.key ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--border-subtle)] bg-transparent text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{option.label}</button>)}</div></div>
 
-      {categoryOptions.length ? <div aria-label="Types of places" className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1"><button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === "all" ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>All categories</button>{categoryOptions.slice(0, 24).map((item) => <button type="button" key={item.key} aria-pressed={category === item.key} onClick={() => setCategory(item.key)} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === item.key ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{item.label}</button>)}</div> : null}
+      {categoryOptions.length ? <div aria-label="Types of places" className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1"><button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === "all" ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>All categories</button>{categoryOptions.map((item) => <button type="button" key={item.key} aria-pressed={category === item.key} onClick={() => setCategory(item.key)} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", category === item.key ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-hover)]")}>{item.label}</button>)}</div> : null}
 
       {service === "shop" && productDepartments.length > 1 ? <div className="no-scrollbar mt-3 flex items-center gap-2 overflow-x-auto pb-1" aria-label="Product departments"><span className="shrink-0 text-xs font-semibold text-[var(--text-3)]">Products</span><button type="button" aria-pressed={productDepartment === "all"} onClick={() => setProductDepartment("all")} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold", productDepartment === "all" ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface-2)] text-[var(--text-2)]")}>All</button>{productDepartments.slice(0, 16).map((name) => <button type="button" key={name} aria-pressed={productDepartment === name} onClick={() => setProductDepartment(name)} className={cn("min-h-11 shrink-0 rounded-full px-3 py-2 text-xs font-semibold", productDepartment === name ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface-2)] text-[var(--text-2)]")}>{name}</button>)}</div> : null}
 
@@ -411,6 +419,8 @@ export function ServiceDiscoveryView({
       </div>}
 
     </section>
+
+    {feed.nextBusinessOffset != null ? <div className="mt-6 flex justify-center"><Button variant="outline" loading={loadingBusinesses} onClick={loadMoreBusinesses}>Show more businesses</Button></div> : null}
 
     {featured.length > 0 && !query ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-8"><div className="flex items-end justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--accent)]">Featured on Spotly</p><h2 className="mt-1 text-xl font-semibold tracking-[-.03em]">Worth a look</h2></div><span className="text-xs text-[var(--text-3)]">Published businesses</span></div><div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto pb-2">{featured.map((business) => <button type="button" key={business.id} onClick={() => onOpenBusiness(business)} className="w-[230px] shrink-0 text-left"><div className="relative aspect-[1.4/1] overflow-hidden rounded-[var(--radius-card)] bg-[var(--surface-2)]"><BusinessPhoto business={business} sizes="230px" labelMode="icon" className="transition duration-300 motion-safe:group-hover:scale-[1.02]" /></div><p className="mt-3 truncate text-sm font-semibold">{business.name}</p><p className="mt-1 truncate text-xs text-[var(--text-3)]">{marketplaceProfile(business).displayCategory} · {business.area || business.city}</p></button>)}</div></section> : null}
 
