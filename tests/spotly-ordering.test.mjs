@@ -21,6 +21,7 @@ test('all directory chains are grouped without replacing their branch identities
   assert.equal(matches.length,1,name);assert.ok(matches[0].groupedLocations.length>1,name);
   assert.ok(matches[0].groupedLocations.every(location=>places.records.some(item=>item.id===location.id)));
  }
+ for (const names of [['OK','O.K. Kuwadzana','Albion OK Supermarket'],['Pick n Pay','PnP','TM Supermarket Newlands'],['Foodworld','Food World']]) assert.equal(groupMarketplaceBusinesses(names.map((name,index)=>({...bon,id:'alias-'+index,name,latitude:-17.5-index/10,longitude:31,coordinates:null}))).length,1);
  const merchant={...bon,id:'owner-store',commerceVerified:true};
  const grouped=groupMarketplaceBusinesses([bon,merchant])[0];
  assert.ok(grouped.groupedLocations.some(item=>item.id==='owner-store'));
