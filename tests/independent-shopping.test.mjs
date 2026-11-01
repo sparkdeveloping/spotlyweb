@@ -47,12 +47,12 @@ test("stale prices are excluded and new prices must be independently checked", (
   assert.equal(independentPublicStore("s", { ...eligible, items: eligible.items.slice(2) }, now), null);
 });
 
-test("public storefront strips copyrighted images and official business identifiers", () => {
+test("public storefront strips unreviewed remote images and official business identifiers", () => {
   const store = independentPublicStore("s", eligible, now);
   assert.equal(store.logo, undefined);
   assert.equal(store.image, undefined);
   assert.equal(store.businessId, undefined);
-  assert.equal(store.items[0].image, undefined);
+  assert.equal(store.items[0].image, "");
   assert.match(store.disclaimer, /not affiliated/i);
   assert.match(INDEPENDENT_SHOPPING_DISCLOSURE, /not affiliated/i);
 });

@@ -27,9 +27,9 @@ test('all directory chains are grouped without replacing their branch identities
  assert.ok(grouped.groupedLocations.some(item=>item.id==='owner-store'));
  assert.ok(grouped.groupedLocations.some(item=>item.id===bon.id));
 });
-test('every eligible food or retail location has an unpriced request catalogue',()=>{
+test('every eligible location supports an unpriced exact order, with sourced items where available',()=>{
  const eligible=places.records.filter(directoryShoppingEligible);assert.ok(eligible.length>800);
- for(const business of eligible){const raw=directoryIntakeStore(business.id,business),store=independentPublicStore(raw.id,raw);assert.ok(store?.items.length,business.name);assert.equal(raw.financeReady,false);assert.equal(raw.operationalReviewed,false);assert.ok(store.items.every(item=>item.priceEstimate===null));}
+ for(const business of eligible){const raw=directoryIntakeStore(business.id,business),store=independentPublicStore(raw.id,raw);assert.ok(store,business.name);assert.equal(store.allowCustomItems,true);assert.equal(raw.financeReady,false);assert.equal(raw.operationalReviewed,false);assert.ok(store.items.every(item=>item.priceEstimate===null));assert.ok(store.items.every(item=>item.catalogueKind!=='request_suggestion'));}
  assert.equal(directoryIntakeStore('paused',{...bon,assistAccepting:false}),null);
  assert.equal(directoryIntakeStore('owner',{...bon,ownerIds:['owner'],claimStatus:'claimed'}),null);
 });
@@ -39,7 +39,7 @@ test('unknown totals remain null, custom selections stay bounded and verified me
  assert.equal(quote.totalEstimate,null);assert.equal(quote.merchandiseEstimate,null);assert.equal(quote.paymentRequired,false);assert.equal(quote.items.length,2);
  assert.throws(()=>independentQuote(store,[],{customItems:[{name:'X',quantity:1}]}));
  assert.throws(()=>independentQuote(store,[{itemId:'forged-price',quantity:1}],{}));
- const menu=menuItemsForBusiness({name:'Fishmonger',city:'Harare'});assert.equal(menu.length,8);assert.ok(menu.some(item=>item.name==='Garlic prawns'));assert.ok(menu.every(item=>item.priceEstimate===null));
+ const menu=menuItemsForBusiness({name:'Doppio Zero',city:'Harare'});assert.ok(menu.length>70);assert.ok(menu.some(item=>item.name==='Original Burger'));assert.ok(menu.every(item=>item.priceEstimate===null));
  assert.deepEqual(menuItemsForBusiness({name:'Other restaurant',city:'Harare'}),[]);
  assert.equal(independentStoreRequestSafe(raw,bon),true);assert.equal(independentStoreSafe(raw,bon),false);
  assert.equal(independentStoreSafe({...raw,operationalReviewed:true,collectionAddressVerified:true,address:'Verified street, Harare'},bon),true);
