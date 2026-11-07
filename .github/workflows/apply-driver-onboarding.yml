@@ -26,7 +26,9 @@ jobs:
           tar -xJf /tmp/spotly-onboarding-import.tar.xz -C /tmp/spotly-onboarding-source
           git apply --unidiff-zero /tmp/spotly-onboarding-source/patch.diff
           cp -a /tmp/spotly-onboarding-source/new/. .
+          node --test tests/driver-assisted-onboarding.test.mjs tests/driver-v8-production.test.mjs tests/marketing-launch-integrity.test.mjs
           git rm -r -f .spotly
+          git rm -f .github/workflows/apply-driver-onboarding.yml
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Implement staff-assisted Driver onboarding, country-aware signup and training removal"
           git push origin HEAD:feat/driver-assisted-onboarding-20261106
