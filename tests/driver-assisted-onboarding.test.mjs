@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { DRIVER_COUNTRIES, normalizeDriverPhone, validCountry, validDriverContactPhone } from "../lib/driver-regions.js";
 import { requirementPlan } from "../lib/driver-capabilities.js";
+import { defaultRoleTemplates } from "../data/production-seed.js";
 const source = (name) => readFile(new URL(`../${name}`, import.meta.url), "utf8");
 
 test("Malawi and Zimbabwe national phones normalize to their own country dial codes", () => {
@@ -76,4 +77,18 @@ test("country admin overrides and final Driver consent are kept separate", async
   assert.match(ui, /agreementsAccepted/);
   assert.match(ui, /existing\.licenceReference/);
   assert.doesNotMatch(ui, /DRIVER_TRAINING_MODULES/);
+});
+
+test("Team & Access role selector tracks shared platform roles and preserves existing grants", async () => {
+  const [picker, access] = await Promise.all([
+    source("components/admin-legacy-sections.js"),
+    source("lib/admin-access.js")
+  ]);
+  const recruiter = defaultRoleTemplates.find((role) => role.id === "driver_recruiter");
+  assert.ok(recruiter, "Driver recruiter must be registered as a shared role template");
+  assert.equal(recruiter.scope, "platform");
+  assert.deepEqual(recruiter.permissions, ["drivers.leads.manage"]);
+  assert.match(picker, /\.\.\.defaultRoles\.map\(\(\{ id \}\) => id\)/);
+  assert.match(picker, /\.\.\.\(person\?\.roles \|\| \[\]\)/);
+  assert.match(access, /driver_recruiter:\s*\["home","mobility"\]/);
 });
