@@ -2,7 +2,7 @@ import { PublicHomeRouter } from "@/components/public-home-router";
 
 export const metadata = {
   title: "Spotly First Access · Your city, so much closer",
-  description: "Get Spotly First Access. Create your account, tell us what you’re most excited about, and be among the first in Zimbabwe to hear when your city opens up."
+  description: "Get Spotly First Access. Create your account, tell us what you’re most excited about, and be among the first to hear when Spotly opens in your city."
 };
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyafrica.com";
@@ -12,8 +12,8 @@ const structuredData = {
   name: "Spotly",
   url: appUrl,
   logo: `${appUrl}/api/branding/assets/primary_symbol_color.svg`,
-  areaServed: "Zimbabwe",
-  description: "A Zimbabwe-first city platform for discovering businesses, ordering, delivery, bookings, events, and future mobility services."
+  areaServed: "Africa",
+  description: "An African city-first platform for discovering businesses, ordering, delivery, bookings, events, and future mobility services."
 };
 
 export default function HomePage() {

@@ -2,8 +2,9 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { applicationReadiness } from "@/lib/driver-delivery-server";
-import { DRIVER_CAPABILITIES, DRIVER_TRAINING_MODULES, documentRequirementsFor, normalizeCapabilities, trainingModuleIsCurrent, trainingRequirementsFor } from "@/lib/driver-capabilities";
-import { normalizeZimbabwePhone, safeText } from "@/lib/server-helpers";
+import { DRIVER_CAPABILITIES, documentRequirementsFor, normalizeCapabilities } from "@/lib/driver-capabilities";
+import { safeText } from "@/lib/server-helpers";
+import { normalizeDriverPhone, validCountry } from "@/lib/driver-regions";
 import { accountLast4, encryptFinancialValue } from "@/lib/business-money-server";
 import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
 
@@ -24,10 +25,10 @@ const vehicleSchema = z.object({
 });
 
 const schema = z.object({
-  action: z.enum(["save", "submit", "vehicle", "vehicle_submit", "document", "payout", "training"]),
+  action: z.enum(["save", "submit", "vehicle", "vehicle_submit", "document", "payout"]),
   vehicleId: z.string().max(180).optional(),
   application: z.object({
-    legalName: z.string().max(160).optional(), phone: z.string().max(40).optional(), city: z.string().max(80).optional(),
+    legalName: z.string().max(160).optional(), phone: z.string().max(40).optional(), country: z.string().length(2).optional(), city: z.string().max(80).optional(),
     preferredZones: z.array(z.string().max(100)).max(30).optional(), emergencyContactName: z.string().max(160).optional(), emergencyContactPhone: z.string().max(40).optional(),
     requestedCapabilities: z.array(z.enum(Object.keys(DRIVER_CAPABILITIES))).max(8).optional(),
     currentStep: z.number().int().min(0).max(10).optional(), agreementsAccepted: z.boolean().optional(), locationConsent: z.boolean().optional()
@@ -39,9 +40,6 @@ const schema = z.object({
     referenceNumber: z.string().max(100).optional(), vehicleId: z.string().max(180).optional()
   }).optional(),
   payout: z.object({ type: z.enum(["bank", "mobile_money"]), provider: z.string().min(2).max(80), recipientName: z.string().min(2).max(160), identifier: z.string().min(3).max(120) }).optional(),
-  trainingComplete: z.boolean().optional(),
-  trainingModuleId: z.enum(Object.keys(DRIVER_TRAINING_MODULES)).optional(),
-  trainingAnswer: z.number().int().min(0).max(8).optional()
 });
 
 function normalizedVehicle(vehicle = {}) {
@@ -107,12 +105,16 @@ export async function POST(request) {
         updates.status = "application_started";
         updates.email = user.email || user.profile?.email || "";
       }
+      const selectedCountry = existing.countryOverride ? existing.country : (values.country || existing.country || "");
+      if (values.country !== undefined && !validCountry(values.country)) throw Object.assign(new Error("Choose a supported country."), { status: 400 });
+      if (values.country !== undefined && existing.countryOverride && values.country !== existing.country) throw Object.assign(new Error("Spotly Operations has set this country. Contact support to request a change."), { status: 403 });
+      if (values.country !== undefined) updates.country = selectedCountry;
       if (values.legalName !== undefined) updates.legalName = safeText(values.legalName, 160);
-      if (values.phone !== undefined) updates.phone = normalizeZimbabwePhone(values.phone);
+      if (values.phone !== undefined) updates.phone = normalizeDriverPhone(values.phone, selectedCountry);
       if (values.city !== undefined) updates.city = safeText(values.city, 80);
       if (values.preferredZones !== undefined) updates.preferredZones = values.preferredZones;
       if (values.emergencyContactName !== undefined) updates.emergencyContactName = safeText(values.emergencyContactName, 160);
-      if (values.emergencyContactPhone !== undefined) updates.emergencyContactPhone = normalizeZimbabwePhone(values.emergencyContactPhone);
+      if (values.emergencyContactPhone !== undefined) updates.emergencyContactPhone = normalizeDriverPhone(values.emergencyContactPhone, selectedCountry);
       if (values.requestedCapabilities !== undefined) {
         updates.requestedCapabilities = [...new Set(values.requestedCapabilities)].filter((id) => DRIVER_CAPABILITIES[id] && (!vehicleType || DRIVER_CAPABILITIES[id].vehicleTypes.includes(vehicleType)));
       }
@@ -256,28 +258,6 @@ export async function POST(request) {
         notifyRoleAudience({ db, messaging, auth, title: "Driver payout account needs review", body: `${safeText(body.payout.recipientName, 160)} submitted Driver payout details for verification.`, href: `/mobility?driver=${encodeURIComponent(user.uid)}`, category: "admin_review", workspace: "admin", module: "money", eventType: "driver_payout_account.submitted", importance: "high", entityType: "driverPayoutAccount", entityId: user.uid, email: true, forceOperationalEmail: true }, ["super_admin", "finance_admin", "operations_manager"])
       ]);
       return Response.json({ ok: true });
-    }
-
-    if (body.action === "training") {
-      const appSnap = await appRef.get();
-      const current = appSnap.exists ? appSnap.data() : {};
-      const vehicleSnap = await db.collection("driverVehicles").doc(`${user.uid}_primary`).get();
-      const requested = normalizeCapabilities(current.requestedCapabilities || [], vehicleSnap.data()?.type || "");
-      const requiredModules = trainingRequirementsFor(requested);
-      const modules = { ...(current.trainingModules || {}) };
-      if (!body.trainingModuleId) throw Object.assign(new Error("Choose the training module you completed."), { status: 400 });
-      const module = DRIVER_TRAINING_MODULES[body.trainingModuleId];
-      if (!requiredModules.includes(body.trainingModuleId)) throw Object.assign(new Error("That training module is not required for your selected work."), { status: 400 });
-      if (body.trainingComplete !== false) {
-        if (body.trainingAnswer !== module.check.answer) throw Object.assign(new Error("Review the module and choose the correct answer before completing it."), { status: 400 });
-        modules[body.trainingModuleId] = { completed: true, version: module.version, completedAt: new Date().toISOString() };
-      } else {
-        modules[body.trainingModuleId] = { completed: false, version: module.version, updatedAt: new Date().toISOString() };
-      }
-      const nextApplication = { ...current, trainingModules: modules };
-      const trainingComplete = requiredModules.every((moduleId) => trainingModuleIsCurrent(nextApplication, moduleId));
-      await appRef.set({ trainingModules: modules, trainingComplete, updatedAt: now }, { merge: true });
-      return Response.json({ ok: true, trainingComplete, trainingModules: modules });
     }
 
     const [appSnap, vehicleSnap, documentQuery, payoutSnap] = await Promise.all([

@@ -5,12 +5,15 @@ import { applicationReadiness, docsData, docData, operationalEligibility, notify
 import { DRIVER_CAPABILITIES, capabilityRequirements, capabilitySummary, documentRequirementsFor, normalizeCapabilities } from "@/lib/driver-capabilities";
 import { driverBalanceAccountId, sanitizeDriverBalance } from "@/lib/driver-money-server";
 import { safeText } from "@/lib/server-helpers";
+import { validCountry, driverCountryCanActivate } from "@/lib/driver-regions";
+import { canOverrideDriverCountry } from "@/lib/driver-leads";
 
 export const runtime = "nodejs";
 const ADMIN_ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager", "driver_operations_coordinator", "risk_compliance_officer", "finance_admin"];
 const schema = z.object({
   driverId: z.string().min(1).max(180),
-  action: z.enum(["approve", "request_information", "reject", "suspend", "reinstate", "compliance_hold", "clear_compliance_hold", "safety_hold", "clear_safety_hold", "approve_document", "reject_document", "approve_vehicle", "request_vehicle_setup", "reject_vehicle", "verify_payout_account", "reject_payout_account", "end_session", "set_capability"]),
+  action: z.enum(["approve", "request_information", "reject", "suspend", "reinstate", "compliance_hold", "clear_compliance_hold", "safety_hold", "clear_safety_hold", "approve_document", "reject_document", "approve_vehicle", "request_vehicle_setup", "reject_vehicle", "verify_payout_account", "reject_payout_account", "end_session", "set_capability", "set_country"]),
+  country: z.string().length(2).optional(), city: z.string().max(80).optional(),
   reason: z.string().max(1000).optional(), documentId: z.string().max(180).optional(), vehicleId: z.string().max(180).optional(),
   capabilityId: z.enum(Object.keys(DRIVER_CAPABILITIES)).optional(), capabilityStatus: z.enum(["active", "in_review", "requirements_incomplete", "temporarily_blocked", "removed"]).optional()
 });
@@ -60,6 +63,9 @@ export async function POST(request) {
     if (actorRoles.has("finance_admin") && !fullAdmin && !payoutReview) throw Object.assign(new Error("Finance reviewers can only review Driver payout destinations in this workspace."), { status: 403 });
     if (payoutReview && !fullAdmin && !actorRoles.has("finance_admin") && !actorRoles.has("operations_manager")) throw Object.assign(new Error("Your role cannot review Driver payout destinations."), { status: 403 });
     const reason = safeText(body.reason || "", 1000);
+    if (body.action === "set_country" && (!canOverrideDriverCountry(actor.profile) || !validCountry(body.country) || reason.length < 10)) {
+      throw Object.assign(new Error("Country overrides require an authorized Operations role, a supported country and a clear reason (10+ characters)."), { status: 403 });
+    }
     if (["request_information", "reject", "suspend", "compliance_hold", "safety_hold", "reject_document", "request_vehicle_setup", "reject_vehicle", "reject_payout_account"].includes(body.action) && reason.length < 3) throw Object.assign(new Error("Add a clear reason for this action."), { status: 400 });
     if (body.action === "set_capability" && ["temporarily_blocked", "removed"].includes(body.capabilityStatus) && reason.length < 3) throw Object.assign(new Error("Add a reason for blocking or removing this work type."), { status: 400 });
     const { db, messaging, auth } = getAdminServices();
@@ -71,7 +77,22 @@ export async function POST(request) {
     if (!appSnap.exists && !["end_session"].includes(body.action)) throw Object.assign(new Error("The Driver application was not found."), { status: 404 });
     const app = appSnap.data() || {};
     const updates = {};
+    if (body.action === "set_country") {
+      const driverSnapshot = await driverRef.get();
+      const presenceSnapshot = await db.collection("driverPresence").doc(body.driverId).get();
+      if (presenceSnapshot.data()?.online || presenceSnapshot.data()?.currentJobId) throw Object.assign(new Error("Take the Driver offline and finish all active jobs before changing countries."), { status: 409 });
+      const changedCountry = app.country !== body.country;
+      const city = safeText(body.city || "", 80);
+      if (changedCountry && !city) throw Object.assign(new Error("Set the Driver's city in the selected country."), { status: 400 });
+      const countryBatch = db.batch();
+      countryBatch.set(appRef, { country: body.country, city: city || app.city || "", countryOverride: true, countrySource: "admin_override", countryOverrideBy: actor.uid, countryOverrideReason: reason, countryOverrideAt: now, updatedAt: now }, { merge: true });
+      if (driverSnapshot.exists) countryBatch.set(driverRef, { country: body.country, city: city || app.city || "", complianceHold: changedCountry ? true : Boolean(driverSnapshot.data()?.complianceHold), complianceHoldReason: changedCountry ? "Country changed: reverify location, documents and payout readiness." : driverSnapshot.data()?.complianceHoldReason || null, updatedAt: now }, { merge: true });
+      countryBatch.create(auditRef, { action: "driver.country_override", entityType: "driver", entityId: body.driverId, actorId: actor.uid, actorEmail: actor.email || "", metadata: { from: app.country || "unknown", to: body.country, city, reason }, createdAt: now });
+      await countryBatch.commit();
+      return Response.json({ ok: true, bundle: await loadDriverBundle(db, body.driverId) });
+    }
     if (body.action === "approve") {
+      if (app.country && !driverCountryCanActivate(app.country)) throw Object.assign(new Error("Driver activation has not launched in this country. Keep the application on file until approved service geography is available."), { status: 409 });
       if (!["application_submitted", "under_review"].includes(app.status)) {
         throw Object.assign(new Error("The Driver must submit a complete application before Admin approval."), { status: 409 });
       }
@@ -97,11 +118,11 @@ export async function POST(request) {
         const readiness = capabilityRequirements({ capabilityId, vehicleType: vehicle.type, vehicleId: vehicle.id, documents, application: app, phase: "operational" });
         capabilityStates[capabilityId] = readiness.ready ? { status: "active", activatedAt: new Date().toISOString(), approvedBy: actor.uid } : { status: "requirements_incomplete", approvedBy: actor.uid };
       }
-      if (!Object.values(capabilityStates).some((value) => value.status === "active")) throw Object.assign(new Error("No requested work type is ready yet. Approve the required documents and training for at least one work type."), { status: 409 });
+      if (!Object.values(capabilityStates).some((value) => value.status === "active")) throw Object.assign(new Error("No requested work type is ready yet. Approve the required documents for at least one work type."), { status: 409 });
       updates.status = "approved"; updates.approvedAt = now; updates.reviewedBy = actor.uid;
       const batch = db.batch();
       batch.set(appRef, updates, { merge: true });
-      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", city: app.city || "Harare", zoneIds: app.preferredZones || [], requestedCapabilities: requested, capabilities: capabilityStates, selectedVehicleId: vehicle.id, payoutVerificationState: "verified", status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
+      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", country: app.country || "ZW", city: app.city || "", zoneIds: app.preferredZones || [], requestedCapabilities: requested, capabilities: capabilityStates, selectedVehicleId: vehicle.id, payoutVerificationState: "verified", status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
       batch.set(db.collection("adminQueueItems").doc(`driver_application_${body.driverId}`), { status: "completed", completedAt: now, completedBy: actor.uid, updatedAt: now }, { merge: true });
       await batch.commit();
     } else if (body.action === "request_information") await appRef.set({ status: "information_required", reviewReason: reason, reviewedBy: actor.uid, updatedAt: now }, { merge: true });

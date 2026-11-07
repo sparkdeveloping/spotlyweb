@@ -14,15 +14,16 @@ test("Driver V8 requirements are vehicle and capability aware", () => {
   assert.equal(unsupported.checks[0].ok, false);
 });
 
-test("Driver application stores requested capabilities and versionable training modules", async () => {
-  const source = await read("app/api/driver/application/route.js");
+test("Driver application stores work and country, without training gates", async () => {
+  const [source, rules, ui] = await Promise.all([
+    read("app/api/driver/application/route.js"), read("lib/driver-capabilities.js"), read("components/driver-app.js")
+  ]);
   assert.match(source, /requestedCapabilities/);
-  assert.match(source, /trainingModuleId/);
-  assert.match(source, /trainingModules/);
-  assert.match(source, /trainingAnswer/);
-  assert.match(source, /module\.check\.answer/);
-  assert.match(source, /module\.version/);
-  assert.match(source, /body\.vehicle\.type\s*!==\s*"bicycle"/);
+  assert.match(source, /countryOverride/);
+  assert.match(source, /validCountry/);
+  assert.doesNotMatch(source, /trainingModuleId|trainingAnswer|body\.action === "training"/);
+  assert.doesNotMatch(rules, /DRIVER_TRAINING_MODULES|training_general_safety/);
+  assert.doesNotMatch(ui, /ActiveDriverTraining|trainingRequirementsFor/);
 });
 
 test("Driver bootstrap returns capabilities, account health and GPS dispatchability", async () => {
@@ -87,7 +88,7 @@ test("Driver V8 exposes field health, work type, offer expiry, safety and multi-
   assert.match(source, /Shop & Deliver/);
   assert.match(source, /Safety toolkit/);
   assert.match(source, /parcel_earned/);
-  assert.match(source, /ZWG/);
+  assert.match(source, /Object.entries(data.balances || {})/);
   assert.doesNotMatch(source, /parcel\.recipientPhone|parcel\.senderPhone/);
 });
 
@@ -144,7 +145,8 @@ test("public Driver acquisition includes a personalized eligibility planner and 
   assert.match(planner, /City/);
   assert.match(planner, /vehicle/);
   assert.match(planner, /documentRequirementsFor/);
-  assert.match(planner, /trainingRequirementsFor/);
+  assert.match(planner, /DRIVER_COUNTRIES|DRIVER_COUNTRY_OPTIONS/);
+  assert.doesNotMatch(planner, /trainingRequirementsFor/);
   assert.match(planner, /entryHref/);
   const driverStart = portals.indexOf('id: "driver"');
   const driverBlock = portals.slice(driverStart, driverStart + 2200);
@@ -250,7 +252,7 @@ test("Driver root sells the Driver product before asking a brand-new applicant t
   ]);
   assert.match(auth, /DriverMarketingPage/);
   assert.match(auth, /portal === "driver" && isDriverLanding/);
-  assert.match(marketing, /Move Zimbabwe\. Earn on work that fits you\./);
+  assert.match(marketing, /Move your city\. Earn on work that fits you\./);
   assert.match(marketing, /Start my Driver application/);
   assert.match(marketing, /Ways to earn/);
   assert.match(marketing, /From curious to active/);
@@ -325,26 +327,26 @@ test("Admin visibly exposes submitted vehicles and Driver review queues", async 
   assert.match(queues, /"driver-vehicles"/);
 });
 
-test("new vehicle work types merge into active Driver training rather than becoming an unfinishable Admin-only state", async () => {
-  const [api, ui] = await Promise.all([
-    read("app/api/driver/application/route.js"),
-    read("components/driver-app.js"),
+test("new work types can be requested without training or admin-only activation shortcuts", async () => {
+  const [api, ui, capabilities] = await Promise.all([
+    read("app/api/driver/application/route.js"), read("components/driver-app.js"), read("lib/driver-capabilities.js")
   ]);
   assert.match(api, /mergedRequestedCapabilities/);
   assert.match(api, /requestedCapabilities: mergedRequestedCapabilities/);
-  assert.match(ui, /function ActiveDriverTraining/);
-  assert.match(ui, /When you add a vehicle or request a new kind of work/);
+  assert.doesNotMatch(api, /trainingModuleId/);
+  assert.doesNotMatch(ui, /function ActiveDriverTraining/);
+  assert.match(capabilities, /capabilityRequirements/);
 });
 
 test("Driver readiness validates saved Zimbabwe contacts and authoritative payout evidence", () => {
   const vehicle = { id: "test_primary", type: "car", registration: "ABC 123", make: "Toyota", model: "Corolla" };
   const application = { legalName: "Full Driver", phone: "+263", city: "Harare", emergencyContactName: "", emergencyContactPhone: "",
-    requestedCapabilities: ["ride_passenger"], payoutComplete: true, agreementsAccepted: true, locationConsent: true, trainingModules: {} };
+    country: "ZW", requestedCapabilities: ["ride_passenger"], payoutComplete: true, agreementsAccepted: true, locationConsent: true };
   const docs = ["identity", "licence", "registration", "insurance", "vehicle_fitness"].map((type) =>
     ({ type, vehicleId: ["registration", "insurance", "vehicle_fitness"].includes(type) ? "test_primary" : null, status: "uploaded" }));
   const missing = requirementPlan({ application, vehicle, documents: docs, payoutAccount: null });
   assert.equal(missing.complete, false);
-  for (const id of ["phone", "emergency_contact", "emergency_phone", "payout", "training_general_safety"]) {
+  for (const id of ["phone", "emergency_contact", "emergency_phone", "payout"]) {
     assert.equal(missing.checks.find((item) => item.id === id)?.ok, false, id);
   }
   assert.equal(validDriverPhone("+263"), false);
@@ -358,7 +360,7 @@ test("Driver readiness validates saved Zimbabwe contacts and authoritative payou
   const pending = requirementPlan({ application, vehicle, documents: docs, payoutAccount });
   assert.equal(pending.checks.find((item) => item.id === "payout")?.ok, true, "pending payout verification permits application review");
   assert.equal(pending.checks.find((item) => item.id === "document_insurance")?.ok, true, "uploaded insurance permits application review");
-  assert.equal(pending.complete, false, "training must still be complete");
+  assert.equal(pending.complete, true, "training is not a driver activation requirement once identity, documents, payout and consent are ready");
   assert.equal(requirementPlan({ application: { ...application, requestedCapabilities: [] }, vehicle, documents: docs, payoutAccount }).checks.find((item) => item.id === "work")?.ok, false);
   assert.equal(requirementPlan({ application, vehicle, documents: docs.map((item) => item.type === "insurance" ? { ...item, status: "rejected" } : item), payoutAccount }).checks.find((item) => item.id === "document_insurance")?.ok, false);
 });

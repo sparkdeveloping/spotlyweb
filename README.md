@@ -1,5 +1,7 @@
 # Spotly Web Platform
 
+**New:** [Assisted Driver onboarding and country-aware registration implementation & release guide](./ASSISTED-DRIVER-ONBOARDING-2026-11.md). This adds recruiter-authorized partial Driver profiles, secure claim links and cross-site country-aware onboarding. The source snapshot is not yet deployed.
+
 Spotly is one operating network with five role-specific production origins backed by one Next.js/Firebase platform. The customer root is now the live marketplace experience rather than a marketing/launch presentation:
 
 ```text

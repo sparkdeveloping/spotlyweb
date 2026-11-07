@@ -29,13 +29,13 @@ test("Admin exposes an intentional root-domain launch switch", () => {
   assert.match(admin, /Open live homepage/);
 });
 
-test("marketing page is Zimbabwe-first, conversion-oriented, animated and reduced-motion aware", () => {
+test("marketing page is city-first, conversion-oriented, animated and reduced-motion aware", () => {
   const landing = read("components/coming-soon-app.js");
   for (const phrase of [
-    "Built for Zimbabwe",
+    "Built city by city",
     "Your city. Your shops.",
     "One place to order.",
-    "For Zimbabwean businesses",
+    "For local businesses",
     "Spotly Driver",
     "Get early access",
     "Explore Spotly",

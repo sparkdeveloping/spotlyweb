@@ -1,6 +1,6 @@
 import { ClaimApp } from "@/components/claim-app";
 
-export const metadata = { title: "List or claim a business", description: "Find, add, or claim a Zimbabwean business on Spotly." };
+export const metadata = { title: "List or claim a business", description: "Find, add, or claim a local business on Spotly." };
 
 export default async function ClaimPage({ searchParams }) {
   const params = await searchParams;
