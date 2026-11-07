@@ -1,0 +1,31 @@
+name: Import assisted Driver onboarding changes
+
+on:
+  push:
+    branches:
+      - feat/driver-assisted-onboarding-20261106
+    paths:
+      - .spotly/driver-onboarding-import.tar.xz
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and apply prepared source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "71eb03ec266d6f81f1d9e0bfae3f378a74d5be3bbecc4ae850bd07f56370f97b  .spotly/driver-onboarding-import.tar.xz" | sha256sum --check
+          mkdir -p /tmp/spotly-onboarding-source
+          tar -xJf .spotly/driver-onboarding-import.tar.xz -C /tmp/spotly-onboarding-source
+          git apply --unidiff-zero /tmp/spotly-onboarding-source/patch.diff
+          cp -a /tmp/spotly-onboarding-source/new/. .
+          git rm -f .spotly/driver-onboarding-import.tar.xz
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Implement staff-assisted Driver onboarding, country-aware signup and training removal"
+          git push origin HEAD:feat/driver-assisted-onboarding-20261106
