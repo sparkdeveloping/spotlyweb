@@ -81,7 +81,7 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
         <span className="min-w-0 flex-1">
           <span className="block text-[10px] font-bold uppercase tracking-[.14em] text-tertiary">{archetype?.nouns?.branch || "Location"}</span>
           <span className="mt-0.5 block break-words text-sm font-bold leading-5">{locationName}</span>
-          <span className="mt-0.5 block break-words text-[11px] leading-4 text-secondary">{selectedBranch?.city || "Zimbabwe"}{branches.length > 1 ? ` · ${branches.length} available` : ""}</span>
+          <span className="mt-0.5 block break-words text-[11px] leading-4 text-secondary">{selectedBranch?.city || "Location not set"}{branches.length > 1 ? ` · ${branches.length} available` : ""}</span>
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-tertiary" />
       </button>}
@@ -105,7 +105,7 @@ export function WorkspaceContextSwitcher({ showBranch = true, compact = false })
         <div className="space-y-2">
           {branches.map((item) => <button key={item.id} type="button" onClick={() => selectLocation(item.id)} className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition hover:bg-[var(--surface-2)] ${item.id === selectedBranchId ? "border-business bg-business-soft" : ""}`}>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business"><MapPin className="h-5 w-5" /></span>
-            <span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold leading-5">{item.branchName || item.name || item.displayName || "Location"}</span><span className="mt-1 block break-words text-xs leading-5 text-secondary">{[item.city, item.address].filter(Boolean).join(" · ") || "Zimbabwe"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold leading-5">{item.branchName || item.name || item.displayName || "Location"}</span><span className="mt-1 block break-words text-xs leading-5 text-secondary">{[item.city, item.address].filter(Boolean).join(" · ") || "Location not set"}</span></span>
             {item.id === selectedBranchId && <Check className="h-4 w-4 text-business" />}
           </button>)}
         </div>

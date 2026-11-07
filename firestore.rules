@@ -539,6 +539,9 @@ service cloud.firestore {
 
     // Driver, delivery, dispatch and kiosk operational records are server-authoritative.
     // UI clients use scoped API routes; privileged Admin SDK writes bypass these rules.
+    // Prospective Driver invitations are server-authoritative. A public client cannot enumerate leads, tokens or contact keys.
+    match /driverLeads/{leadId} { allow read, write: if false; }
+    match /driverLeadContacts/{contactId} { allow read, write: if false; }
     match /driverApplications/{uid} {
       allow read: if self(uid) || platformAdmin() || hasPermission("drivers.read") || hasPermission("drivers.*");
       allow create, update, delete: if false;

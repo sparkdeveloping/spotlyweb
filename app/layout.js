@@ -14,7 +14,7 @@ export const metadata = {
     default: "Spotly · Your city, one place",
     template: "%s · Spotly"
   },
-  description: "Use Spotly to discover verified Zimbabwean businesses, order for pickup or delivery, save places, track activity, and explore the services around your city.",
+  description: "Use Spotly to discover local businesses, order for pickup or delivery, save places, track activity, and explore the services around your city.",
   applicationName: "Spotly",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -23,7 +23,7 @@ export const metadata = {
   },
   openGraph: {
     title: "Spotly · Your city, one place",
-    description: "Ride, eat, shop, book, discover and send with Spotly across Zimbabwe.",
+    description: "Ride, eat, shop, book, discover and send with Spotly in your city as services become available.",
     url: appUrl,
     siteName: "Spotly",
     images: ["/icons/spotly-512.png"],
@@ -32,7 +32,7 @@ export const metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Spotly · Your city, one place",
-    description: "Ride, eat, shop, book, discover and send with Spotly across Zimbabwe.",
+    description: "Ride, eat, shop, book, discover and send with Spotly in your city as services become available.",
     images: ["/icons/spotly-512.png"]
   }
 };

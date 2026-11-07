@@ -13,7 +13,7 @@ export async function generateMetadata({ params }) {
   const business = await getPublicBusinessForSeo(id);
   if (!business) return { title: "Business not available", robots: { index: false, follow: false } };
   const title = `${business.name} on Spotly`;
-  const description = business.description || `${business.category} in ${business.area || business.city || "Zimbabwe"}. View current offerings and locations on Spotly.`;
+  const description = business.description || `${business.category} in ${business.area || business.city || "your city"}. View current offerings and locations on Spotly.`;
   return { title, description, alternates: { canonical: `/place/${id}` }, openGraph: { title, description, url: `${base}/place/${id}`, type: "website", ...(business.image ? { images: [{ url: business.image }] } : {}) } };
 }
 

@@ -75,7 +75,7 @@ export function BusinessDashboard() {
   const capabilities = new Set(data.business?.capabilities || data.archetype.capabilities);
   const needsCatalog = ["catalog", "menu", "events", "services", "listings", "profile"].some((item) => capabilities.has(item));
   const locationName = data.selectedBranch?.branchName || data.selectedBranch?.name || data.selectedBranch?.displayName || "Main location";
-  const locationCity = data.selectedBranch?.city || "Zimbabwe";
+  const locationCity = data.selectedBranch?.city || "Location not set";
   const locationOpen = data.selectedBranch?.status !== "paused" && data.selectedBranch?.status !== "inactive";
   const availability = pickupAvailability(data.selectedBranch);
   const todayOrders = scopedOrders.filter((order) => sameDay(order.createdAt || order.updatedAt));
