@@ -399,6 +399,10 @@ service cloud.firestore {
     match /businessReviews/{reviewId} { allow read, write: if false; }
     match /availabilityReservations/{reservationId} { allow read, write: if false; }
 
+    // Cloud Functions retry/idempotency leases are server-only. TTL on expiresAt
+    // removes completed/abandoned request records without exposing them to clients.
+    match /functionIdempotency/{requestId} { allow read, write: if false; }
+
     match /auditLogs/{logId} {
       allow read: if platformAdmin() || hasPermission("audit.read");
       allow create, update, delete: if false;

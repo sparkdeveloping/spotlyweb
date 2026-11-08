@@ -70,12 +70,13 @@ test("Ride request is launch-gated, country-bound, provider-routed and quote-pri
  const ride=read("app/api/customer/rides/route.js");
  const quote=read("app/api/customer/rides/quote/route.js");
  const config=read("lib/ride-server.js");
+ const routing=read("lib/ride-routing.js");
  for(const term of ["validateRideTerritory","getVerifiedRideRoute","quotedTotal","quotedCurrency",
    "sealRidePin","dispatchRide"])assert.ok(ride.includes(term),term);
  assert.ok(quote.includes("getVerifiedRideRoute"));
  for(const flag of ["enabledCountries","dispatchSchedulerVerified","routingVerified",
-   "SPOTLY_RIDE_PIN_KEY","SPOTLY_GEOCODING_URL","SPOTLY_ROUTING_URL"])
-   assert.ok(config.includes(flag),flag);
+   "SPOTLY_RIDE_PIN_KEY","SPOTLY_GEOCODING_URL"]) assert.ok(config.includes(flag),flag);
+ for(const flag of ["SPOTLY_ROUTING_URL","SPOTLY_ROUTING_API_KEY"]) assert.ok(routing.includes(flag),flag);
 });
 test("Dispatch recovery has timeout, stable offers, customer retry and protected scheduler",()=>{
  const server=read("lib/ride-server.js");

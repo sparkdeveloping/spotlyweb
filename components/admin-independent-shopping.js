@@ -122,7 +122,7 @@ function Editor() {
           <label className="flex items-start gap-3 rounded-xl border bg-[var(--surface-2)] p-4 text-sm"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-1 h-4 w-4"/>I personally verified these prices today using the method selected. This listing will show an explicit no-affiliation disclosure.</label>
           {error && <p role="alert" className="text-sm font-medium text-[var(--danger)]">{error}</p>}
           {success && <p role="status" className="text-sm font-medium text-[var(--success)]">{success}</p>}
-          <button type="submit" disabled={saving} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] font-semibold text-white disabled:opacity-50"><Check className="h-4 w-4"/>{saving ? "Saving…" : "Save independent location"}</button>
+          <button type="submit" disabled={saving} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] font-semibold text-[var(--on-accent)] disabled:opacity-50"><Check className="h-4 w-4"/>{saving ? "Saving…" : "Save independent location"}</button>
         </form>
       </section>
     </div>
@@ -142,7 +142,7 @@ export function AdminIndependentShoppingApp() {
     <main className="mx-auto max-w-[1250px] px-5 py-10 sm:px-8">
       <Link href="/marketplace" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)] hover:text-[var(--accent)]"><ArrowLeft className="h-4 w-4"/>Marketplace operations</Link>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[var(--accent)]">Spotly Assist catalogue</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Independent shopping</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Curate independent price estimates without touching verified merchants, products or orders.</p></div><Link href="https://spotlyafrica.com/shop-for-me" className="text-sm font-semibold text-[var(--accent)]">View customer preview</Link></div>
-      <div className="my-7 flex items-start gap-3 rounded-xl border border-amber-300/40 bg-amber-50 p-4 text-sm text-amber-900"><ShieldAlert className="mt-0.5 h-5 w-5 shrink-0"/><p>Listings are not partnerships. Publishing a location does not enable the pilot. Existing merchant checkout, Driver dispatch and payout systems are unchanged. Do not collect payment or shop until a separately approved release enables them.</p></div>
+      <div className="my-7 flex items-start gap-3 rounded-xl border border-[var(--warning)] bg-[var(--surface-2)] p-4 text-sm text-[var(--text)]"><ShieldAlert className="mt-0.5 h-5 w-5 shrink-0"/><p>Listings are not partnerships. Publishing a location does not enable the pilot. Existing merchant checkout, Driver dispatch and payout systems are unchanged. Do not collect payment or shop until a separately approved release enables them.</p></div>
       {!allowed ? <div className="mt-10 rounded-2xl border bg-[var(--surface)] p-8"><LockKeyhole className="h-8 w-8"/><h2 className="mt-4 font-semibold">Administrator access required</h2><p className="mt-2 text-sm text-[var(--text-2)]">Your assigned role does not include marketplace administration.</p></div> : <Editor/>}
     </main>
   </PortalShell></AdminAccess></AuthGate>;

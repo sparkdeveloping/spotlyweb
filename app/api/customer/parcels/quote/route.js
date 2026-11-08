@@ -4,10 +4,10 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { estimateParcel, normalizeParcelPoint, parcelAvailability } from "@/lib/parcel-server";
 import {validateSendTerritory} from "@/lib/send-territory";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
+import { sendQuoteRequestSchema } from "@/lib/contracts/schemas";
 
 export const runtime = "nodejs";
-const point = z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional(), country:z.literal("ZW"), label: z.string().max(160).optional(), formattedAddress: z.string().max(500).optional(), area: z.string().max(120).optional(), city: z.string().max(120).optional() });
-const schema = z.object({ pickup: point, dropoff: point, parcelSize: z.enum(["small", "medium", "large", "bulky"]).default("medium") });
+const schema = sendQuoteRequestSchema;
 
 export async function POST(request) {
   try {

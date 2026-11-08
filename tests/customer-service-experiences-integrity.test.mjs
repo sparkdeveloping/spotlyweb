@@ -46,7 +46,7 @@ test("service experience provides dedicated discovery controls and real deep lin
 
 test("service switching uses canonical service URLs while Ride and Send remain gated", () => {
   const marketplace = read("components/marketplace-app.js");
-  assert.match(marketplace, /router\.push\(`\/\$\{nextService\}`\)/);
+  assert.match(marketplace, /router\.push\(publicProductRoute\(nextService\)\)/);
   assert.match(marketplace, /service === "ride" && !ridesEnabled/);
   assert.match(marketplace, /service === "send" && !sendEnabled/);
   assert.match(marketplace, /Opening area by area/);

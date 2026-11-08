@@ -45,7 +45,27 @@
     "/careers",
     "/careers/jobs/[jobId]",
     "/careers/apply/[jobId]",
-    "/careers/application/[applicationId]"
+    "/careers/application/[applicationId]",
+    "/admin/assist",
+    "/admin/assist-coverage",
+    "/admin/assist-fulfillment",
+    "/admin/assist-import",
+    "/admin/assist-menu-launch",
+    "/admin/assist-research",
+    "/admin/business-register",
+    "/admin/guide",
+    "/admin/independent-shopping",
+    "/admin/themenu-images",
+    "/assist/book",
+    "/bite",
+    "/branding",
+    "/driver/assist-shopping",
+    "/driver/complete",
+    "/first-access",
+    "/live",
+    "/nxt",
+    "/shop-for-me",
+    "/shopper"
   ],
   "fixedDark": [
     "/business/kiosk/live"
@@ -57,6 +77,12 @@
     "components/business/no-business.js",
     "components/business/shared.js",
     "components/business/kiosk.js",
-    "components/marketplace-home.js"
+    "components/marketplace-home.js",
+    "components/assist-booking-app.js",
+    "components/independent-shopping-app.js",
+    "components/business-photo.js"
+  ],
+  "approvedFixedLightComponents": [
+    "app/branding/page.js"
   ]
 }

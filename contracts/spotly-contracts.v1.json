@@ -1,0 +1,1034 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spotlyafrica.com/contracts/spotly-contracts.v1.json",
+  "title": "Spotly Canonical Wire Contracts v1",
+  "contractVersion": "1.0.0",
+  "publishedAt": "2026-11-08",
+  "compatibility": "additive-only-within-major",
+  "description": "Language-neutral wire contracts shared by Spotly Web, Customer iOS and Driver iOS. Presentation labels are not wire identifiers.",
+  "x-spotly-enums": {
+    "serviceIds": [
+      "eat",
+      "shop",
+      "ride",
+      "book",
+      "events",
+      "send"
+    ],
+    "countryCodes": [
+      "ZW",
+      "MW"
+    ],
+    "currencyCodes": [
+      "USD",
+      "ZWG",
+      "MWK"
+    ],
+    "activityKinds": [
+      "order",
+      "appointment",
+      "booking",
+      "ticket",
+      "ride",
+      "send",
+      "assist_shopping",
+      "assist_booking"
+    ],
+    "transactionKinds": [
+      "order",
+      "appointment",
+      "booking",
+      "ticket",
+      "ride",
+      "send",
+      "independent_shopping",
+      "assisted_booking"
+    ],
+    "driverWorkTypes": [
+      "delivery",
+      "ride",
+      "send"
+    ],
+    "rideServiceTypes": [
+      "economy",
+      "comfort",
+      "xl"
+    ],
+    "parcelSizes": [
+      "small",
+      "medium",
+      "large",
+      "bulky"
+    ],
+    "paymentMethods": [
+      "cash",
+      "paynow",
+      "ecocash",
+      "onemoney",
+      "card",
+      "bank_transfer",
+      "pay_later",
+      "superadmin_test"
+    ],
+    "paymentStatuses": [
+      "not_required",
+      "not_initiated",
+      "unpaid",
+      "due_at_pickup",
+      "awaiting_transfer",
+      "cash_due",
+      "initiated",
+      "pending",
+      "paid",
+      "paid_held",
+      "reconciled",
+      "payment_review_required",
+      "refund_pending",
+      "refunded",
+      "refund_failed",
+      "failed",
+      "action_required",
+      "awaiting_payment",
+      "pay_later",
+      "test_paid",
+      "cash_driver_attested"
+    ],
+    "primaryActions": [
+      "pay",
+      "track",
+      "open",
+      "support",
+      "review_quote",
+      "review_alternative",
+      "review_substitution"
+    ],
+    "pickupModes": [
+      "now",
+      "scheduled"
+    ]
+  },
+  "$defs": {
+    "countryCode": {
+      "type": "string",
+      "enum": [
+        "ZW",
+        "MW"
+      ]
+    },
+    "currencyCode": {
+      "type": "string",
+      "enum": [
+        "USD",
+        "ZWG",
+        "MWK"
+      ]
+    },
+    "serviceId": {
+      "type": "string",
+      "enum": [
+        "eat",
+        "shop",
+        "ride",
+        "book",
+        "events",
+        "send"
+      ]
+    },
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount",
+        "currency"
+      ],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100000000
+        },
+        "currency": {
+          "$ref": "#/$defs/currencyCode"
+        }
+      }
+    },
+    "locationPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lat",
+        "lng",
+        "country"
+      ],
+      "properties": {
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lng": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "accuracy": {
+          "type": "number",
+          "minimum": 0
+        },
+        "country": {
+          "$ref": "#/$defs/countryCode"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "formattedAddress": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "area": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 120
+        }
+      }
+    },
+    "quoteLock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quotedTotal",
+        "quotedCurrency"
+      ],
+      "properties": {
+        "quotedTotal": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "quotedCurrency": {
+          "type": "string",
+          "enum": [
+            "USD",
+            "ZWG"
+          ]
+        }
+      }
+    },
+    "orderLineInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productId",
+        "quantity"
+      ],
+      "properties": {
+        "productId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99
+        }
+      }
+    },
+    "orderCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkoutId",
+        "businessId",
+        "branchId",
+        "items",
+        "currency",
+        "paymentMethod",
+        "fulfilment"
+      ],
+      "properties": {
+        "checkoutId": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "businessId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "branchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 60,
+          "items": {
+            "$ref": "#/$defs/orderLineInput"
+          }
+        },
+        "currency": {
+          "type": "string",
+          "enum": [
+            "USD",
+            "ZWG"
+          ]
+        },
+        "promoCode": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": [
+            "cash",
+            "paynow",
+            "ecocash",
+            "onemoney",
+            "card",
+            "bank_transfer",
+            "superadmin_test"
+          ]
+        },
+        "fulfilment": {
+          "type": "string",
+          "enum": [
+            "pickup",
+            "delivery"
+          ]
+        },
+        "delivery": {
+          "$ref": "#/$defs/orderDeliveryInput"
+        },
+        "pickup": {
+          "$ref": "#/$defs/orderPickupInput"
+        }
+      }
+    },
+    "orderDeliveryInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contactName",
+        "contactPhone",
+        "address",
+        "lat",
+        "lng"
+      ],
+      "properties": {
+        "contactName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "contactPhone": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 40
+        },
+        "address": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "suburb": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "landmark": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lng": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "substitutionPreference": {
+          "type": "string",
+          "enum": [
+            "contact_me",
+            "best_match",
+            "remove_item",
+            "no_substitutions"
+          ]
+        }
+      }
+    },
+    "orderPickupInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date",
+        "slot",
+        "slotId",
+        "contactName",
+        "contactPhone"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "slot": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40
+        },
+        "slotId": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 80
+        },
+        "contactName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "contactPhone": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 40
+        },
+        "alternativePhone": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "substitutionPreference": {
+          "type": "string",
+          "enum": [
+            "contact_me",
+            "best_match",
+            "remove_item",
+            "no_substitutions"
+          ]
+        }
+      }
+    },
+    "rideQuoteRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pickup",
+        "dropoff",
+        "serviceType"
+      ],
+      "properties": {
+        "pickup": {
+          "$ref": "#/$defs/locationPoint"
+        },
+        "dropoff": {
+          "$ref": "#/$defs/locationPoint"
+        },
+        "serviceType": {
+          "type": "string",
+          "enum": [
+            "economy",
+            "comfort",
+            "xl"
+          ]
+        }
+      }
+    },
+    "rideCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "pickup",
+        "dropoff",
+        "serviceType",
+        "paymentMethod",
+        "quotedTotal",
+        "quotedCurrency"
+      ],
+      "properties": {
+        "action": {
+          "const": "request"
+        },
+        "pickup": {
+          "$ref": "#/$defs/locationPoint"
+        },
+        "dropoff": {
+          "$ref": "#/$defs/locationPoint"
+        },
+        "serviceType": {
+          "type": "string",
+          "enum": [
+            "economy",
+            "comfort",
+            "xl"
+          ]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": [
+            "cash",
+            "paynow"
+          ]
+        },
+        "quotedTotal": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "quotedCurrency": {
+          "type": "string",
+          "enum": [
+            "USD",
+            "ZWG"
+          ]
+        },
+        "riderName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "riderPhone": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "sendQuoteRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pickup",
+        "dropoff",
+        "parcelSize"
+      ],
+      "properties": {
+        "pickup": {
+          "$ref": "#/$defs/sendLocationPoint"
+        },
+        "dropoff": {
+          "$ref": "#/$defs/sendLocationPoint"
+        },
+        "parcelSize": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large",
+            "bulky"
+          ]
+        }
+      }
+    },
+    "sendLocationPoint": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locationPoint"
+        },
+        {
+          "properties": {
+            "country": {
+              "const": "ZW"
+            }
+          }
+        }
+      ]
+    },
+    "sendCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "pickup",
+        "dropoff",
+        "parcelSize",
+        "paymentMethod",
+        "senderName",
+        "senderPhone",
+        "recipientName",
+        "recipientPhone",
+        "parcelDescription",
+        "pickupMode",
+        "prohibitedAcknowledged",
+        "quotedTotal",
+        "quotedCurrency"
+      ],
+      "properties": {
+        "action": {
+          "const": "request"
+        },
+        "pickup": {
+          "$ref": "#/$defs/sendLocationPoint"
+        },
+        "dropoff": {
+          "$ref": "#/$defs/sendLocationPoint"
+        },
+        "parcelSize": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large",
+            "bulky"
+          ]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": [
+            "cash",
+            "paynow"
+          ]
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "senderPhone": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 50
+        },
+        "recipientName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "recipientPhone": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 50
+        },
+        "parcelDescription": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 500
+        },
+        "estimatedWeightKg": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 100
+        },
+        "declaredValue": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "pickupMode": {
+          "type": "string",
+          "enum": [
+            "now",
+            "scheduled"
+          ]
+        },
+        "scheduledPickupAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "prohibitedAcknowledged": {
+          "const": true
+        },
+        "quotedTotal": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "quotedCurrency": {
+          "type": "string",
+          "enum": [
+            "USD",
+            "ZWG"
+          ]
+        }
+      }
+    },
+    "activityRecord": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "subtitle",
+        "state",
+        "paymentStatus",
+        "number",
+        "currency"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "order",
+            "appointment",
+            "booking",
+            "ticket",
+            "ride",
+            "send",
+            "assist_shopping",
+            "assist_booking"
+          ]
+        },
+        "service": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "eat",
+            "shop",
+            "ride",
+            "book",
+            "events",
+            "send",
+            null
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": [
+            "not_required",
+            "not_initiated",
+            "unpaid",
+            "due_at_pickup",
+            "awaiting_transfer",
+            "cash_due",
+            "initiated",
+            "pending",
+            "paid",
+            "paid_held",
+            "reconciled",
+            "payment_review_required",
+            "refund_pending",
+            "refunded",
+            "refund_failed",
+            "failed",
+            "action_required",
+            "awaiting_payment",
+            "pay_later",
+            "test_paid",
+            "cash_driver_attested"
+          ]
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1
+        },
+        "total": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/currencyCode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "scheduledAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "attentionReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "primaryAction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "pay",
+            "track",
+            "open",
+            "support",
+            "review_quote",
+            "review_alternative",
+            "review_substitution",
+            null
+          ]
+        },
+        "orderId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rideId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parcelId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "driverWorkOffer": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "workType",
+        "state",
+        "currency",
+        "estimatedEarnings"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workType": {
+          "type": "string",
+          "enum": [
+            "delivery",
+            "ride",
+            "send"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "currency": {
+          "$ref": "#/$defs/currencyCode"
+        },
+        "estimatedEarnings": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pickup": {
+          "$ref": "#/$defs/locationPoint"
+        },
+        "dropoff": {
+          "$ref": "#/$defs/locationPoint"
+        },
+        "expiresAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "errorEnvelope": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "ok",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    },
+    "appointmentSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date",
+        "time"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "time": {
+          "type": "string",
+          "pattern": "^\\d{2}:\\d{2}$"
+        },
+        "staffPreference": {
+          "type": "string",
+          "maxLength": 120
+        }
+      }
+    },
+    "bookingSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "startDate",
+        "guests"
+      ],
+      "properties": {
+        "startDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "endDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "guests": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        }
+      }
+    },
+    "transactionCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkoutId",
+        "businessId",
+        "branchId",
+        "itemId",
+        "quantity",
+        "currency",
+        "paymentMethod",
+        "contactName",
+        "contactPhone"
+      ],
+      "properties": {
+        "checkoutId": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "businessId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "branchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "itemId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "currency": {
+          "type": "string",
+          "enum": [
+            "USD",
+            "ZWG"
+          ]
+        },
+        "promoCode": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": [
+            "paynow",
+            "ecocash",
+            "onemoney",
+            "card",
+            "bank_transfer",
+            "pay_later",
+            "superadmin_test"
+          ]
+        },
+        "contactName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "contactPhone": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 40
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "appointment": {
+          "$ref": "#/$defs/appointmentSelection"
+        },
+        "booking": {
+          "$ref": "#/$defs/bookingSelection"
+        }
+      }
+    }
+  }
+}

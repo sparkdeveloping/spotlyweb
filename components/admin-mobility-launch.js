@@ -83,7 +83,7 @@ export function AdminMobilityLaunch({openRide,openSend}){
    <p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--accent)]">Service Launch & Controls</p>
    <h2 className="mt-2 text-2xl font-semibold">Where and when SpotlyRide and SpotlySend operate</h2>
    <p className="mt-3 max-w-3xl text-sm leading-6 text-secondary">Configure cities, service zones, pricing and proof requirements in the service tabs. Activate only after all technical checks and real Driver/support field verification. Saving a draft never activates customer bookings.</p>
-   <div className="mt-4 flex flex-wrap gap-3"><Button variant="outline" onClick={openRide}><CarFront className="h-4 w-4"/>Configure Ride</Button><Button variant="outline" onClick={openSend}><Package className="h-4 w-4"/>Configure Send</Button><Button asChild variant="outline"><Link href="/admin/system?tab=launch"><ShieldAlert className="h-4 w-4"/>Full launch readiness</Link></Button></div>
+   <div className="mt-4 flex flex-wrap gap-3"><Button variant="outline" onClick={openRide}><CarFront className="h-4 w-4"/>Configure Ride</Button><Button variant="outline" onClick={openSend}><Package className="h-4 w-4"/>Configure Send</Button><Button asChild variant="outline"><Link href="/system?tab=launch"><ShieldAlert className="h-4 w-4"/>Full launch readiness</Link></Button></div>
   </Card>
   <Card className="p-5 sm:p-6">
    <div className="flex flex-wrap items-start justify-between gap-4">

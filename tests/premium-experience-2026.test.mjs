@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import sharp from "sharp";
+import { webpMetadata } from "./helpers/webp-metadata.mjs";
 import { SERVICE_IDENTITIES } from "../lib/service-identity.js";
 import { SPOTLY_PRODUCTS, productServiceId } from "../lib/spotly-products.js";
 import { serviceMatchesMarketplaceBusiness } from "../lib/marketplace-taxonomy.js";
@@ -14,7 +14,7 @@ test("service artwork ships complete, transparent, dimensionally stable and with
     assert.equal(productServiceId(SPOTLY_PRODUCTS[id].route), id);
     for (const size of [320, 640]) {
       const data = await readFile(new URL(`public/experience/services/${identity.asset}-${size}.webp`, root));
-      const meta = await sharp(data).metadata();
+      const meta = webpMetadata(data);
       assert.equal(meta.width, size);
       assert.equal(meta.height, size);
       assert.equal(meta.hasAlpha, true);

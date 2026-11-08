@@ -41,8 +41,8 @@ test('workbook is staged privately and does not import into businesses automatic
  assert.ok(data.rows.every(r=>r.sourceId && r.name));
  const script=read('app/api/nxt/import/route.js');
  assert.match(script,/db\.collection\("nxtProspects"\)/);
- assert.match(script,/public:false/);
- assert.match(script,/body\.confirm!==true/);
+ assert.match(script,/public:\s*false/);
+ assert.match(script,/confirm:\s*z\.literal\(true\)/);
 });
 test('authenticated server operations and claim security checks are present',()=>{
  const paths=['app/api/nxt/route.js','app/api/nxt/team/route.js','app/api/nxt/onboard/route.js','app/api/nxt/invite/route.js','app/api/nxt/evidence/route.js'];

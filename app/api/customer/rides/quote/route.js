@@ -4,11 +4,11 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { estimateRide, normalizeRidePoint, rideAvailability, rideQuoteAvailability } from "@/lib/ride-server";
 import {validateRideTerritory} from "@/lib/ride-geography";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
+import { rideQuoteRequestSchema } from "@/lib/contracts/schemas";
 
 export const runtime = "nodejs";
 
-const point = z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional(), country:z.enum(["ZW","MW"]), label: z.string().max(160).optional(), formattedAddress: z.string().max(500).optional(), area: z.string().max(120).optional(), city: z.string().max(120).optional() });
-const schema = z.object({ pickup: point, dropoff: point, serviceType: z.enum(["economy", "comfort", "xl"]).default("economy") });
+const schema = rideQuoteRequestSchema;
 
 export async function POST(request) {
   try {

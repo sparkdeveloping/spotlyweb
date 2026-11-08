@@ -69,7 +69,7 @@ function SearchResult({ result, onOpen, saved, onSave }) {
 }
 
 function IntentTile({ item, onClick }) {
-  return <button type="button" onClick={onClick} data-service={item.service} className="experience-intent flex items-center gap-3 rounded-[20px] border px-4 text-left transition hover:shadow-card"><ServiceArtwork service={item.icon} compact /><span className="min-w-0 flex-1 text-sm font-semibold">{item.label}</span><ArrowRight className="h-4 w-4 shrink-0 text-[var(--world-ink)]" aria-hidden="true" /></button>;
+  return <button type="button" onClick={onClick} data-service={item.service} className="experience-intent flex items-center gap-3 rounded-[16px] border px-4 text-left transition hover:shadow-card"><ServiceArtwork service={item.icon} compact /><span className="min-w-0 flex-1 text-sm font-semibold">{item.label}</span><ArrowRight className="h-4 w-4 shrink-0 text-[var(--world-ink)]" aria-hidden="true" /></button>;
 }
 
 export function CustomerSearchView({

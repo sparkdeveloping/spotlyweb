@@ -8,10 +8,10 @@ import { safeText } from "@/lib/server-helpers";
 import {validateRideTerritory} from "@/lib/ride-geography";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
 import {sealRidePin} from "@/lib/ride-security";
+import { rideCreateRequestSchema } from "@/lib/contracts/schemas";
 
 export const runtime = "nodejs";
-const point = z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional(), country:z.enum(["ZW","MW"]), label: z.string().max(160).optional(), formattedAddress: z.string().max(500).optional(), area: z.string().max(120).optional(), city: z.string().max(120).optional() });
-const requestSchema = z.object({ action: z.literal("request"), pickup: point, dropoff: point, serviceType: z.enum(["economy", "comfort", "xl"]).default("economy"), paymentMethod: z.enum(["cash", "paynow"]).default("cash"), quotedTotal:z.number().positive().max(100000), quotedCurrency:z.enum(["USD","ZWG"]), riderName: z.string().max(160).optional(), riderPhone: z.string().max(50).optional(), note: z.string().max(500).optional() });
+const requestSchema = rideCreateRequestSchema;
 const cancelSchema = z.object({ action: z.literal("cancel"), rideId: z.string().min(3).max(180), reason: z.string().min(3).max(500) });
 const schema = z.discriminatedUnion("action", [requestSchema, cancelSchema]);
 

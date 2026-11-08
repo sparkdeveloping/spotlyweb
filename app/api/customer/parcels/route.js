@@ -9,14 +9,10 @@ import { safeText } from "@/lib/server-helpers";
 import {sealParcelPin} from "@/lib/send-security";
 import {validateSendTerritory} from "@/lib/send-territory";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
+import { sendCreateRequestSchema } from "@/lib/contracts/schemas";
 
 export const runtime = "nodejs";
-const point = z.object({ lat: z.number(), lng: z.number(), accuracy: z.number().optional(), country:z.literal("ZW"), label: z.string().max(160).optional(), formattedAddress: z.string().max(500).optional(), area: z.string().max(120).optional(), city: z.string().max(120).optional() });
-const requestSchema = z.object({
-  action: z.literal("request"), pickup: point, dropoff: point, parcelSize: z.enum(["small", "medium", "large", "bulky"]).default("medium"), paymentMethod: z.enum(["cash", "paynow"]).default("cash"),
-  senderName: z.string().min(2).max(160), senderPhone: z.string().min(5).max(50), recipientName: z.string().min(2).max(160), recipientPhone: z.string().min(5).max(50),
-  parcelDescription: z.string().min(2).max(500), estimatedWeightKg: z.number().min(0.1).max(100).optional(), declaredValue: z.number().min(0).max(10000).optional(), instructions: z.string().max(500).optional(), pickupMode: z.enum(["now", "scheduled"]).default("now"), scheduledPickupAt: z.string().datetime().optional(), prohibitedAcknowledged: z.literal(true),quotedTotal:z.number().positive().max(100000),quotedCurrency:z.enum(["USD","ZWG"])
-});
+const requestSchema = sendCreateRequestSchema;
 const cancelSchema = z.object({ action: z.literal("cancel"), parcelJobId: z.string().min(3).max(180), reason: z.string().min(3).max(500) });
 const schema = z.discriminatedUnion("action", [requestSchema, cancelSchema]);
 

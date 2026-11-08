@@ -56,7 +56,7 @@ test("generic For businesses navigation opens the Business product landing inste
 
 
 test("interactive login cannot navigate away before the cross-domain session handshake finishes", () => {
-  assert.match(loginApp, /if \(!loading && authReady && user/);
+  assert.match(loginApp, /if \(!redirecting && !loading && authReady && sessionReady && user/);
   assert.match(loginApp, /window\.location\.replace\(next\)/);
   assert.match(loginApp, /router\.replace\(next\)/);
 });

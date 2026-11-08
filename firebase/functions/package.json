@@ -1,0 +1,18 @@
+{
+  "name": "spotly-firebase-functions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "check": "node --check src/index.js && node --check src/core/admin.js && node --check src/core/auth.js && node --check src/core/callable.js && node --check src/core/idempotency.js && node --check src/core/fingerprint.js && node --check src/core/audit.js && node --check src/core/runtime-access.js && node --check src/core/notifications.js && node --check src/core/storage.js && node --test spec/foundation.spec.mjs",
+    "test": "node --test spec/foundation.spec.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "14.5.0",
+    "firebase-functions": "7.4.0"
+  }
+}

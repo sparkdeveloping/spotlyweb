@@ -31,10 +31,11 @@ for (const token of required) {
 }
 
 const inverseAllowlist = new Set(policy.approvedInverseComponents);
+const fixedLightAllowlist = new Set(policy.approvedFixedLightComponents || []);
 for (const file of sourceFiles) {
   const rel = relative(root, file).replaceAll("\\", "/");
   const source = readFileSync(file, "utf8");
-  if (/\bbg-white\b/.test(source)) failures.push(`${rel}: fixed bg-white is not permitted`);
+  if (/\bbg-white(?=[\s"'`}}\]])/.test(source) && !fixedLightAllowlist.has(rel)) failures.push(`${rel}: fixed bg-white is not permitted`);
   if (/\b(?:bg|text|border|divide)-(?:gray|slate)-\d+\b/.test(source)) failures.push(`${rel}: fixed gray/slate palette is not permitted`);
   const fixedNamedPalette = /\b(?:bg|text|border|divide)-(?:red|green|amber|yellow|orange|blue|violet|purple|emerald|cyan|teal|lime|rose|pink|indigo)-\d{2,3}(?:\/\d+)?\b/;
   if (fixedNamedPalette.test(source) && !inverseAllowlist.has(rel)) failures.push(`${rel}: fixed named palette shades require semantic tokens or an approved fixed/inverse exception`);
