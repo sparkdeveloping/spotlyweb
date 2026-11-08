@@ -19,6 +19,11 @@ const nextConfig = {
   reactStrictMode: true,
   compress: true,
   serverExternalPackages: ["firebase-admin", "paynow"],
+  turbopack: {
+    resolveAlias: {
+      "firebase/functions": "./node_modules/firebase/functions/dist/esm/index.esm.js"
+    }
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [

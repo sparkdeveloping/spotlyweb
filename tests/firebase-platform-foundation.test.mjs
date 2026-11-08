@@ -76,12 +76,18 @@ test("Realtime Database rules keep authorization server-owned and scope live loc
 });
 
 test("web Firebase client exposes Functions + RTDB with explicit emulator plumbing", async () => {
-  const [client, config, platform] = await Promise.all([text("lib/firebase.js"), text("lib/firebase-project-config.js"), text("lib/firebase-platform.js")]);
+  const [client, config, platform, nextConfig] = await Promise.all([
+    text("lib/firebase.js"),
+    text("lib/firebase-project-config.js"),
+    text("lib/firebase-platform.js"),
+    text("next.config.mjs")
+  ]);
   assert.match(client, /getFunctions/);
   assert.match(client, /getDatabase/);
   assert.match(client, /connectFunctionsEmulator/);
   assert.match(client, /connectDatabaseEmulator/);
   assert.match(client, /callFirebaseFunction/);
+  assert.match(nextConfig, /"firebase\/functions": "\.\/node_modules\/firebase\/functions\/dist\/esm\/index\.esm\.js"/);
   assert.match(config, /SPOTLY_FIREBASE_FUNCTIONS_REGION = "europe-west1"/);
   assert.match(config, /spotly-africa-default-rtdb\.europe-west1\.firebasedatabase\.app/);
   assert.match(platform, /SPOTLY_CONTRACT_SHA256/);
