@@ -137,6 +137,11 @@ service cloud.firestore {
       allow delete: if superAdmin();
     }
 
+    match /accountCountryOverrides/{uid} {
+      allow read: if self(uid) || platformAdmin() || hasPermission("users.read");
+      allow create, update, delete: if false;
+    }
+
     match /platformSettings/{id} {
       allow read: if true;
       allow write: if platformAdmin() || hasPermission("admin.configuration");

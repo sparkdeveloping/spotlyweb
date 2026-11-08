@@ -32,7 +32,7 @@ export function CustomerShell({
   current = "home",
   user,
   profile,
-  locationLabel = "Harare",
+  locationLabel = "Choose location",
   onHome,
   onSearch,
   onActivity,

@@ -18,6 +18,7 @@ import {
 import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, TabPanel, Tabs } from "@/components/ui";
 import { useToast } from "@/components/providers";
 import { formatCurrency } from "@/lib/format";
+import { countryDefinition } from "@/lib/country-engine";
 import { updateBusinessOrder } from "@/lib/business-services";
 import { useBusinessWorkspace } from "@/components/business/business-context";
 import { BusinessSwitcher, ConfirmDialog, FieldLabel, FullScreenTask, fieldClass, selectClass, textAreaClass } from "@/components/business/shared";
@@ -270,7 +271,7 @@ function ActivityDetails({ record, open, onClose, user, products, archetype }) {
     <Modal open={open && !task.open} onClose={onClose} title={`${flow.singular[0].toUpperCase()}${flow.singular.slice(1)} ${reference(record)}`} size="xl">
       <div className="grid gap-0 lg:grid-cols-[1.1fr_.9fr]">
         <div className="border-b p-5 lg:border-b-0 lg:border-r">
-          <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><StatusBadge status={(record.status || "submitted").replaceAll("_", " ")} /><PaymentBadge record={record} /></div><h2 className="mt-4 text-2xl font-semibold">{customerName(record)}</h2><p className="mt-2 text-sm text-secondary">Created {created ? created.toLocaleString("en-ZW", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Harare" }) : "recently"}</p></div><p className="text-2xl font-semibold">{total(record) > 0 ? formatCurrency(total(record), record.currency || "USD") : "—"}</p></div>
+          <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><StatusBadge status={(record.status || "submitted").replaceAll("_", " ")} /><PaymentBadge record={record} /></div><h2 className="mt-4 text-2xl font-semibold">{customerName(record)}</h2><p className="mt-2 text-sm text-secondary">Created {created ? created.toLocaleString(String(countryDefinition(record.country)?.locale || "en").replace("_", "-"), { dateStyle: "medium", timeStyle: "short", timeZone: record.timeZone || countryDefinition(record.country)?.timeZone || "UTC" }) : "recently"}</p></div><p className="text-2xl font-semibold">{total(record) > 0 ? formatCurrency(total(record), record.currency || "USD") : "—"}</p></div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-bold"><CalendarDays className="h-4 w-4 text-business" />{scheduled.label}</div><p className="mt-2 text-sm">{scheduled.date} · {scheduled.time}</p><p className="mt-1 text-xs text-secondary">{locationName}</p></div><div className="rounded-2xl bg-grouped p-4"><div className="flex items-center gap-2 text-sm font-bold"><Phone className="h-4 w-4 text-business" />Contact</div><p className="mt-2 text-sm">{record.customerPhone || record.pickup?.contactPhone || "No phone supplied"}</p><p className="mt-1 text-xs text-secondary">{record.customerEmail || "No email supplied"}</p></div></div>
 

@@ -193,7 +193,7 @@ export function DeliveryView() {
             <div className="mt-4 space-y-4">
               <label className="block text-sm font-semibold">{driverShops ? "Store entry / meeting point" : "Pickup point"}<input className="field-control mt-2 w-full" value={form.pickupPoint} onChange={(event) => setForm({ ...form, pickupPoint: event.target.value })} placeholder="Example: Collections desk by the east entrance"/></label>
               <label className="block text-sm font-semibold">{driverShops ? "Shopping arrival instructions" : "Pickup instructions"}<textarea className="field-control mt-2 min-h-24 w-full" value={form.pickupInstructions} onChange={(event) => setForm({ ...form, pickupInstructions: event.target.value })} placeholder="Example: Park by Gate B, enter through the side door, and ask for Online Orders."/></label>
-              <label className="block text-sm font-semibold">{driverShops ? "Store contact phone" : "Pickup contact phone"}<input className="field-control mt-2 w-full" value={form.contactPhone} onChange={(event) => setForm({ ...form, contactPhone: event.target.value })} placeholder="+263 …"/></label>
+              <label className="block text-sm font-semibold">{driverShops ? "Store contact phone" : "Pickup contact phone"}<input className="field-control mt-2 w-full" value={form.contactPhone} onChange={(event) => setForm({ ...form, contactPhone: event.target.value })} placeholder="Phone number"/></label>
             </div>
           </div>
 

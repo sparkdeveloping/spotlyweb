@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { safeText } from "@/lib/server-helpers";
 import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
 import { openPlaceById } from "@/lib/open-marketplace-data";
+import { countryCity, countryCurrencies, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ const provisionalSchema = z.object({
   capabilities: z.array(z.string().max(80)).max(30).optional(),
   operatingModel: z.string().max(80).optional(),
   city: z.string().max(100).optional(),
-  country: z.string().max(8).optional(),
+  country: z.enum(["ZW", "MW"]).optional(),
   website: z.string().max(500).optional(),
   description: z.string().max(1000).optional(),
   organizationName: z.string().max(180).optional(),
@@ -162,6 +163,7 @@ export async function POST(request) {
         brandName: curated.brandName || curated.name || input.provisionalBusiness.brandName,
         address: curated.address || input.provisionalBusiness.address,
         city: curated.city || input.provisionalBusiness.city,
+        country: normalizeCountryCode(curated.country) || input.provisionalBusiness.country,
         source: curated.source
       };
     }
@@ -210,6 +212,9 @@ export async function POST(request) {
 
         const ownerCreated = provisional.source?.type === "owner_created";
         const openCurated = provisional.source?.type === "openstreetmap" && provisional.source?.rightsStatus === "open_odbl";
+        const provisionalCountry = normalizeCountryCode(provisional.country);
+        const provisionalCity = countryCity(provisionalCountry, provisional.city);
+        if (!provisionalCountry || !provisionalCity) throw Object.assign(new Error("Choose a supported country and city for this business."), { status: 422 });
         if (!ownerCreated && !openCurated) {
           throw Object.assign(new Error("This listing cannot be claimed until Spotly confirms its source rights."), { status: 409 });
         }
@@ -232,7 +237,7 @@ export async function POST(request) {
           businessIds: [input.businessId],
           branchIds: [resolvedBranchId],
           status: "pending_verification",
-          country: provisional.country || "ZW",
+          country: provisionalCountry,
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()
         });
@@ -242,7 +247,8 @@ export async function POST(request) {
           name: branchName,
           branchName,
           displayName: `${safeText(provisional.brandName || provisional.name, 180)} — ${branchName}`,
-          city: safeText(provisional.city || "Harare", 100),
+          city: provisionalCity.name,
+          country: provisionalCountry,
           address: safeText(provisional.address || "", 500),
           phone: safeText(provisional.phone || "", 40),
           email: safeText(provisional.email || "", 254),
@@ -252,7 +258,7 @@ export async function POST(request) {
           reviewStatus: "pending_launch_review",
           fulfilment: [],
           paymentMethods: [],
-          acceptedCurrencies: ["USD", "ZWG"],
+          acceptedCurrencies: countryCurrencies(provisionalCountry),
           searchTerms: searchTerms(provisional.name, branchName, provisional.city, provisional.address),
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()
@@ -284,8 +290,8 @@ export async function POST(request) {
           businessType,
           capabilities,
           operatingModel: provisional.operatingModel || "single_location",
-          city: safeText(provisional.city || "Zimbabwe", 100),
-          country: provisional.country || "ZW",
+          city: provisionalCity.name,
+          country: provisionalCountry,
           phone: safeText(provisional.phone || "", 40),
           email: safeText(provisional.email || "", 254),
           website: safeText(provisional.website || "", 500),

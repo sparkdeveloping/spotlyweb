@@ -6,6 +6,7 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { adminBusinessState } from "@/lib/admin-business-register";
 import { requireNxt, serial, noStore, audit } from "@/lib/nxt-server";
 import { NXT_CHANNELS, NXT_OUTCOMES, NXT_STATUSES, cleanProspect } from "@/lib/nxt-policy";
+import { countryCity, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ const inputSchema = z.object({
   action: z.enum(["create", "update", "log", "handover", "link"]),
   id: z.string().trim().max(140).optional(),
   name: z.string().trim().min(2).max(180).optional(),
-  category: z.string().trim().max(140).optional(), city: z.string().trim().max(120).optional(), address: z.string().trim().max(300).optional(),
+  category: z.string().trim().max(140).optional(), country: z.enum(["ZW", "MW"]).optional(), city: z.string().trim().max(120).optional(), address: z.string().trim().max(300).optional(),
   phone: z.string().trim().max(80).optional(), email: z.union([z.literal(""), z.string().email()]).optional(),
   website: z.string().trim().max(400).optional(), description: z.string().trim().max(1400).optional(),
   contactName: z.string().trim().max(180).optional(), contactRole: z.string().trim().max(140).optional(),
@@ -113,6 +114,9 @@ export async function POST(request) {
     const {db}=getAdminServices();const now=FieldValue.serverTimestamp();
     if(input.action==="create") {
       if(!input.name)err("A business name is required.");
+      const country=normalizeCountryCode(input.country);
+      if(!country)err("Choose Zimbabwe or Malawi for this prospect.");
+      if(input.city && !countryCity(country,input.city))err("Choose a city supported by the selected country.");
       const ref=db.collection(C).doc();const details=cleanProspect(input);
       if(input.businessId){const matched=await db.collection("businesses").doc(input.businessId).get();if(!matched.exists)err("Directory business not found",404);}
       await ref.create({...details,businessId:input.businessId||"",source:"nxt_manual",status:"new",assigneeUid:actor.uid,createdBy:actor.uid,createdAt:now,updatedAt:now,public:false,claimStatus:"unclaimed",verificationStatus:"unverified"});

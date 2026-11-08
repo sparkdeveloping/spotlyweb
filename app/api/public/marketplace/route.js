@@ -21,6 +21,7 @@ export async function GET(request) {
     const rate = await enforceRateLimit(request, { key: "public-marketplace", limit: 120, windowMs: 60_000 });
     const url = new URL(request.url);
     const queryText = url.searchParams.get("q") || "";
+    const country = String(url.searchParams.get("country") || "").trim().toUpperCase();
     const city = url.searchParams.get("city") || "";
     const service = url.searchParams.get("service") || "";
     const max = Math.min(Math.max(Number(url.searchParams.get("limit") || 100), 1), 250);
@@ -29,11 +30,12 @@ export async function GET(request) {
 
     const [snapshot, curatedResult, showUnclaimed] = await Promise.all([
       db.collection("businesses").where("public", "==", true).limit(700).get(),
-      Promise.resolve(queryOpenPlaces({ city, q: queryText, service, limit: 2500 })), unclaimedPublicationEnabled(db)
+      Promise.resolve(queryOpenPlaces({ country, city, q: queryText, service, limit: 2500 })), unclaimedPublicationEnabled(db)
     ]);
     const firestore = snapshot.docs.filter((doc) => visible(doc.data()) && canShowDirectoryRecord(doc.data(), showUnclaimed)).map((doc) => publicBusinessRecord(doc.id, doc.data()));
     const curated = (showUnclaimed ? curatedResult.records : []).map((item) => publicBusinessRecord(item.id, item));
     const records = groupMarketplaceBusinesses(mergeCuratedWithFirestore(curated, firestore))
+      .filter((item) => !country || String(item.country || "").toUpperCase() === country)
       .filter((item) => !city || !text(item.city) || text(item.city) === text(city))
       .filter((item) => !requestedTokens.length || requestedTokens.every((token) => searchable(item).includes(token)))
       .sort((a, b) => compareMarketplaceBusinesses(a, b))

@@ -5,6 +5,7 @@ import { requirePlatformPermission } from "@/lib/access-control-server";
 import { businessRoleTemplates } from "@/data/business-config";
 import { safeText } from "@/lib/server-helpers";
 import { notifyUser } from "@/lib/notification-server";
+import { countryDefinition } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,8 @@ export async function POST(request) {
       const businessSnapshot = await transaction.get(businessRef);
       if (!businessSnapshot.exists) throw Object.assign(new Error("The linked business was not found."), { status: 404 });
       const business = businessSnapshot.data();
+      const businessCountry = countryDefinition(business.country);
+      if (body.decision === "approve" && !businessCountry) throw Object.assign(new Error("Set a supported business country before approving this claim."), { status: 409 });
       const status = body.decision === "approve" ? "approved" : body.decision === "request" ? "needs_information" : "rejected";
 
       let memberRef = null;
@@ -95,7 +98,7 @@ export async function POST(request) {
             businessIds: FieldValue.arrayUnion(claim.businessId),
             ownerIds: grant.role === "organization_owner" ? FieldValue.arrayUnion(claim.applicantId) : [],
             status: "active",
-            country: business.country || "ZW",
+            country: businessCountry.code,
             updatedAt: FieldValue.serverTimestamp()
           }, { merge: true });
         } else if (grant.role === "organization_owner") {

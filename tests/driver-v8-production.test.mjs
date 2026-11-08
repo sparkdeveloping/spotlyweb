@@ -338,9 +338,9 @@ test("new work types can be requested without training or admin-only activation 
   assert.match(capabilities, /capabilityRequirements/);
 });
 
-test("Driver readiness validates saved Zimbabwe contacts and authoritative payout evidence", () => {
+test("Driver readiness validates country-aware contacts and authoritative payout evidence", () => {
   const vehicle = { id: "test_primary", type: "car", registration: "ABC 123", make: "Toyota", model: "Corolla" };
-  const application = { legalName: "Full Driver", phone: "+263", city: "Harare", emergencyContactName: "", emergencyContactPhone: "",
+  const application = { legalName: "Full Driver", country: "ZW", phone: "+263", city: "Harare", emergencyContactName: "", emergencyContactPhone: "",
     country: "ZW", requestedCapabilities: ["ride_passenger"], payoutComplete: true, agreementsAccepted: true, locationConsent: true };
   const docs = ["identity", "licence", "registration", "insurance", "vehicle_fitness"].map((type) =>
     ({ type, vehicleId: ["registration", "insurance", "vehicle_fitness"].includes(type) ? "test_primary" : null, status: "uploaded" }));
@@ -349,10 +349,12 @@ test("Driver readiness validates saved Zimbabwe contacts and authoritative payou
   for (const id of ["phone", "emergency_contact", "emergency_phone", "payout"]) {
     assert.equal(missing.checks.find((item) => item.id === id)?.ok, false, id);
   }
-  assert.equal(validDriverPhone("+263"), false);
-  assert.equal(validDriverPhone("0771234567"), true);
-  assert.equal(validDriverPhone("+263771234567"), true);
-  assert.equal(validDriverPhone("077"), false);
+  assert.equal(validDriverPhone("+263", "ZW"), false);
+  assert.equal(validDriverPhone("0771234567", "ZW"), true);
+  assert.equal(validDriverPhone("+263771234567", "ZW"), true);
+  assert.equal(validDriverPhone("0991234567", "MW"), true);
+  assert.equal(validDriverPhone("0771234567"), false, "country is explicit");
+  assert.equal(validDriverPhone("077", "ZW"), false);
   application.phone = "+263771234567";
   application.emergencyContactName = "Emergency Contact";
   application.emergencyContactPhone = "0771234567";

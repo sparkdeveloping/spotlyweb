@@ -8,6 +8,7 @@ import { CustomerShell } from "@/components/customer-shell";
 import { ServiceEntrance, ServiceSwitcher } from "@/components/service-identity";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
+import { useCountry } from "@/components/country-provider";
 import { Badge, Button, Card, EmptyState, Modal, StatusBadge } from "@/components/ui";
 import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
@@ -36,7 +37,7 @@ const stateCopy = {
   failed: ["Ride needs attention", "Spotly could not complete this ride."],
 };
 
-function LocationSearch({ label, value, onChange, point, onSelect, city = "Harare", country="ZW", currentLocation = false }) {
+function LocationSearch({ label, value, onChange, point, onSelect, city = "", country = "", currentLocation = false }) {
   const [results, setResults] = useState([]); const [loading, setLoading] = useState(false); const [searchError,setSearchError]=useState(""); const timer = useRef(null);
   useEffect(() => {
     clearTimeout(timer.current);
@@ -85,6 +86,7 @@ function ActiveRide({ ride, onRefresh, onCancel }) {
 
 export function RideApp() {
   const { user, profile, authReady } = useAuth(); const { settings } = usePlatform(); const { toast } = useToast();
+  const countryContext = useCountry();
   const ridesEnabled = typeof settings?.mobility?.ridesEnabled === "boolean" ? settings.mobility.ridesEnabled : settings?.launch?.ridesEnabled === true;
   const cashEnabled = settings?.mobility?.cashEnabled !== false; const paynowEnabled = settings?.integrations?.paynowEnabled === true && (settings?.commerce?.paymentMethods || []).includes("paynow");
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -134,8 +136,14 @@ export function RideApp() {
   useEffect(() => {
     if (bookingError) bookingErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [bookingError]);
-  const [city,setCity]=useState(settings?.launch?.primaryCity||"Harare");
-  const [country,setCountry]=useState(settings?.launch?.primaryCountry==="MW"?"MW":"ZW");
+  const [city,setCity]=useState(profile?.preferences?.preferredCity || "");
+  const [country,setCountry]=useState(countryContext.countryCode || "");
+  useEffect(() => {
+    if (!countryContext.countryCode) return;
+    setCountry(countryContext.countryCode);
+    const allowed = countryContext.country?.cities?.some((item) => item.name === city);
+    if (!allowed) setCity(profile?.preferences?.preferredCity && countryContext.country?.cities?.some((item) => item.name === profile.preferences.preferredCity) ? profile.preferences.preferredCity : "");
+  }, [countryContext.countryCode, countryContext.country, profile?.preferences?.preferredCity, city]);
   const [pickupText, setPickupText] = useState(""); const [dropoffText, setDropoffText] = useState(""); const [pickup, setPickup] = useState(null); const [dropoff, setDropoff] = useState(null);
   const [mapTarget,setMapTarget]=useState(null); const [serviceType, setServiceType] = useState("economy"); const [paymentMethod, setPaymentMethod] = useState("cash"); const [quote, setQuote] = useState(null); const [loading, setLoading] = useState(""); const [activeRide, setActiveRide] = useState(null); const [history, setHistory] = useState([]); const [cancelRide, setCancelRide] = useState(null); const [cancelReason, setCancelReason] = useState("");
   const rideLabLocationValidation = validateRideLabLocations(pickup, dropoff);
@@ -148,7 +156,7 @@ export function RideApp() {
     setPickup(draft.pickup); setDropoff(draft.dropoff);
     setPickupText(draft.pickup.formattedAddress || draft.pickup.label || "");
     setDropoffText(draft.dropoff.formattedAddress || draft.dropoff.label || "");
-    setCountry(draft.pickup.country); setCity(draft.pickup.city || "Harare");
+    setCountry(draft.pickup.country); setCity(draft.pickup.city || "");
     setServiceType(draft.serviceType);
     setBookingStep(2); setPreviewOpen(true); setQuote(null);
     setResumeNotice("Your pickup and destination are restored. See a fresh fare before confirming your ride.");

@@ -38,7 +38,10 @@
     "firebase:deploy:platform": "npx --yes firebase-tools@15.35.0 deploy --project spotly-africa --only functions:platform,firestore:rules,firestore:indexes,database,storage",
     "test:platform-foundation": "node --test tests/firebase-platform-foundation.test.mjs",
     "test:emulator:platform": "npx --yes firebase-tools@15.35.0 emulators:exec --project demo-spotly-platform --only auth,firestore,database,functions,storage \"node --test tests/emulator/platform-foundation-emulator.mjs\"",
-    "firebase:emulators:platform": "npx --yes firebase-tools@15.35.0 emulators:start --project demo-spotly-platform --only auth,firestore,database,functions,storage"
+    "firebase:emulators:platform": "npx --yes firebase-tools@15.35.0 emulators:start --project demo-spotly-platform --only auth,firestore,database,functions,storage",
+    "countries:generate": "node scripts/generate-country-bindings.mjs",
+    "countries:check": "node --test tests/country-engine-v1.test.mjs",
+    "countries:verify-snapshots": "node scripts/verify-country-snapshots.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

@@ -5,6 +5,7 @@ import { applicationReadiness, docsData, docData, operationalEligibility, notify
 import { DRIVER_CAPABILITIES, capabilityRequirements, capabilitySummary, documentRequirementsFor, normalizeCapabilities } from "@/lib/driver-capabilities";
 import { driverBalanceAccountId, sanitizeDriverBalance } from "@/lib/driver-money-server";
 import { safeText } from "@/lib/server-helpers";
+import { countryCity, normalizeCountryCode } from "@/lib/country-engine";
 import { validCountry, driverCountryCanActivate } from "@/lib/driver-regions";
 import { canOverrideDriverCountry } from "@/lib/driver-leads";
 
@@ -112,6 +113,9 @@ export async function POST(request) {
       if (!submission.complete) {
         throw Object.assign(new Error("The Driver application has incomplete requirements: " + submission.checks.filter((check) => !check.ok).map((check) => check.label).join(", ")), { status: 409 });
       }
+      const countryCode = normalizeCountryCode(app.country);
+      const workCity = countryCity(countryCode, app.city);
+      if (!countryCode || !workCity) throw Object.assign(new Error("The Driver needs a supported country and city before approval."), { status: 409 });
       const requested = normalizeCapabilities(app.requestedCapabilities || [], vehicle.type);
       const capabilityStates = {};
       for (const capabilityId of requested) {
@@ -122,7 +126,7 @@ export async function POST(request) {
       updates.status = "approved"; updates.approvedAt = now; updates.reviewedBy = actor.uid;
       const batch = db.batch();
       batch.set(appRef, updates, { merge: true });
-      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", country: app.country || "ZW", city: app.city || "", zoneIds: app.preferredZones || [], requestedCapabilities: requested, capabilities: capabilityStates, selectedVehicleId: vehicle.id, payoutVerificationState: "verified", status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
+      batch.set(driverRef, { userId: body.driverId, legalName: app.legalName || userSnap.data()?.displayName || "Driver", displayName: app.legalName || userSnap.data()?.displayName || "Driver", phone: app.phone || userSnap.data()?.phoneNumber || "", country: countryCode, city: workCity.name, zoneIds: app.preferredZones || [], requestedCapabilities: requested, capabilities: capabilityStates, selectedVehicleId: vehicle.id, payoutVerificationState: "verified", status: "ready", approvedAt: now, approvedBy: actor.uid, complianceHold: false, safetyHold: false, updatedAt: now, createdAt: now }, { merge: true });
       batch.set(db.collection("adminQueueItems").doc(`driver_application_${body.driverId}`), { status: "completed", completedAt: now, completedBy: actor.uid, updatedAt: now }, { merge: true });
       await batch.commit();
     } else if (body.action === "request_information") await appRef.set({ status: "information_required", reviewReason: reason, reviewedBy: actor.uid, updatedAt: now }, { merge: true });

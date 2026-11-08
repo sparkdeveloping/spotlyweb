@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
+import { countryCity, countryCurrencies, countryDefinition } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,8 @@ const createSchema = z.object({
   capabilities: z.array(z.string().max(80)).max(30).optional(),
   legalName: z.string().trim().max(180).optional().default(""),
   category: z.string().trim().min(2).max(100).default("Groceries"),
-  city: z.string().trim().min(2).max(100).default("Harare"),
+  country: z.enum(["ZW", "MW"]),
+  city: z.string().trim().min(2).max(100),
   description: z.string().trim().max(1600).optional().default(""),
   phone: z.string().trim().max(60).optional().default(""),
   email: z.union([z.literal(""), z.string().email()]).optional().default(""),
@@ -71,6 +73,11 @@ export async function POST(request) {
   try {
     const actor = await authenticateRequest(request, { roles: ["super_admin", "platform_admin", "operations_manager", "data_import_manager"] });
     const input = createSchema.parse(await request.json());
+    const country = countryDefinition(input.country);
+    const city = countryCity(input.country, input.city);
+    if (!country || !city) throw Object.assign(new Error("Choose a supported country and city."), { status: 422 });
+    const acceptedCurrencies = countryCurrencies(country.code);
+    const primaryCurrency = acceptedCurrencies[0];
     const { db } = getAdminServices();
     const organizationRef = db.collection("organizations").doc();
     const businessRef = db.collection("businesses").doc();
@@ -89,7 +96,7 @@ export async function POST(request) {
       businessIds: [businessRef.id],
       branchIds: [branchRef.id],
       ownerIds: [],
-      country: "ZW",
+      country: country.code,
       status: input.status,
       source: { type: "admin_created", imported: false },
       searchTerms: terms(brandName, input.legalName),
@@ -113,23 +120,23 @@ export async function POST(request) {
       onboardingStatus: "not_started",
       category: input.category,
       categories: [input.category],
-      city: input.city,
-      country: "ZW",
+      city: city.name,
+      country: country.code,
       description: input.description || `${input.name} is listed provisionally for discovery and business claiming. Details must be confirmed before full publication.`,
       phone: input.phone,
       email: input.email,
       website: input.website,
       address: input.address,
-      currency: "USD",
-      acceptedCurrencies: ["USD", "ZWG"],
+      currency: primaryCurrency,
+      acceptedCurrencies,
       fulfilment: pickupEnabled ? ["pickup"] : [],
       public: input.public,
       claimStatus: "unclaimed",
       verificationStatus: "unverified",
       status: input.status,
       source: { type: "admin_created", imported: false, createdBy: actor.uid },
-      aliases: [input.name, brandName, input.city],
-      searchTerms: terms(input.name, brandName, input.category, input.city, input.phone),
+      aliases: [input.name, brandName, city.name],
+      searchTerms: terms(input.name, brandName, input.category, city.name, country.name, input.phone),
       onboardingProgress: 0,
       createdAt: now,
       updatedAt: now,
@@ -143,8 +150,8 @@ export async function POST(request) {
       name: branchName,
       branchName,
       displayName: `${input.name} — ${branchName}`,
-      city: input.city,
-      country: "ZW",
+      city: city.name,
+      country: country.code,
       address: input.address,
       phone: input.phone,
       email: input.email,
@@ -153,9 +160,9 @@ export async function POST(request) {
       fulfilment: pickupEnabled ? ["pickup"] : [],
       openingHours: openingHours(),
       pickup: { enabled: pickupEnabled, slotMinutes: 30, slotCapacity: 12, preparationMinutes: 45 },
-      acceptedCurrencies: ["USD", "ZWG"],
+      acceptedCurrencies,
       paymentMethods: ["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"],
-      searchTerms: terms(input.name, brandName, branchName, input.city, input.address),
+      searchTerms: terms(input.name, brandName, branchName, city.name, country.name, input.address),
       source: { type: "admin_created", imported: false },
       createdAt: now,
       updatedAt: now,
@@ -169,7 +176,7 @@ export async function POST(request) {
       entityId: businessRef.id,
       actorId: actor.uid,
       actorEmail: actor.email || "",
-      metadata: { organizationId: organizationRef.id, branchId: branchRef.id, name: input.name, branchName, city: input.city, businessType },
+      metadata: { organizationId: organizationRef.id, branchId: branchRef.id, name: input.name, branchName, country: country.code, city: city.name, businessType },
       createdAt: now
     });
 

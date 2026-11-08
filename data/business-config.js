@@ -145,7 +145,8 @@ export const emptyProduct = {
 
 export const defaultBranch = {
   name: "",
-  city: "Harare",
+  country: "",
+  city: "",
   address: "",
   phone: "",
   email: "",
@@ -153,7 +154,7 @@ export const defaultBranch = {
   public: true,
   status: "active",
   fulfilment: ["pickup"],
-  acceptedCurrencies: ["USD", "ZWG"],
+  acceptedCurrencies: [],
   paymentMethods: ["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer"],
   pickup: { enabled: true, slotMinutes: 30, slotCapacity: 12, preparationMinutes: 45 },
   openingHours: {

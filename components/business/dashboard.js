@@ -25,6 +25,7 @@ import { saveBranch } from "@/lib/firebase-services";
 import { pickupAvailability } from "@/lib/pickup-availability";
 import { useToast } from "@/components/providers";
 import { businessHref } from "@/lib/business-routing";
+import { countryDefinition } from "@/lib/country-engine";
 
 function timestamp(value) {
   if (!value) return null;
@@ -33,20 +34,25 @@ function timestamp(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function relativeTime(value) {
+function relativeTime(value, countryCode) {
   const date = timestamp(value);
   if (!date) return "Recently";
-  return date.toLocaleString("en-ZW", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const country = countryDefinition(countryCode);
+  return date.toLocaleString(String(country?.locale || "en").replace("_", "-"), { timeZone: country?.timeZone || "UTC", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-function sameDay(value, now = new Date()) {
+function sameDay(value, countryCode, now = new Date()) {
   const date = timestamp(value);
-  return Boolean(date && date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate());
+  if (!date) return false;
+  const timeZone = countryDefinition(countryCode)?.timeZone || "UTC";
+  const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  return dateKey === todayKey;
 }
 
-function money(value) {
+function money(value, currency = "USD", locale = "en") {
   const amount = Number(value || 0);
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(Number.isFinite(amount) ? amount : 0);
+  return new Intl.NumberFormat(String(locale || "en").replace("_", "-"), { style: "currency", currency, maximumFractionDigits: 2 }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 function activityIcon(type, className = "h-4 w-4") {
@@ -75,10 +81,11 @@ export function BusinessDashboard() {
   const capabilities = new Set(data.business?.capabilities || data.archetype.capabilities);
   const needsCatalog = ["catalog", "menu", "events", "services", "listings", "profile"].some((item) => capabilities.has(item));
   const locationName = data.selectedBranch?.branchName || data.selectedBranch?.name || data.selectedBranch?.displayName || "Main location";
+  const locationCountry = countryDefinition(data.selectedBranch?.country || data.business?.country);
   const locationCity = data.selectedBranch?.city || "Location not set";
   const locationOpen = data.selectedBranch?.status !== "paused" && data.selectedBranch?.status !== "inactive";
   const availability = pickupAvailability(data.selectedBranch);
-  const todayOrders = scopedOrders.filter((order) => sameDay(order.createdAt || order.updatedAt));
+  const todayOrders = scopedOrders.filter((order) => sameDay(order.createdAt || order.updatedAt, order.country || locationCountry?.code));
   const todayValue = todayOrders.reduce((sum, order) => sum + Number(order.total || order.totalAmount || order.grandTotal || order.amount || 0), 0);
 
   async function toggleLocationStatus() {
@@ -125,7 +132,7 @@ export function BusinessDashboard() {
 
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Metric label={`${activityLabel} today`} value={todayOrders.length} detail={`${activeOrders.length} currently active`} icon={ShoppingBag} />
-      <Metric label="Today's value" value={money(todayValue)} detail="Based on activity recorded today" icon={DollarSign} />
+      <Metric label="Today's value" value={money(todayValue, todayOrders.find((order) => order.currency)?.currency || locationCountry?.currencyPriority?.[0] || "USD", locationCountry?.locale)} detail="Based on activity recorded today" icon={DollarSign} />
       <Metric label={`Active ${data.archetype.nouns.items}`} value={activeProducts.length} detail={unavailableProducts.length ? `${unavailableProducts.length} unavailable` : "Availability looks clear"} icon={PackageCheck} />
       <Metric label="Team access" value={data.members.length} detail={openSupport.length ? `${openSupport.length} support item${openSupport.length === 1 ? "" : "s"} open` : "Support inbox clear"} icon={UsersRound} />
     </section>
@@ -135,7 +142,7 @@ export function BusinessDashboard() {
       <ReadinessCard compact />
     </section>
 
-    <section className="overflow-hidden rounded-2xl border bg-[var(--surface)]"><div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><h2 className="text-lg font-bold">{activityLabel} right now</h2><p className="mt-1 text-sm text-secondary">Grouped by the next operational state.</p></div><Button asChild size="sm" variant="outline"><Link href={href("/business/activity")}>Open full view<ArrowRight className="h-4 w-4" /></Link></Button></div><div className="grid divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">{queueGroups.map((group) => <div key={group.id} className="min-w-0"><div className="flex items-center justify-between bg-[var(--surface-2)] px-5 py-3"><p className="text-sm font-bold">{group.label}</p><Badge tone={group.tone}>{group.records.length}</Badge></div><div>{group.records.slice(0, 4).map((order) => <Link href={href("/business/activity", { order: order.id })} key={order.id} className="flex items-center gap-3 border-b p-4 transition hover:bg-grouped last:border-b-0"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business">{activityIcon(data.businessType)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{order.number || order.reference || order.id.slice(0, 8).toUpperCase()}</span><span className="mt-1 block truncate text-xs text-secondary">{order.customerName || "Spotly customer"} · {relativeTime(order.createdAt)}</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link>)}{!group.records.length && <p className="p-5 text-sm leading-6 text-secondary">Nothing in {group.label.toLowerCase()} right now.</p>}</div></div>)}</div></section>
+    <section className="overflow-hidden rounded-2xl border bg-[var(--surface)]"><div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><h2 className="text-lg font-bold">{activityLabel} right now</h2><p className="mt-1 text-sm text-secondary">Grouped by the next operational state.</p></div><Button asChild size="sm" variant="outline"><Link href={href("/business/activity")}>Open full view<ArrowRight className="h-4 w-4" /></Link></Button></div><div className="grid divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">{queueGroups.map((group) => <div key={group.id} className="min-w-0"><div className="flex items-center justify-between bg-[var(--surface-2)] px-5 py-3"><p className="text-sm font-bold">{group.label}</p><Badge tone={group.tone}>{group.records.length}</Badge></div><div>{group.records.slice(0, 4).map((order) => <Link href={href("/business/activity", { order: order.id })} key={order.id} className="flex items-center gap-3 border-b p-4 transition hover:bg-grouped last:border-b-0"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-business-soft text-business">{activityIcon(data.businessType)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{order.number || order.reference || order.id.slice(0, 8).toUpperCase()}</span><span className="mt-1 block truncate text-xs text-secondary">{order.customerName || "Spotly customer"} · {relativeTime(order.createdAt, order.country || locationCountry?.code)}</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link>)}{!group.records.length && <p className="p-5 text-sm leading-6 text-secondary">Nothing in {group.label.toLowerCase()} right now.</p>}</div></div>)}</div></section>
 
     <section className="grid gap-5 lg:grid-cols-2"><Card className="overflow-hidden"><div className="border-b px-5 py-4 sm:px-6"><h2 className="font-bold">Keep the business ready</h2><p className="mt-1 text-sm text-secondary">Small checks that prevent tomorrow&apos;s problems.</p></div><div>{needsCatalog && <Link href={href("/business/catalog")} className="flex items-center gap-3 border-b p-4 hover:bg-grouped sm:px-6"><PackageCheck className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block font-semibold">Review availability</span><span className="mt-1 block text-sm text-secondary">{activeProducts.length} active · {unavailableProducts.length} unavailable</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link>}<Link href={href("/business/staff")} className="flex items-center gap-3 border-b p-4 hover:bg-grouped sm:px-6"><UsersRound className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block font-semibold">Team coverage</span><span className="mt-1 block text-sm text-secondary">{data.members.length} people currently have access</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link><Link href={href("/business/support")} className="flex items-center gap-3 p-4 hover:bg-grouped sm:px-6"><MessageCircle className="h-5 w-5 text-business" /><span className="min-w-0 flex-1"><span className="block font-semibold">Support</span><span className="mt-1 block text-sm text-secondary">{openSupport.length ? `${openSupport.length} conversation${openSupport.length === 1 ? "" : "s"} open` : "No open support conversations"}</span></span><ArrowRight className="h-4 w-4 text-tertiary" /></Link></div></Card><Card className="p-6"><p className="text-xs font-bold uppercase tracking-[.14em] text-business">Quick actions</p><h2 className="mt-2 text-xl font-bold">Do the common things fast.</h2><div className="mt-5 grid gap-3 sm:grid-cols-2"><Button asChild><Link href={href("/business/activity")}>{activityIcon(data.businessType)}Open {activityLabel}</Link></Button>{needsCatalog && <Button asChild variant="outline"><Link href={href("/business/catalog")}><PackageCheck className="h-4 w-4" />Manage {data.archetype.nouns.items}</Link></Button>}<Button asChild variant="outline"><Link href={href("/business/staff")}><UsersRound className="h-4 w-4" />Invite team</Link></Button><Button asChild variant="outline"><Link href={href("/business/support")}><MessageCircle className="h-4 w-4" />Get help</Link></Button></div></Card></section>
   </div>;
