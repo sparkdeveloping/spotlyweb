@@ -26,3 +26,7 @@ coverage
 !/database.rules.json
 !/firebase/functions/src/contracts/spotly-contracts.v1.json
 !/firebase/functions/src/contracts/spotly-countries.v1.json
+
+.env.local.old-denzeltinashe-spotly
+database-debug.log
+firestore-debug.log
