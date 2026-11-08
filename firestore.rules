@@ -551,6 +551,10 @@ service cloud.firestore {
     // Prospective Driver invitations are server-authoritative. A public client cannot enumerate leads, tokens or contact keys.
     match /driverLeads/{leadId} { allow read, write: if false; }
     match /driverLeadContacts/{contactId} { allow read, write: if false; }
+    match /driverLeadTouchpoints/{touchpointId} { allow read, write: if false; }
+    match /driverAcquisitionCampaigns/{campaignId} { allow read, write: if false; }
+    match /driverAcquisitionMetrics/{metricId} { allow read, write: if false; }
+    match /driverAcquisitionSessions/{sessionId} { allow read, write: if false; }
     match /driverApplications/{uid} {
       allow read: if self(uid) || platformAdmin() || hasPermission("drivers.read") || hasPermission("drivers.*");
       allow create, update, delete: if false;
