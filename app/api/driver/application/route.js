@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { applicationReadiness } from "@/lib/driver-delivery-server";
 import { DRIVER_CAPABILITIES, documentRequirementsFor, normalizeCapabilities } from "@/lib/driver-capabilities";
 import { safeText } from "@/lib/server-helpers";
+import { countryCity, normalizeCountryCode } from "@/lib/country-engine";
 import { normalizeDriverPhone, validCountry } from "@/lib/driver-regions";
 import { accountLast4, encryptFinancialValue } from "@/lib/business-money-server";
 import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
@@ -108,13 +109,21 @@ export async function POST(request) {
       const selectedCountry = existing.countryOverride ? existing.country : (values.country || existing.country || "");
       if (values.country !== undefined && !validCountry(values.country)) throw Object.assign(new Error("Choose a supported country."), { status: 400 });
       if (values.country !== undefined && existing.countryOverride && values.country !== existing.country) throw Object.assign(new Error("Spotly Operations has set this country. Contact support to request a change."), { status: 403 });
-      if (values.country !== undefined) updates.country = selectedCountry;
+      if (values.country !== undefined) updates.country = normalizeCountryCode(selectedCountry);
+      const countryCode = normalizeCountryCode(selectedCountry);
+      if ((values.country !== undefined || values.phone !== undefined || values.city !== undefined || values.emergencyContactPhone !== undefined) && !countryCode) {
+        throw Object.assign(new Error("Choose Zimbabwe or Malawi before saving Driver contact details."), { status: 400 });
+      }
       if (values.legalName !== undefined) updates.legalName = safeText(values.legalName, 160);
-      if (values.phone !== undefined) updates.phone = normalizeDriverPhone(values.phone, selectedCountry);
-      if (values.city !== undefined) updates.city = safeText(values.city, 80);
+      if (values.phone !== undefined) updates.phone = normalizeDriverPhone(values.phone, countryCode);
+      if (values.city !== undefined) {
+        const city = countryCity(countryCode, values.city);
+        if (!city) throw Object.assign(new Error("Choose a supported city for the selected country."), { status: 400 });
+        updates.city = city.name;
+      }
       if (values.preferredZones !== undefined) updates.preferredZones = values.preferredZones;
       if (values.emergencyContactName !== undefined) updates.emergencyContactName = safeText(values.emergencyContactName, 160);
-      if (values.emergencyContactPhone !== undefined) updates.emergencyContactPhone = normalizeDriverPhone(values.emergencyContactPhone, selectedCountry);
+      if (values.emergencyContactPhone !== undefined) updates.emergencyContactPhone = normalizeDriverPhone(values.emergencyContactPhone, countryCode);
       if (values.requestedCapabilities !== undefined) {
         updates.requestedCapabilities = [...new Set(values.requestedCapabilities)].filter((id) => DRIVER_CAPABILITIES[id] && (!vehicleType || DRIVER_CAPABILITIES[id].vehicleTypes.includes(vehicleType)));
       }
@@ -267,9 +276,14 @@ export async function POST(request) {
     if (["application_submitted", "under_review", "approved", "ready", "active", "suspended", "offboarded"].includes(appSnap.data()?.status)) {
       throw Object.assign(new Error("This application has already been submitted or reviewed."), { status: 409 });
     }
+    const submittedApplication = appSnap.data();
+    const submittedCountry = normalizeCountryCode(submittedApplication.country);
+    if (!submittedCountry || !countryCity(submittedCountry, submittedApplication.city)) {
+      throw Object.assign(new Error("Choose a supported Driver country and city before submitting."), { status: 409, blockers: [{ id: "country", label: "Country and city", step: 0 }] });
+    }
     const primaryVehicle = vehicleSnap.exists ? { id: vehicleSnap.id, ...vehicleSnap.data() } : null;
     const documents = documentQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
-    const readiness = applicationReadiness(appSnap.data(), primaryVehicle, documents, payoutSnap.exists ? payoutSnap.data() : null);
+    const readiness = applicationReadiness(submittedApplication, primaryVehicle, documents, payoutSnap.exists ? payoutSnap.data() : null);
     if (!readiness.complete) throw Object.assign(new Error("Complete every Driver application step before submitting."), { status: 409, blockers: readiness.checks.filter((item) => !item.ok) });
     await appRef.set({ status: "application_submitted", submittedAt: now, updatedAt: now }, { merge: true });
     await db.collection("adminQueueItems").doc(`driver_application_${user.uid}`).set({

@@ -20,7 +20,9 @@ coverage
 .env.local
 # Canonical Spotly wire contracts are source, not generated runtime data.
 !/contracts/spotly-contracts.v1.json
+!/contracts/spotly-countries.v1.json
 !/contracts/fixtures/
 !/contracts/fixtures/*.json
 !/database.rules.json
 !/firebase/functions/src/contracts/spotly-contracts.v1.json
+!/firebase/functions/src/contracts/spotly-countries.v1.json

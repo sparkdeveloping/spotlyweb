@@ -5,6 +5,7 @@ import { requireBusinessPermission } from "@/lib/access-control-server";
 import { defaultBranch } from "@/data/business-config";
 import { loadCanonicalBusinessBranches } from "@/lib/business-branches-server";
 import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
+import { countryCity, countryCurrencies, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ const branchSchema = z.object({
   id: z.string().min(1).max(220).optional(),
   branchName: z.string().max(180).optional(),
   name: z.string().max(180).optional(),
+  country: z.enum(["ZW", "MW"]).optional(),
   city: z.string().max(120).optional(),
   address: z.string().max(500).optional(),
   phone: z.string().max(80).optional(),
@@ -155,7 +157,11 @@ export async function POST(request) {
       if (!branchName) throw Object.assign(new Error("Enter a location name."), { status: 422 });
       const businessName = business.brandName || business.name || "Business";
       const fulfilment = submitted.fulfilment?.length ? submitted.fulfilment : (existingBranch?.fulfilment?.length ? existingBranch.fulfilment : ["profile"]);
-      const city = submitted.city ?? existingBranch?.city ?? "Harare";
+      const country = normalizeCountryCode(submitted.country || existingBranch?.country || business.country);
+      if (!country) throw Object.assign(new Error("Choose a supported country for this location."), { status: 422 });
+      const cityRecord = countryCity(country, submitted.city ?? existingBranch?.city);
+      if (!cityRecord) throw Object.assign(new Error("Choose a supported city for this location's country."), { status: 422 });
+      const city = cityRecord.name;
       const address = submitted.address ?? existingBranch?.address ?? "";
       const businessIsLive = ["live", "paused"].includes(String(business.lifecycleStatus || "")) || (business.status === "active" && business.public !== false);
       const requestedPublic = submitted.public ?? existingBranch?.requestedPublic ?? existingBranch?.public ?? true;
@@ -168,6 +174,7 @@ export async function POST(request) {
         name: branchName,
         branchName,
         displayName: `${businessName} — ${branchName}`,
+        country,
         city,
         address,
         phone: submitted.phone ?? existingBranch?.phone ?? "",
@@ -182,7 +189,7 @@ export async function POST(request) {
         openingHours: submitted.openingHours || existingBranch?.openingHours || defaultBranch.openingHours,
         pickup: submitted.pickup || existingBranch?.pickup || { ...defaultBranch.pickup, enabled: fulfilment.includes("pickup") },
         paymentMethods: submitted.paymentMethods || existingBranch?.paymentMethods || defaultBranch.paymentMethods,
-        acceptedCurrencies: submitted.acceptedCurrencies || existingBranch?.acceptedCurrencies || defaultBranch.acceptedCurrencies,
+        acceptedCurrencies: submitted.acceptedCurrencies || existingBranch?.acceptedCurrencies || countryCurrencies(country),
         instructions: submitted.instructions ?? existingBranch?.instructions ?? "",
         searchTerms: normalizeSearchTerms(businessName, branchName, city, address),
         updatedAt: FieldValue.serverTimestamp(),

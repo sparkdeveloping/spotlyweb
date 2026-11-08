@@ -15,11 +15,11 @@ import { categorizeMarketplaceProduct } from "@/lib/marketplace-product-taxonomy
 import { independentPublicStore, independentShoppingFlags } from "@/lib/independent-shopping";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
+import { countryTimeZone } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 
 const SERVICES = new Set(["eat", "shop", "book", "events"]);
-const HARARE_TIME_ZONE = "Africa/Harare";
 const SEED_TTL_MS = 30_000;
 let seedCache = { expiresAt: 0, value: null, pending: null };
 
@@ -67,6 +67,7 @@ function branchRecord(doc) {
     businessId: item.businessId || "",
     branchName: item.branchName || item.name || item.displayName || "Location",
     city: item.city || "",
+    country: String(item.country || "").toUpperCase(),
     area: item.suburb || item.area || "",
     address: item.address || "",
     status: item.status || "active",
@@ -145,9 +146,9 @@ function itemRecord(doc, business, service) {
   };
 }
 
-function nowParts() {
+function nowParts(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: HARARE_TIME_ZONE,
+    timeZone: timeZone || "UTC",
     weekday: "long",
     hour: "2-digit",
     minute: "2-digit",
@@ -161,9 +162,9 @@ function minuteOfDay(value) {
   return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
 }
 
-function branchOpenNow(branch) {
+function branchOpenNow(branch, fallbackCountry = null) {
   if (!branch || ["paused", "closed", "archived", "removed"].includes(text(branch.status))) return false;
-  const current = nowParts();
+  const current = nowParts(countryTimeZone(branch.country || fallbackCountry));
   const hours = branch.openingHours?.[text(current.weekday)];
   if (!hours || hours.closed) return false;
   const open = minuteOfDay(hours.open);
@@ -172,14 +173,14 @@ function branchOpenNow(branch) {
   return open !== null && close !== null && now >= open && now < close;
 }
 
-function operationalSummary(branches = []) {
+function operationalSummary(branches = [], fallbackCountry = null) {
   let earliest = null;
   let deliveryFeeFrom = null;
   let pickupAvailable = false;
   let deliveryAvailable = false;
   let openNow = false;
   for (const branch of branches) {
-    openNow = openNow || branchOpenNow(branch);
+    openNow = openNow || branchOpenNow(branch, fallbackCountry);
     const pickupConfigured = !branch.fulfilment.length || branch.fulfilment.includes("pickup");
     const availability = pickupConfigured ? pickupAvailability(branch, { days: 3 }) : { available: false };
     if (availability.available) {
@@ -244,6 +245,7 @@ export async function GET(request) {
     const url = new URL(request.url);
     const service = text(url.searchParams.get("service"));
     if (!SERVICES.has(service)) throw Object.assign(new Error("Choose Eat, Shop, Book or Events."), { status: 422 });
+    const country = String(url.searchParams.get("country") || "").trim().toUpperCase();
     const city = text(url.searchParams.get("city"));
     const area = text(url.searchParams.get("area"));
     const query = String(url.searchParams.get("q") || "").trim();
@@ -267,7 +269,7 @@ export async function GET(request) {
 
 
     const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data()) && canShowDirectoryRecord(doc.data(),showUnclaimed)).map(businessRecord);
-    const curatedBusinesses = (showUnclaimed ? queryOpenPlaces({ city, service, limit: 2500 }).records : []).map((item) => publicBusinessRecord(item.id, item));
+    const curatedBusinesses = (showUnclaimed ? queryOpenPlaces({ country, city, service, limit: 2500 }).records : []).map((item) => publicBusinessRecord(item.id, item));
     const allBusinesses = mergeCuratedWithFirestore(curatedBusinesses, firestoreBusinesses);
     const branchMap = new Map();
     branchSnapshot.docs.forEach((doc) => {
@@ -313,12 +315,13 @@ export async function GET(request) {
     }));
     const eligibleBusinesses = allBusinesses
       .filter((business) => matchesService(service, business))
+      .filter((business) => !country || String(business.country || "").toUpperCase() === country || (branchMap.get(business.id) || []).some((branch) => String(branch.country || "").toUpperCase() === country))
       .filter((business) => !city || !text(business.city) || text(business.city) === city || (branchMap.get(business.id) || []).some((branch) => text(branch.city) === city))
       .filter((business) => matchesArea(business, branchMap.get(business.id) || [], area))
       .map((business) => {
         const linked = independentStores.find(({ source }) => source.directoryBusinessId === business.id);
         const eligible = Boolean(linked) && !marketplaceTrust(business).commerceVerified && !marketplaceTrust(business).claimed;
-        return { ...business, ...(eligible ? { assistStoreId: linked.public.id, assistModel: "spotly_assist", assistPricesEstimated: true, independentItems: linked.public.items.length } : {}), operational: operationalSummary(branchMap.get(business.id) || []), promotion: (promotionMap.get(business.id) || [])[0] || null };
+        return { ...business, ...(eligible ? { assistStoreId: linked.public.id, assistModel: "spotly_assist", assistPricesEstimated: true, independentItems: linked.public.items.length } : {}), operational: operationalSummary(branchMap.get(business.id) || [], business.country), promotion: (promotionMap.get(business.id) || [])[0] || null };
       });
 
     const eligibleBusinessMap = new Map(eligibleBusinesses.map((business) => [business.id, business]));

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spotlyafrica.com/contracts/spotly-countries.v1.json",
+  "title": "Spotly Country Catalog v1",
+  "countryContractVersion": "1.0.0",
+  "publishedAt": "2026-11-08",
+  "compatibility": "additive-only-within-major",
+  "countries": [
+    {
+      "code": "ZW",
+      "name": "Zimbabwe",
+      "demonym": "Zimbabwean",
+      "dialCode": "+263",
+      "timeZone": "Africa/Harare",
+      "locale": "en_ZW",
+      "languageCodes": [
+        "en",
+        "sn",
+        "nd"
+      ],
+      "currencyPriority": [
+        "USD",
+        "ZWG"
+      ],
+      "phone": {
+        "nationalMinDigits": 9,
+        "nationalMaxDigits": 9
+      },
+      "bounds": {
+        "minLat": -22.6,
+        "maxLat": -15.55,
+        "minLng": 25.15,
+        "maxLng": 33.15
+      },
+      "mapCenter": {
+        "lat": -17.8252,
+        "lng": 31.0335,
+        "zoom": 6.2
+      },
+      "cities": [
+        {
+          "id": "harare",
+          "name": "Harare",
+          "lat": -17.8252,
+          "lng": 31.0335
+        },
+        {
+          "id": "bulawayo",
+          "name": "Bulawayo",
+          "lat": -20.1325,
+          "lng": 28.6265
+        },
+        {
+          "id": "mutare",
+          "name": "Mutare",
+          "lat": -18.9707,
+          "lng": 32.6709
+        },
+        {
+          "id": "gweru",
+          "name": "Gweru",
+          "lat": -19.455,
+          "lng": 29.817
+        },
+        {
+          "id": "victoria-falls",
+          "name": "Victoria Falls",
+          "lat": -17.9243,
+          "lng": 25.8572
+        }
+      ]
+    },
+    {
+      "code": "MW",
+      "name": "Malawi",
+      "demonym": "Malawian",
+      "dialCode": "+265",
+      "timeZone": "Africa/Blantyre",
+      "locale": "en_MW",
+      "languageCodes": [
+        "en",
+        "ny"
+      ],
+      "currencyPriority": [
+        "MWK"
+      ],
+      "phone": {
+        "nationalMinDigits": 9,
+        "nationalMaxDigits": 9
+      },
+      "bounds": {
+        "minLat": -17.18,
+        "maxLat": -9.3,
+        "minLng": 32.6,
+        "maxLng": 36.48
+      },
+      "mapCenter": {
+        "lat": -13.9626,
+        "lng": 33.7741,
+        "zoom": 6.2
+      },
+      "cities": [
+        {
+          "id": "lilongwe",
+          "name": "Lilongwe",
+          "lat": -13.9626,
+          "lng": 33.7741
+        },
+        {
+          "id": "blantyre",
+          "name": "Blantyre",
+          "lat": -15.7861,
+          "lng": 35.0058
+        },
+        {
+          "id": "mzuzu",
+          "name": "Mzuzu",
+          "lat": -11.4656,
+          "lng": 34.0207
+        },
+        {
+          "id": "zomba",
+          "name": "Zomba",
+          "lat": -15.3833,
+          "lng": 35.3333
+        }
+      ]
+    }
+  ]
+}

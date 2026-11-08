@@ -32,6 +32,7 @@ import { MarketplaceTrustBadge } from "@/components/marketplace-trust-ui";
 import { marketplaceMedia, marketplaceMediaSet } from "@/lib/marketplace-editorial";
 import { marketplaceActionLabel, marketplaceProfile } from "@/lib/marketplace-taxonomy";
 import { marketplaceEditorial } from "@/lib/marketplace-curation";
+import { countryDefinition } from "@/lib/country-engine";
 
 
 const SERVICE_CONFIG = {
@@ -79,19 +80,19 @@ const SERVICE_CONFIG = {
 
 const COMPLETE_ORDER_STATUSES = new Set(["completed", "delivered", "checked_out"]);
 
-function harareDateKey(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Harare", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+function localDateKey(date = new Date(), timeZone = "UTC") {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function eventBucket(startsAt) {
+function eventBucket(startsAt, timeZone = "UTC") {
   if (!startsAt) return "later";
   const date = new Date(startsAt);
   if (Number.isNaN(date.getTime())) return "later";
-  const todayKey = harareDateKey(new Date());
-  const key = harareDateKey(date);
-  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Harare", hour: "2-digit", hourCycle: "h23" }).format(date));
+  const todayKey = localDateKey(new Date(), timeZone);
+  const key = localDateKey(date, timeZone);
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
   if (key === todayKey && hour >= 17) return "tonight";
   if (key === todayKey) return "today";
   const todayDate = new Date(`${todayKey}T00:00:00Z`);
@@ -104,11 +105,12 @@ function eventBucket(startsAt) {
   return "later";
 }
 
-function eventDateLabel(value) {
+function eventDateLabel(value, countryCode) {
   if (!value) return "Date to be confirmed";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Date to be confirmed";
-  return new Intl.DateTimeFormat("en-ZW", { timeZone: "Africa/Harare", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(date);
+  const country = countryDefinition(countryCode);
+  return new Intl.DateTimeFormat(country?.locale?.replace("_", "-") || "en", { timeZone: country?.timeZone || "UTC", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
 function money(item, currency) {
@@ -124,15 +126,18 @@ function imageForBusiness(business) {
   return mediaForBusiness(business).src;
 }
 
-function pickupTimeLabel(value) {
+function pickupTimeLabel(value, countryCode) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  const today = harareDateKey(new Date());
-  const key = harareDateKey(date);
-  const time = new Intl.DateTimeFormat("en-ZW", { timeZone: "Africa/Harare", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+  const country = countryDefinition(countryCode);
+  const timeZone = country?.timeZone || "UTC";
+  const locale = country?.locale?.replace("_", "-") || "en";
+  const today = localDateKey(new Date(), timeZone);
+  const key = localDateKey(date, timeZone);
+  const time = new Intl.DateTimeFormat(locale, { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
   if (key === today) return `Pickup from ${time}`;
-  return `Pickup ${new Intl.DateTimeFormat("en-ZW", { timeZone: "Africa/Harare", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date)}`;
+  return `Pickup ${new Intl.DateTimeFormat(locale, { timeZone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date)}`;
 }
 
 function ServiceSkeleton() {
@@ -167,7 +172,7 @@ function BusinessCard({ business, media: assignedMedia, favorite, onFavorite, on
         {assisted ? <div className="mt-3 text-xs font-medium text-[var(--text-2)]">Choose items · Price confirmed before payment</div> : null}
         {commerce ? <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-[var(--text-2)]">
           {operation.deliveryAvailable ? <span className="inline-flex items-center gap-1.5"><Truck className="h-3.5 w-3.5" />Delivery{operation.deliveryFeeFrom > 0 ? ` from ${formatCurrency(operation.deliveryFeeFrom, currency || "USD")}` : ""}</span> : null}
-          {operation.pickupAvailable ? <span className="inline-flex items-center gap-1.5"><PackageCheck className="h-3.5 w-3.5" />{pickupTimeLabel(operation.earliestPickup) || "Pickup"}</span> : null}
+          {operation.pickupAvailable ? <span className="inline-flex items-center gap-1.5"><PackageCheck className="h-3.5 w-3.5" />{pickupTimeLabel(operation.earliestPickup, business.country) || "Pickup"}</span> : null}
           {operation.locationCount ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{operation.locationCount} {operation.locationCount === 1 ? "location" : "locations"}</span> : null}
         </div> : <div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className="text-[var(--text-3)]">{assisted ? "Spotly shops on your behalf" : assistedBooking ? "Booking request · subject to confirmation" : "Directory listing · commerce not enabled"}</span><span className="font-semibold text-[var(--accent)]">{assistedBooking ? "Request time" : action} <span aria-hidden="true">→</span></span></div>}
         {commerce ? <div className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)]">{action}<ArrowRight className="h-3.5 w-3.5" /></div> : null}
@@ -208,7 +213,7 @@ function DirectoryListingRow({ business, favorite, onFavorite, onOpen }) {
   </article>;
 }
 
-function ItemCard({ item, service, currency, saved, onOpen, onSave }) {
+function ItemCard({ item, service, currency, country, saved, onOpen, onSave }) {
   const image = item.image;
   const price = money(item, currency);
   const event = service === "events";
@@ -223,7 +228,7 @@ function ItemCard({ item, service, currency, saved, onOpen, onSave }) {
       <div className="p-4">
         <p className="truncate text-xs font-medium text-[var(--text-3)]">{item.businessName || item.category}</p>
         <h3 className="mt-1 line-clamp-2 min-h-[2.5rem] text-[15px] font-semibold leading-5 tracking-[-.015em]">{item.name}</h3>
-        {event ? <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[var(--text-2)]"><Clock3 className="h-3.5 w-3.5 text-[var(--accent)]" />{eventDateLabel(item.startsAt)}</p> : null}
+        {event ? <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[var(--text-2)]"><Clock3 className="h-3.5 w-3.5 text-[var(--accent)]" />{eventDateLabel(item.startsAt, item.country || country)}</p> : null}
         {book && item.durationMinutes > 0 ? <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-3)]"><Clock3 className="h-3.5 w-3.5" />{item.durationMinutes} min</p> : null}
         <div className="mt-3 flex items-center justify-between gap-3"><span className="text-sm font-semibold">{price || (book ? "Price on request" : "Open for details")}</span>{event && item.remainingCapacity !== null ? <span className="text-xs text-[var(--text-3)]">{item.remainingCapacity} left</span> : null}</div>
       </div>
@@ -239,9 +244,9 @@ function filterBusiness(business, filter) {
   return true;
 }
 
-function filterEvent(item, filter) {
+function filterEvent(item, filter, timeZone) {
   if (filter === "free") return Number(item.price || 0) <= 0;
-  if (["today", "tonight", "weekend"].includes(filter)) return eventBucket(item.startsAt) === filter || (filter === "today" && eventBucket(item.startsAt) === "tonight");
+  if (["today", "tonight", "weekend"].includes(filter)) return eventBucket(item.startsAt, timeZone) === filter || (filter === "today" && eventBucket(item.startsAt, timeZone) === "tonight");
   return true;
 }
 
@@ -302,7 +307,7 @@ export function ServiceDiscoveryView({
       setLoading(true);
       setError("");
       try {
-        const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, category, limit: 24 });
+        const result = await loadServiceFeed(service, { country: location.country, city: location.city, area: location.area, query, category, limit: 24 });
         if (!active) return;
         setFeed(result);
         if (query.trim().length >= 2) track(result.totalItems || result.totalBusinesses ? "service_search_results" : "service_search_zero_results", { service, query_length: query.trim().length, item_count: Number(result.totalItems || 0), business_count: Number(result.totalBusinesses || 0), city: location.city || "" });
@@ -314,13 +319,13 @@ export function ServiceDiscoveryView({
       }
     }, query ? 220 : 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [service, location.city, location.area, query, config.label, refreshKey, category]);
+  }, [service, location.country, location.city, location.area, query, config.label, refreshKey, category]);
 
   async function loadMore() {
     if (feed.nextOffset == null || loadingMore) return;
     setLoadingMore(true);
     try {
-      const result = await loadServiceFeed(service, { city: location.city, area: location.area, query, limit: 24, offset: feed.nextOffset });
+      const result = await loadServiceFeed(service, { country: location.country, city: location.city, area: location.area, query, limit: 24, offset: feed.nextOffset });
       setFeed((current) => ({ ...result, items: [...current.items, ...(result.items || [])] }));
     } catch (reason) {
       setError(reason.message || "More results could not be loaded.");
@@ -332,7 +337,7 @@ export function ServiceDiscoveryView({
   async function loadMoreBusinesses() {
     if (feed.nextBusinessOffset == null || loadingBusinesses) return;
     setLoadingBusinesses(true);
-    try { const result = await loadServiceFeed(service,{city:location.city,area:location.area,query,category,businessOffset:feed.nextBusinessOffset,limit:24}); setFeed(current=>({...current,businesses:[...new Map([...current.businesses,...result.businesses].map(item=>[item.id,item])).values()],nextBusinessOffset:result.nextBusinessOffset})); } catch(failure) {setError(failure.message);} finally {setLoadingBusinesses(false);}
+    try { const result = await loadServiceFeed(service,{country:location.country,city:location.city,area:location.area,query,category,businessOffset:feed.nextBusinessOffset,limit:24}); setFeed(current=>({...current,businesses:[...new Map([...current.businesses,...result.businesses].map(item=>[item.id,item])).values()],nextBusinessOffset:result.nextBusinessOffset})); } catch(failure) {setError(failure.message);} finally {setLoadingBusinesses(false);}
   }
 
   const categoryOptions = useMemo(() => {
@@ -343,12 +348,13 @@ export function ServiceDiscoveryView({
     return [...seen].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [feed.businesses, feed.categories, feed.businessCategories, service]);
   const productDepartments = useMemo(() => service !== "shop" ? [] : [...new Set(feed.items.map((item) => item.categoryPath?.[1] || item.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [feed.items, service]);
+  const activeTimeZone = countryDefinition(location.country)?.timeZone || "UTC";
   const businessVertical = useMemo(() => new Map(feed.businesses.map((business) => [business.id, marketplaceProfile(business).vertical])), [feed.businesses]);
   const itemFilterMatches = useMemo(() => feed.items
-    .filter((item) => service === "events" ? filterEvent(item, filter) : filter === "deals" ? ((Number(item.compareAtPrice || 0) > Number(item.price || 0) && Number(item.price || 0) > 0) || Boolean(item.promotion)) : true)
+    .filter((item) => service === "events" ? filterEvent(item, filter, activeTimeZone) : filter === "deals" ? ((Number(item.compareAtPrice || 0) > Number(item.price || 0) && Number(item.price || 0) > 0) || Boolean(item.promotion)) : true)
     .filter((item) => category === "all" || (service === "shop" ? businessVertical.get(item.businessId) === category : item.category === category))
     .filter((item) => service !== "shop" || productDepartment === "all" || item.categoryPath?.includes(productDepartment) || item.category === productDepartment),
-  [feed.items, filter, category, service, businessVertical, productDepartment]);
+  [feed.items, filter, category, service, businessVertical, productDepartment, activeTimeZone]);
   const itemBusinessIds = useMemo(() => new Set(itemFilterMatches.map((item) => item.businessId)), [itemFilterMatches]);
   const visibleBusinesses = useMemo(() => feed.businesses.filter((business) => filterBusiness(business, filter)).filter((business) => {
     if (category === "all") return true;
@@ -426,7 +432,7 @@ export function ServiceDiscoveryView({
 
     {hasInventory || loading ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">Across {config.label}</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">{config.items}</h2><p className="mt-1 text-sm text-[var(--text-3)]">{loading ? "Refreshing published offerings…" : `${feed.totalItems || 0} published ${feed.totalItems === 1 ? "offering" : "offerings"}`}</p></div><SortControl value={sort} onChange={setSort} events={service === "events"} /></div>
-      {loading && !feed.items.length ? <div className="mt-5"><ServiceSkeleton /></div> : visibleItems.length ? <><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{visibleItems.map((item) => <ItemCard key={item.id} item={item} service={service} currency={currency} saved={isSaved(item)} onOpen={onOpenItem} onSave={onToggleSaved} />)}</div>{feed.nextOffset != null ? <div className="mt-6 flex justify-center"><Button variant="outline" loading={loadingMore} onClick={loadMore}>Load more</Button></div> : null}</> : <EmptyState className="mt-5" icon={service === "events" ? Ticket : service === "book" ? CalendarDays : ShoppingBag} title={`No ${config.items.toLowerCase()} match these filters`} description="Change the filters or search for something else. Spotly only shows offerings that businesses have actually published." action={<Button onClick={() => { setFilter("all"); setCategory("all"); setProductDepartment("all"); setQuery(""); }}>Show everything</Button>} />}
+      {loading && !feed.items.length ? <div className="mt-5"><ServiceSkeleton /></div> : visibleItems.length ? <><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{visibleItems.map((item) => <ItemCard key={item.id} item={item} service={service} currency={currency} country={location.country} saved={isSaved(item)} onOpen={onOpenItem} onSave={onToggleSaved} />)}</div>{feed.nextOffset != null ? <div className="mt-6 flex justify-center"><Button variant="outline" loading={loadingMore} onClick={loadMore}>Load more</Button></div> : null}</> : <EmptyState className="mt-5" icon={service === "events" ? Ticket : service === "book" ? CalendarDays : ShoppingBag} title={`No ${config.items.toLowerCase()} match these filters`} description="Change the filters or search for something else. Spotly only shows offerings that businesses have actually published." action={<Button onClick={() => { setFilter("all"); setCategory("all"); setProductDepartment("all"); setQuery(""); }}>Show everything</Button>} />}
     </section> : null}
 
     {error && (feed.businesses.length || feed.items.length) ? <div role="status" className="mt-6 rounded-[var(--radius-card)] border border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm text-[var(--on-warning-soft)]">Some {config.label} results could not refresh. The last loaded results are still shown.</div> : null}

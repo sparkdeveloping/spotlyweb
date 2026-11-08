@@ -4,6 +4,8 @@ import {
   FOUNDATION_CAPABILITIES,
   SPOTLY_CONTRACT_SHA256,
   SPOTLY_CONTRACT_VERSION,
+  SPOTLY_COUNTRY_CONTRACT_SHA256,
+  SPOTLY_COUNTRY_CONTRACT_VERSION,
   SPOTLY_FUNCTIONS_REGION,
   SPOTLY_PROJECT_ID
 } from "./core/platform.js";
@@ -23,6 +25,8 @@ export const platformFoundation = defineCallable({
     functionsRegion: SPOTLY_FUNCTIONS_REGION,
     contractVersion: SPOTLY_CONTRACT_VERSION,
     contractSHA256: SPOTLY_CONTRACT_SHA256,
+    countryContractVersion: SPOTLY_COUNTRY_CONTRACT_VERSION,
+    countryContractSHA256: SPOTLY_COUNTRY_CONTRACT_SHA256,
     capabilities: FOUNDATION_CAPABILITIES,
     serverTimeMs: Date.now()
   })

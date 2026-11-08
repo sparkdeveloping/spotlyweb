@@ -7,7 +7,7 @@ import { useAuth } from "@/components/firebase-provider";
 
 export function CustomerNotificationsPage({ customerMode = true }) {
   const { user, profile } = useAuth();
-  const locationLabel = profile?.preferences?.preferredCity || "Harare";
+  const locationLabel = profile?.preferences?.preferredCity || "Choose location";
   return <AuthGate>
     <CustomerShell current="profile" user={user} profile={profile} locationLabel={locationLabel}>
       <div className="mx-auto max-w-4xl"><NotificationCenter workspace="customer" customerMode={customerMode} /></div>

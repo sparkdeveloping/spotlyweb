@@ -39,7 +39,7 @@ function paymentPolicy(settings = {}) {
 function cleanSettlement(snapshot) {
   if (!snapshot?.exists) return null;
   const data = snapshot.data();
-  return { id: snapshot.id, country: data.country || "Zimbabwe", bank: data.bank || "", branch: data.branch || "", accountHolder: data.accountHolder || "", accountNumberLast4: data.accountNumberLast4 || "", currency: data.currency || "USD", proofStoragePath: data.proofStoragePath || "", status: data.status || "details_submitted", rejectionReason: data.rejectionReason || "", submittedAt: toPlainTimestamp(data.submittedAt), verifiedAt: toPlainTimestamp(data.verifiedAt), updatedAt: toPlainTimestamp(data.updatedAt) };
+  return { id: snapshot.id, country: data.country || "", bank: data.bank || "", branch: data.branch || "", accountHolder: data.accountHolder || "", accountNumberLast4: data.accountNumberLast4 || "", currency: data.currency || "", proofStoragePath: data.proofStoragePath || "", status: data.status || "details_submitted", rejectionReason: data.rejectionReason || "", submittedAt: toPlainTimestamp(data.submittedAt), verifiedAt: toPlainTimestamp(data.verifiedAt), updatedAt: toPlainTimestamp(data.updatedAt) };
 }
 
 export async function GET(request) {

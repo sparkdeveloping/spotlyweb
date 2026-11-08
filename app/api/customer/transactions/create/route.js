@@ -8,6 +8,7 @@ import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promoti
 import { appointmentReservationSpecs, bookingReservationSpecs, reservationCanFit } from "@/lib/availability-reservations";
 import { marketplaceTrust } from "@/lib/marketplace-trust";
 import { transactionCreateRequestSchema } from "@/lib/contracts/schemas";
+import { countryDefinition, countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 
@@ -38,9 +39,21 @@ function transactionKind(type) {
   return null;
 }
 
-function validDate(value) {
-  const time = new Date(`${value}T00:00:00+02:00`).getTime();
-  return Number.isFinite(time) ? time : null;
+function localDateTimeEpoch(date, time, timeZone) {
+  const [year, month, day] = String(date || "").split("-").map(Number);
+  const [hour, minute] = String(time || "00:00").split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+  const wallUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(new Date(wallUtc));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const represented = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute), Number(values.second));
+  const offset = represented - wallUtc;
+  const result = wallUtc - offset;
+  return Number.isFinite(result) ? result : null;
+}
+
+function validDate(value, timeZone) {
+  return localDateTimeEpoch(value, "00:00", timeZone);
 }
 
 function plainDate(value) {
@@ -86,6 +99,11 @@ export async function POST(request) {
     const business = businessSnapshot.data();
     const branch = branchSnapshot.data();
     const product = productSnapshot.data();
+    const countryCode = normalizeCountryCode(branch.country || business.country);
+    const country = countryDefinition(countryCode);
+    if (!country) throw Object.assign(new Error("This location needs a supported country before it can accept bookings or tickets."), { status: 409 });
+    if (branch.country && business.country && normalizeCountryCode(branch.country) !== normalizeCountryCode(business.country)) throw Object.assign(new Error("This location country does not match its business record."), { status: 409 });
+    const timeZone = countryTimeZone(countryCode);
     const type = businessTypeFor(business);
     const kind = transactionKind(type);
     if (!kind) throw Object.assign(new Error("Online booking is not enabled for this business type."), { status: 409 });
@@ -115,12 +133,12 @@ export async function POST(request) {
     if (kind === "appointment" && !body.appointment) throw Object.assign(new Error("Choose an appointment date and time."), { status: 422 });
     if (kind === "booking" && !body.booking) throw Object.assign(new Error("Choose booking dates."), { status: 422 });
     if (kind === "appointment") {
-      const appointmentAt = new Date(`${body.appointment.date}T${body.appointment.time}:00+02:00`).getTime();
+      const appointmentAt = localDateTimeEpoch(body.appointment.date, body.appointment.time, timeZone);
       if (!Number.isFinite(appointmentAt) || appointmentAt < Date.now() + 10 * 60_000) throw Object.assign(new Error("Choose a future appointment time."), { status: 422 });
     }
     if (kind === "booking") {
-      const start = validDate(body.booking.startDate);
-      const end = body.booking.endDate ? validDate(body.booking.endDate) : null;
+      const start = validDate(body.booking.startDate, timeZone);
+      const end = body.booking.endDate ? validDate(body.booking.endDate, timeZone) : null;
       if (!start || start < Date.now() - 86_400_000) throw Object.assign(new Error("Choose a valid future booking date."), { status: 422 });
       if (end && end < start) throw Object.assign(new Error("The end date must be after the start date."), { status: 422 });
     }
@@ -171,6 +189,8 @@ export async function POST(request) {
       const latestProduct = freshProduct.data();
       const latestBusiness = freshBusiness.data();
       const latestBranch = freshBranch.data();
+      const latestCountryCode = normalizeCountryCode(latestBranch.country || latestBusiness.country);
+      if (latestCountryCode !== countryCode) throw Object.assign(new Error("This location country changed while you were booking. Refresh and try again."), { status: 409 });
       const latestBusinessLive = latestBusiness.public === true && (latestBusiness.status === "active" || latestBusiness.lifecycleStatus === "live");
       if (!latestBusinessLive) throw Object.assign(new Error("This business stopped accepting customer activity while you were booking."), { status: 409 });
       if (latestBranch.businessId !== body.businessId || latestBranch.public === false || (latestBranch.status && latestBranch.status !== "active")) throw Object.assign(new Error("This location stopped accepting customer activity while you were booking."), { status: 409 });
@@ -240,6 +260,8 @@ export async function POST(request) {
         branchId: body.branchId,
         branchName: safeText(latestBranch.branchName || latestBranch.name || "Location", 160),
         locationName: safeText(latestBranch.branchName || latestBranch.name || "Location", 160),
+        country: countryCode,
+        timeZone,
         currency: body.currency,
         items: [line],
         itemCount: requestedQuantity,
@@ -265,7 +287,7 @@ export async function POST(request) {
           fulfilment: "ticketing",
           event: {
             date: startsDate ? startsDate.toISOString().slice(0, 10) : "",
-            time: startsDate ? startsDate.toLocaleTimeString("en-GB", { timeZone: "Africa/Harare", hour: "2-digit", minute: "2-digit", hour12: false }) : "",
+            time: startsDate ? startsDate.toLocaleTimeString("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }) : "",
             startsAt: startsDate ? startsDate.toISOString() : null,
             endsAt: endsDate ? endsDate.toISOString() : null,
             venue: safeText(latestProduct.venue || latestBranch.address || latestBranch.branchName || "", 240)

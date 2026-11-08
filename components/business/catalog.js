@@ -24,6 +24,7 @@ import { LottieEmptyState } from "@/components/spotly-lottie";
 import { useToast } from "@/components/providers";
 import { authenticatedFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
+import { countryDefinition } from "@/lib/country-engine";
 import { removeProduct, saveProduct, uploadFile } from "@/lib/firebase-services";
 import {
   duplicateProduct,
@@ -400,7 +401,7 @@ function CsvModal({ open, onClose }) {
 }
 
 function OfferingSummary({ item, archetype }) {
-  if (archetype.id === "ticketing_events") return <div className="space-y-1 text-xs text-secondary">{item.startsAt && <p className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{new Date(item.startsAt).toLocaleString("en-ZW", { timeZone: "Africa/Harare", dateStyle: "medium", timeStyle: "short" })}</p>}{item.capacity > 0 && <p className="flex items-center gap-1.5"><UsersRound className="h-3.5 w-3.5" />{item.capacity} available</p>}</div>;
+  if (archetype.id === "ticketing_events") return <div className="space-y-1 text-xs text-secondary">{item.startsAt && <p className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{new Date(item.startsAt).toLocaleString(String(countryDefinition(item.country)?.locale || "en").replace("_", "-"), { timeZone: item.timeZone || countryDefinition(item.country)?.timeZone || "UTC", dateStyle: "medium", timeStyle: "short" })}</p>}{item.capacity > 0 && <p className="flex items-center gap-1.5"><UsersRound className="h-3.5 w-3.5" />{item.capacity} available</p>}</div>;
   if (archetype.id === "appointments_services") return <p className="flex items-center gap-1.5 text-xs text-secondary"><Clock3 className="h-3.5 w-3.5" />{item.durationMinutes || 30} minutes</p>;
   if (archetype.id === "accommodation_activities") return <p className="flex items-center gap-1.5 text-xs text-secondary"><UsersRound className="h-3.5 w-3.5" />Capacity {item.capacity || 1}</p>;
   return <p className="text-xs text-secondary">{item.sku || item.barcode || "No internal code"}</p>;

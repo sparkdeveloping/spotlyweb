@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
-import { Button, Card, ListRow, Modal, StatusBadge } from "@/components/ui";
+import { Button, Card, EntityPicker, ListRow, Modal, StatusBadge } from "@/components/ui";
 import { ThemeMenu } from "@/components/theme-menu";
 import { deleteSavedItem, saveSavedItem, saveUserPreferences, saveUserProfileDetails, subscribeSavedItems } from "@/lib/firebase-services";
 import { workspaceAccess as resolveWorkspaceAccess } from "@/lib/workspaces";
@@ -17,6 +17,8 @@ import { SpotlyLottie } from "@/components/spotly-lottie";
 import { spotlyPortalUrl } from "@/lib/spotly-domains";
 import { CustomerShell } from "@/components/customer-shell";
 import { cn } from "@/lib/cn";
+import { useCountry } from "@/components/country-provider";
+import { countryCurrencies } from "@/lib/country-engine";
 
 function accountWorkspaces(profile, memberships, staffProfile, driverProfile, driverApplication) {
   const access = resolveWorkspaceAccess({ profile, memberships, staffProfile, driverProfile: driverProfile || driverApplication });
@@ -50,7 +52,8 @@ export function AccountApp() {
   const { user, profile, memberships, staffProfile, driverProfile, driverApplication, logout, linkProvider, beginPhoneLink, enablePushNotifications, resetPassword } = useAuth();
   const { settings } = usePlatform();
   const { toast } = useToast();
-  const [phone, setPhone] = useState("+263");
+  const { country, countryCode, countries, locked: countryLocked, selectCountry } = useCountry();
+  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [confirmation, setConfirmation] = useState(null);
   const [loading, setLoading] = useState("");
@@ -65,7 +68,7 @@ export function AccountApp() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [placeOpen, setPlaceOpen] = useState(false);
   const [savedPlaces, setSavedPlaces] = useState([]);
-  const [placeForm, setPlaceForm] = useState({ label: "Home", address: "", area: "", city: "Harare" });
+  const [placeForm, setPlaceForm] = useState({ label: "Home", address: "", area: "", city: "" });
   const [profileForm, setProfileForm] = useState({ displayName: "", phone: "", preferredContact: "email", pickupContactName: "", pickupContactPhone: "" });
   const providers = useMemo(() => new Set(user?.providerData?.map((item) => item.providerId) || []), [user]);
   const workspaces = useMemo(() => accountWorkspaces(profile, memberships, staffProfile, driverProfile, driverApplication), [profile, memberships, staffProfile, driverProfile, driverApplication]);
@@ -78,7 +81,7 @@ export function AccountApp() {
     setBusinessUpdates(preferences.businessUpdates !== false);
     setWorkUpdates(preferences.workUpdates !== false);
     setMarketing(Boolean(preferences.marketing));
-    setPreferredCurrency(preferences.preferredCurrency || "USD");
+    setPreferredCurrency(preferences.preferredCurrency || countryCurrencies(preferences.countryCode)?.[0] || "USD");
     setDefaultFulfilment(preferences.defaultFulfilment || "pickup");
     setProfileForm({
       displayName: profile?.displayName || user?.displayName || "",
@@ -88,6 +91,13 @@ export function AccountApp() {
       pickupContactPhone: profile?.pickupContactPhone || profile?.phone || user?.phoneNumber || ""
     });
   }, [profile, user?.displayName, user?.phoneNumber]);
+
+  useEffect(() => {
+    if (!phone && country?.dialCode) setPhone(country.dialCode);
+    setPlaceForm((current) => current.city || !profile?.preferences?.preferredCity ? current : { ...current, city: profile.preferences.preferredCity });
+    const allowed = countryCurrencies(countryCode);
+    if (allowed.length && !allowed.includes(preferredCurrency)) setPreferredCurrency(allowed[0]);
+  }, [country?.dialCode, countryCode, profile?.preferences?.preferredCity, phone, preferredCurrency]);
 
   useEffect(() => {
     if (!user?.uid || user.isAnonymous) return undefined;
@@ -100,8 +110,9 @@ export function AccountApp() {
     setLoading("place");
     try {
       const entityId = `${placeForm.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`;
-      await saveSavedItem(user.uid, { type: "place", entityId, title: placeForm.label.trim(), subtitle: [placeForm.area, placeForm.city].filter(Boolean).join(" · "), address: placeForm.address.trim(), area: placeForm.area.trim(), city: placeForm.city.trim() || "Harare", href: "/?view=saved" });
-      setPlaceForm({ label: "Home", address: "", area: "", city: "Harare" });
+      if (!countryCode || !placeForm.city.trim()) throw new Error("Choose your country and city before saving a place.");
+      await saveSavedItem(user.uid, { type: "place", entityId, title: placeForm.label.trim(), subtitle: [placeForm.area, placeForm.city].filter(Boolean).join(" · "), address: placeForm.address.trim(), area: placeForm.area.trim(), city: placeForm.city.trim(), country: countryCode, href: "/?view=saved" });
+      setPlaceForm({ label: "Home", address: "", area: "", city: profile?.preferences?.preferredCity || "" });
       setPlaceOpen(false);
       toast("Place saved to your account.", { title: "Saved place" });
     } catch (error) { toast(error.message, { type: "error", title: "Could not save place" }); }
@@ -175,7 +186,7 @@ export function AccountApp() {
 
   return (
     <AuthGate>
-      <CustomerShell current="profile" user={user} profile={profile} locationLabel={profile?.preferences?.preferredCity || settings.launch?.primaryCity || "Harare"}>
+      <CustomerShell current="profile" user={user} profile={profile} locationLabel={profile?.preferences?.preferredCity || country?.name || "Choose location"}>
         <div className="v7-page-enter mx-auto max-w-[1120px]">
           <section className="flex flex-col gap-5 border-b border-[var(--border-subtle)] pb-7 sm:flex-row sm:items-center">
             <span className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[16px] bg-[var(--accent-soft)] text-xl font-semibold text-[var(--accent)]">{user?.photoURL ? <Image src={user.photoURL} alt="" width={64} height={64} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : initials}</span>
@@ -198,7 +209,7 @@ export function AccountApp() {
               </AccountSection>
 
               <AccountSection id="preferences" icon={Store} title="Preferences" description="These defaults make Spotly faster without limiting what each business can offer.">
-                <div className="space-y-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Appearance</p><p className="mt-1 text-xs text-secondary">Choose Light, Dark or System for this browser.</p></div><ThemeMenu /></div><ChoiceGroup label="Currency & region" value={preferredCurrency} onChange={setPreferredCurrency} options={(settings.commerce?.currencies || ["USD", "ZWG"]).map((item) => ({ value: item, label: item === "ZWG" ? "ZiG" : item }))} /><ChoiceGroup label="Default fulfilment" value={defaultFulfilment} onChange={setDefaultFulfilment} options={[{ value: "pickup", label: "Pickup" }, { value: "delivery", label: "Delivery when available" }]} /><ChoiceGroup label="Language" value={language} onChange={setLanguage} options={[{ value: "English", label: "English" }, { value: "ChiShona", label: "ChiShona · coming", disabled: true }, { value: "isiNdebele", label: "isiNdebele · coming", disabled: true }]} /><div className="flex justify-end"><Button onClick={savePreferences} loading={loading === "preferences"}>Save preferences</Button></div></div>
+                <div className="space-y-6"><div><p className="text-sm font-semibold">Country</p><p className="mt-1 text-xs text-secondary">Your country controls cities, phone formatting, currencies and local time. Service availability is configured separately.</p><div className="mt-3 flex flex-wrap gap-2">{countries.map((item)=><Button key={item.code} type="button" size="sm" variant={countryCode===item.code?"primary":"outline"} disabled={countryLocked} onClick={async()=>{try{await selectCountry(item.code,{preferredCity:"",source:"manual"});toast(`Country changed to ${item.name}.`,{title:"Country updated"});}catch(error){toast(error.message,{type:"error",title:"Could not change country"});}}}>{item.name}</Button>)}</div>{countryLocked?<p className="mt-2 text-xs text-secondary">Spotly operations currently manages this account's country.</p>:null}</div><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Appearance</p><p className="mt-1 text-xs text-secondary">Choose Light, Dark or System for this browser.</p></div><ThemeMenu /></div><ChoiceGroup label="Currency & region" value={preferredCurrency} onChange={setPreferredCurrency} options={(countryCurrencies(countryCode).length ? countryCurrencies(countryCode) : (settings.commerce?.currencies || [])).map((item) => ({ value: item, label: item === "ZWG" ? "ZiG" : item }))} /><ChoiceGroup label="Default fulfilment" value={defaultFulfilment} onChange={setDefaultFulfilment} options={[{ value: "pickup", label: "Pickup" }, { value: "delivery", label: "Delivery when available" }]} /><ChoiceGroup label="Language" value={language} onChange={setLanguage} options={[{ value: "English", label: "English" }, { value: "ChiShona", label: "ChiShona · coming", disabled: true }, { value: "isiNdebele", label: "isiNdebele · coming", disabled: true }]} /><div className="flex justify-end"><Button onClick={savePreferences} loading={loading === "preferences"}>Save preferences</Button></div></div>
               </AccountSection>
 
               <AccountSection id="notifications" icon={BellRing} title="Notifications" description="Choose which updates deserve your attention.">
@@ -208,7 +219,7 @@ export function AccountApp() {
 
               <AccountSection id="security" icon={ShieldCheck} title="Privacy & security" description="Sign-in methods, account sessions and your data controls.">
                 <div className="grid gap-3 sm:grid-cols-2"><Button variant="outline" onClick={() => link("google.com")} loading={loading === "google.com"}>{providers.has("google.com") ? <><Check className="h-4 w-4" />Google linked</> : "Link Google"}</Button><Button variant="outline" onClick={() => link("apple.com")} loading={loading === "apple.com"}>{providers.has("apple.com") ? <><Check className="h-4 w-4" />Apple linked</> : "Link Apple"}</Button><Button variant="outline" onClick={sendPasswordReset} loading={loading === "password"}>Change password</Button><Button asChild variant="outline"><Link href="/support?topic=security-sessions">Review account sessions</Link></Button></div>
-                {!user?.phoneNumber ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">Add a phone number</p><p className="mt-1 text-xs leading-5 text-secondary">Useful for account recovery and services that need a contact number.</p>{confirmation ? <div className="mt-3 flex gap-2"><input value={code} onChange={(event) => setCode(event.target.value)} className="field-control" placeholder="Verification code" /><Button onClick={confirmPhone} loading={loading === "code"}>Confirm</Button></div> : <div className="mt-3 flex gap-2"><input value={phone} onChange={(event) => setPhone(event.target.value)} className="field-control" placeholder="+263…" /><Button onClick={sendPhone} loading={loading === "phone"}>Send code</Button></div>}</div> : null}
+                {!user?.phoneNumber ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">Add a phone number</p><p className="mt-1 text-xs leading-5 text-secondary">Useful for account recovery and services that need a contact number.</p>{confirmation ? <div className="mt-3 flex gap-2"><input value={code} onChange={(event) => setCode(event.target.value)} className="field-control" placeholder="Verification code" /><Button onClick={confirmPhone} loading={loading === "code"}>Confirm</Button></div> : <div className="mt-3 flex gap-2"><input value={phone} onChange={(event) => setPhone(event.target.value)} className="field-control" placeholder={country?.dialCode ? `${country.dialCode}…` : "+country code"} /><Button onClick={sendPhone} loading={loading === "phone"}>Send code</Button></div>}</div> : null}
                 <div className="mt-5 grid gap-2 sm:grid-cols-2"><Button asChild variant="outline"><Link href="/support?topic=privacy">Request my data</Link></Button><Button asChild variant="outline"><Link href="/support?topic=account-delete">Close my account</Link></Button></div>
               </AccountSection>
 
@@ -227,8 +238,8 @@ export function AccountApp() {
           </div>
         </div>
 
-        <Modal open={placeOpen} onClose={() => setPlaceOpen(false)} title="Add a saved place" description="Save an address you use often. You can remove it at any time."><form onSubmit={savePlace} className="space-y-4 p-5"><label className="block"><span className="mb-2 block text-sm font-semibold">Label</span><input required value={placeForm.label} onChange={(event) => setPlaceForm({ ...placeForm, label: event.target.value })} className="field-control w-full" placeholder="Home" /></label><label className="block"><span className="mb-2 block text-sm font-semibold">Address or landmark</span><input required value={placeForm.address} onChange={(event) => setPlaceForm({ ...placeForm, address: event.target.value })} className="field-control w-full" placeholder="Street, building or landmark" /></label><div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Area</span><input value={placeForm.area} onChange={(event) => setPlaceForm({ ...placeForm, area: event.target.value })} className="field-control w-full" placeholder="Avondale" /></label><label><span className="mb-2 block text-sm font-semibold">City</span><input required value={placeForm.city} onChange={(event) => setPlaceForm({ ...placeForm, city: event.target.value })} className="field-control w-full" /></label></div><Button type="submit" className="w-full" loading={loading === "place"}>Save place</Button></form></Modal>
-        <Modal open={profileOpen} onClose={() => setProfileOpen(false)} title="Edit profile and pickup contact" description="These details are saved to your Spotly account and used only where relevant."><form onSubmit={saveProfile} className="space-y-4 p-5"><label className="block"><span className="mb-2 block text-sm font-semibold">Display name</span><input required value={profileForm.displayName} onChange={(event) => setProfileForm({ ...profileForm, displayName: event.target.value })} className="field-control w-full" /></label><label className="block"><span className="mb-2 block text-sm font-semibold">Contact phone</span><input value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })} className="field-control w-full" placeholder="+263…" /></label><ChoiceGroup label="Preferred contact" value={profileForm.preferredContact} onChange={(value) => setProfileForm({ ...profileForm, preferredContact: value })} options={[{ value: "email", label: "Email" }, { value: "phone", label: "Phone" }, { value: "whatsapp", label: "WhatsApp" }]} /><div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Pickup contact name</span><input value={profileForm.pickupContactName} onChange={(event) => setProfileForm({ ...profileForm, pickupContactName: event.target.value })} className="field-control w-full" /></label><label><span className="mb-2 block text-sm font-semibold">Pickup contact phone</span><input value={profileForm.pickupContactPhone} onChange={(event) => setProfileForm({ ...profileForm, pickupContactPhone: event.target.value })} className="field-control w-full" /></label></div><Button type="submit" className="w-full" loading={loading === "profile"}>Save profile</Button></form></Modal>
+        <Modal open={placeOpen} onClose={() => setPlaceOpen(false)} title="Add a saved place" description="Save an address you use often. You can remove it at any time."><form onSubmit={savePlace} className="space-y-4 p-5"><label className="block"><span className="mb-2 block text-sm font-semibold">Label</span><input required value={placeForm.label} onChange={(event) => setPlaceForm({ ...placeForm, label: event.target.value })} className="field-control w-full" placeholder="Home" /></label><label className="block"><span className="mb-2 block text-sm font-semibold">Address or landmark</span><input required value={placeForm.address} onChange={(event) => setPlaceForm({ ...placeForm, address: event.target.value })} className="field-control w-full" placeholder="Street, building or landmark" /></label><div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Area</span><input value={placeForm.area} onChange={(event) => setPlaceForm({ ...placeForm, area: event.target.value })} className="field-control w-full" placeholder="Avondale" /></label><div><span className="mb-2 block text-sm font-semibold">City</span><EntityPicker value={placeForm.city} onChange={(city) => setPlaceForm({ ...placeForm, city })} options={(country?.cities || []).map((item) => ({ value: item.name, label: item.name, description: country.name }))} title="Choose city" searchPlaceholder="Search cities" allowClear disabled={!country} /></div></div><Button type="submit" className="w-full" loading={loading === "place"}>Save place</Button></form></Modal>
+        <Modal open={profileOpen} onClose={() => setProfileOpen(false)} title="Edit profile and pickup contact" description="These details are saved to your Spotly account and used only where relevant."><form onSubmit={saveProfile} className="space-y-4 p-5"><label className="block"><span className="mb-2 block text-sm font-semibold">Display name</span><input required value={profileForm.displayName} onChange={(event) => setProfileForm({ ...profileForm, displayName: event.target.value })} className="field-control w-full" /></label><label className="block"><span className="mb-2 block text-sm font-semibold">Contact phone</span><input value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })} className="field-control w-full" placeholder={country?.dialCode ? `${country.dialCode}…` : "+country code"} /></label><ChoiceGroup label="Preferred contact" value={profileForm.preferredContact} onChange={(value) => setProfileForm({ ...profileForm, preferredContact: value })} options={[{ value: "email", label: "Email" }, { value: "phone", label: "Phone" }, { value: "whatsapp", label: "WhatsApp" }]} /><div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Pickup contact name</span><input value={profileForm.pickupContactName} onChange={(event) => setProfileForm({ ...profileForm, pickupContactName: event.target.value })} className="field-control w-full" /></label><label><span className="mb-2 block text-sm font-semibold">Pickup contact phone</span><input value={profileForm.pickupContactPhone} onChange={(event) => setProfileForm({ ...profileForm, pickupContactPhone: event.target.value })} className="field-control w-full" /></label></div><Button type="submit" className="w-full" loading={loading === "profile"}>Save profile</Button></form></Modal>
       </CustomerShell>
     </AuthGate>
   );

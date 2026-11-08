@@ -10,6 +10,7 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
 import { marketplaceTrust } from "@/lib/marketplace-trust";
 import { orderCreateRequestSchema } from "@/lib/contracts/schemas";
+import { countryDefinition, countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 
@@ -109,6 +110,11 @@ export async function POST(request) {
     if (settings.commerce?.enabled === false || !fulfilmentEnabled) throw Object.assign(new Error(`${body.fulfilment === "delivery" ? "Delivery" : "Pickup"} ordering is temporarily unavailable.`), { status: 503 });
 
     const branch = branchSnapshot.data();
+    const countryCode = normalizeCountryCode(branch.country || businessData?.country);
+    const country = countryDefinition(countryCode);
+    if (!country) throw Object.assign(new Error("This location needs a supported country before it can accept orders."), { status: 409 });
+    if (branch.country && businessData?.country && normalizeCountryCode(branch.country) !== normalizeCountryCode(businessData.country)) throw Object.assign(new Error("This location country does not match its business record."), { status: 409 });
+    const timeZone = countryTimeZone(countryCode);
     if (branch.status && branch.status !== "active") throw Object.assign(new Error("This branch is not accepting orders."), { status: 409 });
     if (branch.public === false || !(branch.fulfilment || ["pickup"]).includes(body.fulfilment)) throw Object.assign(new Error(`${body.fulfilment === "delivery" ? "Delivery" : "Pickup"} is not enabled for this location.`), { status: 409 });
     if (body.fulfilment === "delivery" && (!branch.delivery?.enabled || branch.delivery?.paused)) throw Object.assign(new Error("Delivery is not accepting orders from this location right now."), { status: 409 });
@@ -160,6 +166,8 @@ export async function POST(request) {
       }
       if (!freshBranch.exists) throw Object.assign(new Error("This location is no longer available."), { status: 409 });
       const branchData = freshBranch.data();
+      const latestCountryCode = normalizeCountryCode(branchData.country || currentBusiness?.country);
+      if (latestCountryCode !== countryCode) throw Object.assign(new Error("This location country changed while you were ordering. Refresh and try again."), { status: 409 });
       let slot = null;
       if (body.fulfilment === "pickup") {
         const availability = pickupAvailability(branchData, { days: 14 });
@@ -202,6 +210,8 @@ export async function POST(request) {
         commerceSnapshot: { commissionPercent: totals.commissionPercent, settlementModel: "platform", deliveryFulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", promotionId: promotionResult?.quote?.eligible ? promotionResult.promotion.id : null },
         promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         shopping: driverShopping ? { mode: "driver_shops", state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), actualSubtotal: null, finalTotal: null, unusedReserve: null, topUpRequired: 0, substitutionPreference: normalizedSubstitution, receiptStoragePath: "", changes: [], updatedAt: new Date().toISOString() } : null,
+        country: countryCode,
+        timeZone,
         currency: body.currency,
         fulfilment: body.fulfilment,
         pickup: body.fulfilment === "pickup" ? { ...body.pickup, substitutionPreference: normalizedSubstitution, notes: safeText(body.pickup.notes, 500), reservedSlotId: slot.id } : null,
@@ -242,8 +252,8 @@ export async function POST(request) {
           pickupPoint: safeText(branchData.delivery?.pickupPoint || "", 160) || null
         };
         transaction.create(deliveryRef, {
-          number: deliveryNumber, orderId: orderRef.id, businessId: body.businessId, branchId: body.branchId, customerId: user.uid, state: "awaiting_dispatch",
-          pickup: { lat: Number(pickupLocation?.lat), lng: Number(pickupLocation?.lng), formattedAddress: branchData.address || "", area: branchData.area || branchData.city || "Harare", instructions: safeText(branchData.delivery?.pickupInstructions || branchData.instructions || "", 1000) },
+          number: deliveryNumber, orderId: orderRef.id, businessId: body.businessId, branchId: body.branchId, customerId: user.uid, country: countryCode, timeZone, state: "awaiting_dispatch",
+          pickup: { lat: Number(pickupLocation?.lat), lng: Number(pickupLocation?.lng), formattedAddress: branchData.address || "", area: branchData.area || branchData.city || "", instructions: safeText(branchData.delivery?.pickupInstructions || branchData.instructions || "", 1000) },
           dropoff: { lat: body.delivery.lat, lng: body.delivery.lng, formattedAddress: safeText(body.delivery.address, 500), suburb: safeText(body.delivery.suburb, 120), landmark: safeText(body.delivery.landmark, 240), instructions: safeText(body.delivery.instructions, 500) },
           fulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", operatingProfile, deliveryDistanceKm: Number(deliveryDistanceKm.toFixed(1)),
           businessPreparationMinutes: driverShopping ? 0 : Number(branchData.delivery?.preparationMinutes || 20), shoppingMinutes: driverShopping ? Number(branchData.delivery?.preparationMinutes || 30) : 0, requiredVehicleTypes: branchData.delivery?.vehicleTypes || ["motorcycle", "car"],

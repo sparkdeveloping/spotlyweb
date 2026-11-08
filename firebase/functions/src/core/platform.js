@@ -12,6 +12,12 @@ export const SPOTLY_CONTRACT = Object.freeze(JSON.parse(manifestBytes));
 export const SPOTLY_CONTRACT_VERSION = SPOTLY_CONTRACT.contractVersion;
 export const SPOTLY_CONTRACT_SHA256 = createHash("sha256").update(manifestBytes).digest("hex");
 
+const countryManifestUrl = new URL("../contracts/spotly-countries.v1.json", import.meta.url);
+const countryManifestBytes = readFileSync(fileURLToPath(countryManifestUrl));
+export const SPOTLY_COUNTRY_CONTRACT = Object.freeze(JSON.parse(countryManifestBytes));
+export const SPOTLY_COUNTRY_CONTRACT_VERSION = SPOTLY_COUNTRY_CONTRACT.countryContractVersion;
+export const SPOTLY_COUNTRY_CONTRACT_SHA256 = createHash("sha256").update(countryManifestBytes).digest("hex");
+
 export const FOUNDATION_CAPABILITIES = Object.freeze({
   firestore: true,
   realtimeDatabase: true,

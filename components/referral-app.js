@@ -77,7 +77,7 @@ export function ReferralApp() {
     finally { setSaving(false); }
   }
 
-  const locationLabel = profile?.preferences?.preferredCity || "Harare";
+  const locationLabel = profile?.preferences?.preferredCity || "Choose location";
 
   return <AuthGate><CustomerShell current="profile" user={user} profile={profile} locationLabel={locationLabel}>
     <div className="v7-page-enter mx-auto max-w-5xl">

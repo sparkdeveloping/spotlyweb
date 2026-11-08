@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, u
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
 import { FirebaseProvider, PlatformProvider } from "@/components/firebase-provider";
+import { CountryProvider } from "@/components/country-provider";
 
 const ThemeContext = createContext(null);
 const ToastContext = createContext(null);
@@ -182,9 +183,11 @@ export function AppProviders({ children }) {
     <MotionConfig reducedMotion="user">
       <ThemeProvider>
         <FirebaseProvider>
-          <PlatformProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </PlatformProvider>
+          <CountryProvider>
+            <PlatformProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </PlatformProvider>
+          </CountryProvider>
         </FirebaseProvider>
       </ThemeProvider>
     </MotionConfig>

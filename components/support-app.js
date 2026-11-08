@@ -167,7 +167,7 @@ export function SupportApp() {
     return resources.filter((item) => (!term || [item.title, item.description, item.category].join(" ").toLowerCase().includes(term)) && (item.language === language || item.language === "all" || language === "en" && !item.language));
   }, [query, resources, language]);
 
-  return <CustomerShell current="profile" user={user} profile={profile} locationLabel={profile?.preferences?.preferredCity || "Harare"}>
+  return <CustomerShell current="profile" user={user} profile={profile} locationLabel={profile?.preferences?.preferredCity || "Choose location"}>
     <div className="v7-page-enter mx-auto max-w-6xl">
       <section className="border-b border-[var(--border-subtle)] pb-8 pt-2">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">

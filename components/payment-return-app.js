@@ -39,7 +39,7 @@ export function PaymentReturnApp() {
 
   const paid = result?.paid || result?.state === "paid";
   const transactionLabel = result?.transactionType === "ticket" ? "ticket" : result?.transactionType === "appointment" ? "appointment" : result?.transactionType === "booking" ? "booking" : result?.fulfilment === "delivery" ? "delivery order" : "order";
-  const locationLabel = profile?.preferences?.preferredCity || "Harare";
+  const locationLabel = profile?.preferences?.preferredCity || "Choose location";
   return (
     <CustomerShell current="activity" user={user} profile={profile} locationLabel={locationLabel}>
       <section className="mx-auto flex min-h-[calc(100vh-220px)] max-w-3xl items-center justify-center py-8 sm:py-14">
