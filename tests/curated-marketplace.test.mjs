@@ -125,8 +125,9 @@ test("Admin curation imports only approved data classes and preserves claimed re
   assert.match(route, /sync_places/);
   assert.match(route, /sync_products/);
   assert.match(route, /claimed\(current\)/);
-  assert.match(route, /openstreetmap/);
-  assert.match(route, /open_food_facts/);
+  assert.match(route, /openPlaces\(\)/);
+  assert.match(route, /openProducts\(\)/);
+  assert.match(route, /excludedDefaultSources/);
   assert.match(route, /google_maps_bulk/);
   assert.match(route, /retailer_catalog_scrape/);
   assert.match(ui, /Unclaimed pickup/);
@@ -145,7 +146,7 @@ test("customer UI tells the truth about trust, catalogue and generic photography
   assert.match(marketplace, /BusinessPhoto/);
   assert.match(read("components/business-photo.js"), /Illustrative photo/);
   assert.match(search, /Catalogue identity · store stock and price not confirmed/);
-  assert.match(home, /Spotly includes useful city listings alongside verified commerce businesses/);
+  assert.match(home, /Spotly shows usable services first and independent city listings separately/);
   assert.match(home, /Directory listing/);
 });
 

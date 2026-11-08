@@ -73,12 +73,12 @@ export function AssistResearchImport() {
   return <AuthGate portal="admin" title="Sign in to Spotly Admin" sameOriginLogin><AdminAccess>
     <PortalShell portalId="admin" activeSection="marketplace">
       <main className="mx-auto max-w-[1040px] px-5 py-10">
-        <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/admin/marketplace" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)]"><ArrowLeft className="h-4 w-4"/>Marketplace</Link><Link href="/admin/independent-shopping" className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--accent)]">Manage Spotly menus →</Link></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/marketplace" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-2)]"><ArrowLeft className="h-4 w-4"/>Marketplace</Link><Link href="/independent-shopping" className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--accent)]">Manage Spotly menus →</Link></div>
         <div className="mt-6 flex items-start gap-4">
           <span className="rounded-xl bg-[var(--accent-soft)] p-3 text-[var(--accent)]"><Database className="h-6 w-6"/></span>
           <div><p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">Zimbabwe only</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight">Restaurant research to Firestore</h1>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Save multi-brand restaurant research privately. Review sources, duplicates, copyright permissions and prices before promoting any listing.</p><Link href="/admin/assist-menu-launch" className="mt-4 inline-flex items-center rounded-xl border border-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent)]">Activate verified restaurant menus →</Link>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Save multi-brand restaurant research privately. Review sources, duplicates, copyright permissions and prices before promoting any listing.</p><Link href="/assist-menu-launch" className="mt-4 inline-flex items-center rounded-xl border border-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent)]">Activate verified restaurant menus →</Link>
           </div>
         </div>
         <div className="mt-7 rounded-2xl border bg-[var(--surface)] p-6 sm:p-8">
@@ -88,11 +88,11 @@ export function AssistResearchImport() {
             <input type="file" accept=".json,application/json" onChange={readFile} className="mt-3 block w-full text-sm font-normal"/>
           </label>
           {manifest&&<div className="mt-5 rounded-xl bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">{fileName}</p><p className="mt-2 text-[var(--text-2)]">{manifest.locations.length} location candidates · {manifest.priceReferences.length} online price references</p></div>}
-          {error&&<p role="alert" className="mt-5 rounded-xl border border-red-500/30 p-4 text-sm text-[var(--danger)]">{error}</p>}
+          {error&&<p role="alert" className="mt-5 rounded-xl border border-[var(--control-border-error)] p-4 text-sm text-[var(--danger)]">{error}</p>}
           {message&&<p role="status" className="mt-5 rounded-xl border p-4 text-sm text-[var(--success)]">{message}</p>}
           <div className="mt-5 flex flex-wrap gap-3">
             <button type="button" disabled={!manifest||busy} onClick={()=>submit("preview")} className="rounded-xl border px-5 py-3 text-sm font-semibold disabled:opacity-40">{busy?"Reviewing…":"1. Validate and preview"}</button>
-            {preview&&<button type="button" disabled={busy} onClick={()=>submit("stage")} className="rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">2. Stage privately in Firestore</button>}
+            {preview&&<button type="button" disabled={busy} onClick={()=>submit("stage")} className="rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-40">2. Stage privately in Firestore</button>}
           </div>
           {preview&&<div className="mt-6 rounded-xl border p-5">
             <p className="flex items-center gap-2 font-semibold"><FolderCheck className="h-5 w-5 text-[var(--accent)]"/>Validated staging payload</p>

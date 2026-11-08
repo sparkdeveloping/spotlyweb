@@ -62,13 +62,13 @@ forbidText("components/marketplace-app.js", "Search all of Spotly", "duplicate H
 // 5–7. Service identity and availability hierarchy.
 requireAll("components/service-artwork.js", ["ServiceArtwork", "eat:", "shop:", "book:", "events:", "ride:", "send:", "useReducedMotion"], "six-service artwork family");
 forbidText("components/marketplace-home.js", "Open ↗", "service tiles do not say Open");
-requirePattern("components/marketplace-home.js", /!ridesEnabled[\s\S]*coming to \{location\.city\}/, "unavailable Ride is subordinate");
-requirePattern("components/marketplace-home.js", /!sendEnabled[\s\S]*coming to \{location\.city\}/, "unavailable Send is subordinate");
+requireAll("components/marketplace-home.js", ['key === "ride" ? ridesEnabled', "`Not available in ${city} yet`"], "unavailable Ride is subordinate");
+requireAll("components/marketplace-home.js", ['key === "send" ? sendEnabled', "`Not available in ${city} yet`"], "unavailable Send is subordinate");
 
 // 8–13. Honest personalization, onboarding, explicit user state and Now.
 requirePattern("components/marketplace-home.js", /latestRepeatBusiness \?/, "Again requires completed history");
 forbidText("components/marketplace-home.js", "Search nearby", "generic search is not fake repeat history");
-requireText("components/marketplace-home.js", 'location.coordinates ? "Near you"', "Near you requires precise location");
+requireText("components/marketplace-home.js", 'location.coordinates ? "Discover near you"', "near-you language requires precise location");
 requireAll("components/marketplace-home.js", ["Based on your interests", "interestMatchesBusiness", "ActiveAccessory", "trulyNew"], "Home state-driven personalization");
 requireAll("components/customer-onboarding.js", ["Your city, in one place.", "Use my location", "What would you like Spotly to help with?", "Home", "Work", "Continue exploring"], "progressive onboarding");
 requireText("components/customer-onboarding.js", "Spotly asks the browser for location only after you choose this option.", "location permission explained before request");
@@ -109,7 +109,7 @@ requireText("components/portal-shell.js", "safe-bottom", "role portals have deli
 
 // 34–35. State matrix and honest language.
 requireAll("app/v7-experience.css", [".v7-state", ".v7-skeleton-block", ".v7-interactive"], "shared state primitives");
-requirePattern("components/marketplace-home.js", /location\.coordinates \? "Near you" : `Popular in \$\{location\.city\}`/, "location language reflects available data");
+requirePattern("components/marketplace-home.js", /location\.coordinates \? "Discover near you" : `Explore \$\{location\.city\}`/, "location language reflects available data");
 requirePattern("components/marketplace-home.js", /latestRepeatBusiness \? <section[\s\S]*title="Again"/, "repeat language reflects transaction history");
 
 // 36. Shared primitives/system CSS exists before further expansion.

@@ -1,6 +1,7 @@
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { shoppingActivity, bookingActivity } from "@/lib/assist-activity";
+import { ACTIVITY_KINDS, SERVICE_IDS } from "@/lib/contracts/generated";
 
 export const runtime = "nodejs";
 
@@ -23,14 +24,14 @@ function clean(value) {
 
 function orderKind(order = {}) {
   const type = clean(order.transactionType || order.type || "order").toLowerCase();
-  if (["appointment", "booking", "ticket"].includes(type)) return type;
+  if (ACTIVITY_KINDS.includes(type) && !["order", "ride", "send"].includes(type)) return type;
   if (type === "event") return "ticket";
   return "order";
 }
 
 function serviceForOrder(order = {}, kind = "order") {
   const explicit = clean(order.service || order.serviceKind).toLowerCase();
-  if (["eat", "shop", "book", "events"].includes(explicit)) return explicit;
+  if (SERVICE_IDS.includes(explicit) && !["ride", "send"].includes(explicit)) return explicit;
   if (kind === "appointment" || kind === "booking") return "book";
   if (kind === "ticket") return "events";
   const fulfilment = clean(order.fulfilment || order.fulfilmentMode).toLowerCase();

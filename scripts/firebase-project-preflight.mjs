@@ -9,7 +9,9 @@ const expected = {
   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "spotly-africa.firebasestorage.app",
   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "14197555543",
   NEXT_PUBLIC_FIREBASE_APP_ID: "1:14197555543:web:189486e7d4a23114c3be12",
-  NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: "G-4FPTS9GNG9"
+  NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: "G-4FPTS9GNG9",
+  NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION: "europe-west1",
+  NEXT_PUBLIC_FIREBASE_DATABASE_URL: "https://spotly-africa-default-rtdb.europe-west1.firebasedatabase.app"
 };
 
 function parseEnvFile(file) {
@@ -69,6 +71,10 @@ if (!effective.NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY) {
 
 const sourceChecks = [
   ["lib/firebase-project-config.js", 'SPOTLY_FIREBASE_PROJECT_ID = "spotly-africa"'],
+  ["lib/firebase-project-config.js", 'SPOTLY_FIREBASE_FUNCTIONS_REGION = "europe-west1"'],
+  ["lib/firebase-project-config.js", 'spotly-africa-default-rtdb.europe-west1.firebasedatabase.app'],
+  ["firebase/functions/src/core/platform.js", 'SPOTLY_PROJECT_ID = "spotly-africa"'],
+  ["firebase/functions/src/core/platform.js", 'SPOTLY_FUNCTIONS_REGION = "europe-west1"'],
   ["public/firebase-messaging-sw.js", 'projectId: "spotly-africa"'],
   [".firebaserc", '"default": "spotly-africa"']
 ];
@@ -91,6 +97,7 @@ const scanFiles = [
   "lib/firebase.js",
   "lib/firebase-admin.js",
   "lib/firebase-project-config.js",
+  "firebase/functions/src/core/platform.js",
   "public/firebase-messaging-sw.js",
   "scripts/seed-firestore.mjs",
   ".env.example",

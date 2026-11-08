@@ -17,7 +17,7 @@ function PreviewPhoto({image}) {
         ? <img src={image.imageUrl} alt={image.alt || "External photograph candidate"} loading="lazy" referrerPolicy="no-referrer"
           onError={()=>setFailed(true)} className="h-full w-full object-cover"/>
         : <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-xs text-secondary"><ImageIcon className="h-7 w-7"/>Image unavailable at the source. Check the original page.</div>}
-      <span className="absolute left-2 top-2 rounded-full bg-amber-950/85 px-2.5 py-1 text-[10px] font-semibold text-white">Rights not cleared</span>
+      <span className="absolute left-2 top-2 rounded-full bg-[var(--warning)] px-2.5 py-1 text-[10px] font-semibold text-[var(--on-warning)]">Rights not cleared</span>
     </div>
     <div className="space-y-1 p-3 text-xs">
       <p className="font-semibold capitalize">{image.kind} candidate</p>
@@ -55,7 +55,7 @@ export function TheMenuImageResearch() {
   return <AuthGate portal="admin" title="Sign in to Spotly Admin" sameOriginLogin><AdminAccess>
     <PortalShell portalId="admin" activeSection="marketplace">
       <main className="mx-auto max-w-[1220px] px-4 py-8 sm:px-6">
-        <Link href="/admin/assist-research" className="text-sm font-semibold text-[var(--accent)]">← Restaurant research</Link>
+        <Link href="/assist-research" className="text-sm font-semibold text-[var(--accent)]">← Restaurant research</Link>
         <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[var(--accent)]">Spotly editorial studio · Private</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">External image review</h1>

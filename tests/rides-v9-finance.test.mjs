@@ -33,5 +33,6 @@ test("Geofencing is enforced server-side and operator-configurable",()=>{
   assert.ok(geo.includes(term),term);
  assert.ok(server.includes("cityGeofences"));
  assert.ok(admin.includes("cityGeofences"));
- assert.ok(ui.includes("geofences"));
+ assert.ok(ui.includes("ServiceCoverageEditor"));
+ assert.ok(ui.includes("fences={fences}"));
 });

@@ -44,11 +44,13 @@ test("critical fields do not use the legacy undefined input class", () => {
   assert.match(css, /\.field-control[\s,\n]/);
 });
 
-test("adaptive source has no fixed white background utility", () => {
+test("adaptive source has no fixed white background utility outside intentional on-light brand previews", () => {
   const offenders = [];
   for (const file of sourceFiles()) {
     const source = readFileSync(file, "utf8");
-    if (/\bbg-white\b/.test(source)) offenders.push(file);
+    const exactWhite = /(?:^|\s)bg-white(?=\s|["'])/.test(source);
+    const intentionalBrandPreview = file.endsWith("/app/branding/page.js") && /_horizontal_on_light/.test(source);
+    if (exactWhite && !intentionalBrandPreview) offenders.push(file);
   }
   assert.deepEqual(offenders, []);
 });

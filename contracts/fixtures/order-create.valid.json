@@ -1,0 +1,1 @@
+{"checkoutId":"checkout_20261108","businessId":"business_1","branchId":"branch_1","items":[{"productId":"product_1","quantity":2}],"currency":"USD","paymentMethod":"cash","fulfilment":"pickup","pickup":{"date":"2026-11-10","slot":"10:00–10:30","slotId":"slot_1000","contactName":"Customer","contactPhone":"+263771234567","substitutionPreference":"contact_me"}}

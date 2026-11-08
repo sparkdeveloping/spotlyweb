@@ -13,8 +13,9 @@ test("production Driver no longer imports seeded training jobs or session workfl
 });
 
 test("customer order creation can create a durable delivery job without exposing the customer PIN on the order", async () => {
-  const source = await read("app/api/orders/create/route.js");
-  assert.match(source, /fulfilment:\s*z\.enum\(\["pickup",\s*"delivery"\]\)/);
+  const [source, contracts] = await Promise.all([read("app/api/orders/create/route.js"), read("lib/contracts/schemas.js")]);
+  assert.match(source, /orderCreateRequestSchema/);
+  assert.match(contracts, /fulfilment: z\.enum\(\["pickup", "delivery"\]\)/);
   assert.match(source, /db\.collection\("deliveryJobs"\)/);
   assert.match(source, /customerPin/);
   const orderObjectStart = source.indexOf("const order = {");

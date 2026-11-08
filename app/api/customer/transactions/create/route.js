@@ -1,6 +1,5 @@
 import { requireCustomerLaunchAccess } from "@/lib/customer-launch-server";
 import { FieldValue } from "firebase-admin/firestore";
-import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { buildOrderTotals } from "@/lib/order-money";
 import { safeText } from "@/lib/server-helpers";
@@ -8,32 +7,11 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
 import { appointmentReservationSpecs, bookingReservationSpecs, reservationCanFit } from "@/lib/availability-reservations";
 import { marketplaceTrust } from "@/lib/marketplace-trust";
+import { transactionCreateRequestSchema } from "@/lib/contracts/schemas";
 
 export const runtime = "nodejs";
 
-const schema = z.object({
-  checkoutId: z.string().min(8).max(160).regex(/^[A-Za-z0-9_-]+$/),
-  businessId: z.string().min(1).max(180),
-  branchId: z.string().min(1).max(180),
-  itemId: z.string().min(1).max(180),
-  quantity: z.number().int().min(1).max(20).default(1),
-  currency: z.enum(["USD", "ZWG"]).default("USD"),
-  promoCode: z.string().max(40).optional(),
-  paymentMethod: z.enum(["paynow", "ecocash", "onemoney", "card", "bank_transfer", "pay_later", "superadmin_test"]).default("pay_later"),
-  contactName: z.string().min(2).max(120),
-  contactPhone: z.string().min(7).max(40),
-  notes: z.string().max(600).optional(),
-  appointment: z.object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    time: z.string().regex(/^\d{2}:\d{2}$/),
-    staffPreference: z.string().max(120).optional()
-  }).optional(),
-  booking: z.object({
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    guests: z.number().int().min(1).max(30).default(1)
-  }).optional()
-});
+const schema = transactionCreateRequestSchema;
 
 function transactionNumber(prefix = "SP") {
   const ymd = new Date().toISOString().slice(0, 10).replaceAll("-", "");

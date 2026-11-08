@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import sharp from "sharp";
+import { webpMetadata } from "./helpers/webp-metadata.mjs";
 import catalogues from "../data/spotly-specific-catalogues.js";
 import exclusions from "../data/catalogue-media-review.js";
 import places from "../lib/generated/open-marketplace-places.js";
@@ -128,7 +128,7 @@ test("only shipped, usable item photos are exposed, with reviewed mismatches exc
   for(const item of items)if(exclusions[item.id])assert.equal(item.image,"",item.id);
   const images=[...new Set(items.map(item=>item.image).filter(Boolean))];assert.ok(images.length>250);
   let bytes=0;
-  for(const src of images){assert.match(src,/^\/marketplace\/items\/[a-z0-9_-]+\.webp$/);const data=await readFile(root+"public"+src),meta=await sharp(data).metadata();assert.equal(meta.format,"webp");assert.ok(Math.max(meta.width,meta.height)>=180,src);assert.ok(data.length<140000,src);bytes+=data.length;}
+  for(const src of images){assert.match(src,/^\/marketplace\/items\/[a-z0-9_-]+\.webp$/);const data=await readFile(root+"public"+src),meta=webpMetadata(data);assert.equal(meta.format,"webp");assert.ok(Math.max(meta.width,meta.height)>=180,src);assert.ok(data.length<140000,src);bytes+=data.length;}
   assert.ok(bytes<9*1024*1024);
   const raw=directoryIntakeStore(bon.id,bon);raw.items=[{...raw.items[0],image:"https://unreviewed.example/photo.jpg",reference:{label:"Bad",url:"javascript:alert(1)"}}];
   const exposed=independentPublicStore(raw.id,raw).items[0];assert.equal(exposed.image,"");assert.equal(exposed.reference,null);

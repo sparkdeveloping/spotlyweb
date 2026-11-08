@@ -17,7 +17,7 @@ export function AssistMenuLaunch(){
  const [menuPriceId,setMenuPriceId]=useState(""),[newPrice,setNewPrice]=useState(""),[priceMethod,setPriceMethod]=useState("phone"),[priceEvidence,setPriceEvidence]=useState(""),[priceRight,setPriceRight]=useState(false),[confirmedBranch,setConfirmedBranch]=useState(false);
  const [brandFilter,setBrandFilter]=useState("");
  useEffect(()=>{
-   authenticatedFetch("/api/admin/assist-research").then(data=>{
+   authenticatedFetch("/api/assist-research").then(data=>{
      const items=(data.batches||[]).filter(x=>x.country==="ZW");
      setBatches(items);if(items[0])setBatchId(items[0].id);
    }).catch(e=>setError(e.message||"Unable to load research batches."));
@@ -25,21 +25,21 @@ export function AssistMenuLaunch(){
  useEffect(()=>{
    if(!batchId)return;
    let active=true;setLocations([]);setLocationId("");setDetail(null);
-   authenticatedFetch("/api/admin/assist-research/activate-menu?batchId="+encodeURIComponent(batchId))
+   authenticatedFetch("/api/assist-research/activate-menu?batchId="+encodeURIComponent(batchId))
      .then(d=>{if(active)setLocations(d.locations||[]);}).catch(e=>{if(active)setError(e.message);});
    return()=>{active=false};
  },[batchId]);
  useEffect(()=>{
    if(!batchId||!locationId)return;
    let active=true;setError("");setNotice("");setDetail(null);setPreflight(null);setSelected([]);setOpsReady(false);setRightsReady(false);setMenuPriceId("");setNewPrice("");setPriceEvidence("");setConfirmedBranch(false);setPriceRight(false);
-   authenticatedFetch("/api/admin/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId))
+   authenticatedFetch("/api/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId))
      .then(d=>{if(active)setDetail(d);}).catch(e=>{if(active)setError(e.message);});
    return()=>{active=false};
  },[batchId,locationId]);
  async function checkPilot(){
    setBusy("preflight");setError("");setPreflight(null);
    try{
-     const d=await authenticatedFetch("/api/admin/assist-research/pilot-preflight?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
+     const d=await authenticatedFetch("/api/assist-research/pilot-preflight?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
      setPreflight(d);
    }catch(e){setError(e.message||"Could not inspect pilot readiness.");}
    finally{setBusy("");}
@@ -48,12 +48,12 @@ export function AssistMenuLaunch(){
    if(!menuPriceId||newPrice===""||!confirmedBranch||!priceRight||priceEvidence.trim().length<8)return;
    setBusy("price");setError("");setNotice("");
    try{
-     await authenticatedFetch("/api/admin/assist-research/location-prices",{
+     await authenticatedFetch("/api/assist-research/location-prices",{
        method:"POST",body:JSON.stringify({batchId,locationId,priceId:menuPriceId,
          method:priceMethod,verifiedPrice:Number(newPrice),notes:priceEvidence,
          sourceRightsReviewed:true,confirmedForThisLocation:true})
      });
-     const response=await authenticatedFetch("/api/admin/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
+     const response=await authenticatedFetch("/api/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
      setDetail(response);setMenuPriceId("");setNewPrice("");setPriceEvidence("");setConfirmedBranch(false);setPriceRight(false);setPreflight(null);
      setNotice("Current price saved for this specific branch only. No public menu or customer request was activated.");
    }catch(e){setError(e.message||"Could not verify this location's price.");}
@@ -62,13 +62,13 @@ export function AssistMenuLaunch(){
  async function execute(action){
    setBusy(action);setError("");setNotice("");
    try{
-     await authenticatedFetch("/api/admin/assist-research/activate-menu",{
+     await authenticatedFetch("/api/assist-research/activate-menu",{
        method:"POST",body:JSON.stringify({batchId,locationId,action,
          priceIds:action==="enable"?selected:[],
          operationalAttested:opsReady,agreementConfirmed:rightsReady})
      });
      setNotice(action==="pause"?"Spotly Assist requests paused.":"Verified menu activated for customer price-check requests. No payments or dispatch activated.");
-     const d=await authenticatedFetch("/api/admin/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
+     const d=await authenticatedFetch("/api/assist-research/activate-menu?batchId="+encodeURIComponent(batchId)+"&locationId="+encodeURIComponent(locationId));
      setDetail(d);setPreflight(null);
    }catch(e){setError(e.message);}finally{setBusy("");}
  }
@@ -78,7 +78,7 @@ export function AssistMenuLaunch(){
  const eligible=(detail?.prices||[]).filter(x=>x.verified);
  return <AuthGate portal="admin" title="Spotly Admin sign in" sameOriginLogin><AdminAccess><PortalShell portalId="admin" activeSection="marketplace">
   <main className="mx-auto max-w-[1100px] px-5 py-9">
-   <Link href="/admin/assist" className="inline-flex items-center gap-2 text-sm font-semibold"><ArrowLeft className="h-4 w-4"/>Assist Operations</Link>
+   <Link href="/assist" className="inline-flex items-center gap-2 text-sm font-semibold"><ArrowLeft className="h-4 w-4"/>Assist Operations</Link>
    <div className="mt-7 flex items-start gap-4"><span className="rounded-2xl bg-[var(--accent-soft)] p-3 text-[var(--accent)]"><Utensils className="h-6 w-6"/></span><div>
     <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">Zimbabwe · Independent shopping</p>
     <h1 className="mt-2 text-3xl font-semibold">Multi-brand restaurant launch queue</h1>
@@ -97,7 +97,7 @@ export function AssistMenuLaunch(){
       </div>
       <div className="mt-4 max-h-[400px] space-y-2 overflow-y-auto">{displayedLocations.map(loc=><div key={loc.id} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--surface-2)] p-3">
        <div><p className="text-sm font-semibold">{loc.name}</p><p className="mt-1 text-xs text-[var(--text-2)]">{loc.city} · {loc.brandName||"Independent"} · {loc.publicationState.replaceAll("_"," ")}</p></div>
-       {["approved","published"].includes(loc.publicationState)?<button type="button" onClick={()=>setLocationId(loc.id)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Prepare menu</button>:<Link href="/admin/assist-research" className="text-xs font-semibold text-[var(--accent)]">Review</Link>}
+       {["approved","published"].includes(loc.publicationState)?<button type="button" onClick={()=>setLocationId(loc.id)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Prepare menu</button>:<Link href="/assist-research" className="text-xs font-semibold text-[var(--accent)]">Review</Link>}
       </div>)}</div>
     </div>}
     {error&&<p role="alert" className="mt-5 rounded-xl border p-4 text-sm text-[var(--danger)]">{error}</p>}
@@ -134,7 +134,7 @@ export function AssistMenuLaunch(){
        <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={rightsReady} onChange={e=>setRightsReady(e.target.checked)} className="mt-1"/>I reviewed sourcing rights, and the selected factual items and prices have been independently verified.</label>
      </div>
      <div className="mt-5 flex flex-wrap gap-3">
-       <button type="button" disabled={!!busy||!detail.canActivate||!opsReady||!rightsReady||!selected.length} onClick={()=>execute("enable")} className="rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">{busy==="enable"?"Activating…":"Enable price-check requests"}</button>
+       <button type="button" disabled={!!busy||!detail.canActivate||!opsReady||!rightsReady||!selected.length} onClick={()=>execute("enable")} className="rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-40">{busy==="enable"?"Activating…":"Enable price-check requests"}</button>
        {detail.existingStore&&<button type="button" disabled={!!busy} onClick={()=>execute("pause")} className="rounded-xl border px-5 py-3 text-sm font-semibold disabled:opacity-40">{busy==="pause"?"Pausing…":"Pause requests"}</button>}
        {detail.existingStore?.status==="published"&&<Link href={"/shop-for-me?store="+encodeURIComponent(detail.existingStore.id)} className="rounded-xl border px-5 py-3 text-sm font-semibold">Preview customer menu</Link>}
      </div>

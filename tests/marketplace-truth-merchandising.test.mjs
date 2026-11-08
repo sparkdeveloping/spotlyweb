@@ -49,7 +49,8 @@ test("service discovery separates commerce from directory actions", () => {
   const source = fs.readFileSync("components/service-experience.js", "utf8");
   assert.match(source, /Available on Spotly/);
   assert.match(source, /Directory listing · commerce not enabled/);
-  assert.match(source, /Spotly does not show ordering, pickup, booking or ticket actions until the business enables verified commerce/);
+  assert.match(source, /Independent places for discovery/);
+  assert.match(source, /Where shopping or booking is available, those services appear above this directory/);
   assert.doesNotMatch(source, />Category image</);
 });
 

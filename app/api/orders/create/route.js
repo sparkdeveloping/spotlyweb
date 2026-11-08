@@ -9,41 +9,11 @@ import { buildOrderTotals, shoppingReserveAmount } from "@/lib/order-money";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
 import { marketplaceTrust } from "@/lib/marketplace-trust";
+import { orderCreateRequestSchema } from "@/lib/contracts/schemas";
 
 export const runtime = "nodejs";
 
-const itemSchema = z.object({ productId: z.string().min(1).max(180), quantity: z.number().int().min(1).max(99) });
-const schema = z.object({
-  checkoutId: z.string().min(8).max(160).regex(/^[A-Za-z0-9_-]+$/),
-  businessId: z.string().min(1).max(180),
-  branchId: z.string().min(1).max(180),
-  items: z.array(itemSchema).min(1).max(60),
-  currency: z.enum(["USD", "ZWG"]).default("USD"),
-  promoCode: z.string().max(40).optional(),
-  paymentMethod: z.enum(["cash", "paynow", "ecocash", "onemoney", "card", "bank_transfer", "superadmin_test"]),
-  fulfilment: z.enum(["pickup", "delivery"]).default("pickup"),
-  delivery: z.object({
-    contactName: z.string().min(2).max(120),
-    contactPhone: z.string().min(7).max(40),
-    address: z.string().min(3).max(500),
-    suburb: z.string().max(120).optional(),
-    landmark: z.string().max(240).optional(),
-    instructions: z.string().max(500).optional(),
-    lat: z.number().min(-90).max(90),
-    lng: z.number().min(-180).max(180),
-    substitutionPreference: z.enum(["contact_me", "best_match", "remove_item", "no_substitutions"]).default("contact_me")
-  }).optional(),
-  pickup: z.object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    slot: z.string().min(3).max(40),
-    slotId: z.string().min(8).max(80),
-    contactName: z.string().min(2).max(120),
-    contactPhone: z.string().min(7).max(40),
-    alternativePhone: z.string().max(40).optional(),
-    notes: z.string().max(500).optional(),
-    substitutionPreference: z.enum(["contact_me", "best_match", "remove_item", "no_substitutions"]).default("contact_me")
-  }).optional()
-});
+const schema = orderCreateRequestSchema;
 
 function orderNumber() {
   const ymd = new Date().toISOString().slice(0, 10).replaceAll("-", "");

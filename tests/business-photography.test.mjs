@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import sharp from "sharp";
+import { webpMetadata } from "./helpers/webp-metadata.mjs";
 import dataset from "../lib/generated/open-marketplace-places.js";
 import { businessPhotoFamily, businessPhotography, BUSINESS_PHOTO_FAMILIES } from "../lib/business-photography.js";
 import { marketplaceMedia, marketplaceMediaSet } from "../lib/marketplace-editorial.js";
@@ -104,7 +104,7 @@ test("every generated subject ships responsive photographic files within image t
     for (const [width, budget] of [[320, 35000], [768, 125000], [1536, 600000]]) {
       const path = `public/marketplace/photography/${family}-${width}.webp`;
       const data = await readFile(new URL(path, root));
-      const meta = await sharp(data).metadata();
+      const meta = webpMetadata(data);
       assert.equal(meta.width, width, path);
       assert.equal(meta.hasAlpha, false, path);
       assert.ok(meta.width / meta.height > 1.49 && meta.width / meta.height < 1.51, path);

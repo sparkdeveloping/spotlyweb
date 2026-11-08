@@ -58,7 +58,8 @@ test("global sign out cannot be resurrected by a stale sibling Firebase session"
   assert.match(sessionServer, /SHARED_SIGNOUT_MAX_AGE_SECONDS = 365 \* 24 \* 60 \* 60/);
   assert.match(sessionRoute, /sharedSignoutCookieHeader\(request\)/);
   assert.match(sessionRoute, /reason: signedOut \? "signed_out" : "missing"/);
-  assert.match(provider, /\["signed_out", "expired"\]/);
+  assert.match(provider, /action === "signout"/);
+  assert.match(provider, /not a missing or expired session cookie/);
   assert.match(provider, /visibilitychange/);
   assert.match(provider, /setInterval\(reconcileSharedSession, 5 \* 60 \* 1000\)/);
   assert.match(provider, /sharedBrowserSessionState/);

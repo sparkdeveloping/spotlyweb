@@ -7,10 +7,42 @@
     "rules": "storage.rules"
   },
   "emulators": {
-    "auth": { "port": 9099 },
-    "firestore": { "port": 8080 },
-    "storage": { "port": 9199 },
-    "ui": { "enabled": true, "port": 4000 },
-    "singleProjectMode": true
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    },
+    "singleProjectMode": true,
+    "functions": {
+      "port": 5001
+    },
+    "database": {
+      "port": 9000
+    }
+  },
+  "functions": {
+    "source": "firebase/functions",
+    "codebase": "platform",
+    "runtime": "nodejs22",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "spec",
+      "README.md",
+      ".env.example"
+    ]
+  },
+  "database": {
+    "rules": "database.rules.json"
   }
 }

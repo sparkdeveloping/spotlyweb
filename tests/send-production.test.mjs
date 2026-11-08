@@ -95,8 +95,9 @@ test("Customer Activity and Home route Send into the live Send product", async (
 });
 
 test("Scheduled Send defers dispatch until the pickup window and preserves paid scheduling", async () => {
-  const [customer, processor, cron, server] = await Promise.all([read("app/api/customer/parcels/route.js"), read("lib/payment-processor-server.js"), read("app/api/internal/parcel-dispatch/route.js"), read("lib/parcel-server.js")]);
-  assert.match(customer, /pickupMode: z\.enum\(\["now", "scheduled"\]\)/);
+  const [customer, contracts, processor, cron, server] = await Promise.all([read("app/api/customer/parcels/route.js"), read("lib/contracts/schemas.js"), read("lib/payment-processor-server.js"), read("app/api/internal/parcel-dispatch/route.js"), read("lib/parcel-server.js")]);
+  assert.match(customer, /sendCreateRequestSchema/);
+  assert.match(contracts, /pickupMode: enumValues\(PICKUP_MODES\)\.default\("now"\)/);
   assert.match(customer, /Schedule pickup at least 20 minutes from now/);
   assert.match(customer, /Scheduled Send pickup can be booked up to 7 days ahead/);
   assert.match(processor, /patch.state=scheduledMs.*"scheduled":"searching_driver"/);
@@ -106,8 +107,9 @@ test("Scheduled Send defers dispatch until the pickup window and preserves paid 
 });
 
 test("Parcel size weight limits and prohibited-item acknowledgement are server enforced", async () => {
-  const source = await read("app/api/customer/parcels/route.js");
-  assert.match(source, /estimatedWeightKg: z\.number\(\)\.min\(0\.1\)\.max\(100\)/);
+  const [source, contracts] = await Promise.all([read("app/api/customer/parcels/route.js"), read("lib/contracts/schemas.js")]);
+  assert.match(source, /sendCreateRequestSchema/);
+  assert.match(contracts, /estimatedWeightKg: z\.number\(\)\.min\(0\.1\)\.max\(100\)/);
   assert.match(source, /body\.estimatedWeightKg.*quote\.maxKg/);
-  assert.match(source, /prohibitedAcknowledged: z\.literal\(true\)/);
+  assert.match(contracts, /prohibitedAcknowledged: z\.literal\(true\)/);
 });

@@ -17,7 +17,7 @@ test("Ride address suggestion saves verified coordinates after changing visible 
  assert.ok(ui.includes("setSearchError(error?.message"));
  assert.ok(ui.includes("active=false"));
  const form=source("components/ride-app.js");
- assert.ok(form.includes("disabled={!pickup || !dropoff}"));
+ assert.match(form,/disabled=\{!pickup\s*\|\|\s*!dropoff\}/);
 });
 test("Send address suggestion also retains point coordinates and surfaces search failures",()=>{
  const ui=selectionHandler(source("components/send-app.js"));
