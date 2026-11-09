@@ -5,6 +5,8 @@ import { notifyUsers, operationalEligibility } from "@/lib/driver-delivery-serve
 import { dispatchRide, plainRide, rideSettings } from "@/lib/ride-server";
 import { safeText } from "@/lib/server-helpers";
 import {validateCoverageCollection} from "@/lib/mobility-coverage";
+import { SPOTLY_COUNTRIES } from "@/lib/country-engine";
+import { resolveServiceAvailability } from "@/lib/service-availability";
 
 export const runtime = "nodejs";
 const ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager", "driver_operations_coordinator", "dispatcher", "support_manager"];
@@ -12,7 +14,6 @@ const RIDE_CONFIG_ROLES = ["super_admin", "admin", "platform_admin", "operations
 const schema = z.object({ rideId: z.string().min(3).max(180), action: z.enum(["dispatch", "assign", "reassign", "cancel", "clear_exception","terminate_trip","resume_safety"]), driverId: z.string().max(180).optional(), reason: z.string().max(1000).optional() });
 
 const mobilitySchema = z.object({
-  ridesEnabled: z.boolean().optional(),
   routingVerified:z.boolean().optional(),
   dispatchSchedulerVerified:z.boolean().optional(),
   enabledCountries:z.array(z.enum(["ZW","MW"])).max(2).optional(),
@@ -44,7 +45,9 @@ export async function GET(request) {
       return Response.json({ ok: true, ride: { id: ride.id, ...plainRide(ride.data()) }, events: events.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })), offers: offers.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })) });
     }
     const [rides, presence, drivers, settingsSnap] = await Promise.all([db.collection("rideTrips").limit(300).get(), db.collection("driverPresence").limit(300).get(), db.collection("drivers").limit(300).get(), db.collection("platformSettings").doc("global").get()]);
-    return Response.json({ ok: true, rides: rides.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })), presence: presence.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })), drivers: drivers.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })), mobility: rideSettings(settingsSnap.exists ? settingsSnap.data() : {}) });
+    const settings = settingsSnap.exists ? settingsSnap.data() : {};
+    const publishedAvailability = SPOTLY_COUNTRIES.flatMap((country) => (country.cities || []).map((city) => resolveServiceAvailability(settings, { service: "ride", country: country.code, city: city.name }))).filter((decision) => decision.state === "live");
+    return Response.json({ ok: true, rides: rides.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })), presence: presence.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })), drivers: drivers.docs.map((d) => ({ id: d.id, ...plainRide(d.data()) })), mobility: { ...rideSettings(settings), publishedAvailability: { live: publishedAvailability.length > 0, liveCities: publishedAvailability.map((item) => `${item.country}:${item.city}`), revisionNumber: Number(settings.serviceAvailabilityRevisionNumber || 0) } } });
   } catch (error) { return apiError(error); }
 }
 
@@ -63,11 +66,8 @@ export async function PATCH(request) {
       enabledCities:body.enabledCities??mobility.enabledCities??[],
       send:false
     });
-    if(body.ridesEnabled!==undefined&&body.ridesEnabled!==(mobility.ridesEnabled===true))
-      throw Object.assign(new Error("Activate or pause Ride from Admin Mobility → Service Launch & Controls."),{status:409});
     const next = {
       ...mobility,
-      ...(body.ridesEnabled !== undefined ? { ridesEnabled: body.ridesEnabled } : {}),
       ...(body.routingVerified!==undefined?{routingVerified:body.routingVerified}:{}),
       ...(body.dispatchSchedulerVerified!==undefined?{dispatchSchedulerVerified:body.dispatchSchedulerVerified}:{}),
       ...(body.enabledCountries!==undefined?{enabledCountries:body.enabledCountries}:{}),
@@ -80,7 +80,7 @@ export async function PATCH(request) {
       ...(body.pricing ? { pricing: { ...(mobility.pricing || {}), ...body.pricing } } : {})
     };
     await settingsRef.set({ mobility: next, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.uid }, { merge: true });
-    await db.collection("auditLogs").add({ actorId: actor.uid, action: "mobility.ride_settings.updated", entityType: "platformSettings", entityId: "global", metadata: { ridesEnabled: next.ridesEnabled === true, cashEnabled: next.cashEnabled !== false, enabledCities: next.enabledCities || [], enabledAreas: next.enabledAreas || {}, pricing: next.pricing || {} }, source: "admin_rides", createdAt: FieldValue.serverTimestamp() });
+    await db.collection("auditLogs").add({ actorId: actor.uid, action: "mobility.ride_settings.updated", entityType: "platformSettings", entityId: "global", metadata: { cashEnabled: next.cashEnabled !== false, enabledCities: next.enabledCities || [], enabledAreas: next.enabledAreas || {}, pricing: next.pricing || {} }, source: "admin_rides", createdAt: FieldValue.serverTimestamp() });
     return Response.json({ ok: true, mobility: rideSettings({ ...current, mobility: next }) });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the ride settings." }, { status: 400 });

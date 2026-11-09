@@ -45,6 +45,6 @@ test("customer and workspace shells both show the status; anonymous visitors rem
     const shell = await source(file);
     assert.match(shell, /<EmailVerificationBanner\s*\/>/, file);
   }
-  const rideLab = await source("app/api/mobility/ride-lab/route.js");
-  assert.match(rideLab, /user\.email_verified !== true/);
+  const operations = await source("app/api/operations/rides/route.js");
+  assert.match(operations, /authenticateRequest\(request\)/);
 });

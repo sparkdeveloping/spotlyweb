@@ -5,6 +5,7 @@ import { estimateRide, normalizeRidePoint, rideAvailability, rideQuoteAvailabili
 import {validateRideTerritory} from "@/lib/ride-geography";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
 import { rideQuoteRequestSchema } from "@/lib/contracts/schemas";
+import { requireServiceDiscoverable } from "@/lib/service-availability-server";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,7 @@ export async function POST(request) {
     const { db } = getAdminServices();
     const settingsSnap = await db.collection("platformSettings").doc("global").get();
     const settings = settingsSnap.exists ? settingsSnap.data() : {};
+    const serviceDecision=requireServiceDiscoverable(settings, { service: "ride", country: pickup.country, city: pickup.city });
     const quoteReadiness=rideQuoteAvailability(settings,pickup);
     if(!quoteReadiness.enabled)throw Object.assign(new Error(quoteReadiness.reason),{status:409});
     validateRideTerritory(pickup,dropoff,settings.mobility||{});
@@ -28,8 +30,9 @@ export async function POST(request) {
     // A quote is not an authorization to dispatch. Real bookings independently
     // revalidate every launch gate and live payment before accepting requests.
     const booking=rideAvailability(settings,pickup);
-    return Response.json({ok:true,quote,
-      bookingAvailable:booking.enabled,bookingReason:booking.enabled?"":booking.reason,
+    const bookingAvailable=serviceDecision.transactable&&booking.enabled;
+    return Response.json({ok:true,quote,serviceAvailability:serviceDecision,
+      bookingAvailable,bookingReason:bookingAvailable?"":(serviceDecision.transactable?booking.reason:(serviceDecision.reason||"Ride requests are not live here yet.")),
       serviceTypes:quoteReadiness.config.pricing.serviceTypes,
       paymentMethods:quoteReadiness.config.paymentMethods},
       {headers:{"Cache-Control":"private, no-store"}});

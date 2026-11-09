@@ -9,6 +9,8 @@ import { appointmentReservationSpecs, bookingReservationSpecs, reservationCanFit
 import { marketplaceTrust } from "@/lib/marketplace-trust";
 import { transactionCreateRequestSchema } from "@/lib/contracts/schemas";
 import { countryDefinition, countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
+import { requireServiceLive } from "@/lib/service-availability-server";
+import { operationContextFor } from "@/lib/operations-grants-server";
 
 export const runtime = "nodejs";
 
@@ -99,6 +101,7 @@ export async function POST(request) {
     const business = businessSnapshot.data();
     const branch = branchSnapshot.data();
     const product = productSnapshot.data();
+    const settings = settingsSnapshot.data() || {};
     const countryCode = normalizeCountryCode(branch.country || business.country);
     const country = countryDefinition(countryCode);
     if (!country) throw Object.assign(new Error("This location needs a supported country before it can accept bookings or tickets."), { status: 409 });
@@ -107,6 +110,9 @@ export async function POST(request) {
     const type = businessTypeFor(business);
     const kind = transactionKind(type);
     if (!kind) throw Object.assign(new Error("Online booking is not enabled for this business type."), { status: 409 });
+    requireServiceLive(settings, { service: kind === "ticket" ? "events" : "book", country: countryCode, city: branch.city || business.city || "" });
+    const transactionService = kind === "ticket" ? "events" : "book";
+    const { context: operations } = await operationContextFor(db, user.uid, { service: transactionService, country: countryCode, city: branch.city || business.city || "" });
 
     const live = business.public === true && (business.status === "active" || business.lifecycleStatus === "live");
     if (!live) throw Object.assign(new Error("This business is not accepting customer activity yet."), { status: 404 });
@@ -120,15 +126,8 @@ export async function POST(request) {
       throw Object.assign(new Error("This offering is not available at the selected location."), { status: 409 });
     }
 
-    const settings = settingsSnapshot.data() || {};
-    const roles = user.profile?.roles || [];
-    const isSuperAdmin = roles.includes("super_admin");
-    const elevatedPreview = roles.some((role) => ["super_admin", "platform_admin", "operations_manager", "support_manager"].includes(role));
     const marketplaceOpen = settings.launch?.marketplaceEnabled === true;
-    const privatePreview = settings.launch?.privateBetaEnabled !== false && (user.profile?.privateBeta === true || elevatedPreview);
-    if (!marketplaceOpen && !privatePreview) throw Object.assign(new Error("This customer service is currently limited to approved preview accounts."), { status: 403 });
-    const superAdminTestPayment = body.paymentMethod === "superadmin_test";
-    if (superAdminTestPayment && !isSuperAdmin) throw Object.assign(new Error("Super Admin test payment is restricted to Super Admin accounts."), { status: 403 });
+    if (!marketplaceOpen) throw Object.assign(new Error("This customer service is not accepting production transactions right now. Use Operations mode for isolated testing."), { status: 403 });
 
     if (kind === "appointment" && !body.appointment) throw Object.assign(new Error("Choose an appointment date and time."), { status: 422 });
     if (kind === "booking" && !body.booking) throw Object.assign(new Error("Choose booking dates."), { status: 422 });
@@ -233,7 +232,7 @@ export async function POST(request) {
         ticketType: kind === "ticket" ? safeText(latestProduct.variant || latestProduct.name || "Standard", 120) : "",
         durationLabel: kind === "appointment" ? `${Number(latestProduct.durationMinutes || 30)} min` : ""
       };
-      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines: [line], code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta: privatePreview });
+      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines: [line], code: body.promoCode || "", isNewCustomer: priorOrders.empty, previewAccess: operations.servicePreview });
       if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
       const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
       const latestTotals = buildOrderTotals({
@@ -242,7 +241,7 @@ export async function POST(request) {
         serviceFee: Number(finance.customerServiceFee || settings.commerce?.bookingServiceFee || 0),
         commissionPercent: Number(finance.commissionPercent ?? settings.commerce?.defaultCommissionPercent ?? 0)
       });
-      const paymentRequired = !["pay_later", "superadmin_test"].includes(body.paymentMethod) && latestTotals.total > 0;
+      const paymentRequired = body.paymentMethod !== "pay_later" && latestTotals.total > 0;
 
 
       const base = {
@@ -269,8 +268,7 @@ export async function POST(request) {
         total: latestTotals.total,
         promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         paymentMethod: body.paymentMethod,
-        paymentStatus: superAdminTestPayment ? "test_paid" : paymentRequired ? "unpaid" : latestTotals.total <= 0 ? "not_required" : "pay_later",
-        ...(superAdminTestPayment ? { isTestOrder: true, testPaymentMode: "super_admin", merchantSettlementStatus: "test_excluded" } : {}),
+        paymentStatus: paymentRequired ? "unpaid" : latestTotals.total <= 0 ? "not_required" : "pay_later",
         status: paymentRequired && kind === "ticket" ? "awaiting_payment" : kind === "ticket" ? "submitted" : "requested",
         notes: safeText(body.notes, 600),
         inventoryReservationStatus: kind === "ticket" || availabilitySpecs.length ? "reserved" : "not_applicable",

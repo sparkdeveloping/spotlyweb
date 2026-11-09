@@ -18,7 +18,8 @@ test("Fare quote does not depend on real-time dispatch but still needs verified 
  assert.ok(service.includes('if(!config.routingVerified||!routingConfiguration().ready)'));
  assert.ok(quote.includes("rideQuoteAvailability(settings,pickup)"));
  assert.ok(quote.includes("const booking=rideAvailability(settings,pickup)"));
- assert.ok(quote.includes("bookingAvailable:booking.enabled"));
+ assert.ok(quote.includes("const bookingAvailable=serviceDecision.transactable&&booking.enabled"));
+  assert.ok(quote.includes("requireServiceDiscoverable"));
  assert.ok(booking.includes("rideAvailability(settings, pickup)"));
  assert.ok(quote.includes("getVerifiedRideRoute(pickup,dropoff)"));
  assert.ok(quote.includes("validateRideTerritory(pickup,dropoff"));

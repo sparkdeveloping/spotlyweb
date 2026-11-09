@@ -9,7 +9,7 @@
   "scripts": {
     "predev": "node scripts/firebase-project-preflight.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/firebase-project-preflight.mjs && node --test tests/v9-assist-research-menu.test.mjs tests/maptiler-geocoding.test.mjs tests/ride-quote-preview-v9.test.mjs tests/mapmap-routing-v9.test.mjs tests/mobility-service-coverage.test.mjs tests/driver-v8-production.test.mjs tests/v9-cross-site-experience.test.mjs tests/ride-lab-distance-v9.test.mjs tests/v9-premium-ux.test.mjs tests/themenu-image-catalog-v9.test.mjs tests/admin-operations-v9.test.mjs tests/email-verification-v9.test.mjs tests/auth-session-stability-v9.test.mjs tests/nxt-auth-bootstrap.test.mjs tests/branding-kit.test.mjs tests/premium-experience-2026.test.mjs tests/spotly-curation-2026.test.mjs tests/book-live-artwork-release.test.mjs tests/business-photography.test.mjs tests/spotly-ordering.test.mjs tests/specific-catalogues.test.mjs",
+    "prebuild": "node scripts/firebase-project-preflight.mjs && node --test tests/operations-override-framework.test.mjs tests/v9-assist-research-menu.test.mjs tests/maptiler-geocoding.test.mjs tests/ride-quote-preview-v9.test.mjs tests/mapmap-routing-v9.test.mjs tests/mobility-service-coverage.test.mjs tests/driver-v8-production.test.mjs tests/v9-cross-site-experience.test.mjs tests/ride-lab-distance-v9.test.mjs tests/v9-premium-ux.test.mjs tests/themenu-image-catalog-v9.test.mjs tests/admin-operations-v9.test.mjs tests/email-verification-v9.test.mjs tests/auth-session-stability-v9.test.mjs tests/nxt-auth-bootstrap.test.mjs tests/branding-kit.test.mjs tests/premium-experience-2026.test.mjs tests/spotly-curation-2026.test.mjs tests/book-live-artwork-release.test.mjs tests/business-photography.test.mjs tests/spotly-ordering.test.mjs tests/specific-catalogues.test.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -41,7 +41,10 @@
     "firebase:emulators:platform": "npx --yes firebase-tools@15.35.0 emulators:start --project demo-spotly-platform --only auth,firestore,database,functions,storage",
     "countries:generate": "node scripts/generate-country-bindings.mjs",
     "countries:check": "node --test tests/country-engine-v1.test.mjs",
-    "countries:verify-snapshots": "node scripts/verify-country-snapshots.mjs"
+    "countries:verify-snapshots": "node scripts/verify-country-snapshots.mjs",
+    "services:generate": "node scripts/generate-service-availability-bindings.mjs",
+    "services:check": "node --test tests/service-availability-engine.test.mjs tests/service-availability-control-plane.test.mjs",
+    "services:verify-snapshots": "node scripts/verify-service-availability-snapshots.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

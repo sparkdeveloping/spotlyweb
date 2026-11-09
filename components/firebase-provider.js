@@ -422,7 +422,7 @@ export function FirebaseProvider({ children }) {
     if (!current || current.isAnonymous) throw new Error("Sign in to check your email verification.");
     try {
       await current.reload();
-      // The Ride Lab and other protected API routes read the refreshed email_verified token claim.
+      // Protected API routes read the refreshed email_verified token claim.
       await current.getIdToken(true);
       setVerificationRevision((previous) => previous + 1);
       return current.emailVerified === true;

@@ -8,6 +8,8 @@ import {licensedMapStyle} from "@/lib/mobility-map-provider";
 import {mapTilerReady} from "@/lib/maptiler-geocoding";
 import {paynowCredentialsConfigured} from "@/lib/paynow-server";
 import {routingConfiguration} from "@/lib/ride-routing";
+import {resolveServiceAvailability,serviceAvailabilityCityKey} from "@/lib/service-availability";
+import {editServiceAvailabilityDraft} from "@/lib/service-availability-control-plane-server";
 
 export const runtime="nodejs";
 const READ_ROLES=["super_admin","admin","platform_admin","operations_manager","regional_operations_manager","driver_operations_coordinator","dispatcher","support_manager"];
@@ -45,7 +47,9 @@ function prerequisites(settings,service,heartbeat=null,paynowByCurrency={}){
   const matches=countries.filter(country=>fences[country+":"+String(city).toLowerCase()]);
   if(!matches.length)missing.push("Approve a country-specific service geofence for "+city);
  }
- return {service,enabled:service==="ride"?mobility.ridesEnabled===true:mobility.send?.enabled===true,
+ const countriesForRuntime=service==="ride"?(config.enabledCountries||[]):["ZW"];
+ const runtimeLive=cities.some(city=>countriesForRuntime.some(country=>resolveServiceAvailability(settings,{service,country,city}).state==="live"));
+ return {service,enabled:runtimeLive,
   ready:missing.length===0,missing,cityCount:cities.length,geoFenceCount:Object.keys(fences).length,
   schedulerVerified:config.dispatchSchedulerVerified===true,scheduler,paynowCredentialsConfigured:paynowReady};
 }
@@ -75,35 +79,32 @@ export async function POST(request){
   if(data.confirmation!==confirmation)
    throw Object.assign(new Error("Type "+confirmation+" to confirm this service change."),{status:409});
   const ref=db.collection("platformSettings").doc("global");
-  const [usdPaynow,zwgPaynow]=await Promise.all([
-    paynowCredentialsConfigured("USD").catch(()=>false),
-    paynowCredentialsConfigured("ZWG").catch(()=>false)
+  const [settingsDoc,healthDoc,usdPaynow,zwgPaynow]=await Promise.all([
+   ref.get(),db.collection("mobilityDispatchHealth").doc(data.service).get(),
+   paynowCredentialsConfigured("USD").catch(()=>false),paynowCredentialsConfigured("ZWG").catch(()=>false)
   ]);
-  let after;
-  await db.runTransaction(async tx=>{
-   const doc=await tx.get(ref);
-   const healthDoc=await tx.get(db.collection("mobilityDispatchHealth").doc(data.service));
-   const current=doc.exists?doc.data():{},mobility=current.mobility||{};
-   const prereq=prerequisites(current,data.service,healthDoc.data(),{USD:usdPaynow,ZWG:zwgPaynow});
-   if(data.action==="enable"&&!prereq.ready)
-    throw Object.assign(new Error("Cannot enable "+data.service+": "+prereq.missing.join("; ")),{status:409});
-   if(data.service==="ride"){
-    after={...mobility,ridesEnabled:data.action==="enable"};
-   }else{
-    after={...mobility,send:{...(mobility.send||{}),enabled:data.action==="enable"}};
+  const current=settingsDoc.exists?settingsDoc.data():{};
+  const prereq=prerequisites(current,data.service,healthDoc.data(),{USD:usdPaynow,ZWG:zwgPaynow});
+  if(data.action==="enable"&&!prereq.ready)
+   throw Object.assign(new Error("Cannot stage "+data.service+" live: "+prereq.missing.join("; ")),{status:409});
+  const config=data.service==="ride"?rideSettings(current):parcelSettings(current);
+  const countries=data.service==="ride"?(config.enabledCountries||[]):["ZW"];
+  for(const country of countries){
+   await editServiceAvailabilityDraft(db,actor,{service:data.service,scope:"country",country,state:data.action==="enable"?"discover":"paused",reason:data.action==="enable"?"":"Temporarily paused by Spotly Operations."});
+   for(const city of config.enabledCities||[]){
+    const key=serviceAvailabilityCityKey(country,city); if(!key)continue;
+    if(data.service==="ride"&&!config.cityGeofences?.[country+":"+String(city).toLowerCase()])continue;
+    await editServiceAvailabilityDraft(db,actor,{service:data.service,scope:"city",country,city,state:data.action==="enable"?"live":"paused",reason:data.action==="enable"?"":"Temporarily paused by Spotly Operations."});
    }
-   const now=FieldValue.serverTimestamp();
-   tx.set(ref,{mobility:after,updatedAt:now,updatedBy:actor.uid},{merge:true});
-   tx.create(db.collection("auditLogs").doc(),{
-    actorId:actor.uid,action:"mobility."+data.service+".launch_"+data.action,
-    entityType:"platformSettings",entityId:"global",
-    metadata:{service:data.service,enabled:data.action==="enable",
-      approvedCities:prereq.cityCount,schedulerVerified:prereq.schedulerVerified},
-    createdAt:now
-   });
+  }
+  await db.collection("auditLogs").add({
+   actorId:actor.uid,actorEmail:actor.email||"",action:"mobility."+data.service+".availability_staged",
+   entityType:"serviceAvailability",entityId:data.service,
+   metadata:{service:data.service,action:data.action,approvedCities:prereq.cityCount,schedulerVerified:prereq.schedulerVerified},
+   createdAt:FieldValue.serverTimestamp()
   });
-  return Response.json({ok:true,service:data.service,enabled:data.action==="enable",
-   warning:"This switch does not verify real-world Driver coverage or authorize test payments."});
+  return Response.json({ok:true,service:data.service,staged:true,
+   warning:"Availability is staged only. Publish it from System → Countries & Services before production changes."});
  }catch(error){
   if(error instanceof z.ZodError)return Response.json({ok:false,error:"Review service launch instructions."},{status:422});
   return apiError(error);

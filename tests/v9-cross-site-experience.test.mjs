@@ -56,17 +56,17 @@ test("Ride booking is guided through pickup, destination, vehicle and review, wi
   assert.match(ride, /PinDropMap/);
 });
 
-test("Admin Ride Lab access requires approved staff roles and verified invited email; positions never touch live GPS", async () => {
-  const [admin, driver, dashboard] = await Promise.all([
-    read("app/api/admin/ride-lab/route.js"), read("app/api/driver/ride-lab/route.js"), read("components/admin-mobility-launch.js")
+test("Operations access uses scoped account grants and never simulated Driver GPS", async () => {
+  const [grants, driver, dashboard] = await Promise.all([
+    read("app/api/admin/operations-grants/route.js"), read("app/api/operations/rides/route.js"), read("components/admin-mobility-launch.js")
   ]);
-  assert.match(admin, /authenticateRequest\(request, \{ roles: ROLES \}\)/);
-  assert.match(admin, /testerEmails/);
-  assert.match(driver, /user\.email_verified !== true/);
-  assert.match(driver, /mobilityRideLabLocations/);
+  assert.match(grants, /operationGrants/);
+  assert.match(grants, /operations_grant\.issued/);
+  assert.match(driver, /driver_operations/);
+  assert.match(driver, /operationsRuns/);
   assert.doesNotMatch(driver, /db\.collection\("driverPresence"\)/);
   assert.doesNotMatch(driver, /db\.collection\("rideTrips"\)/);
-  assert.match(dashboard, /Save Ride Lab invitations/);
+  assert.match(dashboard, /Operations grants/);
 });
 
 test("Admin capability cards use a legible two-column layout, not four cards across a cramped detail pane", async () => {
@@ -92,33 +92,26 @@ test("directory cards use described photographs and preserve the real Assist han
   assert.match(home, /Illustrative photographs are identified/);
 });
 
-test("Ride Lab supports isolated two-account shadow requests, offers, test movement and state transitions", async () => {
-  const [route, rider, driver, admin] = await Promise.all([
-    read("app/api/mobility/ride-lab/route.js"),
+test("Operations Ride supports isolated two-account requests and real state transitions", async () => {
+  const [route, rider, driver] = await Promise.all([
+    read("app/api/operations/rides/route.js"),
     read("components/ride-app.js"),
-    read("components/driver-app.js"),
-    read("app/api/admin/ride-lab/route.js")
+    read("components/driver-app.js")
   ]);
-  assert.match(route, /await invited\(db, user\)/);
-  assert.match(route, /user\.email_verified !== true/);
-  assert.match(route, /mobilityRideLabTrips/);
-  assert.match(route, /data\.customerId === user\.uid/);
-  assert.match(route, /transaction\.update\(ref, \{ state, driverId: user\.uid/);
-  assert.match(route, /driver_assigned: "driver_to_pickup"/);
-  assert.match(route, /driver_arrived_pickup: "in_trip"/);
-  assert.match(route, /in_trip: "completed"/);
-  assert.match(route, /validateRideLabLocations\(input\.pickup, input\.dropoff\)/);
-  const geography = await read("lib/ride-lab-validation.js");
-  assert.match(geography, /insideCountryBounds\(pickup, pickup\.country\)/);
+  assert.match(route, /service_operations/);
+  assert.match(route, /driver_operations/);
+  assert.match(route, /operationsRuns/);
+  assert.match(route, /data\.customerId===user\.uid/);
+  assert.match(route, /driver_assigned:\s*"driver_to_pickup"/);
+  assert.match(route, /driver_arrived_pickup:\s*"in_trip"/);
+  assert.match(route, /in_trip:\s*"completed"/);
+  assert.match(route, /validateOperationsRideLocations/);
   assert.match(route, /enforceRateLimit/);
   for (const liveCollection of ["rideTrips", "rideOffers", "driverPresence", "driverEarningsLedger"]) {
     assert.doesNotMatch(route, new RegExp(`db\\.collection\\("${liveCollection}"\\)`));
   }
-  assert.match(driver, /Accept simulated Ride/);
-  assert.match(driver, /Move simulated vehicle/);
-  assert.match(driver, /Advance test state/);
-  assert.match(rider, /Create simulated Ride request/);
-  assert.match(rider, /Simulated Driver location/);
-  assert.match(rider, /Ride booking is still disabled/);
-  assert.match(admin, /recentTrips/);
+  assert.match(driver, /Operations/);
+  assert.match(driver, /\/api\/operations\/rides/);
+  assert.match(rider, /Operations mode/);
+  assert.match(rider, /\/api\/operations\/rides/);
 });

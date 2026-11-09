@@ -9,7 +9,7 @@ test("Functions foundation is pinned to Spotly Africa and canonical contract v1"
   assert.equal(SPOTLY_PROJECT_ID, "spotly-africa");
   assert.equal(SPOTLY_FUNCTIONS_REGION, "europe-west1");
   assert.equal(SPOTLY_CONTRACT_VERSION, "1.0.0");
-  assert.equal(SPOTLY_CONTRACT_SHA256, "753652a6e58d51dc05d11e10640e2b1adef67fe865e734b0c5af389ae735535a");
+  assert.equal(SPOTLY_CONTRACT_SHA256, "a1e3ea851048653f4be14f32024050d62af37bcee88c1055a969ffe7f76c5184");
   const raw = await readFile(new URL("../src/contracts/spotly-contracts.v1.json", import.meta.url));
   assert.ok(raw.length > 1000);
 });

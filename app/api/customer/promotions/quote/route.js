@@ -3,6 +3,9 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { safeText } from "@/lib/server-helpers";
 import { quoteBusinessPromotion } from "@/lib/promotion-server";
+import { operationContextFor } from "@/lib/operations-grants-server";
+import { normalizeCountryCode } from "@/lib/country-engine";
+import { marketplaceProfile } from "@/lib/marketplace-taxonomy";
 
 export const runtime = "nodejs";
 
@@ -37,9 +40,12 @@ export async function POST(request) {
       if (product.businessId !== body.businessId || product.available === false || product.active === false || !Number.isFinite(unitPrice) || unitPrice <= 0) throw Object.assign(new Error(`${safeText(product.name || "An item", 80)} is not available for this promotion quote.`), { status: 409 });
       return { productId: snapshot.id, quantity, lineTotal: Number((unitPrice * quantity).toFixed(2)) };
     });
-    const roles = user.profile?.roles || [];
-    const privateBeta = user.profile?.privateBeta === true || roles.some((role) => ["super_admin", "platform_admin", "operations_manager", "support_manager"].includes(role));
-    const result = await quoteBusinessPromotion(db, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.code || "", isNewCustomer: priorOrders.empty, privateBeta });
+    const branchData = branch.data() || {};
+    const businessData = business.data() || {};
+    const country = normalizeCountryCode(branchData.country || businessData.country);
+    const service = marketplaceProfile(businessData).service;
+    const { context: operations } = await operationContextFor(db, user.uid, { service, country, city: branchData.city || businessData.city || "" });
+    const result = await quoteBusinessPromotion(db, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.code || "", isNewCustomer: priorOrders.empty, previewAccess: operations.servicePreview });
     if (body.code && !result?.quote?.eligible) throw Object.assign(new Error(result?.quote?.reason || "That promotion could not be applied."), { status: 409 });
     return Response.json({ ok: true, applied: Boolean(result?.quote?.eligible), promotion: result?.quote?.eligible ? { id: result.promotion.id, name: result.promotion.name || result.quote.label, code: result.quote.code, discount: result.quote.discount, label: result.quote.label } : null }, { headers: { "X-RateLimit-Remaining": String(rate.remaining), "Cache-Control": "private, no-store" } });
   } catch (error) {

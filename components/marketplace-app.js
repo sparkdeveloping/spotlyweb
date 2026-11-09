@@ -20,7 +20,9 @@ import { formatCurrency } from "@/lib/format";
 import { businessArchetype } from "@/data/business-archetypes";
 import { migrateLegacyState, readState, removeState, writeState } from "@/lib/browser-state";
 import { branchAcceptedCurrencies, branchPaymentMethods, pickupAvailability } from "@/lib/pickup-availability";
-import { countryDefinition } from "@/lib/country-engine";
+import { countryDefinition, countryForCity } from "@/lib/country-engine";
+import { resolveServiceAvailabilitySet } from "@/lib/service-availability";
+import { useCountry } from "@/components/country-provider";
 import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { resolveProductForBranch } from "@/lib/product-offers";
 import { MARKETPLACE_SERVICE_KEYS, MarketplaceHome, ServiceModeHeader, serviceMatchesBusiness } from "@/components/marketplace-home";
@@ -36,6 +38,7 @@ import { ServiceDiscoveryView } from "@/components/service-experience";
 import { CustomerShell } from "@/components/customer-shell";
 import { CustomerOnboarding } from "@/components/customer-onboarding";
 import { CustomerContentSkeleton } from "@/components/customer-loading";
+import { useOperationsContext } from "@/components/operations-context";
 
 const CART_KEY = "spotly-marketplace-cart";
 const CHECKOUT_KEY = "spotly-checkout-draft";
@@ -75,14 +78,14 @@ function distanceKm(from, to) {
   return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function MarketplaceGate({ privateBeta, user, profile, locationLabel = "Your area" }) {
+function MarketplaceGate({ user, profile, locationLabel = "Your area" }) {
   return <CustomerShell current="home" user={user} profile={profile} locationLabel={locationLabel} footer={false}>
     <section className="mx-auto flex min-h-[calc(100vh-180px)] max-w-3xl items-center py-10">
       <div className="w-full text-center">
         <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[24px] bg-[var(--accent-soft)]"><SpotlyLottie name="marketplace-discover" mode="loop" eager className="h-20 w-20" fallback={<ShoppingBasket className="h-8 w-8 text-[var(--on-accent-soft)]" />} /></div>
         <Badge tone="purple" className="mt-6">Controlled rollout</Badge>
         <h1 className="mt-5 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">Spotly is opening carefully, area by area.</h1>
-        <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[var(--text-2)]">We only turn customer ordering on when verified businesses, fulfilment and support are ready. {privateBeta ? "This account does not currently have preview access." : "Customer ordering is temporarily paused for this area."}</p>
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[var(--text-2)]">We only turn customer ordering on when verified businesses, fulfilment and support are ready. Customer ordering is temporarily paused for this area.</p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Button asChild><Link href="/support">Get an update</Link></Button><Button asChild variant="outline"><Link href="/claim">Add or claim a business</Link></Button></div>
       </div>
     </section>
@@ -329,13 +332,18 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
   const [promotionLoading, setPromotionLoading] = useState(false);
   const [form, setForm] = useState({ checkoutId: "", promoCode: "", branchId: "", fulfilment: defaultFulfilment === "delivery" ? "delivery" : "pickup", date: "", slot: "", slotId: "", paymentMethod: "", contactName: user?.displayName || "", contactPhone: user?.phoneNumber || "", alternativePhone: "", notes: "", substitutionPreference: "contact_me", address: "", suburb: "", landmark: "", instructions: "", lat: null, lng: null });
   const selectedBranch = branches.find((branch) => branch.id === form.branchId);
+  const operationService = marketplaceProfile(business || {}).service;
+  const operationCountry = selectedBranch?.country || business?.country || countryForCity(selectedBranch?.city || business?.city || "")?.country?.code || "";
+  const operationCity = selectedBranch?.city || business?.city || "";
+  const { context: operations } = useOperationsContext({ service: operationService, country: operationCountry, city: operationCity });
+  const [operationsRunning, setOperationsRunning] = useState("");
+  const [operationsResult, setOperationsResult] = useState(null);
   const deliveryEnabled = Boolean(selectedBranch?.delivery?.enabled && !selectedBranch?.delivery?.paused && (selectedBranch?.fulfilment || []).includes("delivery"));
   const availability = useMemo(() => pickupAvailability(selectedBranch), [selectedBranch]);
-  const isSuperAdmin = profile?.roles?.includes("super_admin") === true;
   const methods = useMemo(() => {
     const available = branchPaymentMethods(selectedBranch).filter((method) => form.fulfilment !== "delivery" || !["cash", "bank_transfer"].includes(method));
-    return isSuperAdmin ? [...available, "superadmin_test"] : available;
-  }, [selectedBranch, form.fulfilment, isSuperAdmin]);
+    return available;
+  }, [selectedBranch, form.fulfilment]);
   const total = cartItems.reduce((sum, item) => sum + (priceFor(item, currency) || 0) * item.quantity, 0);
   const deliveryFee = form.fulfilment === "delivery" ? Number(selectedBranch?.delivery?.fee ?? 3.5) : 0;
   const promotionDiscount = Number(promotion?.discount || 0);
@@ -362,12 +370,12 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
       const validDay = nextAvailability.days.find((day) => day.date === current.date);
       const validSlot = validDay?.slots.find((slot) => slot.label === current.slot);
       const available = branchPaymentMethods(selectedBranch).filter((method) => nextFulfilment !== "delivery" || !["cash", "bank_transfer"].includes(method));
-      const allowedMethods = isSuperAdmin ? [...available, "superadmin_test"] : available;
+      const allowedMethods = available;
       const method = allowedMethods.includes(current.paymentMethod) ? current.paymentMethod : allowedMethods[0] || "";
       const chosenSlot = validSlot || nextAvailability.earliest?.slot || null;
       return { ...current, fulfilment: nextFulfilment, date: validDay ? current.date : nextAvailability.earliest?.date || "", slot: chosenSlot?.label || "", slotId: chosenSlot?.id || "", paymentMethod: method };
     });
-  }, [selectedBranch, deliveryEnabled, isSuperAdmin]);
+  }, [selectedBranch, deliveryEnabled]);
 
   const day = availability.days.find((item) => item.date === form.date);
   function validationFor(currentStep) {
@@ -405,6 +413,22 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
     finally { setPromotionLoading(false); }
   }
 
+  async function runOperationsCheckout(simulatePayment = false) {
+    const message = validationFor(4); if (message) { setError(message); return; }
+    if (!operations.serviceOperations) { setError("This account does not have scoped Operations checkout access for this service and location."); return; }
+    if (simulatePayment && !operations.paymentSandbox) { setError("Payment simulation requires a separate Payment sandbox grant."); return; }
+    setOperationsRunning(simulatePayment ? "payment" : "validate"); setError(""); setOperationsResult(null);
+    try {
+      const result = await authenticatedFetch("/api/operations/checkout", { method: "POST", body: JSON.stringify({
+        businessId: business.id, branchId: form.branchId, currency, fulfilment: form.fulfilment, paymentMethod: form.paymentMethod, simulatePayment,
+        items: cartItems.map((item) => ({ productId: item.id, quantity: item.quantity }))
+      }) });
+      setOperationsResult(result);
+      toast(simulatePayment ? "Payment simulation passed with no provider call or funds movement." : "Operations checkout validated without creating an order or reserving inventory.", { type: "info" });
+    } catch (reason) { setError(reason.message || "The Operations checkout could not be validated."); }
+    finally { setOperationsRunning(""); }
+  }
+
   async function submit() {
     const message = validationFor(4); if (message) { setError(message); return; }
     if (!user || user.isAnonymous) { window.location.assign(`/login?next=${encodeURIComponent("/marketplace")}`); return; }
@@ -419,7 +443,7 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
         const channel = ["ecocash", "onemoney"].includes(form.paymentMethod) ? form.paymentMethod : "web";
         const payment = await authenticatedFetch("/api/payments/paynow/initiate", { method: "POST", body: JSON.stringify({ orderId: order.orderId, channel, phone: form.contactPhone }) });
         if (payment.redirectUrl) window.location.assign(payment.redirectUrl); else toast(payment.instructions || "Payment request sent.", { type: "success" });
-      } else toast(`${form.paymentMethod === "superadmin_test" ? "Test purchase completed. No real payment was charged." : form.fulfilment === "delivery" ? "Order placed. The business will prepare it for delivery." : "Order placed. The business will confirm your pickup."} View in Activity to track it.`, { type: "success" });
+      } else toast(`${form.fulfilment === "delivery" ? "Order placed. The business will prepare it for delivery." : "Order placed. The business will confirm your pickup."} View in Activity to track it.`, { type: "success" });
       removeState(CHECKOUT_KEY, user); setStep(0); onComplete(order); onClose();
     } catch (submissionError) { setError(submissionError.message || "The order could not be placed. Try again."); }
     finally { setSubmitting(false); }
@@ -460,9 +484,9 @@ function CheckoutModal({ open, onClose, business, branches, selectedBranchId, ca
 
       {step === 2 && form.fulfilment === "delivery" ? <div className="space-y-5"><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium sm:col-span-2">Delivery address<input {...field("address")} className="field-control mt-2 w-full" placeholder="Street / complex / house" /></label><label className="text-sm font-medium">Area or suburb<input {...field("suburb")} className="field-control mt-2 w-full" placeholder="Highlands" /></label><label className="text-sm font-medium">Landmark <span className="font-normal text-tertiary">optional</span><input {...field("landmark")} className="field-control mt-2 w-full" /></label><label className="text-sm font-medium">Delivery contact name<input {...field("contactName")} className="field-control mt-2 w-full" /></label><label className="text-sm font-medium">Phone<input {...field("contactPhone")} className="field-control mt-2 w-full" placeholder="Phone number" /></label><label className="text-sm font-medium sm:col-span-2">Delivery instructions <span className="font-normal text-tertiary">optional</span><textarea {...field("instructions")} className="field-control mt-2 min-h-24 w-full" placeholder="Gate, entrance, landmark or handoff instructions" /></label></div><div className="border-t border-[var(--border-subtle)] pt-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className="flex-1"><p className="font-semibold">Set the delivery pin</p><p className="mt-1 text-sm text-secondary">Spotly uses this map location for dispatch and Driver navigation.</p>{Number.isFinite(Number(form.lat)) && Number.isFinite(Number(form.lng)) ? <p className="mt-2 text-xs font-semibold text-success">Location set · {Number(form.lat).toFixed(5)}, {Number(form.lng).toFixed(5)}</p> : null}</div><Button type="button" variant="outline" onClick={useCurrentLocation} loading={locating}><LocateFixed className="h-4 w-4" />Use my location</Button></div></div></div> : null}
 
-      {step === 3 ? <div><p className="text-sm font-semibold">Payment method</p><div className="mt-3 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">{methods.map((method) => { const active = form.paymentMethod === method; return <button type="button" key={method} onClick={() => setForm((current) => ({ ...current, paymentMethod: method }))} className="flex w-full items-center gap-3 py-4 text-left"><span className={cn("flex h-10 w-10 items-center justify-center rounded-[12px]", active ? "bg-[var(--accent)] text-[var(--on-accent)]" : "bg-[var(--surface-2)]")}><CreditCard className="h-5 w-5" /></span><span className="flex-1 font-semibold">{method === "superadmin_test" ? "Test purchase · Super Admin" : method.replaceAll("_", " ")}</span>{active ? <Badge tone="purple">Selected</Badge> : method === "superadmin_test" ? <Badge tone="neutral">Test only</Badge> : null}</button>; })}</div>{form.fulfilment === "delivery" ? <p className="mt-4 text-sm text-secondary">Cash on delivery is intentionally unavailable. Choose a supported digital payment method.</p> : null}</div> : null}
+      {step === 3 ? <div><p className="text-sm font-semibold">Payment method</p><div className="mt-3 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">{methods.map((method) => { const active = form.paymentMethod === method; return <button type="button" key={method} onClick={() => setForm((current) => ({ ...current, paymentMethod: method }))} className="flex w-full items-center gap-3 py-4 text-left"><span className={cn("flex h-10 w-10 items-center justify-center rounded-[12px]", active ? "bg-[var(--accent)] text-[var(--on-accent)]" : "bg-[var(--surface-2)]")}><CreditCard className="h-5 w-5" /></span><span className="flex-1 font-semibold">{method.replaceAll("_", " ")}</span>{active ? <Badge tone="purple">Selected</Badge> : null}</button>; })}</div>{form.fulfilment === "delivery" ? <p className="mt-4 text-sm text-secondary">Cash on delivery is intentionally unavailable. Choose a supported digital payment method.</p> : null}</div> : null}
 
-      {step === 4 ? <div className="space-y-5"><section className="border-b border-[var(--border-subtle)] pb-5"><p className="text-sm font-semibold text-[var(--accent)]">{form.fulfilment === "delivery" ? "Delivery" : "Pickup"}</p><h3 className="mt-2 text-xl font-semibold">{selectedBranch?.branchName || selectedBranch?.name || business?.name}</h3><p className="mt-2 text-sm text-secondary">{form.fulfilment === "delivery" ? `${form.address}${form.suburb ? ` · ${form.suburb}` : ""}` : `${form.date} · ${form.slot}`}</p></section><section className="space-y-3 text-sm"><div className="flex justify-between"><span className="text-secondary">Items</span><span className="font-semibold">{formatCurrency(total,currency)}</span></div>{promotionDiscount > 0 ? <div className="flex justify-between text-[var(--success)]"><span>Promotion</span><span className="font-semibold">-{formatCurrency(promotionDiscount,currency)}</span></div> : null}{form.fulfilment === "delivery" ? <div className="flex justify-between"><span className="text-secondary">Delivery</span><span className="font-semibold">{formatCurrency(deliveryFee,currency)}</span></div> : null}<div className="flex justify-between border-t border-[var(--border-subtle)] pt-4 text-lg"><span className="font-semibold">Estimated total</span><span className="font-semibold">{formatCurrency(estimatedTotal,currency)}</span></div></section><p className="text-xs leading-5 text-tertiary">The server verifies product prices, fees, branch availability and fulfilment before creating the order.</p></div> : null}
+      {step === 4 ? <div className="space-y-5"><section className="border-b border-[var(--border-subtle)] pb-5"><p className="text-sm font-semibold text-[var(--accent)]">{form.fulfilment === "delivery" ? "Delivery" : "Pickup"}</p><h3 className="mt-2 text-xl font-semibold">{selectedBranch?.branchName || selectedBranch?.name || business?.name}</h3><p className="mt-2 text-sm text-secondary">{form.fulfilment === "delivery" ? `${form.address}${form.suburb ? ` · ${form.suburb}` : ""}` : `${form.date} · ${form.slot}`}</p></section><section className="space-y-3 text-sm"><div className="flex justify-between"><span className="text-secondary">Items</span><span className="font-semibold">{formatCurrency(total,currency)}</span></div>{promotionDiscount > 0 ? <div className="flex justify-between text-[var(--success)]"><span>Promotion</span><span className="font-semibold">-{formatCurrency(promotionDiscount,currency)}</span></div> : null}{form.fulfilment === "delivery" ? <div className="flex justify-between"><span className="text-secondary">Delivery</span><span className="font-semibold">{formatCurrency(deliveryFee,currency)}</span></div> : null}<div className="flex justify-between border-t border-[var(--border-subtle)] pt-4 text-lg"><span className="font-semibold">Estimated total</span><span className="font-semibold">{formatCurrency(estimatedTotal,currency)}</span></div></section><p className="text-xs leading-5 text-tertiary">The server verifies product prices, fees, branch availability and fulfilment before creating the order.</p>{operations.serviceOperations ? <section className="rounded-[16px] border border-[var(--accent)] bg-[var(--accent-soft)] p-4"><p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--accent)]">Scoped Operations access</p><p className="mt-2 font-semibold">Run this checkout without production side effects</p><p className="mt-1 text-xs leading-5 text-secondary">Uses these real products, prices, location and payment configuration, but writes only an isolated Operations record. No merchant order, inventory reservation, provider charge, payout or settlement is created.</p><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" loading={operationsRunning==="validate"} disabled={Boolean(operationsRunning)} onClick={()=>runOperationsCheckout(false)}>Validate isolated checkout</Button>{operations.paymentSandbox ? <Button type="button" loading={operationsRunning==="payment"} disabled={Boolean(operationsRunning)} onClick={()=>runOperationsCheckout(true)}>Simulate payment safely</Button> : null}</div>{operationsResult ? <p className="mt-3 text-xs font-semibold text-success">Operations run {operationsResult.runId} · {String(operationsResult.state||"validated").replaceAll("_"," ")} · no production write</p> : null}</section> : null}</div> : null}
     </div>
     <div className="flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] p-5 sm:px-6"><Button variant="ghost" onClick={() => step ? setStep((value) => value - 1) : onClose()}>{step ? "Back" : "Cancel"}</Button>{step < 4 ? <Button onClick={next}>{step === 0 ? "Continue" : step === 1 ? (form.fulfilment === "delivery" ? "Add delivery details" : "Choose pickup time") : step === 2 ? "Choose payment" : "Review order"}<ChevronRight className="h-4 w-4" /></Button> : <Button onClick={submit} loading={submitting}>Place {form.fulfilment === "delivery" ? "delivery" : "pickup"} order</Button>}</div>
   </Modal>;
@@ -574,6 +598,7 @@ function normalizeMarketplaceView(value) {
 export function MarketplaceApp({ basePath = "/marketplace", initialService = null, initialBusinessId = null, initialOfferId = null, initialCity = null }) {
   const { user, profile, authReady } = useAuth();
   const { settings, settingsReady } = usePlatform();
+  const countryContext = useCountry();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -697,8 +722,9 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }
 
   const maintenance = settings.launch?.publicMode === "maintenance";
-  const ridesEnabled = typeof settings.mobility?.ridesEnabled === "boolean" ? settings.mobility.ridesEnabled : settings.launch?.ridesEnabled === true;
-  const sendEnabled = settings.mobility?.send?.enabled === true || settings.commerce?.peerDeliveryEnabled === true || settings.launch?.sendEnabled === true;
+  const availabilityCountry = countryContext.countryCode || countryForCity(location.city)?.country?.code || "";
+  const serviceAvailability = useMemo(() => Object.fromEntries(resolveServiceAvailabilitySet(settings, { country: availabilityCountry, city: location.city }).map((decision) => [decision.service, decision])), [settings, availabilityCountry, location.city]);
+  const locationWithCountry = useMemo(() => ({ ...location, country: availabilityCountry }), [location, availabilityCountry]);
 
   function routeFor(params) {
     const queryString = params.toString();
@@ -937,6 +963,8 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }, [businessResults, service]);
 
   const selectedArchetype = useMemo(() => businessArchetype(selected || {}), [selected]);
+  const selectedService = selected ? marketplaceProfile(selected).service : service;
+  const selectedServiceDecision = selectedService ? serviceAvailability[selectedService] : null;
   const selectedIsPickup = selectedArchetype.capabilities.includes("pickup_orders");
   const locationNoun = selectedArchetype.nouns.branch;
   const branchProducts = useMemo(() => products.filter((product) => !product.branchIds?.length || !selectedBranchId || product.branchIds.includes(selectedBranchId)).map((product) => resolveProductForBranch(product, selectedBranchId)), [products, selectedBranchId]);
@@ -949,6 +977,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const cartItems = useMemo(() => products.filter((product) => cart[product.id] && priceFor(product, currency)).map((product) => ({ ...product, quantity: cart[product.id] })), [cart, products, currency]);
   const cartTotal = cartItems.reduce((sum, item) => sum + priceFor(item, currency) * item.quantity, 0);
   const shownBusinesses = view === "saved" ? businessResults.filter(({ business }) => favorites.includes(business.id)) : serviceResults;
+  const homeBusinessResults = useMemo(() => businessResults.filter(({ business }) => serviceAvailability[marketplaceProfile(business).service]?.discoverable !== false), [businessResults, serviceAvailability]);
   useEffect(() => {
     if (!activityDetail?.id) return;
     const current = orders.find((order) => order.id === activityDetail.id);
@@ -987,6 +1016,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }
 
   function changeQuantity(product, quantity) {
+    if (quantity > 0 && selectedServiceDecision && !selectedServiceDecision.transactable) { toast(selectedServiceDecision.reason || `${selectedServiceDecision.service} is not accepting new transactions here yet.`, { type: "info" }); return; }
     const max = Number(product.maxQuantity || 99);
     const next = Math.max(0, Math.min(max, quantity));
     const previous = Number(cart[product.id] || 0);
@@ -1010,6 +1040,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }
 
   function startTransaction(product) {
+    if (selectedServiceDecision && !selectedServiceDecision.transactable) { toast(selectedServiceDecision.reason || "This service is not accepting new transactions here yet.", { type: "info" }); return; }
     if (!user || user.isAnonymous) {
       window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
       return;
@@ -1018,6 +1049,13 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     if (selected?.id) updateUrl("home", { business: selected.id, order: null, service, offer: null });
     setTransactionOffer(product);
     track("begin_booking", { product_id: product.id, business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, business_type: selectedArchetype.id });
+  }
+
+  function beginCheckout() {
+    if (selectedServiceDecision && !selectedServiceDecision.transactable) { toast(selectedServiceDecision.reason || "This service is not accepting new orders here yet.", { type: "info" }); return; }
+    track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) });
+    setBasketOpen(false);
+    setCheckout(true);
   }
 
   async function toggleFavorite(id) {
@@ -1212,9 +1250,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }
 
   if (!authReady || !settingsReady) return <MarketplaceLoading />;
-  if (maintenance) return <MarketplaceGate privateBeta={false} user={user} profile={profile} locationLabel={location.area || location.city} />;
+  if (maintenance) return <MarketplaceGate user={user} profile={profile} locationLabel={location.area || location.city} />;
 
-  const serviceUnavailable = (service === "ride" && !ridesEnabled) || (service === "send" && !sendEnabled);
+  const serviceDecision = service ? serviceAvailability[service] : null;
+  const serviceUnavailable = Boolean(service && serviceDecision && !serviceDecision.discoverable);
   const serviceLabel = service ? service[0].toUpperCase() + service.slice(1) : "Spotly";
 
   return <CustomerShell
@@ -1264,10 +1303,10 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
           onOfferOpen={openOffer}
           cartItems={cartItems}
           cartTotal={cartTotal}
-          onCheckout={() => { track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) }); setCheckout(true); }}
+          onCheckout={beginCheckout}
         />
       ) : view === "home" && !service ? (
-        loading && !businesses.length ? <CustomerContentSkeleton rows={6} /> : loadError && !businesses.length ? <LottieEmptyState name="marketplace-discover" title="Spotly could not load nearby businesses" description={loadError} action={<Button onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="h-4 w-4" />Reload</Button>} /> : <MarketplaceHome businessResults={businessResults} orders={orders} recentBusinessIds={recentBusinessIds} location={location} profile={profile} onboardingComplete={onboardingComplete} interests={onboardingInterests} ridesEnabled={ridesEnabled} sendEnabled={sendEnabled} onSelectService={enterService} onOpenBusiness={openBusiness} onSearch={openSearch} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} onSetup={() => setOnboardingOpen(true)} />
+        loading && !businesses.length ? <CustomerContentSkeleton rows={6} /> : loadError && !businesses.length ? <LottieEmptyState name="marketplace-discover" title="Spotly could not load nearby businesses" description={loadError} action={<Button onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="h-4 w-4" />Reload</Button>} /> : <MarketplaceHome businessResults={homeBusinessResults} orders={orders} recentBusinessIds={recentBusinessIds} location={location} profile={profile} onboardingComplete={onboardingComplete} interests={onboardingInterests} serviceAvailability={serviceAvailability} onSelectService={enterService} onOpenBusiness={openBusiness} onSearch={openSearch} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} onSetup={() => setOnboardingOpen(true)} />
       ) : view === "activity" ? (
         <section className="mx-auto max-w-[1080px]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -1321,8 +1360,8 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
           loginHref={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=saved`)}`}
         />
       ) : (
-        ["eat", "shop", "book", "events"].includes(service) ? <ServiceDiscoveryView key={service} service={service} location={location} currency={currency} favorites={favorites} savedItems={savedItems} orders={orders} onOpenBusiness={openBusiness} onOpenItem={openSearchResult} onToggleFavorite={toggleFavorite} onToggleSaved={toggleSavedResult} onHome={openHome} onSelectService={enterService} onSearchAll={openSearch} onLocation={() => setLocationOpen(true)} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} /> : <div>
-          <ServiceModeHeader service={service} location={location} ridesEnabled={ridesEnabled} sendEnabled={sendEnabled} onSelectService={enterService} onExit={openHome} onSearch={openSearch} />
+        ["eat", "shop", "book", "events"].includes(service) ? <ServiceDiscoveryView key={service} service={service} location={locationWithCountry} availability={serviceDecision} currency={currency} favorites={favorites} savedItems={savedItems} orders={orders} onOpenBusiness={openBusiness} onOpenItem={openSearchResult} onToggleFavorite={toggleFavorite} onToggleSaved={toggleSavedResult} onHome={openHome} onSelectService={enterService} onSearchAll={openSearch} onLocation={() => setLocationOpen(true)} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} /> : <div>
+          <ServiceModeHeader service={service} location={locationWithCountry} serviceAvailability={serviceAvailability} onSelectService={enterService} onExit={openHome} onSearch={openSearch} />
           {serviceUnavailable ? <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-6 sm:p-8"><div className="max-w-2xl"><p className="text-sm font-semibold text-[var(--accent)]">Opening area by area</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{serviceLabel} is not accepting requests here yet.</h2><p className="mt-3 text-sm leading-7 text-[var(--text-2)]">We will only switch this on when the matching driver operations, safety support, and local availability are ready. You can keep using Spotly’s live marketplace in the meantime.</p><div className="mt-5 flex flex-wrap gap-3"><Button onClick={openHome}>Explore Spotly</Button><Button variant="outline" asChild><Link href="/support">Get support</Link></Button></div></div></section> : <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{serviceLabel} in {location.area || location.city}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">Available nearby</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Choose a verified business to see its exact locations, published offerings, prices, and availability.</p></div><p className="text-sm text-[var(--text-3)]">{shownBusinesses.length} available</p></div>{loading ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">{[0,1,2,3,4,5].map((item) => <div key={item} className="overflow-hidden rounded-[16px] border border-[var(--border-subtle)]"><div className="v7-skeleton aspect-[16/10] w-full rounded-none"/><div className="p-5"><div className="v7-skeleton h-5 w-2/3 rounded-[10px]"/><div className="v7-skeleton mt-3 h-4 w-1/2 rounded-[10px]"/><div className="v7-skeleton mt-5 h-4 w-full rounded-[10px]"/></div></div>)}</div> : shownBusinesses.length ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{shownBusinesses.map(({ business, distance }) => <BusinessCard key={business.id} business={business} distance={distance} favorite={favorites.includes(business.id)} onFavorite={toggleFavorite} onOpen={openBusiness} />)}</div> : <LottieEmptyState className="mt-6" name="search-nearby" title={`No ${serviceLabel.toLowerCase()} businesses are live here yet`} description={`Try another area or use Search to browse everything currently available in ${location.city}.`} action={<Button onClick={openSearch}>Search Spotly</Button>} />}</section>}
         </div>
       )}
@@ -1333,7 +1372,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
     {selectedIsPickup && cartItems.length > 0 ? <motion.button initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} whileTap={{ scale: .98 }} type="button" onClick={() => setBasketOpen(true)} className="safe-bottom fixed inset-x-3 bottom-20 z-30 flex items-center gap-3 rounded-xl bg-[var(--accent)] px-4 py-3 text-left text-[var(--on-accent)] shadow-elevated lg:bottom-3 lg:hidden"><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--surface)]/15"><ShoppingBasket className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{cartItems.reduce((sum, item) => sum + item.quantity, 0)} items</span><span className="block text-xs text-[color-mix(in_srgb,var(--on-accent)_70%,transparent)]">View basket</span></span><span className="font-semibold">{formatCurrency(cartTotal, currency)}</span></motion.button> : null}
 
-    <Overlay open={basketOpen} onClose={() => setBasketOpen(false)} title="Your basket" description={`${cartItems.length} products`} mode="sheet"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onClose={() => setBasketOpen(false)} onCheckout={() => { track("begin_checkout", { business_id: selected?.id || "", branch_id: selectedBranchId || "", currency, item_count: cartItems.reduce((sum, item) => sum + item.quantity, 0) }); setBasketOpen(false); setCheckout(true); }} /></Overlay>
+    <Overlay open={basketOpen} onClose={() => setBasketOpen(false)} title="Your basket" description={`${cartItems.length} products`} mode="sheet"><BasketContents cartItems={cartItems} cartTotal={cartTotal} currency={currency} onClose={() => setBasketOpen(false)} onCheckout={beginCheckout} /></Overlay>
     <Modal open={Boolean(pendingBranchId)} onClose={() => setPendingBranchId("")} title="Switch business location?" description="Products, prices and availability can differ by location." size="sm"><div className="p-5"><p className="text-sm leading-6 text-secondary">Switching will clear the current basket so you can build an accurate order for the new location.</p><div className="mt-5 flex gap-3"><Button variant="outline" className="flex-1" onClick={() => setPendingBranchId("")}>Keep this location</Button><Button className="flex-1" onClick={confirmBranchChange}>Switch and clear</Button></div></div></Modal>
     {selectedIsPickup ? <CheckoutModal open={checkout} onClose={() => setCheckout(false)} business={selected} branches={branches} selectedBranchId={selectedBranchId} cartItems={cartItems} currency={currency} user={user} profile={profile} defaultFulfilment={profile?.preferences?.defaultFulfilment || "pickup"} onComplete={(order) => { setCart({}); removeState(CART_KEY, user); updateUrl("activity", { order: order.orderId || order.id, business: null, service: null, offer: null }); }} /> : null}
     <ActivityDetailModal order={activityDetail} open={Boolean(activityDetail)} onClose={() => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); }} onPay={payOrder} onRetry={retryActivity} onReview={(record) => { setActivityDetail(null); setReviewTarget(record); }} onCancel={(record) => { setActivityDetail(null); updateUrl("activity", { order: null, business: null, service: null, offer: null }); setCancelTarget(record); setCancelReason(""); }} />

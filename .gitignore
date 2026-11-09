@@ -21,11 +21,13 @@ coverage
 # Canonical Spotly wire contracts are source, not generated runtime data.
 !/contracts/spotly-contracts.v1.json
 !/contracts/spotly-countries.v1.json
+!/contracts/spotly-service-availability.v1.json
 !/contracts/fixtures/
 !/contracts/fixtures/*.json
 !/database.rules.json
 !/firebase/functions/src/contracts/spotly-contracts.v1.json
 !/firebase/functions/src/contracts/spotly-countries.v1.json
+!/firebase/functions/src/contracts/spotly-service-availability.v1.json
 
 .env.local.old-denzeltinashe-spotly
 database-debug.log

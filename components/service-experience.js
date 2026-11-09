@@ -265,6 +265,7 @@ function SortControl({ value, onChange, events }) {
 export function ServiceDiscoveryView({
   service,
   location,
+  availability = null,
   currency,
   favorites = [],
   savedItems = [],
@@ -302,6 +303,12 @@ export function ServiceDiscoveryView({
   useEffect(() => { track("service_view", { service, city: location.city || "", area_selected: Boolean(location.area) }); }, [service, location.city, location.area]);
 
   useEffect(() => {
+    if (availability && !availability.discoverable) {
+      setFeed({ businesses: [], items: [], categories: [], facets: {}, totalBusinesses: 0, totalItems: 0, nextOffset: null });
+      setLoading(false);
+      setError("");
+      return undefined;
+    }
     let active = true;
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -319,7 +326,7 @@ export function ServiceDiscoveryView({
       }
     }, query ? 220 : 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [service, location.country, location.city, location.area, query, config.label, refreshKey, category]);
+  }, [service, location.country, location.city, location.area, query, config.label, refreshKey, category, availability?.discoverable]);
 
   async function loadMore() {
     if (feed.nextOffset == null || loadingMore) return;
@@ -383,8 +390,15 @@ export function ServiceDiscoveryView({
   const hasInventory = feed.items.length > 0 || (feed.businesses.length > 0 && !assistBusinesses.length);
   const isFiltered = Boolean(query.trim() || category !== "all" || productDepartment !== "all" || filter !== "all");
 
+  if (availability && !availability.discoverable) return <div className="v7-page-enter experience-discovery pb-8" data-service={service}>
+    <ServiceEntrance service={service} title={config.title} description={availability.reason || (availability.state === "preview" ? `${config.label} is coming soon in ${location.city || "this area"}.` : `${config.label} is not available in ${location.city || "this area"}.`)}>
+      <div className="flex flex-wrap gap-3"><Button onClick={onHome}>Explore Spotly</Button><Button variant="outline" onClick={onLocation}>Change city</Button></div>
+    </ServiceEntrance>
+  </div>;
+
   return <div className="v7-page-enter experience-discovery pb-8" data-service={service}>
     <ServiceEntrance service={service} title={config.title} description={config.description}>
+      {availability?.paused ? <div className="mb-4 rounded-[var(--radius-card)] border border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--warning-soft)] p-4 text-sm text-[var(--on-warning-soft)]">{availability.reason || `${config.label} is temporarily paused for new transactions here. You can keep browsing published places and offerings.`}</div> : availability && !availability.transactable ? <div className="mb-4 rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--surface-2)] p-4 text-sm text-[var(--text-2)]">{availability.reason || `You can explore ${config.label} here. New transactions are not open yet.`}</div> : null}
       <SearchField value={query} onChange={setQuery} label={`Search ${config.label}`} placeholder={config.search} inputProps={{ autoComplete: "off", enterKeyHint: "search" }} />
       <div className="experience-suggestions no-scrollbar" aria-label="Search suggestions">{config.suggestions.map((suggestion) => <button type="button" key={suggestion} aria-pressed={query === suggestion || (service === "events" && filter === suggestion.toLowerCase())} onClick={() => { if (service === "events" && suggestion === "Tonight") { setQuery(""); setFilter("tonight"); } else if (service === "events" && suggestion === "Weekend") { setQuery(""); setFilter("weekend"); } else { setQuery(suggestion); } }}>{suggestion}<ArrowRight className="h-3 w-3" aria-hidden="true" /></button>)}</div>
     </ServiceEntrance>

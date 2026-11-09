@@ -33,26 +33,26 @@ test("Ride steps and optional-auth quote work for guests, but real request still
   assert.match(ui, /continueToAccount\("signin"\)/);
   assert.match(ui, /continueToAccount\("signup"\)/);
   assert.match(ui, /consumeRideGuestDraft/);
-  assert.match(ui, /setBookingStep\(2\); setPreviewOpen\(true\)/);
+  assert.match(ui, /setBookingStep\(2\); setQuote\(null\)/);
+  assert.match(ui, /rideAvailability\.discoverable/);
   assert.match(ui, /quote\.bookingAvailable===true/);
   assert.match(quote, /authenticateRequest\(request, \{ optional: true \}\)/);
   assert.match(booking, /authenticateRequest\(request\)/);
 });
 
-test("Ride Lab tester account picker is role restricted and limited to verified Firebase emails", async () => {
-  const api=await read("app/api/admin/ride-lab/testers/route.js");
-  const admin=await read("components/admin-mobility-launch.js");
-  const invitations=await read("app/api/admin/ride-lab/route.js");
-  assert.match(api,/authenticateRequest\(request, \{ roles: ROLES \}\)/);
-  assert.match(api,/enforceRateLimit\(request/);
-  assert.match(api,/auth\.listUsers\(500\)/);
-  assert.match(api,/verified: item\.emailVerified === true/);
-  assert.doesNotMatch(api,/phoneNumber|customPermissions/);
-  assert.match(admin, /Invite Spotly accounts/);
-  assert.match(admin, /Find account/);
-  assert.match(admin, /disabled=\{!account\.verified/);
-  assert.match(admin, /Save Ride Lab invitations/);
-  assert.match(invitations, /testerEmails/);
+test("Operations grants replace tester allowlists with scoped real-account access", async () => {
+  const api=await read("app/api/admin/operations-grants/route.js");
+  const admin=await read("components/admin-operations-grants.js");
+  assert.match(api,/operationGrants/);
+  assert.match(api,/expiresAt/);
+  assert.match(api,/services/);
+  assert.match(api,/countries/);
+  assert.match(api,/cities/);
+  assert.match(admin,/Service preview/);
+  assert.match(admin,/Payment sandbox/);
+  assert.match(admin,/Location override/);
+  assert.match(admin,/Driver operations/);
+  assert.doesNotMatch(admin,/testerEmails|Ride Lab/);
 });
 
 test("Marketplace curation is count-based and sync is bounded into recoverable requests", async () => {

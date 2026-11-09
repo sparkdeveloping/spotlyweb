@@ -10,6 +10,8 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 import { notifyRoleAudience } from "@/lib/notification-server";
+import { resolveServiceAvailability } from "@/lib/service-availability";
+import { countryForCity, normalizeCountryCode } from "@/lib/country-engine";
 export const runtime = "nodejs";
 const schema = z.object({
   requestId: z.string().regex(/^[A-Za-z0-9_-]{12,70}$/),
@@ -46,10 +48,13 @@ export async function POST(request) {
     const [businessSnap,settingsSnap]=await Promise.all([db.collection("businesses").doc(input.businessId).get(),db.collection("platformSettings").doc("global").get()]);
     const business=canonicalIndependentSource(businessSnap,input.businessId),settings=settingsSnap.data()||{};
     if(!business||!marketplaceTrust(business).discoveryAllowed||!canShowDirectoryRecord(business,await unclaimedPublicationEnabled(db))||["archived","removed"].includes(business.status)) throw Object.assign(new Error("This business isn't available for a booking request."),{status:404});
+    const country=normalizeCountryCode(business.country)||countryForCity(business.city)?.country?.code||"";
+    const availability=resolveServiceAvailability(settings,{service:"book",country,city:business.city||""});
+    if(!availability.transactable) throw Object.assign(new Error(availability.reason||"Book is not accepting new requests here."),{status:409,code:"service_not_live",serviceAvailability:availability});
     if(!directoryBookingEligible(business) || business.assistAccepting===false || (business.source?.type==="spotly_assist_research" && business.launchApproved!==true)) throw Object.assign(new Error("This business is not open for assisted booking requests."),{status:409});
     if(!regionalServicePolicy(settings.assistCoverage||{},business,"book").available) throw Object.assign(new Error("Spotly Assist bookings are unavailable in this location."),{status:409});
     if(["clinic","hospital","medical","dentist","doctor","pharmacy"].some(x=>String(business.category||"").toLowerCase().includes(x))) throw Object.assign(new Error("Assisted booking is not available for this category."),{status:409});
-    const entry={customerId:user.uid,businessId:input.businessId,businessName:business.name||"Business",country:business.country||"ZW",city:business.city||"",phone:input.phone,serviceName:input.serviceName,requestedAt:input.requestedAt,flexibility:input.flexibility,notes:input.notes,state:"requested",customerDecision:null,alternativeAt:null,customerMessage:"Spotly will contact the business to check availability. This is not a confirmed appointment.",paymentStatus:"not_initiated",source:"spotly_assist",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};
+    const entry={customerId:user.uid,businessId:input.businessId,businessName:business.name||"Business",country,city:business.city||"",phone:input.phone,serviceName:input.serviceName,requestedAt:input.requestedAt,flexibility:input.flexibility,notes:input.notes,state:"requested",customerDecision:null,alternativeAt:null,customerMessage:"Spotly will contact the business to check availability. This is not a confirmed appointment.",paymentStatus:"not_initiated",source:"spotly_assist",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};
     try{await ref.create(entry);}catch(err){if(Number(err?.code)!==6&&String(err?.code)!=="already-exists")throw err;const existing=await ref.get();return Response.json({ok:true,id:ref.id,...pick(existing.data()),idempotent:true});}
     await notifyRoleAudience({
       db,messaging,auth,title:"Assisted booking needs a call",

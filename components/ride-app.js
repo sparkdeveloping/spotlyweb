@@ -14,7 +14,9 @@ import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {PinDropMap,RoadRouteMap} from "@/components/mobility-map";
-import { validateRideLabLocations } from "@/lib/ride-lab-validation";
+import { validateOperationsRideLocations } from "@/lib/operations-run-validation";
+import { resolveServiceAvailability, serviceUnavailableMessage } from "@/lib/service-availability";
+import { SPOTLY_COUNTRIES, countryDefinition } from "@/lib/country-engine";
 
 const rideTypes = [
   { id: "economy", label: "Economy", description: "Everyday rides", seats: "Up to 4" },
@@ -87,46 +89,44 @@ function ActiveRide({ ride, onRefresh, onCancel }) {
 export function RideApp() {
   const { user, profile, authReady } = useAuth(); const { settings } = usePlatform(); const { toast } = useToast();
   const countryContext = useCountry();
-  const ridesEnabled = typeof settings?.mobility?.ridesEnabled === "boolean" ? settings.mobility.ridesEnabled : settings?.launch?.ridesEnabled === true;
   const cashEnabled = settings?.mobility?.cashEnabled !== false; const paynowEnabled = settings?.integrations?.paynowEnabled === true && (settings?.commerce?.paymentMethods || []).includes("paynow");
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [rideLabAllowed, setRideLabAllowed] = useState(false);
-  const [rideLabTrips, setRideLabTrips] = useState([]);
-  const [rideLabBusy, setRideLabBusy] = useState("");
-  const [rideLabError, setRideLabError] = useState("");
-  const loadRideLab = useCallback(async () => {
+  const [operationsAllowed, setOperationsAllowed] = useState(false);
+  const [operationsRuns, setOperationsRuns] = useState([]);
+  const [operationsBusy, setOperationsBusy] = useState("");
+  const [operationsError, setOperationsError] = useState("");
+  const loadOperationsRuns = useCallback(async () => {
     try {
-      const result = await authenticatedFetch("/api/mobility/ride-lab", { cache: "no-store" });
-      setRideLabTrips(result.myTrips || []); setRideLabError("");
-    } catch (err) { setRideLabError(err.message || "Could not load simulated rides."); }
+      const result = await authenticatedFetch("/api/operations/rides", { cache: "no-store" });
+      setOperationsRuns(result.myRuns || []); setOperationsError("");
+    } catch (err) { setOperationsError(err.message || "Could not load Operations Ride runs."); }
   }, []);
   useEffect(() => {
     if (!authReady || !user?.uid || user.isAnonymous) return undefined;
     let active = true;
-    authenticatedFetch("/api/driver/ride-lab", { cache: "no-store" })
+    authenticatedFetch("/api/operations/rides", { cache: "no-store" })
       .then((result) => {
         if (!active) return;
-        setRideLabAllowed(Boolean(result.allowed));
-        if (result.allowed) loadRideLab();
-      }).catch(() => { if (active) setRideLabAllowed(false); });
+        setOperationsAllowed(Boolean(result.canRequest));
+        if (result.canRequest) loadOperationsRuns();
+      }).catch(() => { if (active) setOperationsAllowed(false); });
     return () => { active = false; };
-  }, [authReady, user?.uid, user?.isAnonymous, loadRideLab]);
+  }, [authReady, user?.uid, user?.isAnonymous, loadOperationsRuns]);
 
-  async function testRide(action, rideId = "") {
+  async function operateRide(action, runId = "") {
     if (action === "request") {
-      const validation = validateRideLabLocations(pickup, dropoff);
-      if (!validation.ok) { setRideLabError(validation.error); return; }
+      const validation = validateOperationsRideLocations(pickup, dropoff);
+      if (!validation.ok) { setOperationsError(validation.error); return; }
     }
-    setRideLabBusy(action); setRideLabError("");
+    setOperationsBusy(action); setOperationsError("");
     try {
-      const body = action === "request" ? { action, pickup, dropoff, serviceType } : { action, rideId };
-      await authenticatedFetch("/api/mobility/ride-lab", {
+      const body = action === "request" ? { action, pickup, dropoff, serviceType } : { action, runId };
+      await authenticatedFetch("/api/operations/rides", {
         method: "POST", body: JSON.stringify(body)
       });
-      await loadRideLab();
-      toast("Simulated Ride Lab request updated. No real booking or payment occurred.", { type: "info" });
-    } catch (err) { setRideLabError(err.message || "The simulated Ride could not be updated."); }
-    finally { setRideLabBusy(""); }
+      await loadOperationsRuns();
+      toast("Operations Ride updated. No production ride, charge, payout, or dispatch record was created.", { type: "info" });
+    } catch (err) { setOperationsError(err.message || "The Operations Ride could not be updated."); }
+    finally { setOperationsBusy(""); }
   }
 
   const [bookingStep, setBookingStep] = useState(0); const [bookingError, setBookingError] = useState("");
@@ -144,10 +144,11 @@ export function RideApp() {
     const allowed = countryContext.country?.cities?.some((item) => item.name === city);
     if (!allowed) setCity(profile?.preferences?.preferredCity && countryContext.country?.cities?.some((item) => item.name === profile.preferences.preferredCity) ? profile.preferences.preferredCity : "");
   }, [countryContext.countryCode, countryContext.country, profile?.preferences?.preferredCity, city]);
+  const rideAvailability = useMemo(() => resolveServiceAvailability(settings, { service: "ride", country, city }), [settings, country, city]);
   const [pickupText, setPickupText] = useState(""); const [dropoffText, setDropoffText] = useState(""); const [pickup, setPickup] = useState(null); const [dropoff, setDropoff] = useState(null);
   const [mapTarget,setMapTarget]=useState(null); const [serviceType, setServiceType] = useState("economy"); const [paymentMethod, setPaymentMethod] = useState("cash"); const [quote, setQuote] = useState(null); const [loading, setLoading] = useState(""); const [activeRide, setActiveRide] = useState(null); const [history, setHistory] = useState([]); const [cancelRide, setCancelRide] = useState(null); const [cancelReason, setCancelReason] = useState("");
-  const rideLabLocationValidation = validateRideLabLocations(pickup, dropoff);
-  useEffect(() => { setRideLabError(""); }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, pickup?.country, dropoff?.country]);
+  const operationsLocationValidation = validateOperationsRideLocations(pickup, dropoff);
+  useEffect(() => { setOperationsError(""); }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, pickup?.country, dropoff?.country]);
   useEffect(() => {
     if (!authReady || !user?.uid || user.isAnonymous || resumeCheckedRef.current) return;
     resumeCheckedRef.current = true;
@@ -158,7 +159,7 @@ export function RideApp() {
     setDropoffText(draft.dropoff.formattedAddress || draft.dropoff.label || "");
     setCountry(draft.pickup.country); setCity(draft.pickup.city || "");
     setServiceType(draft.serviceType);
-    setBookingStep(2); setPreviewOpen(true); setQuote(null);
+    setBookingStep(2); setQuote(null);
     setResumeNotice("Your pickup and destination are restored. See a fresh fare before confirming your ride.");
   }, [authReady, user?.uid, user?.isAnonymous]);
   function continueToAccount(mode = "signin") {
@@ -189,6 +190,7 @@ export function RideApp() {
 
   async function getQuote() {
     if (!pickup || !dropoff) return toast("Choose both a pickup point and destination.", { type: "error" });
+    if (!rideAvailability.discoverable) return toast(serviceUnavailableMessage(rideAvailability, "discover"), { type: "error" });
     setLoading("quote"); try { const quoteFetch = user?.uid && !user.isAnonymous ? authenticatedFetch : publicApiFetch; const data = await quoteFetch("/api/customer/rides/quote", { method: "POST", body: JSON.stringify({ pickup, dropoff, serviceType }) }); setQuote({...data.quote,bookingAvailable:data.bookingAvailable===true,bookingReason:data.bookingReason||""}); setBookingStep(3); } catch (error) { setBookingError(error.message||"The fare estimate is unavailable."); toast(error.message, { type: "error" }); } finally { setLoading(""); }
   }
   useEffect(() => { setQuote(null); }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, serviceType,city,country]);
@@ -203,17 +205,17 @@ export function RideApp() {
 
   if (activeRide) return <CustomerShell immersive><ActiveRide ride={activeRide} onRefresh={() => load({ quiet: true })} onCancel={setCancelRide} /></CustomerShell>;
 
-  if (!ridesEnabled && !previewOpen) return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
+  if (!rideAvailability.discoverable && !operationsAllowed) return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
     <ServiceSwitcher service="ride" />
-    <div className="mt-5"><ServiceEntrance service="ride" title={`A new way to move around ${city}.`} description={`Ride isn’t available in ${city} yet. Requests will open when local Driver coverage and support are ready. You can explore a fare estimate in the meantime.`} status="Not available here yet">
-      <div className="flex flex-wrap gap-3"><Button onClick={()=>setPreviewOpen(true)}>Preview a fare</Button><Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button>{rideLabAllowed?<Button variant="outline" onClick={()=>{setPreviewOpen(true);setBookingStep(3);}}>Open my test rides</Button>:null}</div>
+    <div className="mt-5"><ServiceEntrance service="ride" title={`Ride in ${city || "your city"}`} description={serviceUnavailableMessage(rideAvailability, "discover")} status={rideAvailability.state === "preview" ? "Coming soon" : "Not available here"}>
+      <div className="flex flex-wrap gap-3"><Button asChild><Link href="/">Explore Spotly</Link></Button><Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button></div>
     </ServiceEntrance></div>
 
   </CustomerShell>;
 
   return <CustomerShell current="home" user={user} profile={profile} locationLabel={city} mainClassName="max-w-[1180px]">
       {resumeNotice && <p role="status" className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] p-4 text-sm text-[var(--text)]">{resumeNotice}</p>}
-      {!ridesEnabled ? <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">Fare preview only. Ride booking is still disabled until approved Drivers, dispatch and local support are verified.</div> : null}
+      {!rideAvailability.transactable ? <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">{serviceUnavailableMessage(rideAvailability) || "Fare preview only. Ride booking is not accepting requests here yet."}</div> : null}
       <ServiceSwitcher service="ride" />
       <section className="mx-auto mt-5 grid max-w-3xl gap-6 pb-10">
         <div>
@@ -233,14 +235,14 @@ export function RideApp() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs font-semibold uppercase">Country
                 <select className="field-control mt-2 h-12 w-full" value={country} onChange={e=>{
-                  const next=e.target.value;setCountry(next);setCity(next==="MW"?"Lilongwe":"Harare");
+                  const next=e.target.value;setCountry(next);setCity("");
                   setPickup(null);setDropoff(null);setPickupText("");setDropoffText("");setQuote(null);
-                }}><option value="ZW">Zimbabwe</option><option value="MW">Malawi</option></select>
+                }}><option value="">Choose country</option>{SPOTLY_COUNTRIES.map((item)=><option key={item.code} value={item.code}>{item.name}</option>)}</select>
               </label>
               <label className="block text-xs font-semibold uppercase">City
-                <input className="field-control mt-2 h-12 w-full" value={city} onChange={e=>{
+                <select className="field-control mt-2 h-12 w-full" value={city} disabled={!country} onChange={e=>{
                   setCity(e.target.value);setPickup(null);setDropoff(null);setPickupText("");setDropoffText("");setQuote(null);
-                }} placeholder="Harare or Lilongwe" />
+                }}><option value="">Choose city</option>{(countryDefinition(country)?.cities||[]).map((item)=><option key={item.id} value={item.name}>{item.name}</option>)}</select>
               </label>
             </div>
             <LocationSearch label="Pickup" value={pickupText} onChange={(value)=>{
@@ -268,26 +270,26 @@ export function RideApp() {
           <section className="border-t border-[var(--border-subtle)] pt-7"><div className="flex items-end justify-between gap-4"><div><p className="text-sm font-semibold">Choose your ride</p><p className="mt-1 text-sm text-[var(--text-3)]">Same route, different fit.</p></div></div><div className="mt-4 divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">{rideTypes.map((type) => { const selected = serviceType === type.id; return <button key={type.id} onClick={() => {setServiceType(type.id);setQuote(null);}} className="flex w-full items-center gap-4 py-4 text-left transition hover:bg-[var(--surface-hover)]"><span className={cn("flex h-11 w-11 items-center justify-center rounded-[12px]", selected ? "bg-[var(--accent)] text-[var(--on-accent)]" : "bg-[var(--surface-2)] text-[var(--accent)]")}><CarFront className="h-5 w-5" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold">{type.label}</strong><span className="mt-1 block text-xs text-[var(--text-3)]">{type.description} · {type.seats}</span></span>{selected ? <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" /> : <ChevronRight className="h-4 w-4 text-[var(--text-3)]" />}</button>; })}</div></section>
           <div className="mt-7 grid grid-cols-2 gap-3"><Button variant="outline" onClick={()=>setBookingStep(1)}>Back</Button><Button size="lg" onClick={getQuote} loading={loading==="quote"} disabled={!pickup||!dropoff}>See fare<ChevronRight className="h-4 w-4"/></Button></div>
           </div> : null}
-          {bookingStep===3 && rideLabAllowed ? <div className="mt-5 rounded-2xl border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.13em] text-[var(--accent)]">Invitation only · Ride Lab</p><h2 className="mt-2 text-lg font-semibold">Simulated rides</h2>
-              <p className="mt-1 text-xs leading-5 text-secondary">No Driver dispatch, payment, cash, PIN, or operational verification. A second invited tester accepts in Driver Ride Lab. Refresh to view status and shadow location.</p></div>
-              <Button size="sm" variant="outline" onClick={loadRideLab}><RefreshCw className="h-4 w-4"/>Refresh tests</Button>
+          {bookingStep===3 && operationsAllowed ? <div className="mt-5 rounded-2xl border border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.13em] text-[var(--accent)]">Scoped Operations access</p><h2 className="mt-2 text-lg font-semibold">Operations Ride runs</h2>
+              <p className="mt-1 text-xs leading-5 text-secondary">Real routing and pricing with isolated Operations records. A separately granted Driver account can accept the run; no production ride, payment, payout, or GPS record is created.</p></div>
+              <Button size="sm" variant="outline" onClick={loadOperationsRuns}><RefreshCw className="h-4 w-4"/>Refresh runs</Button>
             </div>
             {pickup&&dropoff ? <>
-              <Button className="mt-4 w-full" loading={rideLabBusy==="request"} disabled={Boolean(rideLabBusy) || !rideLabLocationValidation.ok} onClick={()=>testRide("request")}>Create simulated Ride request</Button>
-              {rideLabLocationValidation.ok
-                ? <p className="mt-2 text-xs leading-5 text-secondary">Your two pins are {Math.round(rideLabLocationValidation.separationKm * 1000)} metres apart in a straight line. Ride Lab supports distinct pins at least 20 metres apart, up to 200 km. The fare preview uses driving distance.</p>
+              <Button className="mt-4 w-full" loading={operationsBusy==="request"} disabled={Boolean(operationsBusy) || !operationsLocationValidation.ok} onClick={()=>operateRide("request")}>Create Operations Ride run</Button>
+              {operationsLocationValidation.ok
+                ? <p className="mt-2 text-xs leading-5 text-secondary">Your two pins are {Math.round(operationsLocationValidation.separationKm * 1000)} metres apart in a straight line. Operations mode requires distinct pins at least 20 metres apart, up to 200 km, and uses the same verified road routing and pricing inputs.</p>
                 : <div role="alert" className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <p className="text-sm text-danger">{rideLabLocationValidation.error}</p>
+                    <p className="text-sm text-danger">{operationsLocationValidation.error}</p>
                     <button type="button" className="mt-2 text-xs font-semibold text-[var(--accent)] underline underline-offset-2" onClick={()=>{setBookingStep(1);setQuote(null);}}>Edit destination</button>
                   </div>}
             </> : <p className="mt-3 text-sm text-secondary">To create a new test request, go through pickup and destination first.</p>}
-            {rideLabError?<p role="alert" className="mt-3 text-sm text-danger">{rideLabError}</p>:null}
-            <div className="mt-4 space-y-3">{rideLabTrips.filter(ride=>ride.customerId===user?.uid).map(ride=><div key={ride.id} className="rounded-xl border bg-[var(--surface)] p-3">
+            {operationsError?<p role="alert" className="mt-3 text-sm text-danger">{operationsError}</p>:null}
+            <div className="mt-4 space-y-3">{operationsRuns.filter(ride=>ride.customerId===user?.uid).map(ride=><div key={ride.id} className="rounded-xl border bg-[var(--surface)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{String(ride.state).replaceAll("_"," ")}</p>
-                {!["cancelled","completed"].includes(ride.state)?<Button variant="outline" size="sm" loading={rideLabBusy==="cancel"} onClick={()=>testRide("cancel",ride.id)}>Cancel test</Button>:null}</div>
+                {!["cancelled","completed"].includes(ride.state)?<Button variant="outline" size="sm" loading={operationsBusy==="cancel"} onClick={()=>operateRide("cancel",ride.id)}>Cancel run</Button>:null}</div>
               <p className="mt-2 text-xs text-secondary">{ride.pickup?.label||"Pickup"} → {ride.dropoff?.label||"Destination"}</p>
-              {ride.driverPosition?<div className="mt-3"><RoadRouteMap compact pickup={ride.pickup} dropoff={ride.dropoff} driverLocation={ride.driverPosition}/><p className="mt-1 text-xs text-secondary">Simulated Driver location · not live GPS</p></div>:null}
+              {ride.driverPosition?<div className="mt-3"><RoadRouteMap compact pickup={ride.pickup} dropoff={ride.dropoff} driverLocation={ride.driverPosition}/><p className="mt-1 text-xs text-secondary">Operations Driver position · isolated from production GPS</p></div>:null}
             </div>)}</div>
           </div> : null}
           {bookingStep===3 ? <div className="mt-7 rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface)] p-5">

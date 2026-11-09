@@ -9,8 +9,7 @@ const schema = z.object({
   userId: z.string().min(3).max(180),
   roles: z.array(z.string().min(1).max(100)).max(30),
   customPermissions: z.array(z.string().min(1).max(140)).max(100),
-  status: z.enum(["active", "restricted", "suspended", "disabled"]),
-  privateBeta: z.boolean()
+  status: z.enum(["active", "restricted", "suspended", "disabled"])
 });
 
 export async function POST(request) {
@@ -36,7 +35,6 @@ export async function POST(request) {
         roles: body.roles,
         customPermissions: body.customPermissions,
         status: body.status,
-        privateBeta: body.privateBeta,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: actor.uid
       }, { merge: true });
@@ -46,7 +44,7 @@ export async function POST(request) {
         entityId: body.userId,
         actorId: actor.uid,
         actorEmail: actor.email || "",
-        metadata: { roles: body.roles, customPermissions: body.customPermissions, status: body.status, privateBeta: body.privateBeta },
+        metadata: { roles: body.roles, customPermissions: body.customPermissions, status: body.status },
         createdAt: FieldValue.serverTimestamp()
       });
     });

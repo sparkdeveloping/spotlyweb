@@ -60,7 +60,7 @@ export function EmailVerificationBanner() {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-[var(--text)]">Verify your email address</p>
         <p className="mt-0.5 break-words text-xs leading-5 text-[var(--text-2)]">
-          <strong>{user.email}</strong> is not verified yet. Check your inbox to finish setup and access invitation-only features such as Ride Lab.
+          <strong>{user.email}</strong> is not verified yet. Check your inbox to finish setup and access scoped Operations features.
         </p>
         {notice && <p role="status" className="mt-1.5 text-xs font-medium text-[var(--text)]">{notice}</p>}
         {error && <p role="alert" className="mt-1.5 text-xs font-medium text-danger">{error}</p>}

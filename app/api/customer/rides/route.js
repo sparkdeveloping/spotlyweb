@@ -9,6 +9,7 @@ import {validateRideTerritory} from "@/lib/ride-geography";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
 import {sealRidePin} from "@/lib/ride-security";
 import { rideCreateRequestSchema } from "@/lib/contracts/schemas";
+import { requireServiceLive } from "@/lib/service-availability-server";
 
 export const runtime = "nodejs";
 const requestSchema = rideCreateRequestSchema;
@@ -103,6 +104,7 @@ export async function POST(request) {
     const pickup = normalizeRidePoint(body.pickup); const dropoff = normalizeRidePoint(body.dropoff);
     if (!pickup || !dropoff) throw Object.assign(new Error("Set valid pickup and destination locations."), { status: 400 });
     const settingsSnap = await db.collection("platformSettings").doc("global").get(); const settings = settingsSnap.exists ? settingsSnap.data() : {};
+    requireServiceLive(settings, { service: "ride", country: pickup.country, city: pickup.city });
     const availability = rideAvailability(settings, pickup); if (!availability.enabled) throw Object.assign(new Error(availability.reason), { status: 409 });
     if (!availability.config.paymentMethods.includes(body.paymentMethod)) throw Object.assign(new Error("Choose an available ride payment method."), { status: 409 });
     const active = await db.collection("rideTrips").where("customerId", "==", user.uid).where("state", "in", ["requested", "searching_driver", "driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification", "no_show_review", "in_trip", "driver_arrived_dropoff"]).limit(1).get();

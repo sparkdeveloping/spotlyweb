@@ -86,13 +86,15 @@ function SectionHeader({ title, description, action, onAction }) {
 }
 
 
-function ServiceTile({ service, onSelect, enabled = true, city }) {
+function ServiceTile({ service, onSelect, availability, city }) {
   const reduce = useReducedMotion();
   const identity = serviceIdentity(service.key);
-  return <motion.button type="button" onClick={() => onSelect(service.key)} whileHover={reduce ? undefined : { y: -4 }} whileTap={reduce ? undefined : { scale: .985 }} data-service={service.key} className="experience-service-tile group" aria-label={`${identity.name}: ${enabled ? service.subtitle : `Not available in ${city} yet`}`}>
+  if (availability?.visible === false) return null;
+  const availabilityCopy = availability?.state === "preview" ? `Coming soon in ${city || "your city"}` : availability?.paused ? `Temporarily paused in ${city || "your city"}` : service.subtitle;
+  return <motion.button type="button" onClick={() => onSelect(service.key)} whileHover={reduce ? undefined : { y: -4 }} whileTap={reduce ? undefined : { scale: .985 }} data-service={service.key} className="experience-service-tile group" aria-label={`${identity.name}: ${availabilityCopy}`}>
     <span className="experience-service-name" aria-hidden="true">{identity.label}</span>
     <ServiceArtwork service={service.key} compact className="experience-tile-art" priority={service.key === "eat"} />
-    <span className="experience-tile-copy"><strong>{identity.detail}</strong><span>{enabled ? service.subtitle : `Not available in ${city} yet`}</span></span>
+    <span className="experience-tile-copy"><strong>{identity.detail}</strong><span>{availabilityCopy}</span></span>
     <span className="experience-tile-arrow" aria-hidden="true"><ArrowUpRight className="h-4 w-4" /></span>
   </motion.button>;
 }
@@ -129,8 +131,7 @@ export function MarketplaceHome({
   profile,
   onboardingComplete = false,
   interests = [],
-  ridesEnabled = false,
-  sendEnabled = false,
+  serviceAvailability = {},
   onSelectService,
   onOpenBusiness,
   onSearch,
@@ -166,7 +167,7 @@ export function MarketplaceHome({
       <button type="button" onClick={onSearch} className="experience-home-search"><Search className="h-5 w-5" /><span>What are you looking for?</span><span className="experience-search-city"><MapPin className="h-4 w-4" />{location.city}</span><span className="experience-search-go" aria-hidden="true"><ArrowUpRight className="h-5 w-5" /></span></button>
       <div className="experience-atlas-label"><h2>One Spotly. Your kind of day.</h2><span>Explore the services</span></div>
       <div className="experience-service-atlas">
-        {["eat", "shop", "ride", "book", "events", "send"].map((key) => <ServiceTile key={key} service={MARKETPLACE_SERVICES.find((item) => item.key === key)} enabled={key === "ride" ? ridesEnabled : key === "send" ? sendEnabled : true} city={location.city} onSelect={onSelectService} />)}
+        {["eat", "shop", "ride", "book", "events", "send"].map((key) => <ServiceTile key={key} service={MARKETPLACE_SERVICES.find((item) => item.key === key)} availability={serviceAvailability[key]} city={location.city} onSelect={onSelectService} />)}
       </div>
     </section>
 
@@ -196,9 +197,10 @@ export function MarketplaceHome({
   </div>;
 }
 
-export function ServiceModeHeader({ service, location, ridesEnabled, sendEnabled, onSelectService, onExit, onSearch }) {
+export function ServiceModeHeader({ service, location, serviceAvailability = {}, onSelectService, onExit, onSearch }) {
   const current = MARKETPLACE_SERVICES.find((item) => item.key === service) || MARKETPLACE_SERVICES[1];
-  const enabled = service === "ride" ? ridesEnabled : service === "send" ? sendEnabled : true;
+  const decision = serviceAvailability[service];
+  const enabled = decision?.discoverable !== false;
   const taskCopy = {
     ride: ["Where to?", "Search a destination or saved place"],
     eat: ["What are you craving?", "Search restaurants, dishes and food"],
@@ -210,7 +212,7 @@ export function ServiceModeHeader({ service, location, ridesEnabled, sendEnabled
 
   return <div className="border-b border-[var(--border-subtle)] pb-5">
     <div className="flex items-start justify-between gap-4"><div><button type="button" onClick={onExit} className="text-xs font-semibold text-[var(--accent)]">← Home</button><div className="mt-2 flex items-center gap-3"><span className={cn("flex h-10 w-10 items-center justify-center rounded-[12px] text-[var(--service-foreground)]", `spotly-service-${current.tone}`)}><ServiceGlyph service={current.key} /></span><h1 className="text-[30px] font-semibold tracking-[-.05em] sm:text-[38px]">{current.label}</h1></div></div><p className="hidden pt-6 text-xs font-semibold text-[var(--text-3)] sm:block">{location.area || location.city}</p></div>
-    <div className="no-scrollbar mt-5 flex gap-5 overflow-x-auto border-b border-[var(--border-subtle)]">{MARKETPLACE_SERVICES.map((item) => <button key={item.key} type="button" onClick={() => onSelectService(item.key)} className={cn("relative shrink-0 pb-3 text-sm font-semibold", item.key === service ? "text-[var(--text)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[var(--accent)]" : "text-[var(--text-3)] hover:text-[var(--text)]")}><span className="inline-flex items-center gap-1.5"><ServiceGlyph service={item.key} className="h-4 w-4" />{item.label}</span></button>)}</div>
+    <div className="no-scrollbar mt-5 flex gap-5 overflow-x-auto border-b border-[var(--border-subtle)]">{MARKETPLACE_SERVICES.filter((item) => serviceAvailability[item.key]?.visible !== false).map((item) => <button key={item.key} type="button" onClick={() => onSelectService(item.key)} className={cn("relative shrink-0 pb-3 text-sm font-semibold", item.key === service ? "text-[var(--text)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[var(--accent)]" : "text-[var(--text-3)] hover:text-[var(--text)]")}><span className="inline-flex items-center gap-1.5"><ServiceGlyph service={item.key} className="h-4 w-4" />{item.label}</span></button>)}</div>
     <button type="button" onClick={enabled ? onSearch : undefined} className={cn("mt-4 flex min-h-16 w-full items-center gap-3 rounded-[16px] px-4 text-left transition", enabled ? "bg-[var(--surface-2)] hover:bg-[var(--surface-hover)]" : "cursor-default border border-[var(--border-subtle)] bg-[var(--surface-2)]")}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--surface)] text-[var(--accent)]">{enabled ? <Search className="h-5 w-5" /> : <Clock3 className="h-5 w-5" />}</span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold">{enabled ? taskCopy[0] : `${current.label} is not live here yet`}</strong><span className="mt-0.5 block text-xs text-[var(--text-3)]">{enabled ? taskCopy[1] : `We will enable ${current.label} when verified operations and support are ready in ${location.city}.`}</span></span>{enabled ? <ChevronRight className="h-5 w-5 text-[var(--text-3)]" /> : null}</button>
   </div>;
 }

@@ -15,7 +15,8 @@ import { categorizeMarketplaceProduct } from "@/lib/marketplace-product-taxonomy
 import { independentPublicStore, independentShoppingFlags } from "@/lib/independent-shopping";
 import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
-import { countryTimeZone } from "@/lib/country-engine";
+import { countryForCity, countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
+import { requireServiceDiscoverable } from "@/lib/service-availability-server";
 
 export const runtime = "nodejs";
 
@@ -245,8 +246,9 @@ export async function GET(request) {
     const url = new URL(request.url);
     const service = text(url.searchParams.get("service"));
     if (!SERVICES.has(service)) throw Object.assign(new Error("Choose Eat, Shop, Book or Events."), { status: 422 });
-    const country = String(url.searchParams.get("country") || "").trim().toUpperCase();
+    const requestedCountry = normalizeCountryCode(url.searchParams.get("country"));
     const city = text(url.searchParams.get("city"));
+    const country = requestedCountry || countryForCity(city)?.country?.code || "";
     const area = text(url.searchParams.get("area"));
     const query = String(url.searchParams.get("q") || "").trim();
     const requestedOffset = Number(url.searchParams.get("offset") || 0);
@@ -254,10 +256,13 @@ export async function GET(request) {
     const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
     const itemLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 8), 48) : 24;
     const { db } = getAdminServices();
+    const settingsSnapshot = await db.collection("platformSettings").doc("global").get();
+    const platformSettings = settingsSnapshot.exists ? settingsSnapshot.data() || {} : {};
+    const availability = requireServiceDiscoverable(platformSettings, { service, country, city });
     const showUnclaimed = await unclaimedPublicationEnabled(db);
 
     const [businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot] = await publicSeed(db);
-    const assistSettings = (service === "eat" || service === "shop") ? (await db.collection("platformSettings").doc("global").get()).data() || {} : {};
+    const assistSettings = (service === "eat" || service === "shop") ? platformSettings : {};
     const assistedSnapshot = (service === "eat" || service === "shop") && independentShoppingFlags(assistSettings).browseEnabled
       ? await db.collection("independentShoppingStores").where("status", "==", "published").limit(160).get()
       : { docs: [] };
@@ -374,6 +379,8 @@ export async function GET(request) {
     return Response.json({
       ok: true,
       service,
+      country,
+      availability,
       city: url.searchParams.get("city") || "",
       area: url.searchParams.get("area") || "",
       query,

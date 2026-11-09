@@ -52,15 +52,21 @@ export async function GET(request) {
     }
     const snapshot = await query.get();
     const entries = snapshot.docs.map(lead);
-    // Read the authoritative current beta flag, even if it was changed in Team & Access.
+    // Preview access is owned by time-limited Operations grants, not a mutable user-profile beta flag.
     const linked = [...new Set(entries.map((e) => e.accountUid).filter(Boolean))];
     if (!exportCsv && linked.length) {
-      const users = await db.getAll(...linked.map((uid) => db.collection("users").doc(uid)));
-      const betaById = new Map(users.filter((u) => u.exists).map((u) => [u.id, u.data()]));
-      for (const entry of entries) {
-        const account = betaById.get(entry.accountUid);
-        if (account && account.email?.toLowerCase() === entry.email?.toLowerCase()) entry.betaEnabled = account.privateBeta === true;
+      const grantsByUser = new Map();
+      for (let index = 0; index < linked.length; index += 30) {
+        const chunk = linked.slice(index, index + 30);
+        const grants = await db.collection("operationGrants").where("userId", "in", chunk).get();
+        for (const grant of grants.docs) {
+          const data = grant.data();
+          const expiry = data.expiresAt?.toDate?.();
+          if (data.type !== "service_preview" || data.status !== "active" || !expiry || expiry.getTime() <= Date.now()) continue;
+          grantsByUser.set(data.userId, true);
+        }
       }
+      for (const entry of entries) entry.previewGranted = grantsByUser.get(entry.accountUid) === true;
     }
     const nextCursor = snapshot.size === pageSize ? snapshot.docs.at(-1)?.id || null : null;
     if (exportCsv) {

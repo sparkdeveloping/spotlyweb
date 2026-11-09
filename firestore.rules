@@ -144,8 +144,17 @@ service cloud.firestore {
 
     match /platformSettings/{id} {
       allow read: if true;
-      allow write: if platformAdmin() || hasPermission("admin.configuration");
+      allow create: if (platformAdmin() || hasPermission("admin.configuration")) &&
+        !request.resource.data.keys().hasAny(["serviceAvailability", "serviceAvailabilityRevisionId", "serviceAvailabilityRevisionNumber", "serviceAvailabilityPublishedAt", "serviceAvailabilityPublishedBy", "serviceAvailabilityPublishedByEmail", "serviceAvailabilityPublishNote", "serviceAvailabilityUpdatedAt", "serviceAvailabilityUpdatedBy"]);
+      allow update: if (platformAdmin() || hasPermission("admin.configuration")) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(["serviceAvailability", "serviceAvailabilityRevisionId", "serviceAvailabilityRevisionNumber", "serviceAvailabilityPublishedAt", "serviceAvailabilityPublishedBy", "serviceAvailabilityPublishedByEmail", "serviceAvailabilityPublishNote", "serviceAvailabilityUpdatedAt", "serviceAvailabilityUpdatedBy"]);
+      allow delete: if false;
     }
+
+    // Countries & Services rollout drafts and immutable revisions are server-authoritative.
+    // Admin clients must use the revisioned control-plane API so impact/readiness checks cannot be bypassed.
+    match /serviceAvailabilityDrafts/{id} { allow read, write: if false; }
+    match /serviceAvailabilityRevisions/{id} { allow read, write: if false; }
 
     // Partner CRM, call evidence and invitation tokens are server-only. The
     // NXT portal checks roles in authenticated API handlers, not client rules.
@@ -549,6 +558,8 @@ service cloud.firestore {
     // Driver, delivery, dispatch and kiosk operational records are server-authoritative.
     // UI clients use scoped API routes; privileged Admin SDK writes bypass these rules.
     // Prospective Driver invitations are server-authoritative. A public client cannot enumerate leads, tokens or contact keys.
+    match /operationGrants/{grantId} { allow read, write: if false; }
+    match /operationsRuns/{runId} { allow read, write: if false; }
     match /driverLeads/{leadId} { allow read, write: if false; }
     match /driverLeadContacts/{contactId} { allow read, write: if false; }
     match /driverLeadTouchpoints/{touchpointId} { allow read, write: if false; }

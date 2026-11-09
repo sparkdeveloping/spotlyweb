@@ -18,6 +18,12 @@ export const SPOTLY_COUNTRY_CONTRACT = Object.freeze(JSON.parse(countryManifestB
 export const SPOTLY_COUNTRY_CONTRACT_VERSION = SPOTLY_COUNTRY_CONTRACT.countryContractVersion;
 export const SPOTLY_COUNTRY_CONTRACT_SHA256 = createHash("sha256").update(countryManifestBytes).digest("hex");
 
+const serviceAvailabilityManifestUrl = new URL("../contracts/spotly-service-availability.v1.json", import.meta.url);
+const serviceAvailabilityManifestBytes = readFileSync(fileURLToPath(serviceAvailabilityManifestUrl));
+export const SPOTLY_SERVICE_AVAILABILITY_CONTRACT = Object.freeze(JSON.parse(serviceAvailabilityManifestBytes));
+export const SPOTLY_SERVICE_AVAILABILITY_CONTRACT_VERSION = SPOTLY_SERVICE_AVAILABILITY_CONTRACT.serviceAvailabilityContractVersion;
+export const SPOTLY_SERVICE_AVAILABILITY_CONTRACT_SHA256 = createHash("sha256").update(serviceAvailabilityManifestBytes).digest("hex");
+
 export const FOUNDATION_CAPABILITIES = Object.freeze({
   firestore: true,
   realtimeDatabase: true,
@@ -25,5 +31,6 @@ export const FOUNDATION_CAPABILITIES = Object.freeze({
   messaging: true,
   callableFunctions: true,
   appCheckReady: true,
-  emulatorReady: true
+  emulatorReady: true,
+  operationsGrants: true
 });

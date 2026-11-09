@@ -67,8 +67,7 @@
       "onemoney",
       "card",
       "bank_transfer",
-      "pay_later",
-      "superadmin_test"
+      "pay_later"
     ],
     "paymentStatuses": [
       "not_required",
@@ -90,7 +89,6 @@
       "action_required",
       "awaiting_payment",
       "pay_later",
-      "test_paid",
       "cash_driver_attested"
     ],
     "primaryActions": [
@@ -294,8 +292,7 @@
             "ecocash",
             "onemoney",
             "card",
-            "bank_transfer",
-            "superadmin_test"
+            "bank_transfer"
           ]
         },
         "fulfilment": {
@@ -744,8 +741,7 @@
             "action_required",
             "awaiting_payment",
             "pay_later",
-            "test_paid",
-            "cash_driver_attested"
+                  "cash_driver_attested"
           ]
         },
         "number": {
@@ -1004,8 +1000,7 @@
             "onemoney",
             "card",
             "bank_transfer",
-            "pay_later",
-            "superadmin_test"
+            "pay_later"
           ]
         },
         "contactName": {

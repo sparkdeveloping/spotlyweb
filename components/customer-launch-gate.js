@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
+import { useOperationsContext } from "@/components/operations-context";
 import { FirstAccessLanding, MaintenanceLanding } from "@/components/first-access-landing";
 
 // This is a customer UX gate, not an authentication substitute. Commerce mutation
@@ -20,8 +21,9 @@ export function CustomerLaunchGate({ children }) {
   const path = usePathname() || "/";
   const requiresGate = gatedPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
   const [customerHost, setCustomerHost] = useState(null);
-  const { profile, user } = useAuth();
+  const { user } = useAuth();
   const { settings, settingsReady } = usePlatform();
+  const operations = useOperationsContext();
   useEffect(() => setCustomerHost(isCustomerHost()), []);
   if (!requiresGate) return children;
   if (customerHost === null || !settingsReady) return <div className="min-h-screen bg-[var(--background)]" aria-busy="true" />;
@@ -29,7 +31,8 @@ export function CustomerLaunchGate({ children }) {
   const mode = settings?.launch?.publicMode;
   if (mode === "maintenance") return <MaintenanceLanding />;
   if (["first_access", "coming-soon", "private-beta"].includes(mode)) {
-    const invited = settings?.launch?.privateBetaEnabled !== false && Boolean(user && !user.isAnonymous && profile?.privateBeta === true);
+    const invited = Boolean(user && !user.isAnonymous && (operations.context.servicePreview || operations.context.serviceOperations));
+    if (operations.loading) return <div className="min-h-screen bg-[var(--background)]" aria-busy="true" />;
     if (!invited) return <FirstAccessLanding />;
   }
   return children;

@@ -8,6 +8,9 @@ import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-t
 import { publicBusinessGroup } from "@/lib/business-group-server";
 import { directoryShoppingStore } from "@/lib/directory-shopping-server";
 import { independentShoppingFlags } from "@/lib/independent-shopping";
+import { marketplaceProfile } from "@/lib/marketplace-taxonomy";
+import { resolveServiceAvailability } from "@/lib/service-availability";
+import { countryForCity, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 const text=(value)=>String(value||"").trim().toLowerCase();
@@ -18,12 +21,15 @@ export async function GET(request){
  try{
   await verifyAppCheckRequest(request,{required:false}); const rate=await enforceRateLimit(request,{key:"public-marketplace-business",limit:180,windowMs:60_000});
   const businessId=new URL(request.url).searchParams.get("businessId")||""; if(!businessId) throw Object.assign(new Error("Business ID is required."),{status:400});
-  const {db}=getAdminServices(); const [businessSnapshot,branchSnapshot,productSnapshot]=await Promise.all([db.collection("businesses").doc(businessId).get(),db.collection("branches").where("businessId","==",businessId).limit(100).get(),db.collection("products").where("businessId","==",businessId).limit(1000).get()]);
+  const {db}=getAdminServices(); const [businessSnapshot,branchSnapshot,productSnapshot,settingsSnapshot]=await Promise.all([db.collection("businesses").doc(businessId).get(),db.collection("branches").where("businessId","==",businessId).limit(100).get(),db.collection("products").where("businessId","==",businessId).limit(1000).get(),db.collection("platformSettings").doc("global").get()]);
   const curated=openPlaceById(businessId); const source=businessSnapshot.exists?{...(curated||{}),...businessSnapshot.data()}:curated; const showUnclaimed=await unclaimedPublicationEnabled(db);
   if(!source||!isMarketplaceDiscoverable(source)||!(businessSnapshot.exists?canShowDirectoryRecord(source,showUnclaimed):showUnclaimed)) throw Object.assign(new Error("This business is not publicly available."),{status:404});
+  const sourceCountry=normalizeCountryCode(source.country)||countryForCity(source.city)?.country?.code||"";
+  const serviceAvailability=resolveServiceAvailability(settingsSnapshot.data()||{},{service:marketplaceProfile(source).service,country:sourceCountry,city:source.city||""});
+  if(!serviceAvailability.discoverable) throw Object.assign(new Error("This service is not publicly available in this area."),{status:404});
   const business=await publicBusinessGroup(db,businessId,{...source,curated:Boolean(curated)},showUnclaimed); const trust=marketplaceTrust(source);
   if (business.assistRequestAvailable) {
-    const config = (await db.collection("platformSettings").doc("global").get()).data() || {};
+    const config = settingsSnapshot.data() || {};
     const flags = independentShoppingFlags(config);
     const found = flags.browseEnabled ? await directoryShoppingStore(db, {businessId,branchId:branchSnapshot.docs.find(doc=>doc.data()?.public===true&&!["archived","removed"].includes(text(doc.data()?.status)))?.id || "",settings:config,source}) : null;
     business.assistRequestAvailable = Boolean(found?.store);
@@ -33,6 +39,6 @@ export async function GET(request){
   if(!trust.commerceVerified) branches=branches.map((branch)=>({...branch,fulfilment:[],pickup:{},paymentMethods:[],delivery:null}));
   if(!branches.length&&business.coordinates)branches=[{id:`${businessId}-place`,businessId,branchName:business.area||business.city||"Location",name:business.name,city:business.city,area:business.area,suburb:business.suburb,address:business.address,phone:business.phone,status:"listed",public:true,fulfilment:[],openingHours:business.openingHours||{},specialHours:[],pickup:{},paymentMethods:[],acceptedCurrencies:[],delivery:null,location:{lat:business.latitude,lng:business.longitude},curated:true}];
   const products=trust.commerceVerified?productSnapshot.docs.map(publicProduct).filter((item)=>item.published&&item.active&&item.available):[];
-  return Response.json({ok:true,business,branches,products,transactional:trust.commerceVerified,claimAvailable:trust.discovery.claim,dataAttribution:business.source?.type==="openstreetmap"?{openStreetMap:"© OpenStreetMap contributors",license:"ODbL-1.0",licenseUrl:"https://www.openstreetmap.org/copyright"}:null},{headers:{"Cache-Control":"public, max-age=20, stale-while-revalidate=60","X-RateLimit-Remaining":String(rate.remaining)}});
+  return Response.json({ok:true,business,branches,products,transactional:trust.commerceVerified&&serviceAvailability.transactable,serviceAvailability,claimAvailable:trust.discovery.claim,dataAttribution:business.source?.type==="openstreetmap"?{openStreetMap:"© OpenStreetMap contributors",license:"ODbL-1.0",licenseUrl:"https://www.openstreetmap.org/copyright"}:null},{headers:{"Cache-Control":"public, max-age=20, stale-while-revalidate=60","X-RateLimit-Remaining":String(rate.remaining)}});
  }catch(error){return apiError(error);}
 }

@@ -34,3 +34,15 @@ node scripts/verify-contract-snapshots.mjs \
 ```
 
 This phase defines the contracts only. Country/service runtime configuration, Firebase Functions infrastructure and launch controls belong to later phases.
+
+## Service availability contract
+
+`spotly-service-availability.v1.json` defines the five runtime states shared by web, Firebase Functions, customer iOS and Driver iOS: `hidden`, `preview`, `discover`, `live`, and `paused`.
+
+Runtime configuration lives in `platformSettings/global.serviceAvailability`. Resolution is deterministic: city override → country override → service default → canonical bootstrap. Only `live` permits new customer transactions; `discover` and `paused` may remain browsable, while `preview` is presentation-only and `hidden` is not exposed.
+
+```bash
+npm run services:generate
+npm run services:check
+npm run services:verify-snapshots
+```

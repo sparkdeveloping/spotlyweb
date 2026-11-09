@@ -3,6 +3,9 @@ import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { openPlaceById } from "@/lib/open-marketplace-data";
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable } from "@/lib/marketplace-trust";
+import { marketplaceProfile } from "@/lib/marketplace-taxonomy";
+import { resolveServiceAvailability } from "@/lib/service-availability";
+import { countryForCity, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 
@@ -23,7 +26,8 @@ export async function GET(request) {
     if (!ids.length) throw Object.assign(new Error("At least one business ID is required."), { status: 400 });
 
     const { db } = getAdminServices();
-    const snapshots = await Promise.all(ids.map((id) => db.collection("businesses").doc(id).get()));
+    const [snapshots, settingsSnapshot] = await Promise.all([Promise.all(ids.map((id) => db.collection("businesses").doc(id).get())), db.collection("platformSettings").doc("global").get()]);
+    const settings = settingsSnapshot.data() || {};
     const byID = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]));
     const businesses = [];
     const unavailableIDs = [];
@@ -36,7 +40,10 @@ export async function GET(request) {
         unavailableIDs.push(id);
         continue;
       }
-      businesses.push(publicBusinessRecord(id, { ...source, curated: Boolean(curated) }));
+      const country = normalizeCountryCode(source.country) || countryForCity(source.city)?.country?.code || "";
+      const availability = resolveServiceAvailability(settings, { service: marketplaceProfile(source).service, country, city: source.city || "" });
+      if (!availability.discoverable) { unavailableIDs.push(id); continue; }
+      businesses.push({ ...publicBusinessRecord(id, { ...source, curated: Boolean(curated) }), serviceAvailability: availability });
     }
 
     return Response.json({ ok: true, businesses, unavailableIDs }, {

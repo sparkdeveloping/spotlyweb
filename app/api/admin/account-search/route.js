@@ -12,6 +12,6 @@ export async function GET(request) {
     if (snapshot.empty) return Response.json({ ok: false, error: "No account was found for this email. Ask the team member to create their Spotly account first." }, { status: 404 });
     const d = snapshot.docs[0]; const item = d.data();
     return Response.json({ ok: true, user: { id: d.id, uid: d.id, email: item.email || "", displayName: item.displayName || "", roles: item.roles || ["customer"],
-      customPermissions: item.customPermissions || [], status: item.status || "active", privateBeta: Boolean(item.privateBeta), providers: item.providers || [] } }, { headers: { "Cache-Control": "private, no-store" } });
+      customPermissions: item.customPermissions || [], status: item.status || "active", providers: item.providers || [] } }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return apiError(error); }
 }

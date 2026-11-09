@@ -8,7 +8,7 @@
   },
   "main": "src/index.js",
   "scripts": {
-    "check": "node --check src/index.js && node --check src/core/admin.js && node --check src/core/auth.js && node --check src/core/callable.js && node --check src/core/idempotency.js && node --check src/core/fingerprint.js && node --check src/core/audit.js && node --check src/core/runtime-access.js && node --check src/core/notifications.js && node --check src/core/storage.js && node --test spec/foundation.spec.mjs",
+    "check": "node --check src/index.js && node --check src/core/admin.js && node --check src/core/auth.js && node --check src/core/callable.js && node --check src/core/idempotency.js && node --check src/core/fingerprint.js && node --check src/core/audit.js && node --check src/core/runtime-access.js && node --check src/core/notifications.js && node --check src/core/storage.js && node --check src/core/service-availability.js && node --check src/core/operations-grants.js && node --test spec/foundation.spec.mjs",
     "test": "node --test spec/foundation.spec.mjs"
   },
   "dependencies": {

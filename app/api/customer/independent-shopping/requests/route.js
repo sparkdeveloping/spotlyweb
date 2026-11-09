@@ -11,6 +11,8 @@ import { canonicalIndependentSource, directoryShoppingStore } from "@/lib/direct
 import { independentStoreRequestSafe } from "@/lib/assist-store-safety";
 import { catalogueService, refreshDirectoryCatalogue } from "@/lib/spotly-catalogue";
 import { independentPaymentEnabled } from "@/lib/assist-money";
+import { resolveServiceAvailability } from "@/lib/service-availability";
+import { countryForCity, normalizeCountryCode } from "@/lib/country-engine";
 
 export const runtime = "nodejs";
 const selectionSchema = z.object({ itemId: z.string().min(2).max(80), quantity: z.number().int().min(1).max(10), choices: z.array(z.object({ group: z.string().min(1).max(60), value: z.string().min(1).max(120) }).strict()).max(6).optional() }).strict();
@@ -90,6 +92,10 @@ export async function POST(request) {
       store = rawStore ? independentPublicStore(input.storeId, rawStore) : null;
     }
     if (!store || !rawStore) throw Object.assign(new Error("This shopping location is not accepting requests."), { status: 409 });
+    const assistService = catalogueService(rawStore);
+    const assistCountry = normalizeCountryCode(rawStore.country) || countryForCity(rawStore.city)?.country?.code || "";
+    const availability = resolveServiceAvailability(settings, { service: assistService, country: assistCountry, city: rawStore.city || "" });
+    if (!availability.transactable) throw Object.assign(new Error(availability.reason || "This Spotly service is not accepting new requests here."), { status: 409, code: "service_not_live", serviceAvailability: availability });
     let estimate;
     try { estimate = independentQuote(store, input.items, {
       customItems: input.customItems,
@@ -101,7 +107,7 @@ export async function POST(request) {
       storeId: store.id, storeName: store.name, model: "independent_shopping",
       affiliation: "unaffiliated", state: "pending_manual_quote",
       sourceBusinessId: rawStore.directoryBusinessId || null, directoryBranchId: rawStore.directoryBranchId || null,
-      assistService: catalogueService(rawStore), collectionAddress: rawStore.address || "",
+      assistService, country: assistCountry, city: rawStore.city || "", collectionAddress: rawStore.address || "",
       items: estimate.items, estimate,
       contactName: input.contactName, contactPhone: input.contactPhone,
       deliveryAddress: input.deliveryAddress, notes: input.notes,
@@ -116,9 +122,12 @@ export async function POST(request) {
       const active = currentStore.exists ? { ...currentStore.data(), id: currentStore.id } : rawStore;
       const canonical = active.directoryBusinessId ? await tx.get(db.collection("businesses").doc(active.directoryBusinessId)) : null;
       const branch = active.directoryBranchId ? await tx.get(db.collection("branches").doc(active.directoryBranchId)) : null;
+      const currentService = catalogueService(active);
+      const currentCountry = normalizeCountryCode(active.country) || countryForCity(active.city)?.country?.code || "";
+      const currentAvailability = resolveServiceAvailability(currentSettings.data() || {}, { service: currentService, country: currentCountry, city: active.city || "" });
       if (!independentStoreRequestSafe(active, active.directoryBusinessId ? canonicalIndependentSource(canonical, active.directoryBusinessId) : null, branch?.exists ? branch.data() : null) ||
-          !independentShoppingFlags(currentSettings.data()).requestEnabled ||
-          !regionalServicePolicy(currentSettings.data()?.assistCoverage || {}, active, catalogueService(active)).available) {
+          !independentShoppingFlags(currentSettings.data()).requestEnabled || !currentAvailability.transactable ||
+          !regionalServicePolicy(currentSettings.data()?.assistCoverage || {}, active, currentService).available) {
         throw Object.assign(new Error("This location has changed availability. Refresh before submitting."), { status: 409 });
       }
       if (!currentStore.exists) tx.create(storeRef, { ...rawStore, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });

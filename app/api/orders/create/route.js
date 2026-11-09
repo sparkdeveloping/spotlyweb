@@ -11,6 +11,9 @@ import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promoti
 import { marketplaceTrust } from "@/lib/marketplace-trust";
 import { orderCreateRequestSchema } from "@/lib/contracts/schemas";
 import { countryDefinition, countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
+import { requireServiceLive } from "@/lib/service-availability-server";
+import { marketplaceProfile } from "@/lib/marketplace-taxonomy";
+import { operationContextFor } from "@/lib/operations-grants-server";
 
 export const runtime = "nodejs";
 
@@ -99,12 +102,8 @@ export async function POST(request) {
     if (body.fulfilment === "pickup" && !body.pickup) throw Object.assign(new Error("Choose a pickup time."), { status: 422 });
 
     const settings = settingsSnapshot.data() || {};
-    const roles = user.profile?.roles || [];
-    const isSuperAdmin = roles.includes("super_admin");
-    const elevatedPreview = roles.some((role) => ["super_admin", "platform_admin", "operations_manager", "support_manager"].includes(role));
     const marketplaceOpen = settings.launch?.marketplaceEnabled === true;
-    const privatePreview = settings.launch?.privateBetaEnabled !== false && (user.profile?.privateBeta === true || elevatedPreview);
-    if (!marketplaceOpen && !privatePreview) throw Object.assign(new Error("The marketplace is currently limited to approved preview accounts."), { status: 403 });
+    if (!marketplaceOpen) throw Object.assign(new Error("The marketplace is not accepting production orders right now. Use Operations mode for isolated testing."), { status: 403 });
     const configuredFulfilment = settings.commerce?.fulfilment || ["pickup"];
     const fulfilmentEnabled = body.fulfilment === "delivery" ? settings.commerce?.deliveryEnabled !== false : configuredFulfilment.includes("pickup");
     if (settings.commerce?.enabled === false || !fulfilmentEnabled) throw Object.assign(new Error(`${body.fulfilment === "delivery" ? "Delivery" : "Pickup"} ordering is temporarily unavailable.`), { status: 503 });
@@ -115,6 +114,10 @@ export async function POST(request) {
     if (!country) throw Object.assign(new Error("This location needs a supported country before it can accept orders."), { status: 409 });
     if (branch.country && businessData?.country && normalizeCountryCode(branch.country) !== normalizeCountryCode(businessData.country)) throw Object.assign(new Error("This location country does not match its business record."), { status: 409 });
     const timeZone = countryTimeZone(countryCode);
+    const orderService = marketplaceProfile(businessData).service;
+    if (!["eat", "shop"].includes(orderService)) throw Object.assign(new Error("This business does not accept standard Spotly orders."), { status: 409 });
+    requireServiceLive(settings, { service: orderService, country: countryCode, city: branch.city || businessData?.city || "" });
+    const { context: operations } = await operationContextFor(db, user.uid, { service: orderService, country: countryCode, city: branch.city || businessData?.city || "" });
     if (branch.status && branch.status !== "active") throw Object.assign(new Error("This branch is not accepting orders."), { status: 409 });
     if (branch.public === false || !(branch.fulfilment || ["pickup"]).includes(body.fulfilment)) throw Object.assign(new Error(`${body.fulfilment === "delivery" ? "Delivery" : "Pickup"} is not enabled for this location.`), { status: 409 });
     if (body.fulfilment === "delivery" && (!branch.delivery?.enabled || branch.delivery?.paused)) throw Object.assign(new Error("Delivery is not accepting orders from this location right now."), { status: 409 });
@@ -124,9 +127,7 @@ export async function POST(request) {
     const businessMethods = finance.paymentMethods || platformMethods;
     const branchMethods = branch.paymentMethods || businessMethods;
     const allowedMethods = platformMethods.filter((method) => businessMethods.includes(method) && branchMethods.includes(method));
-    const superAdminTestPayment = body.paymentMethod === "superadmin_test";
-    if (superAdminTestPayment && !isSuperAdmin) throw Object.assign(new Error("Super Admin test payment is restricted to Super Admin accounts."), { status: 403 });
-    if (!superAdminTestPayment && !allowedMethods.includes(body.paymentMethod)) throw Object.assign(new Error("That payment method is not currently available for this branch."), { status: 422 });
+    if (!allowedMethods.includes(body.paymentMethod)) throw Object.assign(new Error("That payment method is not currently available for this branch."), { status: 422 });
 
     const platformCurrencies = settings.commerce?.currencies || ["USD", "ZWG"];
     const businessCurrencies = finance.acceptedCurrencies || platformCurrencies;
@@ -146,7 +147,7 @@ export async function POST(request) {
     const notificationRef = db.collection("notifications").doc();
     const businessRef = db.collection("businesses").doc(body.businessId);
     const branchRef = db.collection("branches").doc(body.branchId);
-    const paymentMethodRequiresCapture = !["cash", "bank_transfer", "superadmin_test"].includes(body.paymentMethod);
+    const paymentMethodRequiresCapture = !["cash", "bank_transfer"].includes(body.paymentMethod);
     if (body.fulfilment === "delivery" && ["cash", "bank_transfer"].includes(body.paymentMethod)) throw Object.assign(new Error("Delivery requires an instantly confirmable digital payment method."), { status: 422 });
     const number = orderNumber();
     const serviceFee = Number(Math.max(0, Number(settings.commerce?.customerServiceFee || 0)).toFixed(2));
@@ -183,7 +184,7 @@ export async function POST(request) {
       const driverShopping = body.fulfilment === "delivery" && branchData.delivery?.fulfilmentMode === "driver_shops";
       const reservePercent = driverShopping ? Number(branchData.delivery?.shoppingReservePercent ?? settings.commerce?.driverShoppingReservePercent ?? 12) : 0;
       const shoppingReserve = driverShopping ? shoppingReserveAmount(subtotal, reservePercent) : 0;
-      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.promoCode || "", isNewCustomer: priorOrders.empty, privateBeta: privatePreview });
+      const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.promoCode || "", isNewCustomer: priorOrders.empty, previewAccess: operations.servicePreview });
       if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
       const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
       const commissionPercent = Number(finance.commissionPercent ?? settings.commerce?.commissionPercent ?? 0);
@@ -217,8 +218,7 @@ export async function POST(request) {
         pickup: body.fulfilment === "pickup" ? { ...body.pickup, substitutionPreference: normalizedSubstitution, notes: safeText(body.pickup.notes, 500), reservedSlotId: slot.id } : null,
         delivery: body.fulfilment === "delivery" ? { ...body.delivery, substitutionPreference: normalizedSubstitution, instructions: safeText(body.delivery.instructions, 500) } : null,
         paymentMethod: body.paymentMethod,
-        paymentStatus: superAdminTestPayment ? "test_paid" : paymentRequired ? "unpaid" : body.paymentMethod === "cash" ? "due_at_pickup" : "awaiting_transfer",
-        ...(superAdminTestPayment ? { isTestOrder: true, testPaymentMode: "super_admin", merchantSettlementStatus: "test_excluded" } : {}),
+        paymentStatus: paymentRequired ? "unpaid" : body.paymentMethod === "cash" ? "due_at_pickup" : "awaiting_transfer",
         status: paymentRequired ? "awaiting_payment" : "submitted",
         inventoryReservationStatus: "reserved",
         timeline: [{ status: paymentRequired ? "awaiting_payment" : "submitted", at: new Date().toISOString(), actorId: user.uid }],

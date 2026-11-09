@@ -6,6 +6,7 @@ import { FirstAccessLanding, MaintenanceLanding } from "@/components/first-acces
 import { Button } from "@/components/ui";
 import { usePlatform, useAuth } from "@/components/firebase-provider";
 import { MarketplaceApp } from "@/components/marketplace-app";
+import { useOperationsContext } from "@/components/operations-context";
 
 function PublicHomeLoading() {
   return <div className="min-h-screen bg-[var(--background)] text-[var(--text)]" aria-busy="true" aria-label="Opening Spotly">
@@ -20,12 +21,14 @@ function MaintenanceHome() {
 
 export function PublicHomeRouter() {
   const { settings, settingsReady } = usePlatform();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const operations = useOperationsContext();
   if (!settingsReady) return <PublicHomeLoading />;
   if (settings.launch?.publicMode === "maintenance") return <MaintenanceLanding />;
   if (["first_access", "coming-soon", "private-beta"].includes(settings.launch?.publicMode)) {
-    const betaEnabled = settings.launch?.privateBetaEnabled !== false && user && !user.isAnonymous && profile?.privateBeta === true;
-    return betaEnabled ? <MarketplaceApp basePath="/" /> : <FirstAccessLanding />;
+    const previewEnabled = user && !user.isAnonymous && (operations.context.servicePreview || operations.context.serviceOperations);
+    if (operations.loading) return <PublicHomeLoading />;
+    return previewEnabled ? <MarketplaceApp basePath="/" /> : <FirstAccessLanding />;
   }
   return <MarketplaceApp basePath="/" />;
 }

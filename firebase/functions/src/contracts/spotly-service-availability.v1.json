@@ -1,0 +1,85 @@
+{
+  "serviceAvailabilityContractVersion": "1.0.0",
+  "states": {
+    "hidden": {
+      "visible": false,
+      "discoverable": false,
+      "transactable": false,
+      "paused": false
+    },
+    "preview": {
+      "visible": true,
+      "discoverable": false,
+      "transactable": false,
+      "paused": false
+    },
+    "discover": {
+      "visible": true,
+      "discoverable": true,
+      "transactable": false,
+      "paused": false
+    },
+    "live": {
+      "visible": true,
+      "discoverable": true,
+      "transactable": true,
+      "paused": false
+    },
+    "paused": {
+      "visible": true,
+      "discoverable": true,
+      "transactable": false,
+      "paused": true
+    }
+  },
+  "services": [
+    {
+      "id": "eat",
+      "defaultState": "hidden",
+      "countries": {
+        "ZW": "live",
+        "MW": "preview"
+      }
+    },
+    {
+      "id": "shop",
+      "defaultState": "hidden",
+      "countries": {
+        "ZW": "live",
+        "MW": "preview"
+      }
+    },
+    {
+      "id": "ride",
+      "defaultState": "hidden",
+      "countries": {
+        "ZW": "discover",
+        "MW": "preview"
+      }
+    },
+    {
+      "id": "book",
+      "defaultState": "hidden",
+      "countries": {
+        "ZW": "live",
+        "MW": "preview"
+      }
+    },
+    {
+      "id": "events",
+      "defaultState": "hidden",
+      "countries": {
+        "ZW": "live",
+        "MW": "preview"
+      }
+    },
+    {
+      "id": "send",
+      "defaultState": "hidden",
+      "countries": {
+        "ZW": "discover",
+        "MW": "hidden"
+      }
+    }
+  ]
+}

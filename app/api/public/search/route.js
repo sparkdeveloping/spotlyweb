@@ -9,6 +9,9 @@ import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-t
 import { publicBusinessRecord, publicCanonicalProduct, publicMerchantProduct } from "@/lib/marketplace-public";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
 import { marketplaceRank } from "@/lib/marketplace-ranking";
+import { countryForCity, normalizeCountryCode } from "@/lib/country-engine";
+import { requireServiceDiscoverable } from "@/lib/service-availability-server";
+import { resolveServiceAvailability } from "@/lib/service-availability";
 
 export const runtime = "nodejs";
 const text=(value)=>String(value||"").trim().toLowerCase();
@@ -32,11 +35,15 @@ export async function GET(request){
  try{
   await verifyAppCheckRequest(request,{required:false});
   const rate=await enforceRateLimit(request,{key:"public-search",limit:120,windowMs:60_000});
-  const url=new URL(request.url),query=String(url.searchParams.get("q")||"").trim(),queryTokens=words(query),country=String(url.searchParams.get("country")||"").trim().toUpperCase(),city=text(url.searchParams.get("city")),service=text(url.searchParams.get("service")),type=text(url.searchParams.get("type"));
+  const url=new URL(request.url),query=String(url.searchParams.get("q")||"").trim(),queryTokens=words(query),city=text(url.searchParams.get("city")),service=text(url.searchParams.get("service")),type=text(url.searchParams.get("type"));
+  const country=normalizeCountryCode(url.searchParams.get("country"))||countryForCity(city)?.country?.code||"";
   const max=Math.min(Math.max(Number(url.searchParams.get("limit")||40),1),80); const {db}=getAdminServices();
-  const [businessSnap,productSnap,branchSnap,showUnclaimed]=await Promise.all([db.collection("businesses").where("public","==",true).limit(700).get(),db.collection("products").where("published","==",true).limit(2000).get(),db.collection("branches").where("public","==",true).limit(1400).get(),unclaimedPublicationEnabled(db)]);
-  const firestoreBusinesses=businessSnap.docs.filter((doc)=>isMarketplaceDiscoverable(doc.data()) && canShowDirectoryRecord(doc.data(),showUnclaimed)).map((doc)=>publicBusinessRecord(doc.id,doc.data()));
-  const open=(showUnclaimed?queryOpenPlaces({country,city,q:query,service,limit:2500}).records:[]).map((item)=>publicBusinessRecord(item.id,item));
+  const [businessSnap,productSnap,branchSnap,showUnclaimed,settingsSnap]=await Promise.all([db.collection("businesses").where("public","==",true).limit(700).get(),db.collection("products").where("published","==",true).limit(2000).get(),db.collection("branches").where("public","==",true).limit(1400).get(),unclaimedPublicationEnabled(db),db.collection("platformSettings").doc("global").get()]);
+  const settings=settingsSnap.exists?settingsSnap.data()||{}:{};
+  if(service&&country)requireServiceDiscoverable(settings,{service,country,city});
+  const serviceVisible=(business)=>{const profile=marketplaceProfile(business);const c=normalizeCountryCode(business.country)||country;const localCity=business.city||city;if(!c||!["eat","shop","book","events"].includes(profile.service))return true;return resolveServiceAvailability(settings,{service:profile.service,country:c,city:localCity}).discoverable;};
+  const firestoreBusinesses=businessSnap.docs.filter((doc)=>isMarketplaceDiscoverable(doc.data()) && canShowDirectoryRecord(doc.data(),showUnclaimed)).map((doc)=>publicBusinessRecord(doc.id,doc.data())).filter(serviceVisible);
+  const open=(showUnclaimed?queryOpenPlaces({country,city,q:query,service,limit:2500}).records:[]).map((item)=>publicBusinessRecord(item.id,item)).filter(serviceVisible);
   const businesses=mergeCuratedWithFirestore(open,firestoreBusinesses).filter((business)=>(!country||String(business.country||"").toUpperCase()===country)&&(!city||!text(business.city)||text(business.city)===city)&&serviceMatches(service,business));
   const businessMap=new Map(businesses.map((business)=>[business.id,business]));
   const records=[];

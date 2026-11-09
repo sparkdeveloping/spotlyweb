@@ -35,7 +35,7 @@ test("Functions snapshot is exactly the canonical Spotly v1 contract", async () 
   ]);
   assert.equal(snapshot, canonical);
   const hash = createHash("sha256").update(snapshot).digest("hex");
-  assert.equal(hash, "753652a6e58d51dc05d11e10640e2b1adef67fe865e734b0c5af389ae735535a");
+  assert.equal(hash, "a1e3ea851048653f4be14f32024050d62af37bcee88c1055a969ffe7f76c5184");
 });
 
 test("trusted mutation foundation fails closed on auth, App Check and retries", async () => {
