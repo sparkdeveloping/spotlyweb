@@ -90,7 +90,7 @@ function ServiceTile({ service, onSelect, availability, city }) {
   const reduce = useReducedMotion();
   const identity = serviceIdentity(service.key);
   if (availability?.visible === false) return null;
-  const availabilityCopy = availability?.state === "preview" ? `Coming soon in ${city || "your city"}` : availability?.paused ? `Temporarily paused in ${city || "your city"}` : service.subtitle;
+  const availabilityCopy = availability?.previewGranted && availability?.publicDiscoverable === false ? "Operations preview" : availability?.state === "preview" ? `Coming soon in ${city || "your area"}` : availability?.paused ? `Temporarily paused in ${city || "your area"}` : service.subtitle;
   return <motion.button type="button" onClick={() => onSelect(service.key)} whileHover={reduce ? undefined : { y: -4 }} whileTap={reduce ? undefined : { scale: .985 }} data-service={service.key} className="experience-service-tile group" aria-label={`${identity.name}: ${availabilityCopy}`}>
     <span className="experience-service-name" aria-hidden="true">{identity.label}</span>
     <ServiceArtwork service={service.key} compact className="experience-tile-art" priority={service.key === "eat"} />
@@ -138,19 +138,27 @@ export function MarketplaceHome({
   onActivity,
   onSetup
 }) {
-  const readyNow = businessResults.filter(({ business }) => marketplaceTier(business) >= 3).slice(0, 8);
-  const nearby = businessResults.slice(0, 8);
-  const food = businessResults.filter(({ business }) => serviceMatchesBusiness("eat", business)).slice(0, 8);
-  const bookable = businessResults.filter(({ business }) => serviceMatchesBusiness("book", business)).slice(0, 8);
-  const events = businessResults.filter(({ business }) => serviceMatchesBusiness("events", business)).slice(0, 8);
-  const recent = recentBusinessIds.map((id) => businessResults.find(({ business }) => business.id === id)).filter(Boolean).slice(0, 6);
-  const interestMatches = businessResults.filter(({ business }) => interestMatchesBusiness(interests, business)).slice(0, 8);
+  const runtimeResults = businessResults.filter(({ business }) => {
+    const service = marketplaceProfile(business).service;
+    return service === "directory" || serviceAvailability[service]?.discoverable !== false;
+  });
+  const readyNow = runtimeResults.filter(({ business }) => {
+    const service = marketplaceProfile(business).service;
+    return marketplaceTier(business) >= 3 && serviceAvailability[service]?.transactable === true;
+  }).slice(0, 8);
+  const nearby = runtimeResults.slice(0, 8);
+  const food = serviceAvailability.eat?.discoverable === false ? [] : runtimeResults.filter(({ business }) => serviceMatchesBusiness("eat", business)).slice(0, 8);
+  const bookable = serviceAvailability.book?.discoverable === false ? [] : runtimeResults.filter(({ business }) => serviceMatchesBusiness("book", business)).slice(0, 8);
+  const events = serviceAvailability.events?.discoverable === false ? [] : runtimeResults.filter(({ business }) => serviceMatchesBusiness("events", business)).slice(0, 8);
+  const recent = recentBusinessIds.map((id) => runtimeResults.find(({ business }) => business.id === id)).filter(Boolean).slice(0, 6);
+  const interestMatches = runtimeResults.filter(({ business }) => interestMatchesBusiness(interests, business)).slice(0, 8);
   const activeOrder = orders.find((order) => activeStatuses.has(String(order.status || "").toLowerCase()));
   const completed = orders.filter((order) => completedStatuses.has(String(order.status || "").toLowerCase()));
-  const latestRepeat = completed.find((order) => order.businessId && businessResults.some(({ business }) => business.id === order.businessId));
-  const latestRepeatBusiness = latestRepeat ? businessResults.find(({ business }) => business.id === latestRepeat.businessId)?.business : null;
+  const latestRepeat = completed.find((order) => order.businessId && runtimeResults.some(({ business }) => business.id === order.businessId));
+  const latestRepeatBusiness = latestRepeat ? runtimeResults.find(({ business }) => business.id === latestRepeat.businessId)?.business : null;
   const firstName = profile?.displayName?.trim()?.split(/\s+/)[0];
   const trulyNew = !orders.length && !recentBusinessIds.length;
+  const locality = location.city || location.countryName || "your area";
 
   return <div className="pb-6">
     <ActiveAccessory order={activeOrder} onActivity={onActivity} />
@@ -160,11 +168,11 @@ export function MarketplaceHome({
         <div>
           <p className="experience-eyebrow">{trulyNew ? "Welcome to Spotly" : firstName ? `Good to see you, ${firstName}` : "Your city, in one place"}</p>
           <h1 id="home-title">Your city. <span>A little closer.</span></h1>
-          <p>Everyday plans, good finds and what comes next in {location.city}.</p>
+          <p>Everyday plans, good finds and what comes next in {locality}.</p>
         </div>
         {!onboardingComplete ? <button type="button" onClick={onSetup} className="experience-setup"><Sparkles className="h-4 w-4" />Make it yours<ChevronRight className="h-4 w-4" /></button> : null}
       </div>
-      <button type="button" onClick={onSearch} className="experience-home-search"><Search className="h-5 w-5" /><span>What are you looking for?</span><span className="experience-search-city"><MapPin className="h-4 w-4" />{location.city}</span><span className="experience-search-go" aria-hidden="true"><ArrowUpRight className="h-5 w-5" /></span></button>
+      <button type="button" onClick={onSearch} className="experience-home-search"><Search className="h-5 w-5" /><span>What are you looking for?</span><span className="experience-search-city"><MapPin className="h-4 w-4" />{locality}</span><span className="experience-search-go" aria-hidden="true"><ArrowUpRight className="h-5 w-5" /></span></button>
       <div className="experience-atlas-label"><h2>One Spotly. Your kind of day.</h2><span>Explore the services</span></div>
       <div className="experience-service-atlas">
         {["eat", "shop", "ride", "book", "events", "send"].map((key) => <ServiceTile key={key} service={MARKETPLACE_SERVICES.find((item) => item.key === key)} availability={serviceAvailability[key]} city={location.city} onSelect={onSelectService} />)}
@@ -180,7 +188,7 @@ export function MarketplaceHome({
     {readyNow.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title="Ready on Spotly" description="Services with active merchant commerce or explicitly enabled Assist — not just directory profiles" action="Explore" onAction={onSearch}/><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{readyNow.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness}/>)}</div></section> : null}
     {nearby.length ? <p className="mt-7 max-w-2xl text-xs leading-5 text-[var(--text-3)]">Spotly shows usable services first and independent city listings separately. Illustrative photographs are identified on the image.</p> : null}
 
-    {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Discover near you" : `Explore ${location.city}`} description={location.coordinates ? "Ranked by actual service readiness, then relevance and proximity" : "Verified and usable services first, followed by useful city listings"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
+    {nearby.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={location.coordinates ? "Discover near you" : `Explore ${locality}`} description={location.coordinates ? "Ranked by actual service readiness, then relevance and proximity" : "Verified and usable services first, followed by useful city listings"} action="Explore" onAction={onSearch} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{nearby.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
     {food.length ? <section className="mt-10 border-t border-[var(--border-subtle)] pt-7"><SectionHeader title={trulyNew ? "Start with food" : "Bite nearby"} action="Explore Bite" onAction={() => onSelectService("eat")} /><div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{food.map((item) => <MarketplaceRailCard key={item.business.id} item={item} onOpen={onOpenBusiness} />)}</div></section> : null}
 
@@ -191,8 +199,8 @@ export function MarketplaceHome({
 
     {!businessResults.length ? <section className="experience-city-state">
       <span className="experience-city-symbol" aria-hidden="true"><MapPin className="h-7 w-7" /></span>
-      <div><p className="experience-eyebrow">Growing around you</p><h2>A closer {location.city}, one place at a time.</h2><p>Published places and services will appear here as they become available. You can explore each service or search the city now.</p></div>
-      <button type="button" onClick={onSearch}>Explore {location.city}<ArrowUpRight className="h-4 w-4" /></button>
+      <div><p className="experience-eyebrow">Growing around you</p><h2>A closer {locality}, one place at a time.</h2><p>Published places and services will appear here as they become available. You can explore each available service or search this market now.</p></div>
+      <button type="button" onClick={onSearch}>Explore {locality}<ArrowUpRight className="h-4 w-4" /></button>
     </section> : null}
   </div>;
 }

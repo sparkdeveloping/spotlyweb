@@ -10,7 +10,7 @@
     "predev": "node scripts/firebase-project-preflight.mjs",
     "dev": "next dev",
     "prebuild": "node scripts/firebase-project-preflight.mjs && node --test tests/operations-override-framework.test.mjs tests/v9-assist-research-menu.test.mjs tests/maptiler-geocoding.test.mjs tests/ride-quote-preview-v9.test.mjs tests/mapmap-routing-v9.test.mjs tests/mobility-service-coverage.test.mjs tests/driver-v8-production.test.mjs tests/v9-cross-site-experience.test.mjs tests/ride-lab-distance-v9.test.mjs tests/v9-premium-ux.test.mjs tests/themenu-image-catalog-v9.test.mjs tests/admin-operations-v9.test.mjs tests/email-verification-v9.test.mjs tests/auth-session-stability-v9.test.mjs tests/nxt-auth-bootstrap.test.mjs tests/branding-kit.test.mjs tests/premium-experience-2026.test.mjs tests/spotly-curation-2026.test.mjs tests/book-live-artwork-release.test.mjs tests/business-photography.test.mjs tests/spotly-ordering.test.mjs tests/specific-catalogues.test.mjs",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "check:js": "node scripts/check-javascript.mjs",
@@ -44,21 +44,22 @@
     "countries:verify-snapshots": "node scripts/verify-country-snapshots.mjs",
     "services:generate": "node scripts/generate-service-availability-bindings.mjs",
     "services:check": "node --test tests/service-availability-engine.test.mjs tests/service-availability-control-plane.test.mjs",
-    "services:verify-snapshots": "node scripts/verify-service-availability-snapshots.mjs"
+    "services:verify-snapshots": "node scripts/verify-service-availability-snapshots.mjs",
+    "customer-web:check": "node --test tests/customer-web-runtime.test.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",
     "firebase": "12.16.0",
     "firebase-admin": "14.2.0",
     "framer-motion": "12.42.2",
+    "lottie-web": "5.12.2",
     "lucide-react": "1.25.0",
     "next": "16.2.10",
     "paynow": "2.2.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "server-only": "0.0.1",
-    "zod": "4.4.3",
-    "lottie-web": "5.12.2"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

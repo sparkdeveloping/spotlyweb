@@ -19,13 +19,18 @@ function navigate(event, handler, service) {
   handler(service);
 }
 
-export function ServiceSwitcher({ service, onSelectService, onHome }) {
+export function ServiceSwitcher({ service, onSelectService, onHome, serviceRuntime = null }) {
+  const entries = Object.entries(SERVICE_IDENTITIES).filter(([key]) => serviceRuntime?.[key]?.visible !== false);
   return <nav aria-label="Spotly services" className="experience-service-switcher no-scrollbar">
     <Link href="/" className="experience-service-home" onClick={(event) => navigate(event, onHome)}><ArrowLeft aria-hidden="true" className="h-4 w-4" /><span>Home</span></Link>
     <span className="experience-service-divider" aria-hidden="true" />
-    {Object.entries(SERVICE_IDENTITIES).map(([key, identity]) => <Link key={key} href={publicProductRoute(key)} aria-current={service === key ? "page" : undefined} data-service={key} onClick={(event) => navigate(event, onSelectService, key)}>
-      <ServiceGlyph service={key} className="h-4 w-4" />{identity.label}
-    </Link>)}
+    {entries.map(([key, identity]) => {
+      const decision = serviceRuntime?.[key];
+      const stateLabel = decision?.paused ? "Paused" : decision?.state === "preview" && !decision?.previewGranted ? "Coming soon" : "";
+      return <Link key={key} href={publicProductRoute(key)} aria-current={service === key ? "page" : undefined} data-service={key} title={stateLabel ? `${identity.label} · ${stateLabel}` : identity.label} onClick={(event) => navigate(event, onSelectService, key)}>
+        <ServiceGlyph service={key} className="h-4 w-4" />{identity.label}{stateLabel ? <span className="sr-only"> ({stateLabel})</span> : null}
+      </Link>;
+    })}
   </nav>;
 }
 

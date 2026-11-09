@@ -255,6 +255,7 @@ export async function GET(request) {
     const requestedLimit = Number(url.searchParams.get("limit") || 24);
     const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
     const itemLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 8), 48) : 24;
+    if (!country) return Response.json({ ok: true, service, businesses: [], items: [], totalBusinesses: 0, totalItems: 0, requiresLocation: true }, { headers: { "Cache-Control": "private, max-age=0", "X-RateLimit-Remaining": String(rate.remaining) } });
     const { db } = getAdminServices();
     const settingsSnapshot = await db.collection("platformSettings").doc("global").get();
     const platformSettings = settingsSnapshot.exists ? settingsSnapshot.data() || {} : {};
@@ -320,7 +321,11 @@ export async function GET(request) {
     }));
     const eligibleBusinesses = allBusinesses
       .filter((business) => matchesService(service, business))
-      .filter((business) => !country || String(business.country || "").toUpperCase() === country || (branchMap.get(business.id) || []).some((branch) => String(branch.country || "").toUpperCase() === country))
+      .filter((business) => {
+        const businessCountry = normalizeCountryCode(business.country) || countryForCity(business.city)?.country?.code || "";
+        const branchMatches = (branchMap.get(business.id) || []).some((branch) => (normalizeCountryCode(branch.country) || countryForCity(branch.city)?.country?.code || "") === country);
+        return businessCountry === country || branchMatches;
+      })
       .filter((business) => !city || !text(business.city) || text(business.city) === city || (branchMap.get(business.id) || []).some((branch) => text(branch.city) === city))
       .filter((business) => matchesArea(business, branchMap.get(business.id) || [], area))
       .map((business) => {
@@ -344,6 +349,7 @@ export async function GET(request) {
 
     const matchingBusinessIds = new Set(itemsAll.map((item) => item.businessId));
     const selectedAssist = independentCards.filter((business) =>
+      (normalizeCountryCode(business.country) || countryForCity(business.city)?.country?.code || "") === country &&
       (!city || text(business.city) === city) &&
       (!area || !text(business.area) || text(business.area) === area) &&
       (matchesQuery(business, query) || independentStores.some(({ public: store }) =>

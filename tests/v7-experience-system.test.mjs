@@ -38,7 +38,7 @@ test('V7 Home only claims repeat behavior from real completed history', () => {
   assert.doesNotMatch(source, /Search nearby/);
   assert.doesNotMatch(source, />Open ↗</);
   assert.doesNotMatch(source, /Search all of Spotly/);
-  assert.match(source, /Explore \$\{location\.city\}/);
+  assert.match(source, /Explore \{locality\}/);
   assert.match(source, /Based on your interests/);
 });
 

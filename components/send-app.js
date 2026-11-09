@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Banknote, Box, Camera, CheckCircle2, Clock3, CreditCard, LocateFixed, LoaderCircle, MapPin, Navigation, PackageCheck, Phone, RefreshCw, Search, ShieldCheck, Truck, X } from "lucide-react";
 import { AuthGate } from "@/components/auth-gate";
 import { CustomerShell } from "@/components/customer-shell";
+import { CustomerPageSkeleton } from "@/components/customer-loading";
 import { ServiceEntrance, ServiceSwitcher } from "@/components/service-identity";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
@@ -14,7 +15,8 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {PinDropMap,RoadRouteMap} from "@/components/mobility-map";
 import { useCountry } from "@/components/country-provider";
-import { resolveServiceAvailability, serviceUnavailableMessage } from "@/lib/service-availability";
+import { serviceUnavailableMessage } from "@/lib/service-availability";
+import { useCustomerRuntime } from "@/components/customer-runtime";
 
 const sizes = [
   { id: "small", label: "Small", note: "Documents or a small bag", icon: Box },
@@ -66,7 +68,7 @@ function ActiveSend({ parcel, onRefresh, onCancel, onPay }) {
 
 export function SendApp() {
   const { user, profile } = useAuth(); const { settings } = usePlatform(); const countryContext = useCountry(); const { toast } = useToast(); const [city,setCity]=useState(profile?.preferences?.preferredCity||profile?.city||""); const [country,setCountry]=useState(countryContext.countryCode||"");const [mapTarget,setMapTarget]=useState(null); const [pickup,setPickup]=useState(null); const [dropoff,setDropoff]=useState(null); const [pickupText,setPickupText]=useState(""); const [dropoffText,setDropoffText]=useState(""); const [parcelSize,setParcelSize]=useState("medium"); const [pickupMode,setPickupMode]=useState("now"); const [scheduledPickupAt,setScheduledPickupAt]=useState(""); const [scheduleBounds,setScheduleBounds]=useState({min:"",max:""}); const [quote,setQuote]=useState(null); const [paymentMethod,setPaymentMethod]=useState("cash"); const [activeParcel,setActiveParcel]=useState(null); const [history,setHistory]=useState([]); const [loading,setLoading]=useState(""); const [cancelTarget,setCancelTarget]=useState(null); const [cancelReason,setCancelReason]=useState(""); const [form,setForm]=useState({senderName:"",senderPhone:"",recipientName:"",recipientPhone:"",parcelDescription:"",estimatedWeightKg:"",instructions:"",declaredValue:"",ack:false});
-  const sendAvailability = useMemo(()=>resolveServiceAvailability(settings,{service:"send",country,city}),[settings,country,city]); const scheduledEnabled = settings?.mobility?.send?.scheduledEnabled !== false; const cashEnabled = settings?.mobility?.send?.cashEnabled !== false; const paynowEnabled = settings?.integrations?.paynowEnabled === true && (settings?.commerce?.paymentMethods || []).includes("paynow");
+  const customerRuntime = useCustomerRuntime({country,city}); const sendAvailability=customerRuntime.services.send; const scheduledEnabled = settings?.mobility?.send?.scheduledEnabled !== false; const cashEnabled = settings?.mobility?.send?.cashEnabled !== false; const paynowEnabled = settings?.integrations?.paynowEnabled === true && (settings?.commerce?.paymentMethods || []).includes("paynow");
   useEffect(()=>{setForm((f)=>({...f,senderName:f.senderName||profile?.displayName||user?.displayName||"",senderPhone:f.senderPhone||profile?.phone||user?.phoneNumber||""}));},[profile?.displayName,profile?.phone,user?.displayName,user?.phoneNumber]);
   useEffect(()=>{if(!countryContext.countryCode)return;setCountry(countryContext.countryCode);const allowed=countryContext.country?.cities?.some((item)=>item.name===city);if(!allowed)setCity(profile?.preferences?.preferredCity&&countryContext.country?.cities?.some((item)=>item.name===profile.preferences.preferredCity)?profile.preferences.preferredCity:"");},[countryContext.countryCode,countryContext.country,profile?.preferences?.preferredCity,city]);
   useEffect(()=>{const now=new Date();const offset=now.getTimezoneOffset()*60_000;const base=now.getTime();setScheduleBounds({min:new Date(base+20*60_000-offset).toISOString().slice(0,16),max:new Date(base+7*24*60*60_000-offset).toISOString().slice(0,16)});},[]);
@@ -84,7 +86,7 @@ export function SendApp() {
   function useCurrentPickup(){if(!navigator.geolocation)return toast("Location is not available on this device.",{type:"error"});setLoading("location");navigator.geolocation.getCurrentPosition(async pos=>{
       try{
        const data=await publicApiFetch(`/api/public/reverse-geocode?lat=${encodeURIComponent(pos.coords.latitude)}&lng=${encodeURIComponent(pos.coords.longitude)}`);
-       setPickup({...data.location,accuracy:pos.coords.accuracy});setPickupText(data.location.formattedAddress);setCountry(data.location.country||country);setCity(data.location.city||city);
+       setPickup({...data.location,accuracy:pos.coords.accuracy});setPickupText(data.location.formattedAddress);setCountry(countryContext.locked?countryContext.countryCode:(data.location.country||country));setCity(data.location.city||city);
       }catch(e){toast(e.message||"Choose a valid pickup address.",{type:"error"});}
       finally{setLoading("");}
      },()=>{setLoading("");toast("Turn on location access and try again.",{type:"error"});},{enableHighAccuracy:true,timeout:12000,maximumAge:15000});}
@@ -93,14 +95,15 @@ export function SendApp() {
   async function requestSend(){if(!quote||!pickup||!dropoff)return;if(quote.bookingAvailable!==true)return toast(quote.bookingReason||serviceUnavailableMessage(sendAvailability),{type:"error"});const required=[form.senderName,form.senderPhone,form.recipientName,form.recipientPhone,form.parcelDescription];if(required.some((v)=>String(v||"").trim().length<2)||!form.ack)return toast("Complete the sender, recipient, parcel and safety details.",{type:"error"});if(pickupMode==="scheduled"&&!scheduledPickupAt)return toast("Choose a scheduled pickup time.",{type:"error"});setLoading("request");try{const data=await authenticatedFetch("/api/customer/parcels",{method:"POST",body:JSON.stringify({action:"request",pickup,dropoff,parcelSize,paymentMethod,quotedTotal:quote.total,quotedCurrency:quote.currency,pickupMode,scheduledPickupAt:pickupMode==="scheduled"?new Date(scheduledPickupAt).toISOString():undefined,senderName:form.senderName.trim(),senderPhone:form.senderPhone.trim(),recipientName:form.recipientName.trim(),recipientPhone:form.recipientPhone.trim(),parcelDescription:form.parcelDescription.trim(),estimatedWeightKg:form.estimatedWeightKg?Number(form.estimatedWeightKg):undefined,instructions:form.instructions.trim(),declaredValue:form.declaredValue?Number(form.declaredValue):0,prohibitedAcknowledged:true})});const next=await authenticatedFetch(`/api/customer/parcels?parcelJobId=${encodeURIComponent(data.parcelJobId)}`,{cache:"no-store"});setActiveParcel(next.parcel);setQuote(null);toast(paymentMethod==="paynow"?"Send request created. Complete payment to confirm it.":pickupMode==="scheduled"?"Your Send pickup is scheduled.":"Your Send request is live.",{type:"success"});if(paymentMethod==="paynow")await pay(next.parcel);}catch(e){toast(e.message,{type:"error"});}finally{setLoading("");}}
   async function confirmCancel(){if(!cancelTarget||cancelReason.trim().length<3)return;setLoading("cancel");try{await authenticatedFetch("/api/customer/parcels",{method:"POST",body:JSON.stringify({action:"cancel",parcelJobId:cancelTarget.id,reason:cancelReason.trim()})});setCancelTarget(null);setCancelReason("");setActiveParcel(null);await load({quiet:true});toast("Send request cancelled.");}catch(e){toast(e.message,{type:"error"});}finally{setLoading("");}}
   if(activeParcel)return <CustomerShell immersive><ActiveSend parcel={activeParcel} onRefresh={()=>load({quiet:true})} onCancel={setCancelTarget} onPay={pay}/></CustomerShell>;
-  if(!sendAvailability.discoverable)return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
-    <ServiceSwitcher service="send" />
+  if(!customerRuntime.ready)return <CustomerPageSkeleton/>;
+  if(!sendAvailability.publicDiscoverable)return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
+    <ServiceSwitcher service="send" serviceRuntime={customerRuntime.services} />
     <div className="mt-5"><ServiceEntrance service="send" title="From here to their hands." description={serviceUnavailableMessage(sendAvailability,"discover")} status={sendAvailability.state==="preview"?"Coming soon":"Not available here yet"}>
       <div className="flex flex-wrap gap-3"><Button asChild><Link href="/">Explore Spotly</Link></Button><Button asChild variant="outline"><Link href="/support?topic=send">Ask about Send</Link></Button></div>
     </ServiceEntrance></div>
   </CustomerShell>;
   return <AuthGate portal="customer" title="Sign in to send a parcel"><CustomerShell current="home" user={user} profile={profile} locationLabel={city} mainClassName="max-w-[1180px]">
-    <ServiceSwitcher service="send" />
+    <ServiceSwitcher service="send" serviceRuntime={customerRuntime.services} />
     {!sendAvailability.transactable?<div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">{serviceUnavailableMessage(sendAvailability)||"Delivery estimates are available, but new Send requests are not open here yet."}</div>:null}
     <section className="mt-5 grid gap-8 pb-10 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
       <div>
@@ -110,7 +113,7 @@ export function SendApp() {
         <Button variant="outline" onClick={()=>setMapTarget("dropoff")}><MapPin className="h-4 w-4"/>Drop-off on map</Button></div>
        <PinDropMap open={Boolean(mapTarget)} country={country} initialPoint={mapTarget==="pickup"?pickup:dropoff}
         label={mapTarget==="pickup"?"Pin sender pickup":"Pin recipient drop-off"} onClose={()=>setMapTarget(null)}
-        onSelect={place=>{if(mapTarget==="pickup"){setPickup(place);setPickupText(place.formattedAddress);setCity(place.city);setCountry(place.country||country);}
+        onSelect={place=>{if(mapTarget==="pickup"){setPickup(place);setPickupText(place.formattedAddress);setCity(place.city);setCountry(countryContext.locked?countryContext.countryCode:(place.country||country));}
           else{setDropoff(place);setDropoffText(place.formattedAddress);}setQuote(null);}}/>
       </div>
         <section className="mt-8 border-t border-[var(--border-subtle)] pt-7"><p className="text-sm font-semibold">When should we collect it?</p><div className="mt-3 grid grid-cols-2 gap-3"><button type="button" onClick={()=>setPickupMode("now")} className={cn("rounded-[16px] border p-4 text-left",pickupMode==="now"?"border-[var(--accent)] bg-[var(--accent-soft)]":"border-[var(--border)] hover:bg-[var(--surface-hover)]")}><Clock3 className="h-5 w-5 text-[var(--accent)]"/><p className="mt-2 font-semibold">Now</p><p className="mt-1 text-xs text-[var(--text-3)]">Match a courier after request/payment</p></button>{scheduledEnabled?<button type="button" onClick={()=>setPickupMode("scheduled")} className={cn("rounded-[16px] border p-4 text-left",pickupMode==="scheduled"?"border-[var(--accent)] bg-[var(--accent-soft)]":"border-[var(--border)] hover:bg-[var(--surface-hover)]")}><Clock3 className="h-5 w-5 text-[var(--accent)]"/><p className="mt-2 font-semibold">Schedule</p><p className="mt-1 text-xs text-[var(--text-3)]">Up to 7 days ahead</p></button>:null}</div>{pickupMode==="scheduled"?<label className="mt-4 block text-sm font-medium">Pickup date and time<input type="datetime-local" className="field-control mt-2 w-full" value={scheduledPickupAt} min={scheduleBounds.min} max={scheduleBounds.max} onChange={(e)=>setScheduledPickupAt(e.target.value)}/></label>:null}</section>

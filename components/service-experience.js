@@ -266,6 +266,7 @@ export function ServiceDiscoveryView({
   service,
   location,
   availability = null,
+  serviceAvailability = {},
   currency,
   favorites = [],
   savedItems = [],
@@ -281,6 +282,7 @@ export function ServiceDiscoveryView({
   onActivity
 }) {
   const config = SERVICE_CONFIG[service] || SERVICE_CONFIG.eat;
+  const discoveryBlocked = Boolean(availability && (!availability.discoverable || availability.publicDiscoverable === false));
   const [query, setQuery] = useState("");
   const [feed, setFeed] = useState({ businesses: [], items: [], categories: [], facets: {}, totalBusinesses: 0, totalItems: 0, nextOffset: null });
   const [loading, setLoading] = useState(true);
@@ -303,7 +305,7 @@ export function ServiceDiscoveryView({
   useEffect(() => { track("service_view", { service, city: location.city || "", area_selected: Boolean(location.area) }); }, [service, location.city, location.area]);
 
   useEffect(() => {
-    if (availability && !availability.discoverable) {
+    if (discoveryBlocked) {
       setFeed({ businesses: [], items: [], categories: [], facets: {}, totalBusinesses: 0, totalItems: 0, nextOffset: null });
       setLoading(false);
       setError("");
@@ -326,7 +328,7 @@ export function ServiceDiscoveryView({
       }
     }, query ? 220 : 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [service, location.country, location.city, location.area, query, config.label, refreshKey, category, availability?.discoverable]);
+  }, [service, location.country, location.city, location.area, query, config.label, refreshKey, category, discoveryBlocked]);
 
   async function loadMore() {
     if (feed.nextOffset == null || loadingMore) return;
@@ -390,6 +392,13 @@ export function ServiceDiscoveryView({
   const hasInventory = feed.items.length > 0 || (feed.businesses.length > 0 && !assistBusinesses.length);
   const isFiltered = Boolean(query.trim() || category !== "all" || productDepartment !== "all" || filter !== "all");
 
+  if (availability?.previewGranted && availability.publicDiscoverable === false) return <div className="v7-page-enter experience-discovery pb-8" data-service={service}>
+    <ServiceEntrance service={service} title={config.title} description={`Operations preview for ${location.city || location.countryName || "this market"}. Public discovery is not published here yet.`}>
+      <div className="flex flex-wrap gap-3"><Button onClick={onHome}>Explore public services</Button><Button variant="outline" onClick={onLocation}>Change location</Button></div>
+    </ServiceEntrance>
+    <div className="mt-4 border-b border-[var(--border-subtle)] pb-4"><ServiceSwitcher service={service} serviceRuntime={serviceAvailability} onSelectService={onSelectService} onHome={onHome} /></div>
+  </div>;
+
   if (availability && !availability.discoverable) return <div className="v7-page-enter experience-discovery pb-8" data-service={service}>
     <ServiceEntrance service={service} title={config.title} description={availability.reason || (availability.state === "preview" ? `${config.label} is coming soon in ${location.city || "this area"}.` : `${config.label} is not available in ${location.city || "this area"}.`)}>
       <div className="flex flex-wrap gap-3"><Button onClick={onHome}>Explore Spotly</Button><Button variant="outline" onClick={onLocation}>Change city</Button></div>
@@ -404,7 +413,7 @@ export function ServiceDiscoveryView({
     </ServiceEntrance>
 
     <div className="mt-4 flex flex-col gap-3 border-b border-[var(--border-subtle)] pb-4 lg:flex-row lg:items-center lg:justify-between">
-      <ServiceSwitcher service={service} onSelectService={onSelectService} onHome={onHome} />
+      <ServiceSwitcher service={service} serviceRuntime={serviceAvailability} onSelectService={onSelectService} onHome={onHome} />
       <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-3)]">
         <button type="button" onClick={onLocation} className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 font-semibold transition hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"><MapPin className="h-3.5 w-3.5 text-[var(--accent)]" />{location.area || location.city || "Choose location"}</button>
         <span aria-hidden="true">·</span>

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Banknote, CarFront, CheckCircle2, ChevronRight, Clock3, CreditCard, LocateFixed, LoaderCircle, MapPin, Navigation, Phone, RefreshCw, Search, ShieldCheck, UsersRound, X } from "lucide-react";
 import { saveRideGuestDraft, consumeRideGuestDraft } from "@/lib/ride-guest-draft";
 import { CustomerShell } from "@/components/customer-shell";
+import { CustomerPageSkeleton } from "@/components/customer-loading";
 import { ServiceEntrance, ServiceSwitcher } from "@/components/service-identity";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
@@ -15,7 +16,8 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {PinDropMap,RoadRouteMap} from "@/components/mobility-map";
 import { validateOperationsRideLocations } from "@/lib/operations-run-validation";
-import { resolveServiceAvailability, serviceUnavailableMessage } from "@/lib/service-availability";
+import { serviceUnavailableMessage } from "@/lib/service-availability";
+import { useCustomerRuntime } from "@/components/customer-runtime";
 import { SPOTLY_COUNTRIES, countryDefinition } from "@/lib/country-engine";
 
 const rideTypes = [
@@ -144,7 +146,8 @@ export function RideApp() {
     const allowed = countryContext.country?.cities?.some((item) => item.name === city);
     if (!allowed) setCity(profile?.preferences?.preferredCity && countryContext.country?.cities?.some((item) => item.name === profile.preferences.preferredCity) ? profile.preferences.preferredCity : "");
   }, [countryContext.countryCode, countryContext.country, profile?.preferences?.preferredCity, city]);
-  const rideAvailability = useMemo(() => resolveServiceAvailability(settings, { service: "ride", country, city }), [settings, country, city]);
+  const customerRuntime = useCustomerRuntime({ country, city });
+  const rideAvailability = customerRuntime.services.ride;
   const [pickupText, setPickupText] = useState(""); const [dropoffText, setDropoffText] = useState(""); const [pickup, setPickup] = useState(null); const [dropoff, setDropoff] = useState(null);
   const [mapTarget,setMapTarget]=useState(null); const [serviceType, setServiceType] = useState("economy"); const [paymentMethod, setPaymentMethod] = useState("cash"); const [quote, setQuote] = useState(null); const [loading, setLoading] = useState(""); const [activeRide, setActiveRide] = useState(null); const [history, setHistory] = useState([]); const [cancelRide, setCancelRide] = useState(null); const [cancelReason, setCancelReason] = useState("");
   const operationsLocationValidation = validateOperationsRideLocations(pickup, dropoff);
@@ -157,11 +160,11 @@ export function RideApp() {
     setPickup(draft.pickup); setDropoff(draft.dropoff);
     setPickupText(draft.pickup.formattedAddress || draft.pickup.label || "");
     setDropoffText(draft.dropoff.formattedAddress || draft.dropoff.label || "");
-    setCountry(draft.pickup.country); setCity(draft.pickup.city || "");
+    setCountry(countryContext.locked ? countryContext.countryCode : draft.pickup.country); setCity(draft.pickup.city || "");
     setServiceType(draft.serviceType);
     setBookingStep(2); setQuote(null);
     setResumeNotice("Your pickup and destination are restored. See a fresh fare before confirming your ride.");
-  }, [authReady, user?.uid, user?.isAnonymous]);
+  }, [authReady, user?.uid, user?.isAnonymous, countryContext.locked, countryContext.countryCode]);
   function continueToAccount(mode = "signin") {
     if (pickup && dropoff) saveRideGuestDraft(window.sessionStorage, { pickup, dropoff, serviceType });
     window.location.assign("/login?portal=customer&mode=" + encodeURIComponent(mode) + "&next=%2Fride");
@@ -182,7 +185,7 @@ export function RideApp() {
        const verified=await publicApiFetch(`/api/public/reverse-geocode?lat=${encodeURIComponent(position.coords.latitude)}&lng=${encodeURIComponent(position.coords.longitude)}`);
        setPickup({...verified.location,accuracy:position.coords.accuracy});setQuote(null);
        setPickupText(verified.location.formattedAddress);
-       setCity(verified.location.city);setCountry(verified.location.country);
+       setCity(verified.location.city);setCountry(countryContext.locked ? countryContext.countryCode : verified.location.country);
       }catch(e){toast(e.message||"Select your pickup address from search.",{type:"error"});}
       finally{setLoading("");}
      }, () => { setLoading(""); toast("Turn on location access and try again.", { type: "error" }); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 });
@@ -205,8 +208,10 @@ export function RideApp() {
 
   if (activeRide) return <CustomerShell immersive><ActiveRide ride={activeRide} onRefresh={() => load({ quiet: true })} onCancel={setCancelRide} /></CustomerShell>;
 
+  if (!customerRuntime.ready) return <CustomerPageSkeleton />;
+
   if (!rideAvailability.discoverable && !operationsAllowed) return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
-    <ServiceSwitcher service="ride" />
+    <ServiceSwitcher service="ride" serviceRuntime={customerRuntime.services} />
     <div className="mt-5"><ServiceEntrance service="ride" title={`Ride in ${city || "your city"}`} description={serviceUnavailableMessage(rideAvailability, "discover")} status={rideAvailability.state === "preview" ? "Coming soon" : "Not available here"}>
       <div className="flex flex-wrap gap-3"><Button asChild><Link href="/">Explore Spotly</Link></Button><Button asChild variant="outline"><Link href="/support?topic=ride">Ask about Ride</Link></Button></div>
     </ServiceEntrance></div>
@@ -216,7 +221,7 @@ export function RideApp() {
   return <CustomerShell current="home" user={user} profile={profile} locationLabel={city} mainClassName="max-w-[1180px]">
       {resumeNotice && <p role="status" className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] p-4 text-sm text-[var(--text)]">{resumeNotice}</p>}
       {!rideAvailability.transactable ? <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-secondary">{serviceUnavailableMessage(rideAvailability) || "Fare preview only. Ride booking is not accepting requests here yet."}</div> : null}
-      <ServiceSwitcher service="ride" />
+      <ServiceSwitcher service="ride" serviceRuntime={customerRuntime.services} />
       <section className="mx-auto mt-5 grid max-w-3xl gap-6 pb-10">
         <div>
           <ServiceEntrance service="ride" compact title="Where to?" description="Choose your pickup and destination. See the estimate before requesting a Driver." />
@@ -234,9 +239,13 @@ export function RideApp() {
             <div><h2 className="text-2xl font-semibold tracking-tight">Where should your Driver meet you?</h2><p className="mt-1 text-sm text-secondary">Search an address or use the map to confirm one exact pickup point.</p></div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-xs font-semibold uppercase">Country
-                <select className="field-control mt-2 h-12 w-full" value={country} onChange={e=>{
+                <select className="field-control mt-2 h-12 w-full" value={country} disabled={countryContext.locked} onChange={async e=>{
                   const next=e.target.value;setCountry(next);setCity("");
                   setPickup(null);setDropoff(null);setPickupText("");setDropoffText("");setQuote(null);
+                  if(next && next !== countryContext.countryCode){
+                    try{await countryContext.selectCountry(next,{preferredCity:"",source:"manual"});}
+                    catch(error){toast(error.message||"Country could not be changed.",{type:"error"});}
+                  }
                 }}><option value="">Choose country</option>{SPOTLY_COUNTRIES.map((item)=><option key={item.code} value={item.code}>{item.name}</option>)}</select>
               </label>
               <label className="block text-xs font-semibold uppercase">City
@@ -262,7 +271,7 @@ export function RideApp() {
           <PinDropMap open={Boolean(mapTarget)} label={mapTarget==="pickup"?"Confirm pickup location":"Confirm destination location"} country={country}
             initialPoint={mapTarget==="pickup"?pickup:dropoff} onClose={()=>setMapTarget(null)}
             onSelect={place=>{
-              if(mapTarget==="pickup"){setPickup(place);setPickupText(place.formattedAddress);setCity(place.city);}
+              if(mapTarget==="pickup"){setPickup(place);setPickupText(place.formattedAddress);setCity(place.city);setCountry(countryContext.locked ? countryContext.countryCode : (place.country||country));}
               else {setDropoff(place);setDropoffText(place.formattedAddress);}
               setQuote(null);
             }}/>

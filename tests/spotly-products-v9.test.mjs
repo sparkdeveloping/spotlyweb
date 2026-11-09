@@ -17,7 +17,8 @@ test("Brand names are cohesive while internal commerce service IDs stay unchange
   assert.ok(read("next.config.mjs").includes("source:\""+old+"\",destination:\""+route+"\""));
   const page=read("app/"+route.slice(1)+"/page.js");
   assert.ok(page.includes('initialService="'+id+'"'));
-  assert.ok(page.includes('canonical:"'+route+'"'));
+  assert.ok(page.includes('alternates: { canonical: "'+route+'" }'));
+  assert.ok(page.includes('getPublicServiceSeo'));
  }
 });
 test("Homepage, city URLs and sitemap use public product names",()=>{
@@ -26,7 +27,11 @@ test("Homepage, city URLs and sitemap use public product names",()=>{
  const app=read("components/marketplace-app.js");
  const sitemap=read("app/sitemap.js");
  for(const term of ['label: "Bite"','label: "Shopper"','label: "Live"'])assert.ok(home.includes(term));
- for(const term of ['bite:"eat"','shopper:"shop"','live:"events"'])assert.ok(city.includes(term));
+ assert.ok(city.includes('resolveCanonicalCityRoute'));
+ assert.ok(city.includes('route.serviceSlug'));
+ assert.ok(city.includes('route.country.code'));
  assert.ok(app.includes("publicProductRoute(nextService)"));
- for(const path of ["/bite","/shopper","/live"])assert.ok(sitemap.includes(path));
+ assert.ok(sitemap.includes('getPublicCustomerSitemapRoutes'));
+ assert.ok(sitemap.includes('runtimeRoutes.serviceRoutes'));
+ assert.ok(sitemap.includes('runtimeRoutes.cityRoutes'));
 });

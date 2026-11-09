@@ -16,12 +16,14 @@ import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { deleteSavedItem, loadPublicMarketplaceBusiness, saveFavorite, saveSavedItem, saveUserPreferences, searchLiveBusinesses, searchSpotly, subscribeCustomerOrders, subscribeFavorites, subscribeSavedItems, track } from "@/lib/firebase-services";
 import { cn } from "@/lib/cn";
 import {publicProductRoute} from "@/lib/spotly-products";
+import { serviceIdentity } from "@/lib/service-identity";
 import { formatCurrency } from "@/lib/format";
 import { businessArchetype } from "@/data/business-archetypes";
 import { migrateLegacyState, readState, removeState, writeState } from "@/lib/browser-state";
 import { branchAcceptedCurrencies, branchPaymentMethods, pickupAvailability } from "@/lib/pickup-availability";
-import { countryDefinition, countryForCity } from "@/lib/country-engine";
-import { resolveServiceAvailabilitySet } from "@/lib/service-availability";
+import { countryCity, countryDefinition, countryForCity, normalizeCountryCode } from "@/lib/country-engine";
+import { customerServiceDecision } from "@/lib/customer-runtime";
+import { useCustomerRuntime } from "@/components/customer-runtime";
 import { useCountry } from "@/components/country-provider";
 import { LottieEmptyState, SpotlyLottie } from "@/components/spotly-lottie";
 import { resolveProductForBranch } from "@/lib/product-offers";
@@ -96,9 +98,16 @@ function MarketplaceLoading() {
   return <div className="min-h-screen bg-[var(--background)]" aria-busy="true" aria-label="Loading Spotly"><div className="border-b border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto flex h-[72px] max-w-[1320px] items-center gap-4 px-4 sm:px-6 lg:px-8"><div className="v7-skeleton h-9 w-24 rounded-[12px]" /><div className="v7-skeleton hidden h-11 w-[300px] rounded-[12px] lg:block" /><div className="ml-auto flex gap-2"><div className="v7-skeleton hidden h-10 w-24 rounded-[12px] sm:block" /><div className="v7-skeleton h-10 w-10 rounded-[12px]" /><div className="v7-skeleton h-10 w-10 rounded-[12px]" /></div></div></div><main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8"><div className="v7-skeleton h-4 w-32 rounded-full" /><div className="v7-skeleton mt-4 h-12 w-[60%] max-w-xl rounded-[12px]" /><div className="mt-7 grid gap-3 lg:grid-cols-[1.15fr_.85fr]"><div className="v7-skeleton min-h-[292px] rounded-[24px]" /><div className="grid grid-cols-2 gap-3">{[0,1,2,3].map((item) => <div key={item} className="v7-skeleton min-h-[132px] rounded-[24px]" />)}</div></div></main></div>;
 }
 
-function LocationControl({ value, cities, supportedAreas, onChange, onLocate, locating }) {
+function LocationControl({ value, countries = [], countryCode, cities, supportedAreas, onCountryChange, onChange, onLocate, locating, countryLocked = false }) {
   const areas = supportedAreas?.[value.city] || [];
-  return <div className="space-y-5"><div><p className="text-sm font-semibold">City</p><EntityPicker value={value.city} onChange={(city) => onChange({ ...value, city, area: "", coordinates: null })} options={cities.map((city) => ({ value: city, label: city, description: "Spotly city" }))} title="Choose your city" searchPlaceholder="Search cities" allowClear={false} className="mt-2" /></div><div><p className="text-sm font-semibold">Area or suburb</p>{areas.length ? <EntityPicker value={value.area} onChange={(area) => onChange({ ...value, area })} options={[{ value: "", label: `All areas in ${value.city}`, description: "Show the whole city" }, ...areas.map((area) => ({ value: area, label: area, description: value.city }))]} title={`Choose an area in ${value.city}`} searchPlaceholder="Search areas" allowClear={false} className="mt-2" /> : <input className="field-control mt-2 h-12 w-full" value={value.area} onChange={(event) => onChange({ ...value, area: event.target.value })} placeholder={`Area or suburb in ${value.city}`} />}</div><div className="border-t border-[var(--border-subtle)] pt-4"><Button variant="outline" onClick={onLocate} loading={locating}><LocateFixed className="h-4 w-4" />Use my current location</Button><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Precise location lets Spotly say “near you” honestly. Otherwise discovery stays city-level.</p></div></div>;
+  const countryOptions = countries.map((country) => ({ value: country.code, label: country.name, description: country.code }));
+  const areaLabel = value.city || "this country";
+  return <div className="space-y-5">
+    <div><p className="text-sm font-semibold">Country</p><EntityPicker value={countryCode || ""} onChange={onCountryChange} options={countryOptions} title="Choose your country" searchPlaceholder="Search countries" allowClear={false} disabled={countryLocked} className="mt-2" />{countryLocked ? <p className="mt-2 text-xs text-[var(--text-3)]">This account’s country is managed by Spotly Operations.</p> : null}</div>
+    <div><p className="text-sm font-semibold">City</p><EntityPicker value={value.city} onChange={(city) => onChange({ ...value, city, area: "", coordinates: null })} options={cities.map((city) => ({ value: city, label: city, description: countryOptions.find((item) => item.value === countryCode)?.label || "Spotly city" }))} title="Choose your city" searchPlaceholder="Search cities" allowClear className="mt-2" /></div>
+    <div><p className="text-sm font-semibold">Area or suburb</p>{areas.length ? <EntityPicker value={value.area} onChange={(area) => onChange({ ...value, area })} options={[{ value: "", label: `All areas in ${areaLabel}`, description: "Show the whole city" }, ...areas.map((area) => ({ value: area, label: area, description: value.city }))]} title={`Choose an area in ${areaLabel}`} searchPlaceholder="Search areas" allowClear={false} className="mt-2" /> : <input className="field-control mt-2 h-12 w-full" value={value.area} onChange={(event) => onChange({ ...value, area: event.target.value })} placeholder={value.city ? `Area or suburb in ${value.city}` : "Choose a city or enter an area"} />}</div>
+    <div className="border-t border-[var(--border-subtle)] pt-4"><Button variant="outline" onClick={onLocate} loading={locating}><LocateFixed className="h-4 w-4" />Use my current location</Button><p className="mt-2 text-xs leading-5 text-[var(--text-3)]">Precise location suggests the correct Spotly country and improves nearby results. You stay in control of the selected country.</p></div>
+  </div>;
 }
 
 function BusinessVisual({ business, sizes = "(max-width: 768px) 100vw, 420px", priority = false }) {
@@ -609,14 +618,9 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const requestedBusiness = searchParams.get("business") || initialBusinessId;
   const requestedOffer = searchParams.get("offer") || initialOfferId;
   const requestedService = searchParams.get("service");
-  const launchCities = settings.launch?.launchCities?.length ? settings.launch.launchCities : [];
-  const configuredPrimaryCity = settings.launch?.primaryCity || "";
-  const defaultCity = initialCity && launchCities.includes(initialCity)
-    ? initialCity
-    : configuredPrimaryCity && (!launchCities.length || launchCities.includes(configuredPrimaryCity))
-      ? configuredPrimaryCity
-      : launchCities[0] || "";
-  const defaultLocation = { city: defaultCity, area: "", radiusKm: 20, coordinates: null };
+  const routeCountryCode = initialCity ? countryForCity(initialCity)?.country?.code || "" : "";
+  const initialPreferredCity = initialCity || profile?.preferences?.preferredCity || "";
+  const defaultLocation = { city: initialPreferredCity, area: "", radiusKm: 20, coordinates: null };
 
   const [location, setLocation] = useState(defaultLocation);
   const [locating, setLocating] = useState(false);
@@ -666,6 +670,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [onboardingInterests, setOnboardingInterests] = useState([]);
+  const customerRuntime = useCustomerRuntime({ country: routeCountryCode, city: location.city });
+  const availabilityCountry = customerRuntime.countryCode || countryContext.countryCode || countryForCity(location.city)?.country?.code || "";
+  const serviceAvailability = customerRuntime.services;
+  const canonicalCities = (countryDefinition(availabilityCountry)?.cities || []).map((city) => city.name);
+  const locationWithCountry = useMemo(() => ({ ...location, country: availabilityCountry, countryName: countryDefinition(availabilityCountry)?.name || "" }), [location, availabilityCountry]);
 
   useEffect(() => {
     const update = () => setOnline(typeof navigator === "undefined" ? true : navigator.onLine !== false);
@@ -696,8 +705,13 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }
 
   async function completeOnboarding(values) {
-    const nextCity = launchCities.includes(values.city) ? values.city : location.city;
-    setLocation((current) => ({ ...current, city: nextCity, area: "" }));
+    const selectedCity = countryForCity(values.city);
+    const nextCountryCode = normalizeCountryCode(values.countryCode) || selectedCity?.country?.code || availabilityCountry;
+    const nextCity = selectedCity?.city?.name || countryCity(nextCountryCode, values.city)?.name || location.city;
+    if (nextCountryCode && nextCountryCode !== countryContext.countryCode && !countryContext.locked) {
+      try { await countryContext.selectCountry(nextCountryCode, { preferredCity: nextCity, source: "onboarding" }); } catch {}
+    }
+    setLocation((current) => ({ ...current, city: nextCity, area: "", coordinates: null }));
     if (typeof window !== "undefined") {
       window.localStorage.setItem("spotly-onboarding-v7-complete", "1");
       window.localStorage.setItem("spotly-onboarding-v7-profile", JSON.stringify({ city: nextCity, interests: values.interests || [], home: values.home || "", work: values.work || "" }));
@@ -722,9 +736,6 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   }
 
   const maintenance = settings.launch?.publicMode === "maintenance";
-  const availabilityCountry = countryContext.countryCode || countryForCity(location.city)?.country?.code || "";
-  const serviceAvailability = useMemo(() => Object.fromEntries(resolveServiceAvailabilitySet(settings, { country: availabilityCountry, city: location.city }).map((decision) => [decision.service, decision])), [settings, availabilityCountry, location.city]);
-  const locationWithCountry = useMemo(() => ({ ...location, country: availabilityCountry }), [location, availabilityCountry]);
 
   function routeFor(params) {
     const queryString = params.toString();
@@ -796,6 +807,17 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setRecentBusinessIds(readState(RECENT_BUSINESS_KEY, user, [], "local"));
   }, [user]);
 
+  useEffect(() => {
+    if (routeCountryCode || !countryContext.ready || !availabilityCountry) return;
+    setLocation((current) => {
+      if (!current.city) return current;
+      const canonical = countryCity(availabilityCountry, current.city);
+      if (canonical) return canonical.name === current.city ? current : { ...current, city: canonical.name };
+      const preferred = countryCity(availabilityCountry, profile?.preferences?.preferredCity);
+      return { ...current, city: preferred?.name || "", area: "", coordinates: null };
+    });
+  }, [routeCountryCode, countryContext.ready, availabilityCountry, profile?.preferences?.preferredCity]);
+
   useEffect(() => { writeState(CART_KEY, user, cart); }, [cart, user]);
   useEffect(() => { writeState(LOCATION_KEY, user, location); }, [location, user]);
   useEffect(() => {
@@ -809,7 +831,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setLoadError("");
     const timer = window.setTimeout(async () => {
       try {
-        const result = await searchLiveBusinesses(query, 100, { city: location.city });
+        const result = await searchLiveBusinesses(query, 100, { country: availabilityCountry, city: location.city });
         if (active) {
           setBusinesses(result);
           setLoadError("");
@@ -821,7 +843,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       }
     }, query ? 250 : 0);
     return () => { active = false; clearTimeout(timer); };
-  }, [location.city, query, reloadKey]);
+  }, [availabilityCountry, location.city, query, reloadKey]);
 
   useEffect(() => {
     let active = true;
@@ -913,7 +935,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       setSearchLoading(true);
       setSearchError("");
       try {
-        const result = await searchSpotly(term, 60, { city: location.city, service });
+        const result = await searchSpotly(term, 60, { country: availabilityCountry, city: location.city, service });
         if (!active) return;
         setSearchResults(result.results || []);
         setSearchCounts(result.counts || {});
@@ -928,7 +950,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       }
     }, 220);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [view, query, location.city, service]);
+  }, [view, query, availabilityCountry, location.city, service]);
   useEffect(() => {
     if (!requestedOrder || view !== "activity" || !orders.length) return;
     const match = orders.find((order) => order.id === requestedOrder);
@@ -964,7 +986,9 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
 
   const selectedArchetype = useMemo(() => businessArchetype(selected || {}), [selected]);
   const selectedService = selected ? marketplaceProfile(selected).service : service;
-  const selectedServiceDecision = selectedService ? serviceAvailability[selectedService] : null;
+  const selectedScopeCity = selectedBranch?.city || selected?.city || location.city;
+  const selectedScopeCountry = normalizeCountryCode(selectedBranch?.country || selected?.country) || countryForCity(selectedScopeCity)?.country?.code || availabilityCountry;
+  const selectedServiceDecision = selectedService ? customerServiceDecision(settings, { service: selectedService, country: selectedScopeCountry, city: selectedScopeCity, grants: customerRuntime.grants }) : null;
   const selectedIsPickup = selectedArchetype.capabilities.includes("pickup_orders");
   const locationNoun = selectedArchetype.nouns.branch;
   const branchProducts = useMemo(() => products.filter((product) => !product.branchIds?.length || !selectedBranchId || product.branchIds.includes(selectedBranchId)).map((product) => resolveProductForBranch(product, selectedBranchId)), [products, selectedBranchId]);
@@ -1006,6 +1030,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
       return;
     }
     setLocating(true);
+    countryContext.suggestFromCurrentLocation().catch(() => null);
     navigator.geolocation.getCurrentPosition((position) => {
       setLocation((value) => ({ ...value, coordinates: { lat: position.coords.latitude, lng: position.coords.longitude } }));
       setLocating(false);
@@ -1113,7 +1138,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     await toggleSavedResult({
       ...product, type, entityId: product.id, businessId: selected?.id || product.businessId,
       title: product.name, subtitle: [selected?.name, product.category].filter(Boolean).join(" · "),
-      href: selected?.id ? `/?business=${selected.id}&offer=${product.id}` : ""
+      href: product?.id ? `/item/${encodeURIComponent(product.id)}` : selected?.id ? `/place/${encodeURIComponent(selected.id)}` : ""
     });
   }
 
@@ -1249,12 +1274,12 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setPendingBranchId("");
   }
 
-  if (!authReady || !settingsReady) return <MarketplaceLoading />;
-  if (maintenance) return <MarketplaceGate user={user} profile={profile} locationLabel={location.area || location.city} />;
+  if (!authReady || !settingsReady || !customerRuntime.ready) return <MarketplaceLoading />;
+  if (maintenance) return <MarketplaceGate user={user} profile={profile} locationLabel={location.area || location.city || customerRuntime.country?.name || "Choose location"} />;
 
   const serviceDecision = service ? serviceAvailability[service] : null;
   const serviceUnavailable = Boolean(service && serviceDecision && !serviceDecision.discoverable);
-  const serviceLabel = service ? service[0].toUpperCase() + service.slice(1) : "Spotly";
+  const serviceLabel = service ? serviceIdentity(service).label : "Spotly";
 
   return <CustomerShell
     current={selected ? "home" : (["search", "activity", "saved"].includes(view) ? view : "home")}
@@ -1267,7 +1292,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     onSaved={() => updateUrl("saved", { business: null, order: null, service: null })}
     onLocation={() => setLocationOpen((value) => !value)}
     activityCount={activityGroups.problem.length + activityGroups.active.length + activityGroups.upcoming.length}
-    locationPanel={locationOpen ? <div className="border-t border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8"><LocationControl value={location} cities={launchCities} supportedAreas={settings.launch?.supportedAreas} onChange={setLocation} onLocate={locate} locating={locating} /></div></div> : null}
+    locationPanel={locationOpen ? <div className="border-t border-[var(--border-subtle)] bg-[var(--surface)]"><div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8"><LocationControl value={location} countries={countryContext.countries} countryCode={availabilityCountry} countryLocked={countryContext.locked || Boolean(routeCountryCode)} cities={canonicalCities} supportedAreas={settings.launch?.supportedAreas} onCountryChange={async (nextCountry) => { if (!nextCountry || nextCountry === availabilityCountry) return; try { await countryContext.selectCountry(nextCountry, { source: "manual" }); setLocation((current) => ({ ...current, city: "", area: "", coordinates: null })); } catch (error) { toast(error.message, { type: "error" }); } }} onChange={setLocation} onLocate={locate} locating={locating} /></div></div> : null}
   >
 
     <div className="v7-page-enter">
@@ -1340,7 +1365,8 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
           onOpenResult={openSearchResult}
           onSaveResult={toggleSavedResult}
           isSaved={isSavedResult}
-          location={location}
+          location={locationWithCountry}
+          serviceAvailability={serviceAvailability}
           onLocation={() => setLocationOpen(true)}
           service={service}
           serviceLabel={serviceLabel}
@@ -1360,7 +1386,7 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
           loginHref={`/login?next=${encodeURIComponent(`${basePath || "/"}?view=saved`)}`}
         />
       ) : (
-        ["eat", "shop", "book", "events"].includes(service) ? <ServiceDiscoveryView key={service} service={service} location={locationWithCountry} availability={serviceDecision} currency={currency} favorites={favorites} savedItems={savedItems} orders={orders} onOpenBusiness={openBusiness} onOpenItem={openSearchResult} onToggleFavorite={toggleFavorite} onToggleSaved={toggleSavedResult} onHome={openHome} onSelectService={enterService} onSearchAll={openSearch} onLocation={() => setLocationOpen(true)} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} /> : <div>
+        ["eat", "shop", "book", "events"].includes(service) ? <ServiceDiscoveryView key={service} service={service} location={locationWithCountry} availability={serviceDecision} serviceAvailability={serviceAvailability} currency={currency} favorites={favorites} savedItems={savedItems} orders={orders} onOpenBusiness={openBusiness} onOpenItem={openSearchResult} onToggleFavorite={toggleFavorite} onToggleSaved={toggleSavedResult} onHome={openHome} onSelectService={enterService} onSearchAll={openSearch} onLocation={() => setLocationOpen(true)} onActivity={() => updateUrl("activity", { business: null, order: null, service: null })} /> : <div>
           <ServiceModeHeader service={service} location={locationWithCountry} serviceAvailability={serviceAvailability} onSelectService={enterService} onExit={openHome} onSearch={openSearch} />
           {serviceUnavailable ? <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-6 sm:p-8"><div className="max-w-2xl"><p className="text-sm font-semibold text-[var(--accent)]">Opening area by area</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">{serviceLabel} is not accepting requests here yet.</h2><p className="mt-3 text-sm leading-7 text-[var(--text-2)]">We will only switch this on when the matching driver operations, safety support, and local availability are ready. You can keep using Spotly’s live marketplace in the meantime.</p><div className="mt-5 flex flex-wrap gap-3"><Button onClick={openHome}>Explore Spotly</Button><Button variant="outline" asChild><Link href="/support">Get support</Link></Button></div></div></section> : <section className="mt-5 rounded-[24px] bg-[var(--surface)] p-5 sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-[var(--accent)]">{serviceLabel} in {location.area || location.city}</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.035em]">Available nearby</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-2)]">Choose a verified business to see its exact locations, published offerings, prices, and availability.</p></div><p className="text-sm text-[var(--text-3)]">{shownBusinesses.length} available</p></div>{loading ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true">{[0,1,2,3,4,5].map((item) => <div key={item} className="overflow-hidden rounded-[16px] border border-[var(--border-subtle)]"><div className="v7-skeleton aspect-[16/10] w-full rounded-none"/><div className="p-5"><div className="v7-skeleton h-5 w-2/3 rounded-[10px]"/><div className="v7-skeleton mt-3 h-4 w-1/2 rounded-[10px]"/><div className="v7-skeleton mt-5 h-4 w-full rounded-[10px]"/></div></div>)}</div> : shownBusinesses.length ? <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{shownBusinesses.map(({ business, distance }) => <BusinessCard key={business.id} business={business} distance={distance} favorite={favorites.includes(business.id)} onFavorite={toggleFavorite} onOpen={openBusiness} />)}</div> : <LottieEmptyState className="mt-6" name="search-nearby" title={`No ${serviceLabel.toLowerCase()} businesses are live here yet`} description={`Try another area or use Search to browse everything currently available in ${location.city}.`} action={<Button onClick={openSearch}>Search Spotly</Button>} />}</section>}
         </div>
@@ -1380,6 +1406,6 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     <Modal open={Boolean(cancelTarget)} onClose={() => { if (!cancelling) { setCancelTarget(null); setCancelReason(""); } }} title="Cancel this activity?" description="Spotly will release any held availability when cancellation is still allowed." size="sm"><div className="p-5"><label className="block text-sm font-medium">Reason<textarea className="field-control mt-2 min-h-24 w-full" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Tell the business why you are cancelling" /></label><p className="mt-3 text-xs leading-5 text-[var(--text-3)]">Paid activity cannot be cancelled here. Use support if a payment has already been captured.</p><div className="mt-5 flex gap-3"><Button className="flex-1" variant="outline" disabled={cancelling} onClick={() => { setCancelTarget(null); setCancelReason(""); }}>Keep it</Button><Button className="flex-1" loading={cancelling} onClick={cancelActivity}>Cancel activity</Button></div></div></Modal>
     <OfferDetailModal product={selectedOffer} open={Boolean(selectedOffer)} onClose={closeOffer} currency={currency} archetype={selectedArchetype} quantity={selectedOffer ? (cart[selectedOffer.id] || 0) : 0} onQuantityChange={changeQuantity} onBook={startTransaction} branch={selectedBranch} saved={selectedOffer ? savedItems.some((item) => item.type === savedTypeForProduct(selectedOffer) && item.entityId === selectedOffer.id) : false} onSave={toggleSavedProduct} />
     <CustomerTransactionModal open={Boolean(transactionOffer)} onClose={() => setTransactionOffer(null)} product={transactionOffer} business={selected} branches={branches} selectedBranchId={selectedBranchId} currency={currency} user={user} profile={profile} archetype={selectedArchetype} onComplete={(order) => { track("booking_created", { order_id: order.orderId || "", business_id: selected?.id || "", branch_id: selectedBranchId || "", transaction_type: order.transactionType || selectedArchetype.id }); }} />
-    <CustomerOnboarding open={onboardingOpen} cities={launchCities} initialCity={location.city} signedIn={Boolean(user?.uid && !user.isAnonymous)} onClose={dismissOnboarding} onComplete={completeOnboarding} onLocate={locate} locating={locating} />
+    <CustomerOnboarding open={onboardingOpen} countries={countryContext.countries} countryCode={availabilityCountry} cities={canonicalCities} initialCity={location.city} serviceAvailability={serviceAvailability} signedIn={Boolean(user?.uid && !user.isAnonymous)} onClose={dismissOnboarding} onComplete={completeOnboarding} onLocate={locate} locating={locating} />
   </CustomerShell>;
 }

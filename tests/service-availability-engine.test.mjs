@@ -96,7 +96,8 @@ test("new customer transactions are enforced by the service engine at every back
   }
   assert.doesNotMatch(source("lib/ride-server.js"), /if\s*\(!config\.enabled\)/);
   assert.doesNotMatch(source("lib/parcel-server.js"), /if\s*\(!config\.enabled\)/);
-  for (const path of ["components/marketplace-app.js", "components/ride-app.js", "components/send-app.js"]) assert.match(source(path), /resolveServiceAvailability/, path);
+  for (const path of ["components/marketplace-app.js", "components/ride-app.js", "components/send-app.js"]) assert.match(source(path), /useCustomerRuntime/, path);
+  assert.match(source("components/marketplace-app.js"), /customerServiceDecision/);
   assert.match(source("app/api/public/marketplace/business/route.js"), /serviceAvailability\.discoverable/);
   assert.match(source("app/api/public/independent-shopping/route.js"), /availabilityFor/);
 });
