@@ -25,6 +25,16 @@ export function routingConfigured(endpoint = process.env.SPOTLY_ROUTING_URL) {
     return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash;
   } catch { return false; }
 }
+// A deployed callable is not necessarily ready to route. MapMap requires a
+// full server key; Vercel's environment is not inherited by Firebase.
+export function routingCredentialsConfigured(
+  endpoint = process.env.SPOTLY_ROUTING_URL,
+  key = process.env.SPOTLY_ROUTING_API_KEY
+) {
+  if (!routingConfigured(endpoint)) return false;
+  return new URL(endpoint).hostname !== 'api.mapmap.ai' ||
+    /^snk_[A-Za-z0-9_-]{16,180}$/.test(String(key || ''));
+}
 
 function endpointUrl(root, service, coordinateList) {
   const url = new URL(root);
@@ -33,9 +43,14 @@ function endpointUrl(root, service, coordinateList) {
     url.searchParams.set('overview', 'simplified');
     url.searchParams.set('geometries', 'geojson');
     url.searchParams.set('steps', 'false');
-    // OSRM route waypoints snap to the nearest drivable network node. Reject
-    // extremely distant snapping before making financial commitments.
-    url.searchParams.set('radiuses', String(MAX_ACCESS_METERS) + ";" + MAX_ACCESS_METERS);
+    if (url.hostname === 'api.mapmap.ai') {
+      // MapMap rejects OSRM's radiuses option (HTTP 400) and performs its own
+      // bounded wider snap retry. Validate actual returned access offsets below.
+      url.searchParams.set('snap_retry', 'true');
+    } else {
+      // Native OSRM supports per-waypoint radiuses.
+      url.searchParams.set('radiuses', String(MAX_ACCESS_METERS) + ";" + MAX_ACCESS_METERS);
+    }
   } else {
     url.searchParams.set('number', '3');
   }
@@ -63,6 +78,11 @@ async function fetchOSRM(url, { key, fetcher, signal } = {}) {
   let body;
   try { body = await response.json(); }
   catch { throw new HttpsError('unavailable', 'The road routing provider returned unreadable data.'); }
+  // Invalid options and missing endpoints are integration failures, not
+  // evidence that the selected street or building has no nearby access.
+  if (!response.ok) {
+    throw new HttpsError('unavailable', 'The road routing provider rejected this request.');
+  }
   return body;
 }
 
@@ -130,7 +150,7 @@ export async function verifiedMobilityRoute(from, to, {
   fetcher = fetch
 } = {}) {
   if (!validPoint(from) || !validPoint(to)) throw new HttpsError('invalid-argument', 'Choose valid pickup and destination coordinates.');
-  if (!routingConfigured(endpoint)) throw new HttpsError('failed-precondition', 'Verified road routing is not configured.');
+  if (!routingCredentialsConfigured(endpoint, key)) throw new HttpsError('failed-precondition', 'Verified road routing credentials are not configured.');
   const root = new URL(endpoint);
   const route = async (a, b) => {
     const body = await fetchOSRM(endpointUrl(root, 'route', coordinates(a) + ";" + coordinates(b)), { key, fetcher });
@@ -138,6 +158,13 @@ export async function verifiedMobilityRoute(from, to, {
   };
   const initial = await route(from, to);
   if (initial) return initial;
+
+  // MapMap supports snap_retry on /route/v1 and has no OSRM /nearest/v1
+  // fallback. Never call a nonexistent endpoint and mislabel the result as an
+  // inaccessible pickup point. Its returned geometry is still checked above.
+  if (root.hostname === 'api.mapmap.ai') {
+    throw new HttpsError('failed-precondition', 'No connected drivable route is available near these locations.');
+  }
 
   // Most OSRM-compatible engines already snap /route endpoints. For no segment
   // or no route, request alternative nearby drivable nodes, bounded by 350m.
