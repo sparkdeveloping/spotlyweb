@@ -1,4 +1,5 @@
 import { HttpsError } from "firebase-functions/v2/https";
+import { verifiedMobilityRoute } from "./mobility-road-access.js";
 import { resolveServiceAvailabilitySet } from "./service-availability.js";
 import { loadOperationGrants, operationContext } from "./operations-grants.js";
 import { SPOTLY_COUNTRY_CONTRACT } from "./platform.js";
@@ -77,50 +78,6 @@ function routeReady() {
     return endpoint.protocol === "https:" && endpoint.username === "" && endpoint.password === "" && endpoint.search === "";
   } catch { return false; }
 }
-async function verifiedRoute(from, to) {
-  if (!routeReady()) throw new HttpsError("failed-precondition", "Verified road routing is not configured in Firebase Functions.");
-  const base = new URL(process.env.SPOTLY_ROUTING_URL);
-  const coords = `${Number(from.lng).toFixed(6)},${Number(from.lat).toFixed(6)};${Number(to.lng).toFixed(6)},${Number(to.lat).toFixed(6)}`;
-  base.pathname = `${base.pathname.replace(/\/$/, "")}/route/v1/driving/${coords}`;
-  base.searchParams.set("overview", "simplified"); base.searchParams.set("geometries", "geojson"); base.searchParams.set("steps", "false");
-  const headers = { Accept: "application/json" };
-  if (base.hostname === "api.mapmap.ai") {
-    const key = text(process.env.SPOTLY_ROUTING_API_KEY, 220);
-    if (!/^snk_[A-Za-z0-9_-]{16,180}$/.test(key)) throw new HttpsError("failed-precondition", "Firebase Functions routing credentials are not configured.");
-    headers.Authorization = `Bearer ${key}`;
-  }
-  let response;
-  try { response = await fetch(base.toString(), { headers, signal: AbortSignal.timeout(8500) }); }
-  catch { throw new HttpsError("unavailable", "Road routing could not be reached."); }
-  if (!response.ok) throw new HttpsError(response.status === 429 ? "resource-exhausted" : "failed-precondition", "No verified driving route is available for these locations.");
-  let data;
-  try { data = await response.json(); } catch { throw new HttpsError("unavailable", "The road-routing provider returned unreadable data."); }
-  const route = data?.routes?.[0];
-  const distance = number(route?.distance), duration = number(route?.duration);
-  if (data?.code !== "Ok" || !Number.isFinite(distance) || distance < 150 || distance > 1_500_000 ||
-      !Number.isFinite(duration) || duration <= 0 || duration > 604_800) {
-    throw new HttpsError("failed-precondition", "No safe driving route was returned.");
-  }
-  const raw = route?.geometry?.coordinates;
-  if (!Array.isArray(raw) || raw.length < 2) throw new HttpsError("failed-precondition", "No drivable road geometry was returned.");
-  const points = raw.map((pair) => ({ lng: number(pair?.[0]), lat: number(pair?.[1]) }));
-  if (points.some((point) => !Number.isFinite(point.lat) || !Number.isFinite(point.lng) ||
-      Math.abs(point.lat) > 90 || Math.abs(point.lng) > 180)) {
-    throw new HttpsError("failed-precondition", "The routing provider returned invalid road geometry.");
-  }
-  // Avoid presenting a valid route in the wrong part of the city.
-  if (haversineKm(from, points[0]) > 3 || haversineKm(to, points.at(-1)) > 3) {
-    throw new HttpsError("failed-precondition", "Both locations must be near a drivable road.");
-  }
-  const stride = Math.max(1, Math.ceil(points.length / 110));
-  const path = points.filter((_, index) => index % stride === 0 || index === points.length - 1);
-  return {
-    distanceKm: Number((distance / 1000).toFixed(2)),
-    durationMinutes: Math.max(1, Math.ceil(duration / 60)),
-    source: "verified_road_route",
-    path
-  };
-}
 // Quote discovery may remain visible during First Access, but requests must
 // observe the same launch gate as the existing trusted website mutations.
 async function customerTransactionLaunchReadiness(firestore, settings, actor) {
@@ -177,10 +134,10 @@ export async function rideQuote({ firestore, data, actor }) {
   const mobility = settings.mobility || {}; ensureTerritory(pickup, mobility); if (!withinCountry(dropoff)) throw new HttpsError("failed-precondition", "The Ride destination is outside the supported country boundary.");
   const pricing = countryPricing(mobility, pickup.country, { currency: "USD", baseFare: 1.5, perKm: .65, perMinute: .12, bookingFee: .3, minimumFare: 3.5, driverSharePercent: 80 });
   if (!pricing) throw new HttpsError("failed-precondition", `Ride pricing has not been approved for ${pickup.country}.`);
-  const route = await verifiedRoute(pickup, dropoff);
+  const route = await verifiedMobilityRoute(pickup, dropoff);
   const type = { ...RIDE_TYPES[serviceType], ...(pricing.serviceTypes?.[serviceType] || {}) };
   const raw = number(pricing.baseFare) + route.distanceKm * number(pricing.perKm) + route.durationMinutes * number(pricing.perMinute) + number(pricing.bookingFee); const total = Number((Math.max(number(pricing.minimumFare), raw) * number(type.multiplier || 1)).toFixed(2)); const driverPay = Number((total * Math.max(0, Math.min(100, number(pricing.driverSharePercent || 80))) / 100).toFixed(2));
-  const quote = { serviceType, routeSource: route.source, routePath: route.path, serviceLabel: type.label || serviceType, seats: number(type.seats || 4), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), directDistanceKm: Number(haversineKm(pickup, dropoff).toFixed(1)), durationMinutes: route.durationMinutes, baseFare: Number(number(pricing.baseFare).toFixed(2)), bookingFee: Number(number(pricing.bookingFee).toFixed(2)), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: type.vehicleTypes || ["car", "van"] };
+  const quote = { serviceType, routeSource: route.source, routePath: route.path, accessPoints: route.accessPoints, serviceLabel: type.label || serviceType, seats: number(type.seats || 4), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), directDistanceKm: Number(haversineKm(pickup, dropoff).toFixed(1)), durationMinutes: route.durationMinutes, baseFare: Number(number(pricing.baseFare).toFixed(2)), bookingFee: Number(number(pricing.bookingFee).toFixed(2)), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: type.vehicleTypes || ["car", "van"] };
   const methods = paymentMethods(settings, mobility.cashEnabled !== false, pickup.country, pricing.currency);
   const launchAccess = await customerTransactionLaunchReadiness(firestore, settings, actor);
   const bookingAvailable = launchAccess.allowed && decision.transactable === true &&
@@ -196,9 +153,9 @@ export async function sendQuote({ firestore, data, actor }) {
   const send = settings.mobility?.send || {}; ensureTerritory(pickup, send, { send: true }); if (!withinCountry(dropoff) || dropoff.country !== pickup.country) throw new HttpsError("failed-precondition", "Spotly Send supports domestic deliveries only.");
   const pricing = countryPricing(send, pickup.country, { currency: "USD", baseFare: 2, perKm: .55, bookingFee: .25, minimumFare: 3.5, driverSharePercent: 80 });
   if (!pricing) throw new HttpsError("failed-precondition", `Send pricing has not been approved for ${pickup.country}.`);
-  const route = await verifiedRoute(pickup, dropoff); const size = { ...PARCEL_SIZES[parcelSize], ...(pricing.parcelSizes?.[parcelSize] || {}) };
+  const route = await verifiedMobilityRoute(pickup, dropoff); const size = { ...PARCEL_SIZES[parcelSize], ...(pricing.parcelSizes?.[parcelSize] || {}) };
   const raw = number(pricing.baseFare) + route.distanceKm * number(pricing.perKm) + number(pricing.bookingFee); const total = Number((Math.max(number(pricing.minimumFare), raw) * number(size.multiplier || 1)).toFixed(2)); const driverPay = Number((total * Math.max(0, Math.min(100, number(pricing.driverSharePercent || 80))) / 100).toFixed(2));
-  const quote = { parcelSize, routeSource: route.source, routePath: route.path, parcelSizeLabel: size.label || parcelSize, maxKg: number(size.maxKg || 15), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), durationMinutes: route.durationMinutes, baseFare: number(pricing.baseFare), bookingFee: number(pricing.bookingFee), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: size.vehicleTypes || ["car", "van"], proofPhotoRequired: pricing.proofPhotoRequired === true };
+  const quote = { parcelSize, routeSource: route.source, routePath: route.path, accessPoints: route.accessPoints, parcelSizeLabel: size.label || parcelSize, maxKg: number(size.maxKg || 15), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), durationMinutes: route.durationMinutes, baseFare: number(pricing.baseFare), bookingFee: number(pricing.bookingFee), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: size.vehicleTypes || ["car", "van"], proofPhotoRequired: pricing.proofPhotoRequired === true };
   const methods = paymentMethods(settings, send.cashEnabled !== false, pickup.country, pricing.currency);
   const launchAccess = await customerTransactionLaunchReadiness(firestore, settings, actor);
   const bookingAvailable = launchAccess.allowed && decision.transactable === true &&
