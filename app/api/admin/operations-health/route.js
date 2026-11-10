@@ -29,7 +29,7 @@ export async function GET(request) {
       const updated = millis(row.updatedAt); return updated && now - updated < 15 * 60_000 && Number(row.count || 0) >= 8;
     }).length;
     const recentAudits = auditSnapshot.docs.map((doc) => doc.data()).filter((row) => { const created = millis(row.createdAt); return created && now - created < 24 * 60 * 60_000; }).length;
-    const appCheckEnforced = process.env.SPOTLY_ENFORCE_APP_CHECK === "true" || (process.env.NODE_ENV === "production" && process.env.SPOTLY_ENFORCE_APP_CHECK !== "false");
+    const appCheckEnforced = process.env.SPOTLY_ENFORCE_APP_CHECK === "true";
     const auditRetentionDays = Math.min(Math.max(Number(settings.security?.auditRetentionDays || 730), 90), 2555);
 
     return Response.json({
