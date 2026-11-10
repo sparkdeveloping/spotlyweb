@@ -26,12 +26,15 @@ test("authoritative platform configuration is private and customer runtime is sa
   assert.doesNotMatch(sanitizer, /source\.integrations/);
 });
 
-test("App Check is fail-closed for production authenticated APIs and trusted callables", () => {
+test("App Check uses an explicit monitored rollout for web APIs and stays fail-closed for trusted callables", () => {
   const admin = read("lib/firebase-admin.js");
+  const firebase = read("lib/firebase.js");
   const callable = read("firebase/functions/src/core/callable.js");
   const functionsIndex = read("firebase/functions/src/index.js");
-  assert.match(admin, /SPOTLY_ENFORCE_APP_CHECK/);
-  assert.match(admin, /NODE_ENV === "production"/);
+  assert.match(admin, /return process\.env\.SPOTLY_ENFORCE_APP_CHECK === "true"/);
+  assert.doesNotMatch(admin, /NODE_ENV === "production"/);
+  assert.ok(firebase.indexOf("globalThis.__spotlyAppCheck = initializeAppCheck") < firebase.indexOf("const auth = getAuth"));
+  assert.match(firebase, /Spotly App Check could not obtain an attestation token/);
   assert.match(callable, /defineTrustedMutation[\s\S]*enforceAppCheck: true/);
   assert.equal((functionsIndex.match(/enforceAppCheck:\s*false/g) || []).length, 1);
 });
