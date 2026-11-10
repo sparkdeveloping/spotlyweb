@@ -135,6 +135,10 @@ export async function rideQuote({ firestore, data, actor }) {
   const pricing = countryPricing(mobility, pickup.country, { currency: "USD", baseFare: 1.5, perKm: .65, perMinute: .12, bookingFee: .3, minimumFare: 3.5, driverSharePercent: 80 });
   if (!pricing) throw new HttpsError("failed-precondition", `Ride pricing has not been approved for ${pickup.country}.`);
   const route = await verifiedMobilityRoute(pickup, dropoff);
+  if (!withinCountry({ ...route.accessPoints.pickup, country: pickup.country }) ||
+      !withinCountry({ ...route.accessPoints.destination, country: dropoff.country })) {
+    throw new HttpsError("failed-precondition", "The nearest drivable access is outside the supported country boundary.");
+  }
   const type = { ...RIDE_TYPES[serviceType], ...(pricing.serviceTypes?.[serviceType] || {}) };
   const raw = number(pricing.baseFare) + route.distanceKm * number(pricing.perKm) + route.durationMinutes * number(pricing.perMinute) + number(pricing.bookingFee); const total = Number((Math.max(number(pricing.minimumFare), raw) * number(type.multiplier || 1)).toFixed(2)); const driverPay = Number((total * Math.max(0, Math.min(100, number(pricing.driverSharePercent || 80))) / 100).toFixed(2));
   const quote = { serviceType, routeSource: route.source, routePath: route.path, accessPoints: route.accessPoints, serviceLabel: type.label || serviceType, seats: number(type.seats || 4), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), directDistanceKm: Number(haversineKm(pickup, dropoff).toFixed(1)), durationMinutes: route.durationMinutes, baseFare: Number(number(pricing.baseFare).toFixed(2)), bookingFee: Number(number(pricing.bookingFee).toFixed(2)), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: type.vehicleTypes || ["car", "van"] };
@@ -153,7 +157,12 @@ export async function sendQuote({ firestore, data, actor }) {
   const send = settings.mobility?.send || {}; ensureTerritory(pickup, send, { send: true }); if (!withinCountry(dropoff) || dropoff.country !== pickup.country) throw new HttpsError("failed-precondition", "Spotly Send supports domestic deliveries only.");
   const pricing = countryPricing(send, pickup.country, { currency: "USD", baseFare: 2, perKm: .55, bookingFee: .25, minimumFare: 3.5, driverSharePercent: 80 });
   if (!pricing) throw new HttpsError("failed-precondition", `Send pricing has not been approved for ${pickup.country}.`);
-  const route = await verifiedMobilityRoute(pickup, dropoff); const size = { ...PARCEL_SIZES[parcelSize], ...(pricing.parcelSizes?.[parcelSize] || {}) };
+  const route = await verifiedMobilityRoute(pickup, dropoff);
+  if (!withinCountry({ ...route.accessPoints.pickup, country: pickup.country }) ||
+      !withinCountry({ ...route.accessPoints.destination, country: dropoff.country })) {
+    throw new HttpsError("failed-precondition", "The nearest delivery road access is outside the supported country boundary.");
+  }
+  const size = { ...PARCEL_SIZES[parcelSize], ...(pricing.parcelSizes?.[parcelSize] || {}) };
   const raw = number(pricing.baseFare) + route.distanceKm * number(pricing.perKm) + number(pricing.bookingFee); const total = Number((Math.max(number(pricing.minimumFare), raw) * number(size.multiplier || 1)).toFixed(2)); const driverPay = Number((total * Math.max(0, Math.min(100, number(pricing.driverSharePercent || 80))) / 100).toFixed(2));
   const quote = { parcelSize, routeSource: route.source, routePath: route.path, accessPoints: route.accessPoints, parcelSizeLabel: size.label || parcelSize, maxKg: number(size.maxKg || 15), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), durationMinutes: route.durationMinutes, baseFare: number(pricing.baseFare), bookingFee: number(pricing.bookingFee), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: size.vehicleTypes || ["car", "van"], proofPhotoRequired: pricing.proofPhotoRequired === true };
   const methods = paymentMethods(settings, send.cashEnabled !== false, pickup.country, pricing.currency);
