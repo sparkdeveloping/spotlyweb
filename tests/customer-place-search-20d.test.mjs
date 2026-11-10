@@ -14,7 +14,7 @@ const sample=(name,lng,lat,rel=0.92,extra={})=>({
 test("autocomplete requests named POIs without stuffing a city into the search term",()=>{
   const url=mod.mapTilerSearchUrl({query:"KFC",country:"ZW",
     center:{lat:-17.825,lng:31.03},apiKey:"abcdefghijklmnopqrs"});
-  assert.match(url.pathname,/KFC\\.json$/);
+  assert.match(url.pathname,/KFC\.json$/);
   assert.match(url.searchParams.get("types"),/poi/);
   assert.equal(url.searchParams.get("country"),"zw");
   assert.ok(url.searchParams.get("bbox"));
