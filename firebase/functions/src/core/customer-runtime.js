@@ -1,5 +1,5 @@
 import { HttpsError } from "firebase-functions/v2/https";
-import { verifiedMobilityRoute } from "./mobility-road-access.js";
+import { verifiedMobilityRoute, routingCredentialsConfigured } from "./mobility-road-access.js";
 import { resolveServiceAvailabilitySet } from "./service-availability.js";
 import { loadOperationGrants, operationContext } from "./operations-grants.js";
 import { SPOTLY_COUNTRY_CONTRACT } from "./platform.js";
@@ -73,10 +73,7 @@ function countryPricing(config = {}, country = "", defaults = {}) {
   return countrySupportsCurrency(code, pricing.currency) ? pricing : null;
 }
 function routeReady() {
-  try {
-    const endpoint = new URL(process.env.SPOTLY_ROUTING_URL || "");
-    return endpoint.protocol === "https:" && endpoint.username === "" && endpoint.password === "" && endpoint.search === "";
-  } catch { return false; }
+  return routingCredentialsConfigured();
 }
 // Quote discovery may remain visible during First Access, but requests must
 // observe the same launch gate as the existing trusted website mutations.
