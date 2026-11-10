@@ -7,7 +7,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 test("native Ride and Send quotes include verified backend road geometry", () => {
   const runtime = read("firebase/functions/src/core/customer-runtime.js");
   assert.match(runtime, /base\.searchParams\.set\("geometries", "geojson"\)/);
-  assert.match(runtime, /route\.geometry\?\.coordinates/);
+  assert.match(runtime, /route\?\.geometry\?\.coordinates/);
   assert.match(runtime, /points\.some\(/);
   assert.match(runtime, /haversineKm\(from, points\[0\]\)/);
   assert.equal((runtime.match(/routePath: route\.path/g) || []).length, 2);
