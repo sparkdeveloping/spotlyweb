@@ -15,7 +15,7 @@ const THEME_COOKIE = "spotly_theme";
 const VALID_THEMES = new Set(["light", "dark", "system"]);
 
 function normalizeTheme(value) {
-  return VALID_THEMES.has(value) ? value : "system";
+  return VALID_THEMES.has(value) ? value : "light";
 }
 
 function readThemeCookie() {
@@ -37,7 +37,7 @@ function getThemeSnapshot() {
 }
 
 function getThemeServerSnapshot() {
-  return "system";
+  return "light";
 }
 
 function subscribeTheme(listener) {
@@ -103,6 +103,8 @@ function ThemeProvider({ children }) {
     root.dataset.theme = theme;
     root.dataset.resolvedTheme = resolvedTheme;
     root.style.colorScheme = resolvedTheme;
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.setAttribute("content", dark ? "#0b0d12" : "#ffffff");
   }, [resolvedTheme, theme]);
 
   const value = useMemo(() => ({
