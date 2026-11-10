@@ -782,8 +782,17 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const requestedOffer = searchParams.get("offer") || initialOfferId;
   const requestedService = searchParams.get("service");
   const routeCountryCode = initialCity ? countryForCity(initialCity)?.country?.code || "" : "";
-  const initialPreferredCity = initialCity || profile?.preferences?.preferredCity || "";
-  const defaultLocation = { city: initialPreferredCity, area: "", radiusKm: 20, coordinates: null };
+  const configuredCountry = routeCountryCode
+    || normalizeCountryCode(countryContext.countryCode)
+    || normalizeCountryCode(settings?.launch?.supportedCountries?.[0])
+    || countryForCity(settings?.launch?.primaryCity)?.country?.code
+    || "";
+  const launchFallbackCity = initialCity
+    || countryCity(configuredCountry, profile?.preferences?.preferredCity)?.name
+    || countryCity(configuredCountry, settings?.launch?.primaryCity)?.name
+    || countryDefinition(configuredCountry)?.cities?.[0]?.name
+    || "";
+  const defaultLocation = { city: launchFallbackCity, area: "", radiusKm: 20, coordinates: null };
 
   const [location, setLocation] = useState(defaultLocation);
   const [locating, setLocating] = useState(false);
@@ -835,8 +844,8 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [onboardingInterests, setOnboardingInterests] = useState([]);
-  const customerRuntime = useCustomerRuntime({ country: routeCountryCode, city: location.city });
-  const availabilityCountry = customerRuntime.countryCode || countryContext.countryCode || countryForCity(location.city)?.country?.code || "";
+  const customerRuntime = useCustomerRuntime({ country: configuredCountry, city: location.city || launchFallbackCity });
+  const availabilityCountry = customerRuntime.countryCode || configuredCountry || countryForCity(location.city)?.country?.code || "";
   const serviceAvailability = customerRuntime.services;
   const canonicalCities = (countryDefinition(availabilityCountry)?.cities || []).map((city) => city.name);
   const locationWithCountry = useMemo(() => ({ ...location, country: availabilityCountry, countryName: countryDefinition(availabilityCountry)?.name || "" }), [location, availabilityCountry]);
@@ -974,6 +983,11 @@ export function MarketplaceApp({ basePath = "/marketplace", initialService = nul
     setLocation(migrateLegacyState(LOCATION_KEY, user) || readState(LOCATION_KEY, user, defaultLocation));
     setRecentBusinessIds(readState(RECENT_BUSINESS_KEY, user, [], "local"));
   }, [user]);
+
+  useEffect(() => {
+    if (!settingsReady || !countryContext.ready || !launchFallbackCity) return;
+    setLocation((current) => current.city ? current : { ...current, city: launchFallbackCity });
+  }, [settingsReady, countryContext.ready, launchFallbackCity]);
 
   useEffect(() => {
     if (routeCountryCode || !countryContext.ready || !availabilityCountry) return;
