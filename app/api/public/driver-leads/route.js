@@ -7,6 +7,7 @@ import { cleanLead, contactKey } from "@/lib/driver-leads";
 import { driverAcquisitionAttribution, driverAcquisitionSlug } from "@/lib/driver-acquisition";
 import { publicDriverCampaign, recordDriverAcquisitionEvent } from "@/lib/driver-acquisition-server";
 import { countryCity, normalizeCountryCode } from "@/lib/country-engine";
+import { publicDriverLeadFieldErrors, validateDriverLeadContact } from "@/lib/driver-lead-form-validation";
 
 export const runtime = "nodejs";
 const schema = z.object({
@@ -34,6 +35,8 @@ export async function POST(request) {
     await verifyAppCheckRequest(request);
     await enforceRateLimit(request, { key: "public-driver-lead", limit: 6, windowMs: 30 * 60_000 });
     const body = schema.parse(await request.json());
+    const contactErrors = validateDriverLeadContact(body.lead);
+    if (Object.keys(contactErrors).length) return Response.json({ ok: false, error: "Correct the highlighted contact details and try again.", fieldErrors: contactErrors }, { status: 400 });
     const { db, auth } = getAdminServices();
     const canonicalCountry = normalizeCountryCode(body.lead.country);
     const canonicalCity = countryCity(canonicalCountry, body.lead.city);
@@ -122,7 +125,14 @@ export async function POST(request) {
     if (created) await recordDriverAcquisitionEvent(db, { event: "new_lead", campaign, campaignSlug, sessionId: body.sessionId, attribution, country: lead.country, city: lead.city }).catch(() => null);
     return Response.json({ ok: true, received: true });
   } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review your details and try again." }, { status: 400 });
+    if (error instanceof z.ZodError) {
+      const fieldErrors = publicDriverLeadFieldErrors(error.issues);
+      return Response.json({
+        ok: false,
+        error: Object.keys(fieldErrors).length ? "Correct the highlighted details and try again." : "The form could not be validated. Refresh the page and try again.",
+        fieldErrors,
+      }, { status: 400 });
+    }
     return apiError(error);
   }
 }
