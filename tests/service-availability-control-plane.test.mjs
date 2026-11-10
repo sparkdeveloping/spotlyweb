@@ -22,8 +22,8 @@ const emptyFacts = () => ({
   marketplace: {},
   drivers: {},
   mobility: {
-    ride: { routingReady: false, schedulerReady: false, pinReady: false, geofences: {} },
-    send: { routingReady: false, schedulerReady: false, pinReady: false, geofences: {} }
+    ride: { enabledCountries: [], countries: {}, routingReady: false, schedulerReady: false, pinReady: false, geofences: {} },
+    send: { enabledCountries: [], countries: {}, routingReady: false, schedulerReady: false, pinReady: false, geofences: {} }
   }
 });
 
@@ -78,20 +78,24 @@ test("Ride live readiness requires routing, scheduler, PIN, city geofence and Dr
   for (const id of ["routing", "scheduler", "pin", "geofence", "drivers"]) assert.ok(row.checks.find((item) => item.id === id)?.blocking, id);
 
   const facts = emptyFacts();
-  facts.mobility.ride = { routingReady: true, schedulerReady: true, pinReady: true, geofences: { "ZW:harare": true } };
+  facts.mobility.ride = { enabledCountries: ["ZW"], countries: { ZW: { pricingReady: true, currency: "USD", paymentReady: true, paymentMethods: ["cash"] } }, routingReady: true, schedulerReady: true, pinReady: true, geofences: { "ZW:harare": true } };
   facts.drivers.ride = { ZW: { active: 1, cities: { harare: { active: 1 } } } };
   readiness = buildServiceAvailabilityReadiness(config, facts);
   row = readiness.countries.ZW.cities.harare.services.ride.readiness;
   assert.equal(row.blockers, 0);
 });
 
-test("Send cannot be published live in Malawi while its transaction backend remains Zimbabwe-only", () => {
+test("Send Malawi launch is blocked until territory, pricing and payment readiness are explicit", () => {
   const config = applyServiceAvailabilityDraftEdit({}, { service: "send", scope: "city", country: "MW", city: "Lilongwe", state: "live" });
   const facts = emptyFacts();
-  facts.mobility.send = { routingReady: true, schedulerReady: true, pinReady: true, geofences: { "MW:lilongwe": true } };
+  facts.mobility.send = { enabledCountries: [], countries: {}, routingReady: true, schedulerReady: true, pinReady: true, geofences: { "MW:lilongwe": true } };
   facts.drivers.send = { MW: { active: 1, cities: { lilongwe: { active: 1 } } } };
-  const row = buildServiceAvailabilityReadiness(config, facts).countries.MW.cities.lilongwe.services.send.readiness;
-  assert.ok(row.checks.find((item) => item.id === "territory")?.blocking);
+  let row = buildServiceAvailabilityReadiness(config, facts).countries.MW.cities.lilongwe.services.send.readiness;
+  for (const id of ["territory", "pricing", "payments"]) assert.ok(row.checks.find((item) => item.id === id)?.blocking, id);
+  facts.mobility.send.enabledCountries = ["MW"];
+  facts.mobility.send.countries.MW = { pricingReady: true, currency: "MWK", paymentReady: true, paymentMethods: ["cash"] };
+  row = buildServiceAvailabilityReadiness(config, facts).countries.MW.cities.lilongwe.services.send.readiness;
+  assert.equal(row.blockers, 0);
 });
 
 test("revision API owns drafts, publication, stale protection and rollback history", () => {
@@ -120,7 +124,9 @@ test("generic settings and browser Firestore writes cannot bypass revision-owned
   }
   assert.match(rules, /serviceAvailabilityDrafts/);
   assert.match(rules, /serviceAvailabilityRevisions/);
-  assert.match(rules, /affectedKeys\(\)\.hasAny/);
+  assert.match(rules, /match \/platformSettings\/\{id\}[\s\S]*allow create, update, delete: if false/);
+  assert.match(clientSettings, /authenticatedFetch\("\/api\/admin\/settings"/);
+  assert.doesNotMatch(clientSettings, /setDoc\(doc\(db, "platformSettings"/);
   assert.match(rules, /allow read, write: if false/);
 });
 

@@ -5,7 +5,7 @@ import { notifyUsers, operationalEligibility } from "@/lib/driver-delivery-serve
 import { dispatchRide, plainRide, rideSettings } from "@/lib/ride-server";
 import { safeText } from "@/lib/server-helpers";
 import {validateCoverageCollection} from "@/lib/mobility-coverage";
-import { SPOTLY_COUNTRIES } from "@/lib/country-engine";
+import { SPOTLY_COUNTRIES, countryCurrencies } from "@/lib/country-engine";
 import { resolveServiceAvailability } from "@/lib/service-availability";
 
 export const runtime = "nodejs";
@@ -24,15 +24,22 @@ const mobilitySchema = z.object({
   enabledCities: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
   enabledAreas: z.record(z.string().trim().min(1).max(120), z.array(z.string().trim().min(1).max(120)).max(100)).optional(),
   pricing: z.object({
-    baseFare: z.number().min(0).max(1000).optional(),
-    perKm: z.number().min(0).max(1000).optional(),
-    perMinute: z.number().min(0).max(1000).optional(),
-    bookingFee: z.number().min(0).max(1000).optional(),
-    minimumFare: z.number().min(0).max(1000).optional(),
+    currency: z.enum(["USD", "ZWG", "MWK"]).optional(),
+    baseFare: z.number().min(0).max(1000000).optional(),
+    perKm: z.number().min(0).max(1000000).optional(),
+    perMinute: z.number().min(0).max(1000000).optional(),
+    bookingFee: z.number().min(0).max(1000000).optional(),
+    minimumFare: z.number().min(0).max(1000000).optional(),
     driverSharePercent: z.number().min(1).max(100).optional(),
     maxPickupKm: z.number().min(1).max(100).optional(),
     offerSeconds: z.number().int().min(20).max(600).optional()
-  }).partial().optional()
+  }).partial().optional(),
+  pricingByCountry: z.record(z.enum(["ZW", "MW"]), z.object({
+    currency: z.enum(["USD", "ZWG", "MWK"]),
+    baseFare: z.number().min(0).max(1000000), perKm: z.number().min(0).max(1000000), perMinute: z.number().min(0).max(1000000),
+    bookingFee: z.number().min(0).max(1000000), minimumFare: z.number().min(0).max(1000000),
+    driverSharePercent: z.number().min(1).max(100).optional(), maxPickupKm: z.number().min(1).max(100).optional(), offerSeconds: z.number().int().min(20).max(600).optional()
+  }).passthrough()).optional()
 });
 
 export async function GET(request) {
@@ -56,6 +63,9 @@ export async function PATCH(request) {
   try {
     const actor = await authenticateRequest(request, { roles: RIDE_CONFIG_ROLES });
     const body = mobilitySchema.parse(await request.json());
+    for (const [country, pricing] of Object.entries(body.pricingByCountry || {})) {
+      if (!countryCurrencies(country).includes(pricing.currency)) throw Object.assign(new Error(`Choose a currency approved for ${country}.`), { status: 400 });
+    }
     const { db } = getAdminServices();
     const settingsRef = db.collection("platformSettings").doc("global");
     const currentSnap = await settingsRef.get();
@@ -77,10 +87,11 @@ export async function PATCH(request) {
       ...(body.cashEnabled !== undefined ? { cashEnabled: body.cashEnabled } : {}),
       ...(body.enabledCities !== undefined ? { enabledCities: [...new Set(body.enabledCities.map((value) => value.trim()).filter(Boolean))] } : {}),
       ...(body.enabledAreas !== undefined ? { enabledAreas: Object.fromEntries(Object.entries(body.enabledAreas).map(([city, areas]) => [city.trim(), [...new Set(areas.map((value) => value.trim()).filter(Boolean))]]).filter(([city, areas]) => city && areas.length)) } : {}),
-      ...(body.pricing ? { pricing: { ...(mobility.pricing || {}), ...body.pricing } } : {})
+      ...(body.pricing ? { pricing: { ...(mobility.pricing || {}), ...body.pricing } } : {}),
+      ...(body.pricingByCountry ? { pricingByCountry: { ...(mobility.pricingByCountry || {}), ...body.pricingByCountry } } : {})
     };
     await settingsRef.set({ mobility: next, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.uid }, { merge: true });
-    await db.collection("auditLogs").add({ actorId: actor.uid, action: "mobility.ride_settings.updated", entityType: "platformSettings", entityId: "global", metadata: { cashEnabled: next.cashEnabled !== false, enabledCities: next.enabledCities || [], enabledAreas: next.enabledAreas || {}, pricing: next.pricing || {} }, source: "admin_rides", createdAt: FieldValue.serverTimestamp() });
+    await db.collection("auditLogs").add({ actorId: actor.uid, action: "mobility.ride_settings.updated", entityType: "platformSettings", entityId: "global", metadata: { cashEnabled: next.cashEnabled !== false, enabledCountries: next.enabledCountries || [], enabledCities: next.enabledCities || [], enabledAreas: next.enabledAreas || {}, pricing: next.pricing || {}, pricingByCountry: next.pricingByCountry || {} }, source: "admin_rides", createdAt: FieldValue.serverTimestamp() });
     return Response.json({ ok: true, mobility: rideSettings({ ...current, mobility: next }) });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the ride settings." }, { status: 400 });

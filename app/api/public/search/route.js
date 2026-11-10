@@ -4,7 +4,8 @@ import { unclaimedPublicationEnabled } from "@/lib/directory-publication-server"
 import { canShowDirectoryRecord } from "@/lib/nxt-policy";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
-import { queryOpenPlaces, queryOpenProducts, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
+import { queryOpenProducts, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
+import { projectedDiscoveryBusinesses } from "@/lib/discovery-projection";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 import { publicBusinessRecord, publicCanonicalProduct, publicMerchantProduct } from "@/lib/marketplace-public";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
@@ -45,7 +46,7 @@ export async function GET(request){
   if(service&&country)requireServiceDiscoverable(settings,{service,country,city});
   const serviceVisible=(business)=>{const profile=marketplaceProfile(business);const localCity=business.city||city;const c=normalizeCountryCode(business.country)||countryForCity(localCity)?.country?.code||country;if(!c||!["eat","shop","book","events"].includes(profile.service))return true;return resolveServiceAvailability(settings,{service:profile.service,country:c,city:localCity}).discoverable;};
   const firestoreBusinesses=businessSnap.docs.filter((doc)=>isMarketplaceDiscoverable(doc.data()) && canShowDirectoryRecord(doc.data(),showUnclaimed)).map((doc)=>publicBusinessRecord(doc.id,doc.data())).filter(serviceVisible);
-  const open=(showUnclaimed?queryOpenPlaces({country,city,q:query,service,limit:2500}).records:[]).map((item)=>publicBusinessRecord(item.id,item)).filter(serviceVisible);
+  const open=(showUnclaimed?projectedDiscoveryBusinesses({country,city,q:query,service}):[]).map((item)=>publicBusinessRecord(item.id,item)).filter(serviceVisible);
   const businesses=mergeCuratedWithFirestore(open,firestoreBusinesses).filter((business)=>{const businessCountry=normalizeCountryCode(business.country)||countryForCity(business.city)?.country?.code||"";return (!country||businessCountry===country)&&(!city||!text(business.city)||text(business.city)===city)&&serviceMatches(service,business);});
   const businessMap=new Map(businesses.map((business)=>[business.id,business]));
   const records=[];

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { cloneElement, forwardRef, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LoaderCircle, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -21,8 +21,8 @@ export function Button({ children, variant = "primary", size = "md", className, 
     inverse: "border border-[var(--inverse-border)] bg-[var(--inverse-surface)] text-[var(--inverse-text)] hover:bg-[var(--inverse-surface-2)]"
   };
   const sizes = {
-    sm: "h-10 rounded-[12px] px-3.5 text-sm",
-    md: "h-[50px] rounded-[12px] px-5 text-[15px]",
+    sm: "h-11 rounded-[12px] px-3.5 text-sm",
+    md: "h-[52px] rounded-[14px] px-5 text-[15px]",
     lg: "h-14 rounded-[16px] px-6 text-base",
     icon: "h-11 w-11 rounded-[12px]"
   };
@@ -49,7 +49,7 @@ export function Button({ children, variant = "primary", size = "md", className, 
   }
 
   return (
-    <button type={type} disabled={isDisabled} className={classes} {...props}>
+    <button type={type} disabled={isDisabled} aria-busy={loading || undefined} className={classes} {...props}>
       {loading && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}
       {children}
     </button>
@@ -156,7 +156,7 @@ export function StatusBadge({ status }) {
 
 export function SearchField({ value, onChange, placeholder = "Search", className, onFocus, onKeyDown, shortcut, label = "Search", inputProps = {} }) {
   return (
-    <label className={cn("experience-search-field flex h-[50px] items-center gap-3 rounded-[12px] border border-[var(--control-border)] bg-[var(--control-bg)] px-4 text-[var(--control-text)] transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]", className)}>
+    <label className={cn("experience-search-field flex min-h-[52px] items-center gap-3 rounded-[12px] border border-[var(--control-border)] bg-[var(--control-bg)] px-4 text-[var(--control-text)] transition focus-within:border-[var(--focus)] focus-within:ring-2 focus-within:ring-[var(--focus-soft)]", className)}>
       <span className="sr-only">{label}</span>
       <Search className="h-5 w-5 shrink-0 text-tertiary" aria-hidden="true" />
       <input
@@ -185,6 +185,7 @@ export function Tabs({ tabs, value, onChange, className, label = "Sections", idP
   const generated = useId();
   const prefix = safeId(idPrefix || `tabs-${generated}`);
   const tabRefs = useRef([]);
+  const reduceMotion = useReducedMotion();
   function onKeyDown(event, index) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -214,9 +215,9 @@ export function Tabs({ tabs, value, onChange, className, label = "Sections", idP
             tabIndex={value === tab.value ? 0 : -1}
             onKeyDown={(event) => onKeyDown(event, index)}
             onClick={() => onChange(tab.value)}
-            className={cn("relative h-10 whitespace-nowrap rounded-lg px-4 text-sm font-semibold text-secondary transition", value === tab.value && "text-[var(--accent-strong)] dark:text-[var(--accent)]")}
+            className={cn("relative min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold text-secondary transition", value === tab.value && "text-[var(--accent-strong)] dark:text-[var(--accent)]")}
           >
-            {value === tab.value && <motion.span layoutId={`${prefix}-active-tab`} className="absolute inset-0 rounded-lg bg-[var(--surface)] shadow-sm" transition={{ type: "spring", bounce: 0.12, duration: 0.4 }} />}
+            {value === tab.value && <motion.span layoutId={`${prefix}-active-tab`} className="absolute inset-0 rounded-lg bg-[var(--surface)] shadow-sm" transition={reduceMotion ? { duration: 0 } : { type: "spring", bounce: 0.12, duration: 0.4 }} />}
             <span className="relative inline-flex items-center gap-2">{Icon && <Icon className="h-4 w-4" aria-hidden="true" />}{tab.label}</span>
           </button>
         );
@@ -461,6 +462,7 @@ function useOverlayPortal(open, onClose) {
 }
 
 export function Overlay({ open, onClose, title, description, children, mode = "modal", size = "md", closeOnBackdrop = true, className, hideHeader = false, label }) {
+  const reduceMotion = useReducedMotion();
   const widths = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl" };
   const titleId = useId();
   const descriptionId = useId();
@@ -474,12 +476,12 @@ export function Overlay({ open, onClose, title, description, children, mode = "m
         : cn("bottom-0 left-1/2 w-full -translate-x-1/2 rounded-t-[24px] sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-[16px]", widths[size]);
   const initial = mode === "drawer" ? { x: "100%" } : mode === "sheet" ? { y: "100%" } : mode === "full" ? { opacity: 0 } : { y: 30, opacity: 0, scale: 0.99 };
   const animate = mode === "drawer" ? { x: 0 } : mode === "sheet" ? { y: 0 } : mode === "full" ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 };
-  const exit = initial;
+  const exit = reduceMotion ? animate : initial;
   if (!root) return null;
   return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-[100]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div className="fixed inset-0 z-[100]" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.18 }}>
           <button type="button" aria-label={`Close ${label || title || "dialog"}`} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[1px]" onClick={closeOnBackdrop ? onClose : undefined} />
           <motion.div
             ref={dialogRef}
@@ -489,10 +491,10 @@ export function Overlay({ open, onClose, title, description, children, mode = "m
             aria-label={!title ? label : undefined}
             aria-describedby={description ? descriptionId : undefined}
             tabIndex={-1}
-            initial={initial}
+            initial={reduceMotion ? false : initial}
             animate={animate}
             exit={exit}
-            transition={{ type: "spring", stiffness: 330, damping: 32 }}
+            transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 330, damping: 32 }}
             className={cn("experience-overlay-panel surface absolute z-10 flex max-h-[94dvh] flex-col overflow-hidden shadow-elevated", panelClass, className)}
           >
             {!hideHeader && (
@@ -501,7 +503,7 @@ export function Overlay({ open, onClose, title, description, children, mode = "m
                   {title && <h2 id={titleId} className="text-lg font-semibold">{title}</h2>}
                   {description && <p id={descriptionId} className="mt-1 text-sm text-secondary">{description}</p>}
                 </div>
-                <button type="button" aria-label="Close" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button>
+                <button type="button" aria-label="Close" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-[12px] hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button>
               </div>
             )}
             <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
@@ -543,6 +545,7 @@ export function ListRow({ icon: Icon, title, subtitle, trailing, onClick, href, 
 }
 
 export function ProgressBar({ value, className, color = "var(--accent)", label = "Progress" }) {
+  const reduceMotion = useReducedMotion();
   const bounded = Math.max(0, Math.min(100, Number(value) || 0));
-  return <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={bounded} className={cn("h-2 overflow-hidden rounded-full bg-[var(--surface-2)]", className)}><motion.div initial={{ width: 0 }} animate={{ width: `${bounded}%` }} className="h-full rounded-full" style={{ backgroundColor: color }} /></div>;
+  return <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={bounded} className={cn("h-2 overflow-hidden rounded-full bg-[var(--surface-2)]", className)}><motion.div initial={reduceMotion ? false : { width: 0 }} animate={{ width: `${bounded}%` }} transition={{ duration: reduceMotion ? 0 : 0.28 }} className="h-full rounded-full" style={{ backgroundColor: color }} /></div>;
 }

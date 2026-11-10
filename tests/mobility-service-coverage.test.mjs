@@ -28,15 +28,16 @@ test("Cannot accidentally approve country mismatch, unsupported cities or invali
  {country:"ZW",city:"Harare",lat:-17.825,lng:31.033,radiusKm:2},
  ])assert.throws(()=>verifyCoverageZone(zone,options));
 });
-test("Send zones are restricted to Zimbabwe and cannot mismatch their keys",()=>{
- const options={enabledCountries:["ZW"],enabledCities:cities,send:true};
- const good={country:"ZW",lat:-17.825,lng:31.033,radiusKm:15};
- assert.deepEqual(validateCoverageCollection({"ZW:harare":good},options),{"ZW:harare":good});
- assert.throws(()=>validateCoverageCollection({"MW:lilongwe":{country:"MW",lat:-13.962,lng:33.774,radiusKm:20}},options));
- assert.throws(()=>validateCoverageCollection({"ZW:bulawayo":good},{...options,enabledCities:["Harare"]}));
- assert.throws(()=>validateCoverageCollection({"ZW:harare":{...good,country:"MW"}},options));
- assert.throws(()=>validateCoverageCollection({"zw:harare":good},options));
- assert.throws(()=>validateCoverageCollection({"ZW:harare":{...good,radiusKm:0}},options));
+test("Send zones support any explicitly enabled Spotly country and cannot mismatch keys",()=>{
+ const options={enabledCountries:["ZW","MW"],enabledCities:cities,send:true};
+ const zw={country:"ZW",lat:-17.825,lng:31.033,radiusKm:15};
+ const mw={country:"MW",lat:-13.962,lng:33.774,radiusKm:20};
+ assert.deepEqual(validateCoverageCollection({"ZW:harare":zw,"MW:lilongwe":mw},options),{"ZW:harare":zw,"MW:lilongwe":mw});
+ assert.throws(()=>validateCoverageCollection({"MW:lilongwe":mw},{...options,enabledCountries:["ZW"]}));
+ assert.throws(()=>validateCoverageCollection({"ZW:bulawayo":zw},{...options,enabledCities:["Harare"]}));
+ assert.throws(()=>validateCoverageCollection({"ZW:harare":{...zw,country:"MW"}},options));
+ assert.throws(()=>validateCoverageCollection({"zw:harare":zw},options));
+ assert.throws(()=>validateCoverageCollection({"ZW:harare":{...zw,radiusKm:0}},options));
 });
 test("Ride & Send Admin never expose raw geofence serialization and validate on server",()=>{
  const ui=read("components/admin-driver-operations.js");

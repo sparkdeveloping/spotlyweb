@@ -24,7 +24,7 @@ export async function GET(request) {
     const city = text(url.searchParams.get("city"));
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 60), 1), 120);
     const { db } = getAdminServices();
-    const productsSnapshot = await db.collection("products").where("itemType", "==", "event").limit(300).get();
+    const productsSnapshot = await db.collection("products").where("itemType", "in", ["event", "ticket"]).limit(300).get();
     const candidates = productsSnapshot.docs.filter((doc) => {
       const data = doc.data() || {};
       if (data.published !== true || data.active === false || data.available === false || data.status === "archived") return false;
@@ -51,7 +51,15 @@ export async function GET(request) {
         currency: item.currency || "USD",
         price: Number(item.price || 0),
         prices: item.prices || {},
+        eventId: item.eventId || doc.id,
+        eventName: item.eventName || item.name || "Event",
+        ticketTier: item.ticketTier || item.variant || item.name || "Standard",
         capacity: Number(item.capacity || 0),
+        reservedQuantity: Number(item.reservedQuantity || 0),
+        maxQuantityPerOrder: Math.max(1, Number(item.maxQuantityPerOrder || 8)),
+        transferable: item.transferable !== false,
+        salesStartAt: plainDate(item.salesStartAt),
+        salesEndAt: plainDate(item.salesEndAt),
         startsAt: plainDate(item.startsAt),
         endsAt: plainDate(item.endsAt),
         venue: item.venue || business.name || "",

@@ -5,7 +5,7 @@ import { notifyUsers, operationalEligibility } from "@/lib/driver-delivery-serve
 import { dispatchParcel, parcelSettings, plainParcel } from "@/lib/parcel-server";
 import { safeText } from "@/lib/server-helpers";
 import {validateCoverageCollection} from "@/lib/mobility-coverage";
-import { SPOTLY_COUNTRIES } from "@/lib/country-engine";
+import { SPOTLY_COUNTRIES, countryCurrencies } from "@/lib/country-engine";
 import { resolveServiceAvailability } from "@/lib/service-availability";
 
 export const runtime = "nodejs";
@@ -13,8 +13,12 @@ const ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "
 const CONFIG_ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager"];
 const schema = z.object({ parcelJobId: z.string().min(3).max(180), action: z.enum(["dispatch", "assign", "reassign", "cancel", "clear_exception"]), driverId: z.string().max(180).optional(), reason: z.string().max(1000).optional() });
 const settingsSchema = z.object({
-  routingVerified:z.boolean().optional(),dispatchSchedulerVerified:z.boolean().optional(),maxSearchSeconds:z.number().int().min(90).max(1800).optional(),cityGeofences:z.record(z.string().min(4),z.object({country:z.literal("ZW"),lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180),radiusKm:z.number().min(3).max(100)}).strict()).optional(), cashEnabled: z.boolean().optional(), scheduledEnabled: z.boolean().optional(), enabledCities: z.array(z.string().trim().min(1).max(120)).max(50).optional(), enabledAreas: z.record(z.string().trim().min(1).max(120), z.array(z.string().trim().min(1).max(120)).max(100)).optional(),
-  pricing: z.object({ baseFare: z.number().min(0).max(1000).optional(), perKm: z.number().min(0).max(1000).optional(), bookingFee: z.number().min(0).max(1000).optional(), minimumFare: z.number().min(0).max(1000).optional(), driverSharePercent: z.number().min(1).max(100).optional(), maxPickupKm: z.number().min(1).max(100).optional(), offerSeconds: z.number().int().min(20).max(600).optional(), proofPhotoRequired: z.boolean().optional() }).partial().optional()
+  routingVerified:z.boolean().optional(), dispatchSchedulerVerified:z.boolean().optional(), maxSearchSeconds:z.number().int().min(90).max(1800).optional(),
+  enabledCountries:z.array(z.enum(["ZW","MW"])).max(2).optional(),
+  cityGeofences:z.record(z.string().min(4),z.object({country:z.enum(["ZW","MW"]),lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180),radiusKm:z.number().min(3).max(100)}).strict()).optional(),
+  cashEnabled: z.boolean().optional(), scheduledEnabled: z.boolean().optional(), enabledCities: z.array(z.string().trim().min(1).max(120)).max(50).optional(), enabledAreas: z.record(z.string().trim().min(1).max(130), z.array(z.string().trim().min(1).max(120)).max(100)).optional(),
+  pricing: z.object({ currency:z.enum(["USD","ZWG","MWK"]).optional(), baseFare: z.number().min(0).max(1000000).optional(), perKm: z.number().min(0).max(1000000).optional(), bookingFee: z.number().min(0).max(1000000).optional(), minimumFare: z.number().min(0).max(1000000).optional(), driverSharePercent: z.number().min(1).max(100).optional(), maxPickupKm: z.number().min(1).max(100).optional(), offerSeconds: z.number().int().min(20).max(600).optional(), proofPhotoRequired: z.boolean().optional() }).partial().optional(),
+  pricingByCountry: z.record(z.enum(["ZW","MW"]),z.object({ currency:z.enum(["USD","ZWG","MWK"]), baseFare:z.number().min(0).max(1000000), perKm:z.number().min(0).max(1000000), bookingFee:z.number().min(0).max(1000000), minimumFare:z.number().min(0).max(1000000), driverSharePercent:z.number().min(1).max(100).optional(), maxPickupKm:z.number().min(1).max(100).optional(), offerSeconds:z.number().int().min(20).max(600).optional(), proofPhotoRequired:z.boolean().optional() }).passthrough()).optional()
 });
 
 export async function GET(request) {
@@ -34,9 +38,13 @@ export async function GET(request) {
 
 export async function PATCH(request) {
   try {
-    const actor = await authenticateRequest(request, { roles: CONFIG_ROLES }); const body = settingsSchema.parse(await request.json()); const { db } = getAdminServices(); const ref = db.collection("platformSettings").doc("global"); const currentSnap = await ref.get(); const current = currentSnap.exists ? currentSnap.data() : {}; const mobility = current.mobility || {}; const send = mobility.send || {};
+    const actor = await authenticateRequest(request, { roles: CONFIG_ROLES }); const body = settingsSchema.parse(await request.json());
+    for (const [country, pricing] of Object.entries(body.pricingByCountry || {})) {
+      if (!countryCurrencies(country).includes(pricing.currency)) throw Object.assign(new Error(`Choose a currency approved for ${country}.`), { status: 400 });
+    }
+    const { db } = getAdminServices(); const ref = db.collection("platformSettings").doc("global"); const currentSnap = await ref.get(); const current = currentSnap.exists ? currentSnap.data() : {}; const mobility = current.mobility || {}; const send = mobility.send || {};
     const validatedZones=body.cityGeofences===undefined?null:validateCoverageCollection(body.cityGeofences,{
-      enabledCountries:["ZW"],
+      enabledCountries:body.enabledCountries??send.enabledCountries??[],
       enabledCities:body.enabledCities??send.enabledCities??[],
       send:true
     });
@@ -44,9 +52,10 @@ export async function PATCH(request) {
      ...(body.routingVerified!==undefined?{routingVerified:body.routingVerified}:{}),
      ...(body.dispatchSchedulerVerified!==undefined?{dispatchSchedulerVerified:body.dispatchSchedulerVerified}:{}),
      ...(body.maxSearchSeconds!==undefined?{maxSearchSeconds:body.maxSearchSeconds}:{}),
-     ...(validatedZones!==null?{cityGeofences:validatedZones}:{}), ...(body.cashEnabled !== undefined ? { cashEnabled: body.cashEnabled } : {}), ...(body.scheduledEnabled !== undefined ? { scheduledEnabled: body.scheduledEnabled } : {}), ...(body.enabledCities !== undefined ? { enabledCities: [...new Set(body.enabledCities.map((value) => value.trim()).filter(Boolean))] } : {}), ...(body.enabledAreas !== undefined ? { enabledAreas: Object.fromEntries(Object.entries(body.enabledAreas).map(([city, areas]) => [city.trim(), [...new Set(areas.map((value) => value.trim()).filter(Boolean))]]).filter(([city, areas]) => city && areas.length)) } : {}), ...(body.pricing ? { pricing: { ...(send.pricing || {}), ...body.pricing } } : {}) };
+     ...(body.enabledCountries!==undefined?{enabledCountries:body.enabledCountries}:{}),
+     ...(validatedZones!==null?{cityGeofences:validatedZones}:{}), ...(body.cashEnabled !== undefined ? { cashEnabled: body.cashEnabled } : {}), ...(body.scheduledEnabled !== undefined ? { scheduledEnabled: body.scheduledEnabled } : {}), ...(body.enabledCities !== undefined ? { enabledCities: [...new Set(body.enabledCities.map((value) => value.trim()).filter(Boolean))] } : {}), ...(body.enabledAreas !== undefined ? { enabledAreas: Object.fromEntries(Object.entries(body.enabledAreas).map(([city, areas]) => [city.trim(), [...new Set(areas.map((value) => value.trim()).filter(Boolean))]]).filter(([city, areas]) => city && areas.length)) } : {}), ...(body.pricing ? { pricing: { ...(send.pricing || {}), ...body.pricing } } : {}), ...(body.pricingByCountry ? { pricingByCountry: { ...(send.pricingByCountry || {}), ...body.pricingByCountry } } : {}) };
     await ref.set({ mobility: { ...mobility, send: next }, updatedAt: FieldValue.serverTimestamp(), updatedBy: actor.uid }, { merge: true });
-    await db.collection("auditLogs").add({ actorId: actor.uid, action: "mobility.send_settings.updated", entityType: "platformSettings", entityId: "global", metadata: { cashEnabled: next.cashEnabled !== false, enabledCities: next.enabledCities || [], enabledAreas: next.enabledAreas || {}, pricing: next.pricing || {} }, source: "admin_send", createdAt: FieldValue.serverTimestamp() });
+    await db.collection("auditLogs").add({ actorId: actor.uid, action: "mobility.send_settings.updated", entityType: "platformSettings", entityId: "global", metadata: { cashEnabled: next.cashEnabled !== false, enabledCountries: next.enabledCountries || [], enabledCities: next.enabledCities || [], enabledAreas: next.enabledAreas || {}, pricing: next.pricing || {}, pricingByCountry: next.pricingByCountry || {} }, source: "admin_send", createdAt: FieldValue.serverTimestamp() });
     return Response.json({ ok: true, send: parcelSettings({ ...current, mobility: { ...mobility, send: next } }) });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the Send settings." }, { status: 400 });

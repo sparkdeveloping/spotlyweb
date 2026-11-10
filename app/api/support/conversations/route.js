@@ -74,6 +74,34 @@ function actorName(user) {
   return safeText(user?.profile?.displayName || user?.name || user?.email || "Spotly Support", 160);
 }
 
+function publicSupportRecord(id, data = {}) {
+  const iso = (value) => value?.toDate?.().toISOString?.() || null;
+  return {
+    id,
+    subject: data.subject || "Spotly Support",
+    category: data.category || "general",
+    priority: data.priority || "normal",
+    status: data.status || "open",
+    contextType: data.contextType || null,
+    contextId: data.contextId || null,
+    lastMessage: data.lastMessage || "",
+    unreadForRequester: Number(data.unreadForRequester || 0),
+    lastMessageAt: iso(data.lastMessageAt),
+    createdAt: iso(data.createdAt),
+    updatedAt: iso(data.updatedAt)
+  };
+}
+
+function publicSupportMessage(id, data = {}) {
+  return {
+    id,
+    senderName: data.senderName || "Spotly Support",
+    senderRole: data.senderRole || "support",
+    body: data.body || "",
+    createdAt: data.createdAt?.toDate?.().toISOString?.() || null
+  };
+}
+
 async function participant(db, user, conversation) {
   if (supportStaff(user) || conversation.requesterId === user.uid) return { allowed: true, support: supportStaff(user), requester: conversation.requesterId === user.uid };
   if (conversation.businessId) {
@@ -95,6 +123,52 @@ async function supportAudit(db, user, conversationId, action, details = {}) {
     details,
     createdAt: FieldValue.serverTimestamp()
   });
+}
+
+
+export async function GET(request) {
+  try {
+    const user = await authenticateRequest(request);
+    await enforceRateLimit(request, { key: `support-read:${user.uid}`, limit: 120, windowMs: 60_000 });
+    const { db } = getAdminServices();
+    const url = new URL(request.url);
+    const conversationId = safeText(url.searchParams.get("conversationId") || "", 180);
+
+    if (conversationId) {
+      const snapshot = await db.collection("supportConversations").doc(conversationId).get();
+      if (!snapshot.exists) throw Object.assign(new Error("The support conversation was not found."), { status: 404 });
+      const conversation = snapshot.data() || {};
+      const access = await participant(db, user, conversation);
+      if (!access.allowed) throw Object.assign(new Error("You cannot access this support conversation."), { status: 403 });
+      const messageSnapshot = await db.collection("supportMessages")
+        .where("conversationId", "==", conversationId)
+        .limit(250)
+        .get();
+      const messages = messageSnapshot.docs
+        .map((doc) => ({ raw: doc.data() || {}, public: publicSupportMessage(doc.id, doc.data() || {}) }))
+        .filter((message) => access.support || message.raw.internal !== true)
+        .sort((a, b) => (a.raw.createdAt?.toMillis?.() || 0) - (b.raw.createdAt?.toMillis?.() || 0))
+        .map((message) => message.public);
+      if (access.requester && Number(conversation.unreadForRequester || 0) > 0) {
+        await snapshot.ref.set({ unreadForRequester: 0, requesterLastReadAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      }
+      return Response.json({ ok: true, conversation: publicSupportRecord(snapshot.id, conversation), messages });
+    }
+
+    // Customer-facing support history is deliberately scoped to the requester.
+    // Staff/business consoles have separate permissioned surfaces.
+    const history = await db.collection("supportConversations")
+      .where("requesterId", "==", user.uid)
+      .limit(100)
+      .get();
+    const conversations = history.docs
+      .map((doc) => ({ raw: doc.data() || {}, public: publicSupportRecord(doc.id, doc.data() || {}) }))
+      .sort((a, b) => (b.raw.lastMessageAt?.toMillis?.() || b.raw.updatedAt?.toMillis?.() || 0) - (a.raw.lastMessageAt?.toMillis?.() || a.raw.updatedAt?.toMillis?.() || 0))
+      .map((item) => item.public);
+    return Response.json({ ok: true, conversations });
+  } catch (error) {
+    return apiError(error, "Support history could not be loaded.");
+  }
 }
 
 export async function POST(request) {

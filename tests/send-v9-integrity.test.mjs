@@ -6,11 +6,15 @@ import {validateSendTerritory} from "../lib/send-territory.js";
 const read=p=>fs.readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const pickup={lat:-17.83,lng:31.04,country:"ZW",city:"Harare",area:"CBD"};
 const dropoff={...pickup,lat:-17.85};
-const policy={enabledCities:["Harare"],enabledAreas:{},cityGeofences:{"ZW:harare":{country:"ZW",lat:-17.83,lng:31.04,radiusKm:35}}};
-test("Zimbabwe-only pickup territory is authenticated against operator geofences",()=>{
+const policy={enabledCountries:["ZW","MW"],enabledCities:["Harare","Lilongwe"],enabledAreas:{},cityGeofences:{"ZW:harare":{country:"ZW",lat:-17.83,lng:31.04,radiusKm:35},"MW:lilongwe":{country:"MW",lat:-13.9626,lng:33.7741,radiusKm:35}}};
+test("Send territory is country-aware, domestic and authenticated against operator geofences",()=>{
  assert.equal(validateSendTerritory(pickup,dropoff,policy).country,"ZW");
- assert.throws(()=>validateSendTerritory({...pickup,country:"MW"},dropoff,policy));
+ const mwPickup={lat:-13.9626,lng:33.7741,country:"MW",city:"Lilongwe",area:"City Centre"};
+ const mwDropoff={...mwPickup,lat:-13.98,lng:33.79};
+ assert.equal(validateSendTerritory(mwPickup,mwDropoff,policy).country,"MW");
+ assert.throws(()=>validateSendTerritory(mwPickup,dropoff,policy));
  assert.throws(()=>validateSendTerritory(pickup,{...dropoff,country:"MW"},policy));
+ assert.throws(()=>validateSendTerritory(mwPickup,mwDropoff,{...policy,enabledCountries:["ZW"]}));
  assert.throws(()=>validateSendTerritory(pickup,dropoff,{...policy,cityGeofences:{}}));
  assert.throws(()=>validateSendTerritory({...pickup,lat:-21},dropoff,policy));
 });

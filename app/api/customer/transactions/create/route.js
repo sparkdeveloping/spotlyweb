@@ -1,5 +1,6 @@
 import { requireCustomerLaunchAccess } from "@/lib/customer-launch-server";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { buildOrderTotals } from "@/lib/order-money";
 import { safeText } from "@/lib/server-helpers";
@@ -11,6 +12,8 @@ import { transactionCreateRequestSchema } from "@/lib/contracts/schemas";
 import { countryDefinition, countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
 import { requireServiceLive } from "@/lib/service-availability-server";
 import { operationContextFor } from "@/lib/operations-grants-server";
+import { appointmentSlotAllowed, bookingRangeValidation, localDateTimeEpoch, ticketRules } from "@/lib/book-live-domain";
+import { issueTicketEntitlementsInTransaction, ticketCode } from "@/lib/ticket-entitlements-server";
 
 export const runtime = "nodejs";
 
@@ -39,23 +42,6 @@ function transactionKind(type) {
   if (type === "appointments_services") return "appointment";
   if (type === "accommodation_activities") return "booking";
   return null;
-}
-
-function localDateTimeEpoch(date, time, timeZone) {
-  const [year, month, day] = String(date || "").split("-").map(Number);
-  const [hour, minute] = String(time || "00:00").split(":").map(Number);
-  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
-  const wallUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(new Date(wallUtc));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const represented = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute), Number(values.second));
-  const offset = represented - wallUtc;
-  const result = wallUtc - offset;
-  return Number.isFinite(result) ? result : null;
-}
-
-function validDate(value, timeZone) {
-  return localDateTimeEpoch(value, "00:00", timeZone);
 }
 
 function plainDate(value) {
@@ -132,14 +118,17 @@ export async function POST(request) {
     if (kind === "appointment" && !body.appointment) throw Object.assign(new Error("Choose an appointment date and time."), { status: 422 });
     if (kind === "booking" && !body.booking) throw Object.assign(new Error("Choose booking dates."), { status: 422 });
     if (kind === "appointment") {
-      const appointmentAt = localDateTimeEpoch(body.appointment.date, body.appointment.time, timeZone);
-      if (!Number.isFinite(appointmentAt) || appointmentAt < Date.now() + 10 * 60_000) throw Object.assign(new Error("Choose a future appointment time."), { status: 422 });
+      if (!appointmentSlotAllowed({ product, date: body.appointment.date, time: body.appointment.time, timeZone })) {
+        throw Object.assign(new Error("That appointment time is outside the published availability or booking window."), { status: 422 });
+      }
     }
     if (kind === "booking") {
-      const start = validDate(body.booking.startDate, timeZone);
-      const end = body.booking.endDate ? validDate(body.booking.endDate, timeZone) : null;
-      if (!start || start < Date.now() - 86_400_000) throw Object.assign(new Error("Choose a valid future booking date."), { status: 422 });
-      if (end && end < start) throw Object.assign(new Error("The end date must be after the start date."), { status: 422 });
+      const validation = bookingRangeValidation({ product, startDate: body.booking.startDate, endDate: body.booking.endDate, timeZone });
+      if (!validation.ok) throw Object.assign(new Error(validation.reason), { status: 422 });
+    }
+    if (kind === "ticket") {
+      const rules = ticketRules(product);
+      if (!rules.salesOpen) throw Object.assign(new Error("Ticket sales are not currently open for this event."), { status: 409 });
     }
 
     const finance = { ...(legacyFinanceSnapshot.data() || {}), ...(financeSnapshot.data() || {}) };
@@ -155,7 +144,7 @@ export async function POST(request) {
     if (!Number.isFinite(unitPrice) || unitPrice < 0) throw Object.assign(new Error(`This offering does not have a valid ${body.currency} price.`), { status: 409 });
 
     const requestedQuantity = kind === "ticket" ? body.quantity : 1;
-    const maxQuantity = Number(product.maxQuantity || (kind === "ticket" ? 10 : 1));
+    const maxQuantity = kind === "ticket" ? ticketRules(product).maxQuantity : 1;
     if (requestedQuantity > maxQuantity) throw Object.assign(new Error(`You can select up to ${maxQuantity}.`), { status: 409 });
 
     const capacity = Number(product.capacity || 0);
@@ -196,9 +185,19 @@ export async function POST(request) {
       if (latestProduct.businessId !== body.businessId || latestProduct.published !== true || latestProduct.available === false || latestProduct.active === false || latestProduct.status === "archived") throw Object.assign(new Error("This offering is no longer available."), { status: 409 });
       if (latestProduct.branchIds?.length && !latestProduct.branchIds.includes(body.branchId)) throw Object.assign(new Error("This offering is no longer available at the selected location."), { status: 409 });
       if (kind === "ticket") {
+        const latestTicketRules = ticketRules(latestProduct);
+        if (!latestTicketRules.salesOpen) throw Object.assign(new Error("Ticket sales closed while you were checking out."), { status: 409 });
+        if (requestedQuantity > latestTicketRules.maxQuantity) throw Object.assign(new Error(`You can select up to ${latestTicketRules.maxQuantity}.`), { status: 409 });
         const latestCapacity = Number(latestProduct.capacity || 0);
         const latestReserved = Math.max(0, Number(latestProduct.reservedQuantity || 0));
         if (latestCapacity > 0 && requestedQuantity > Math.max(0, latestCapacity - latestReserved)) throw Object.assign(new Error("Those tickets were just taken. Choose a smaller quantity."), { status: 409 });
+      } else if (kind === "appointment") {
+        if (!appointmentSlotAllowed({ product: latestProduct, date: body.appointment.date, time: body.appointment.time, timeZone })) {
+          throw Object.assign(new Error("That appointment time is no longer available in the published schedule."), { status: 409 });
+        }
+      } else if (kind === "booking") {
+        const validation = bookingRangeValidation({ product: latestProduct, startDate: body.booking.startDate, endDate: body.booking.endDate, timeZone });
+        if (!validation.ok) throw Object.assign(new Error(validation.reason), { status: 409 });
       }
 
       const availabilitySpecs = kind === "appointment"
@@ -242,7 +241,18 @@ export async function POST(request) {
         commissionPercent: Number(finance.commissionPercent ?? settings.commerce?.defaultCommissionPercent ?? 0)
       });
       const paymentRequired = body.paymentMethod !== "pay_later" && latestTotals.total > 0;
-
+      const requiresBusinessReview = latestProduct.requiresBusinessReview === true;
+      const appointmentAtMs = kind === "appointment" ? localDateTimeEpoch(body.appointment?.date, body.appointment?.time, timeZone) : null;
+      const bookingAtMs = kind === "booking" ? localDateTimeEpoch(body.booking?.startDate, "00:00", timeZone) : null;
+      const eventStartDate = kind === "ticket" ? plainDate(latestProduct.startsAt) : null;
+      const scheduledAtMs = kind === "appointment" ? appointmentAtMs : kind === "booking" ? bookingAtMs : eventStartDate?.getTime?.();
+      const initialStatus = paymentRequired
+        ? "awaiting_payment"
+        : kind === "ticket"
+          ? "issued"
+          : requiresBusinessReview
+            ? "requested"
+            : "confirmed";
 
       const base = {
         number,
@@ -269,7 +279,9 @@ export async function POST(request) {
         promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         paymentMethod: body.paymentMethod,
         paymentStatus: paymentRequired ? "unpaid" : latestTotals.total <= 0 ? "not_required" : "pay_later",
-        status: paymentRequired && kind === "ticket" ? "awaiting_payment" : kind === "ticket" ? "submitted" : "requested",
+        status: initialStatus,
+        requiresBusinessReview,
+        scheduledAt: Number.isFinite(scheduledAtMs) ? Timestamp.fromMillis(scheduledAtMs) : null,
         notes: safeText(body.notes, 600),
         inventoryReservationStatus: kind === "ticket" || availabilitySpecs.length ? "reserved" : "not_applicable",
         availabilityReservations: availabilitySpecs.map((spec) => ({ id: spec.id, units: spec.units, key: spec.key, kind: spec.kind })),
@@ -280,17 +292,26 @@ export async function POST(request) {
       if (kind === "ticket") {
         const startsDate = plainDate(latestProduct.startsAt);
         const endsDate = plainDate(latestProduct.endsAt);
-        transaction.create(orderRef, {
+        const liveRules = ticketRules(latestProduct);
+        const issuedCodes = initialStatus === "issued" ? Array.from({ length: requestedQuantity }, () => ticketCode()) : [];
+        const ticketOrder = {
           ...base,
           fulfilment: "ticketing",
+          ...(issuedCodes.length ? { ticketCodes: issuedCodes, ticketCode: issuedCodes[0], ticketOwnershipStatus: "issued", issuedAt: now } : { ticketOwnershipStatus: "pending" }),
           event: {
+            eventId: liveRules.eventId || body.itemId,
+            name: safeText(liveRules.eventName, 160),
+            tier: safeText(liveRules.ticketTier, 120),
             date: startsDate ? startsDate.toISOString().slice(0, 10) : "",
             time: startsDate ? startsDate.toLocaleTimeString("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }) : "",
             startsAt: startsDate ? startsDate.toISOString() : null,
             endsAt: endsDate ? endsDate.toISOString() : null,
-            venue: safeText(latestProduct.venue || latestBranch.address || latestBranch.branchName || "", 240)
+            venue: safeText(latestProduct.venue || latestBranch.address || latestBranch.branchName || "", 240),
+            transferable: liveRules.transferable
           }
-        });
+        };
+        transaction.create(orderRef, ticketOrder);
+        if (issuedCodes.length) await issueTicketEntitlementsInTransaction(transaction, db, orderRef, ticketOrder, { now, source: "customer_transaction_create", codes: issuedCodes, patchOrder: false });
         transaction.set(db.collection("products").doc(body.itemId), { reservedQuantity: FieldValue.increment(requestedQuantity), updatedAt: now }, { merge: true });
       } else if (kind === "appointment") {
         transaction.create(orderRef, {
@@ -346,8 +367,8 @@ export async function POST(request) {
       });
       transaction.create(notificationRef, {
         userId: user.uid,
-        title: kind === "ticket" ? "Ticket request created" : kind === "appointment" ? "Appointment requested" : "Booking requested",
-        body: `${number} was sent to ${latestBusiness.name || "the business"}.`,
+        title: kind === "ticket" ? (initialStatus === "issued" ? "Tickets ready" : "Ticket checkout created") : kind === "appointment" ? (initialStatus === "confirmed" ? "Appointment confirmed" : "Appointment requested") : (initialStatus === "confirmed" ? "Booking confirmed" : "Booking requested"),
+        body: initialStatus === "issued" ? `${number} is ready in Activity.` : initialStatus === "confirmed" ? `${number} is confirmed with ${latestBusiness.name || "the business"}.` : `${number} was sent to ${latestBusiness.name || "the business"}.`,
         href: `/?view=activity&order=${encodeURIComponent(orderRef.id)}`,
         category: kind,
         workspace: "customer",

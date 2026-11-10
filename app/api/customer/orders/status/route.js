@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { plain } from "@/lib/driver-delivery-server";
+import { cancellationDeadlineMs, rescheduleDeadlineMs } from "@/lib/book-live-domain";
 
 export const runtime = "nodejs";
 const schema = z.object({ orderId: z.string().min(3).max(180) });
@@ -46,6 +47,42 @@ export async function POST(request) {
     if (!orderSnapshot.exists) throw Object.assign(new Error("The order was not found."), { status: 404 });
     const order = orderSnapshot.data() || {};
     if (order.customerId !== user.uid) throw Object.assign(new Error("You cannot view this order."), { status: 403 });
+
+    const transactionKind = ["appointment", "booking", "ticket"].includes(order.transactionType) ? order.transactionType : null;
+    let transaction = null;
+    if (transactionKind) {
+      const productId = order.items?.[0]?.productId || "";
+      const productSnapshot = productId ? await db.collection("products").doc(productId).get() : null;
+      const product = productSnapshot?.exists ? productSnapshot.data() || {} : {};
+      const cancelDeadline = cancellationDeadlineMs({ kind: transactionKind, product, order });
+      const rescheduleDeadline = rescheduleDeadlineMs({ kind: transactionKind, product, order });
+      const active = !["cancelled", "completed", "checked_out", "refunded", "expired", "payment_failed"].includes(String(order.status || ""));
+      const organizerCancelledEvent = transactionKind === "ticket" && order.event?.cancelled === true;
+      const now = Date.now();
+      let entitlements = [];
+      if (transactionKind === "ticket") {
+        const quantity = Math.max(1, Number(order.items?.[0]?.quantity || order.itemCount || 1));
+        const refs = Array.from({ length: quantity }, (_, index) => db.collection("ticketEntitlements").doc(`${orderSnapshot.id}_${String(index + 1).padStart(3, "0")}`));
+        if (refs.length) {
+          const snapshots = await db.getAll(...refs);
+          entitlements = snapshots.filter((snapshot) => snapshot.exists).map((snapshot) => ({ id: snapshot.id, ...plain(snapshot.data()) }));
+        }
+      }
+      transaction = {
+        kind: transactionKind,
+        appointment: plain(order.appointment || null),
+        booking: plain(order.booking || null),
+        event: plain(order.event || null),
+        ticketOwnershipStatus: order.ticketOwnershipStatus || null,
+        tickets: entitlements,
+        actions: {
+          canCancel: active && (organizerCancelledEvent || !Number.isFinite(cancelDeadline) || now < cancelDeadline),
+          canReschedule: active && ["appointment", "booking"].includes(transactionKind) && (!Number.isFinite(rescheduleDeadline) || now < rescheduleDeadline),
+          cancellationDeadline: Number.isFinite(cancelDeadline) ? new Date(cancelDeadline).toISOString() : null,
+          rescheduleDeadline: Number.isFinite(rescheduleDeadline) ? new Date(rescheduleDeadline).toISOString() : null
+        }
+      };
+    }
 
     let delivery = null;
     if (order.deliveryJobId) {
@@ -129,9 +166,18 @@ export async function POST(request) {
         pickup: plain(order.pickup || null),
         delivery: plain(order.delivery || null),
         shopping: plain(order.shopping || null),
+        scheduledAt: plain(order.scheduledAt || null),
+        transactionType: order.transactionType || null,
+        appointment: plain(order.appointment || null),
+        booking: plain(order.booking || null),
+        event: plain(order.event || null),
+        ticketCode: order.ticketCode || null,
+        ticketCodes: plain(order.ticketCodes || []),
+        ticketOwnershipStatus: order.ticketOwnershipStatus || null,
         createdAt: plain(order.createdAt || null),
         updatedAt: plain(order.updatedAt || null)
       },
+      transaction,
       delivery
     });
   } catch (error) {

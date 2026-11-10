@@ -128,7 +128,13 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow create: if self(uid) && request.resource.data.roles == ["customer"];
+      // Self-registration is deliberately narrow. A customer may never seed roles,
+      // customPermissions or lifecycle values that grant platform authority.
+      allow create: if self(uid) && request.resource.data.uid == uid && request.resource.data.roles == ["customer"] &&
+        request.resource.data.status == "active" && !("customPermissions" in request.resource.data) &&
+        request.resource.data.keys().hasOnly([
+          "uid", "email", "displayName", "phoneNumber", "photoURL", "providers", "locale", "lastSeenAt", "updatedAt", "roles", "status", "createdAt"
+        ]);
       allow read: if self(uid) || platformAdmin() || hasPermission("users.read");
       allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         "displayName", "phoneNumber", "phone", "photoURL", "providers", "locale", "lastSeenAt", "updatedAt", "email",
@@ -143,12 +149,11 @@ service cloud.firestore {
     }
 
     match /platformSettings/{id} {
-      allow read: if true;
-      allow create: if (platformAdmin() || hasPermission("admin.configuration")) &&
-        !request.resource.data.keys().hasAny(["serviceAvailability", "serviceAvailabilityRevisionId", "serviceAvailabilityRevisionNumber", "serviceAvailabilityPublishedAt", "serviceAvailabilityPublishedBy", "serviceAvailabilityPublishedByEmail", "serviceAvailabilityPublishNote", "serviceAvailabilityUpdatedAt", "serviceAvailabilityUpdatedBy"]);
-      allow update: if (platformAdmin() || hasPermission("admin.configuration")) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(["serviceAvailability", "serviceAvailabilityRevisionId", "serviceAvailabilityRevisionNumber", "serviceAvailabilityPublishedAt", "serviceAvailabilityPublishedBy", "serviceAvailabilityPublishedByEmail", "serviceAvailabilityPublishNote", "serviceAvailabilityUpdatedAt", "serviceAvailabilityUpdatedBy"]);
-      allow delete: if false;
+      // Authoritative operations configuration is never a public Firestore document.
+      // Customer-safe runtime fields are projected through /api/public/runtime and all
+      // mutations go through audited Admin SDK endpoints.
+      allow read: if platformAdmin() || hasPermission("admin.configuration");
+      allow create, update, delete: if false;
     }
 
     // Countries & Services rollout drafts and immutable revisions are server-authoritative.
@@ -284,7 +289,8 @@ service cloud.firestore {
     match /products/{productId} {
       allow read: if publicProduct() || canReadCatalogue(resource.data.businessId) || hasPermission("businesses.read");
       allow create: if canEditCatalogue(request.resource.data.businessId);
-      allow update, delete: if canEditCatalogue(resource.data.businessId);
+      allow update: if canEditCatalogue(resource.data.businessId) && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if canEditCatalogue(resource.data.businessId);
     }
 
     match /orders/{orderId} {
@@ -326,7 +332,11 @@ service cloud.firestore {
     match /promotions/{promotionId} {
       allow read: if (("scope" in resource.data) && resource.data.scope == "platform" && platformAdmin()) || ((!(("scope" in resource.data) && resource.data.scope == "platform")) && ((resource.data.active == true && publicBusiness(resource.data.businessId)) || canViewBusiness(resource.data.businessId)));
       allow create: if (("scope" in request.resource.data) && request.resource.data.scope == "platform" && platformAdmin()) || ((!(("scope" in request.resource.data) && request.resource.data.scope == "platform")) && canManageBusiness(request.resource.data.businessId));
-      allow update, delete: if (("scope" in resource.data) && resource.data.scope == "platform" && platformAdmin()) || ((!(("scope" in resource.data) && resource.data.scope == "platform")) && canManageBusiness(resource.data.businessId));
+      allow update: if request.resource.data.scope == resource.data.scope && (
+        (("scope" in resource.data) && resource.data.scope == "platform" && platformAdmin()) ||
+        ((!(("scope" in resource.data) && resource.data.scope == "platform")) && request.resource.data.businessId == resource.data.businessId && canManageBusiness(resource.data.businessId))
+      );
+      allow delete: if (("scope" in resource.data) && resource.data.scope == "platform" && platformAdmin()) || ((!(("scope" in resource.data) && resource.data.scope == "platform")) && canManageBusiness(resource.data.businessId));
     }
 
     match /catalogTemplates/{templateId} {
@@ -374,6 +384,7 @@ service cloud.firestore {
     match /firstAccessTouchpoints/{id} { allow read, write: if false; }
 
     match /rateLimits/{limitId} { allow read, write: if false; }
+    match /securityRateLimits/{limitId} { allow read, write: if false; }
 
     match /partnershipLeads/{leadId} {
       allow create: if false;
@@ -392,11 +403,15 @@ service cloud.firestore {
     match /notificationPreferences/{uid} { allow read, write: if self(uid) || platformAdmin(); }
     match /pushTokens/{tokenId} {
       allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if activeAccount() && resource.data.userId == request.auth.uid;
+      allow read: if activeAccount() && resource.data.userId == request.auth.uid;
+      allow update: if activeAccount() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if activeAccount() && resource.data.userId == request.auth.uid;
     }
     match /favorites/{favoriteId} {
       allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if activeAccount() && resource.data.userId == request.auth.uid;
+      allow read: if activeAccount() && resource.data.userId == request.auth.uid;
+      allow update: if activeAccount() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if activeAccount() && resource.data.userId == request.auth.uid;
     }
     match /savedItems/{savedItemId} {
       allow create: if activeAccount() && request.resource.data.userId == request.auth.uid;
@@ -423,9 +438,16 @@ service cloud.firestore {
     }
 
     match /clientTelemetry/{eventId} {
-      allow create: if activeAccount() && request.resource.data.actorId == request.auth.uid && request.resource.data.diff({}).affectedKeys().hasOnly([
-        "action", "entityType", "entityId", "metadata", "actorId", "actorEmail", "createdAt"
-      ]);
+      // Telemetry is explicitly untrusted and must not be able to impersonate an
+      // email identity or smuggle arbitrary top-level fields into audit tooling.
+      allow create: if activeAccount() && request.resource.data.actorId == request.auth.uid &&
+        request.resource.data.action is string && request.resource.data.action.size() <= 120 &&
+        request.resource.data.entityType is string && request.resource.data.entityType.size() <= 120 &&
+        request.resource.data.entityId is string && request.resource.data.entityId.size() <= 240 &&
+        request.resource.data.metadata is map && request.resource.data.createdAt == request.time &&
+        request.resource.data.diff({}).affectedKeys().hasOnly([
+          "action", "entityType", "entityId", "metadata", "actorId", "createdAt"
+        ]);
       allow read: if platformAdmin() || hasPermission("audit.read");
       allow update, delete: if false;
     }

@@ -24,6 +24,18 @@ export const SPOTLY_SERVICE_AVAILABILITY_CONTRACT = Object.freeze(JSON.parse(ser
 export const SPOTLY_SERVICE_AVAILABILITY_CONTRACT_VERSION = SPOTLY_SERVICE_AVAILABILITY_CONTRACT.serviceAvailabilityContractVersion;
 export const SPOTLY_SERVICE_AVAILABILITY_CONTRACT_SHA256 = createHash("sha256").update(serviceAvailabilityManifestBytes).digest("hex");
 
+const customerRuntimeManifestUrl = new URL("../contracts/spotly-customer-runtime.v1.json", import.meta.url);
+const customerRuntimeManifestBytes = readFileSync(fileURLToPath(customerRuntimeManifestUrl));
+export const SPOTLY_CUSTOMER_RUNTIME_CONTRACT = Object.freeze(JSON.parse(customerRuntimeManifestBytes));
+export const SPOTLY_CUSTOMER_RUNTIME_CONTRACT_VERSION = SPOTLY_CUSTOMER_RUNTIME_CONTRACT.customerRuntimeContractVersion;
+export const SPOTLY_CUSTOMER_RUNTIME_CONTRACT_SHA256 = createHash("sha256").update(customerRuntimeManifestBytes).digest("hex");
+
+const mediaDiscoveryManifestUrl = new URL("../contracts/spotly-media-discovery.v1.json", import.meta.url);
+const mediaDiscoveryManifestBytes = readFileSync(fileURLToPath(mediaDiscoveryManifestUrl));
+export const SPOTLY_MEDIA_DISCOVERY_CONTRACT = Object.freeze(JSON.parse(mediaDiscoveryManifestBytes));
+export const SPOTLY_MEDIA_DISCOVERY_CONTRACT_VERSION = SPOTLY_MEDIA_DISCOVERY_CONTRACT.version;
+export const SPOTLY_MEDIA_DISCOVERY_CONTRACT_SHA256 = createHash("sha256").update(mediaDiscoveryManifestBytes).digest("hex");
+
 export const FOUNDATION_CAPABILITIES = Object.freeze({
   firestore: true,
   realtimeDatabase: true,
@@ -32,5 +44,9 @@ export const FOUNDATION_CAPABILITIES = Object.freeze({
   callableFunctions: true,
   appCheckReady: true,
   emulatorReady: true,
-  operationsGrants: true
+  operationsGrants: true,
+  customerRuntime: true,
+  customerMobilityQuotes: true,
+  customerDiscovery: true,
+  approvedMedia: true
 });

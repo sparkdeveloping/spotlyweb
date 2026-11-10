@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
@@ -6,6 +5,7 @@ import { requireBusinessPermission } from "@/lib/access-control-server";
 import { releaseReservationInTransaction } from "@/lib/order-reservations-server";
 import { safeText } from "@/lib/server-helpers";
 import { qualifyReferralForCustomer } from "@/lib/referral-server";
+import { issueTicketEntitlementsInTransaction } from "@/lib/ticket-entitlements-server";
 
 export const runtime = "nodejs";
 
@@ -46,9 +46,6 @@ function transitionAllowed(current, next) {
   return !next || current === next || ALLOWED_STATUS_TRANSITIONS.get(current)?.has(next) === true;
 }
 
-function createTicketCode() {
-  return `SPT-${randomBytes(4).toString("hex").toUpperCase()}`;
-}
 
 export async function POST(request) {
   try {
@@ -78,10 +75,6 @@ export async function POST(request) {
 
       const changes = { ...body.changes, updatedAt: FieldValue.serverTimestamp(), updatedBy: user.uid };
       if (body.changes.paymentStatus === "paid") changes.paidAt = FieldValue.serverTimestamp();
-      if (nextStatus === "issued" && fresh.transactionType === "ticket") {
-        changes.ticketCode = fresh.ticketCode || createTicketCode();
-        changes.issuedAt = fresh.issuedAt || FieldValue.serverTimestamp();
-      }
       const timelineEntry = { status: nextStatus || fresh.status, note, at: new Date().toISOString(), actorId: user.uid, actorName: user.name || user.email || "Business team" };
       changes.timeline = FieldValue.arrayUnion(timelineEntry);
 
@@ -96,6 +89,9 @@ export async function POST(request) {
         });
       } else {
         transaction.set(orderRef, changes, { merge: true });
+        if (nextStatus === "issued" && fresh.transactionType === "ticket") {
+          await issueTicketEntitlementsInTransaction(transaction, db, orderRef, { ...fresh, ...changes, status: "issued" }, { now: FieldValue.serverTimestamp(), source: "business_order_update" });
+        }
         transaction.create(db.collection("orderEvents").doc(), {
           orderId: body.orderId,
           type: body.changes.paymentStatus === "paid" ? "manual_payment_confirmed" : "order_updated",

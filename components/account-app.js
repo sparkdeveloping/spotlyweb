@@ -2,14 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, BellRing, Check, Globe2, Heart, HelpCircle, History, LockKeyhole, LogOut, Mail, MapPin, Pencil, Phone, Plus, ShieldCheck, Store, Trash2, UserRound, WalletCards } from "lucide-react";
+import { ArrowRight, BellRing, Check, Gift, Globe2, Heart, HelpCircle, History, LockKeyhole, LogOut, Mail, MapPin, Pencil, Phone, Plus, ShieldCheck, Store, Trash2, UserRound, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth, usePlatform } from "@/components/firebase-provider";
 import { useToast } from "@/components/providers";
 import { Button, Card, EntityPicker, ListRow, Modal, StatusBadge } from "@/components/ui";
 import { ThemeMenu } from "@/components/theme-menu";
-import { deleteSavedItem, saveSavedItem, saveUserPreferences, saveUserProfileDetails, subscribeSavedItems } from "@/lib/firebase-services";
+import { deleteSavedItem, saveNotificationPreferences, saveSavedItem, saveUserPreferences, saveUserProfileDetails, subscribeNotificationPreferences, subscribeSavedItems } from "@/lib/firebase-services";
 import { workspaceAccess as resolveWorkspaceAccess } from "@/lib/workspaces";
 import { BUILD_INFO, buildLabel } from "@/lib/build-info";
 import { NotificationCenter } from "@/components/notification-center";
@@ -19,6 +19,7 @@ import { CustomerShell } from "@/components/customer-shell";
 import { cn } from "@/lib/cn";
 import { useCountry } from "@/components/country-provider";
 import { countryCurrencies } from "@/lib/country-engine";
+import { authenticatedFetch } from "@/lib/api-client";
 
 function accountWorkspaces(profile, memberships, staffProfile, driverProfile, driverApplication) {
   const access = resolveWorkspaceAccess({ profile, memberships, staffProfile, driverProfile: driverProfile || driverApplication });
@@ -60,8 +61,8 @@ export function AccountApp() {
   const [language, setLanguage] = useState("English");
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [orderUpdates, setOrderUpdates] = useState(true);
-  const [businessUpdates, setBusinessUpdates] = useState(true);
-  const [workUpdates, setWorkUpdates] = useState(true);
+  const [bookingUpdates, setBookingUpdates] = useState(true);
+  const [rideSendUpdates, setRideSendUpdates] = useState(true);
   const [marketing, setMarketing] = useState(false);
   const [preferredCurrency, setPreferredCurrency] = useState("USD");
   const [defaultFulfilment, setDefaultFulfilment] = useState("pickup");
@@ -70,6 +71,8 @@ export function AccountApp() {
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [placeForm, setPlaceForm] = useState({ label: "Home", address: "", area: "", city: "" });
   const [profileForm, setProfileForm] = useState({ displayName: "", phone: "", preferredContact: "email", pickupContactName: "", pickupContactPhone: "" });
+  const [deletionOpen, setDeletionOpen] = useState(false);
+  const [deletionStatus, setDeletionStatus] = useState(null);
   const providers = useMemo(() => new Set(user?.providerData?.map((item) => item.providerId) || []), [user]);
   const workspaces = useMemo(() => accountWorkspaces(profile, memberships, staffProfile, driverProfile, driverApplication), [profile, memberships, staffProfile, driverProfile, driverApplication]);
 
@@ -78,8 +81,8 @@ export function AccountApp() {
     setLanguage(preferences.language || "English");
     setEmailUpdates(preferences.emailUpdates !== false);
     setOrderUpdates(preferences.orderUpdates !== false);
-    setBusinessUpdates(preferences.businessUpdates !== false);
-    setWorkUpdates(preferences.workUpdates !== false);
+    setBookingUpdates(preferences.bookingUpdates !== false);
+    setRideSendUpdates(preferences.rideSendUpdates !== false);
     setMarketing(Boolean(preferences.marketing));
     setPreferredCurrency(preferences.preferredCurrency || countryCurrencies(preferences.countryCode)?.[0] || "USD");
     setDefaultFulfilment(preferences.defaultFulfilment || "pickup");
@@ -102,6 +105,23 @@ export function AccountApp() {
   useEffect(() => {
     if (!user?.uid || user.isAnonymous) return undefined;
     return subscribeSavedItems(user.uid, (items) => setSavedPlaces(items.filter((item) => item.type === "place")), () => {});
+  }, [user?.uid, user?.isAnonymous]);
+
+  useEffect(() => {
+    if (!user?.uid || user.isAnonymous) return undefined;
+    return subscribeNotificationPreferences(user.uid, (preferences) => {
+      if (!preferences) return;
+      setEmailUpdates(preferences.emailUpdates !== false);
+      setOrderUpdates(preferences.orderUpdates !== false);
+      setBookingUpdates(preferences.bookingUpdates !== false);
+      setRideSendUpdates(preferences.rideSendUpdates !== false);
+      setMarketing(preferences.marketing === true);
+    }, () => {});
+  }, [user?.uid, user?.isAnonymous]);
+
+  useEffect(() => {
+    if (!user?.uid || user.isAnonymous) return;
+    authenticatedFetch("/api/customer/account/deletion", { cache: "no-store" }).then(setDeletionStatus).catch(() => {});
   }, [user?.uid, user?.isAnonymous]);
 
   async function savePlace(event) {
@@ -127,8 +147,11 @@ export function AccountApp() {
   async function savePreferences() {
     setLoading("preferences");
     try {
-      await saveUserPreferences(user.uid, { language, emailUpdates, orderUpdates, businessUpdates, workUpdates, marketing, preferredCurrency, defaultFulfilment }, user);
-      toast("Your notification and language preferences were saved to your account.", { title: "Preferences saved" });
+      await Promise.all([
+        saveUserPreferences(user.uid, { language, emailUpdates, orderUpdates, bookingUpdates, rideSendUpdates, marketing, preferredCurrency, defaultFulfilment }, user),
+        saveNotificationPreferences(user.uid, { emailUpdates, orderUpdates, bookingUpdates, rideSendUpdates, marketing })
+      ]);
+      toast("Your customer preferences were saved across Spotly.", { title: "Preferences saved" });
     } catch (error) { toast(error.message, { type: "error", title: "Could not save preferences" }); }
     finally { setLoading(""); }
   }
@@ -177,6 +200,19 @@ export function AccountApp() {
     finally { setLoading(""); }
   }
 
+  async function requestDeletion() {
+    setLoading("deletion");
+    try {
+      const result = await authenticatedFetch("/api/customer/account/deletion", { method: "POST", body: JSON.stringify({ reason: "customer_request", source: "customer_web" }) });
+      setDeletionStatus(result);
+      setDeletionOpen(false);
+      const total = Number(result.blockers?.total || 0);
+      toast(total ? `Your request is recorded. ${total} active ${total === 1 ? "transaction" : "transactions"} must resolve before deletion can finish.` : "Your account deletion request was recorded.", { title: "Deletion requested" });
+    } catch (error) {
+      toast(error.message || "Spotly could not start account deletion.", { type: "error", title: "Could not request deletion" });
+    } finally { setLoading(""); }
+  }
+
   const displayName = profile?.displayName || user?.displayName || "Your account";
   const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const legal = settings?.legal || {};
@@ -213,14 +249,15 @@ export function AccountApp() {
               </AccountSection>
 
               <AccountSection id="notifications" icon={BellRing} title="Notifications" description="Choose which updates deserve your attention.">
-                <div><ToggleRow title="Order and pickup updates" description="Status, payment and collection changes" checked={orderUpdates} onChange={(event) => setOrderUpdates(event.target.checked)} /><ToggleRow title="Account email" description="Important account and launch communication" checked={emailUpdates} onChange={(event) => setEmailUpdates(event.target.checked)} /><ToggleRow title="Business updates" description="Business setup, claims and operational changes" checked={businessUpdates} onChange={(event) => setBusinessUpdates(event.target.checked)} /><ToggleRow title="Staff and work updates" description="Tasks, shifts, learning and approvals" checked={workUpdates} onChange={(event) => setWorkUpdates(event.target.checked)} /><ToggleRow title="Marketing" description="Optional Spotly launch and product news" checked={marketing} onChange={(event) => setMarketing(event.target.checked)} /></div><div className="mt-4 flex flex-wrap gap-2"><Button variant="outline" onClick={push} loading={loading === "push"}>Enable browser notifications</Button><Button asChild variant="outline"><Link href="/notifications">Open notification center</Link></Button><Button onClick={savePreferences} loading={loading === "preferences"}>Save notification choices</Button></div>
+                <div><ToggleRow title="Orders & deliveries" description="Bite and Shopper status, payment, pickup and delivery changes" checked={orderUpdates} onChange={(event) => setOrderUpdates(event.target.checked)} /><ToggleRow title="Book & Live" description="Reservation, appointment, event and ticket updates" checked={bookingUpdates} onChange={(event) => setBookingUpdates(event.target.checked)} /><ToggleRow title="Ride & Send" description="Driver matching, trip, parcel and handoff updates" checked={rideSendUpdates} onChange={(event) => setRideSendUpdates(event.target.checked)} /><ToggleRow title="Offers & discovery" description="Optional Spotly recommendations, referrals and launch news" checked={marketing} onChange={(event) => setMarketing(event.target.checked)} /><ToggleRow title="Account email" description="Allow email for the customer update categories you keep enabled; safety and account-critical communication may still be required" checked={emailUpdates} onChange={(event) => setEmailUpdates(event.target.checked)} /></div><div className="mt-4 flex flex-wrap gap-2"><Button variant="outline" onClick={push} loading={loading === "push"}>Enable browser notifications</Button><Button asChild variant="outline"><Link href="/notifications">Open notification center</Link></Button><Button onClick={savePreferences} loading={loading === "preferences"}>Save notification choices</Button></div>
                 <div className="mt-7"><NotificationCenter workspace="customer" customerMode title="Your notification history" description="Orders, bookings, support and important account updates." /></div>
               </AccountSection>
 
               <AccountSection id="security" icon={ShieldCheck} title="Privacy & security" description="Sign-in methods, account sessions and your data controls.">
                 <div className="grid gap-3 sm:grid-cols-2"><Button variant="outline" onClick={() => link("google.com")} loading={loading === "google.com"}>{providers.has("google.com") ? <><Check className="h-4 w-4" />Google linked</> : "Link Google"}</Button><Button variant="outline" onClick={() => link("apple.com")} loading={loading === "apple.com"}>{providers.has("apple.com") ? <><Check className="h-4 w-4" />Apple linked</> : "Link Apple"}</Button><Button variant="outline" onClick={sendPasswordReset} loading={loading === "password"}>Change password</Button><Button asChild variant="outline"><Link href="/support?topic=security-sessions">Review account sessions</Link></Button></div>
                 {!user?.phoneNumber ? <div className="mt-5 rounded-[16px] bg-[var(--surface-2)] p-4"><p className="text-sm font-semibold">Add a phone number</p><p className="mt-1 text-xs leading-5 text-secondary">Useful for account recovery and services that need a contact number.</p>{confirmation ? <div className="mt-3 flex gap-2"><input value={code} onChange={(event) => setCode(event.target.value)} className="field-control" placeholder="Verification code" /><Button onClick={confirmPhone} loading={loading === "code"}>Confirm</Button></div> : <div className="mt-3 flex gap-2"><input value={phone} onChange={(event) => setPhone(event.target.value)} className="field-control" placeholder={country?.dialCode ? `${country.dialCode}…` : "+country code"} /><Button onClick={sendPhone} loading={loading === "phone"}>Send code</Button></div>}</div> : null}
-                <div className="mt-5 grid gap-2 sm:grid-cols-2"><Button asChild variant="outline"><Link href="/support?topic=privacy">Request my data</Link></Button><Button asChild variant="outline"><Link href="/support?topic=account-delete">Close my account</Link></Button></div>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2"><Button asChild variant="outline"><Link href="/support?topic=privacy">Request my data</Link></Button><Button variant="outline" onClick={() => setDeletionOpen(true)}>Close my account</Button></div>
+                {deletionStatus?.status && deletionStatus.status !== "not_requested" ? <div className="mt-4 rounded-[16px] bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">Account deletion: {String(deletionStatus.status).replaceAll("_", " ")}</p>{Number(deletionStatus.blockers?.total || 0) > 0 ? <p className="mt-1 text-xs leading-5 text-secondary">{deletionStatus.blockers.total} active transaction{deletionStatus.blockers.total === 1 ? "" : "s"} must resolve before deletion can finish. Your history stays available while those transactions are active.</p> : <p className="mt-1 text-xs leading-5 text-secondary">No active customer transaction is currently blocking the request.</p>}</div> : null}
               </AccountSection>
 
               <AccountSection id="workspaces" icon={Globe2} title="Where do you want to go?" description="Customer is always available. Business, Driver, Staff and Admin appear only when this account has access.">
@@ -229,7 +266,7 @@ export function AccountApp() {
               </AccountSection>
 
               <AccountSection id="help" icon={HelpCircle} title="Help" description="Get support without losing the context of what you were trying to do.">
-                <div className="grid gap-3 sm:grid-cols-3"><Link href="/?view=activity" className="rounded-[16px] border border-[var(--border-subtle)] p-4 transition hover:bg-[var(--surface-hover)]"><History className="h-5 w-5 text-[var(--accent)]" /><span className="mt-3 block text-sm font-semibold">Activity</span><span className="mt-1 block text-xs text-secondary">Orders, bookings and trips</span></Link><Link href="/?view=saved" className="rounded-[16px] border border-[var(--border-subtle)] p-4 transition hover:bg-[var(--surface-hover)]"><Heart className="h-5 w-5 text-[var(--accent)]" /><span className="mt-3 block text-sm font-semibold">Saved</span><span className="mt-1 block text-xs text-secondary">Things you kept</span></Link><Link href="/support" className="rounded-[16px] border border-[var(--border-subtle)] p-4 transition hover:bg-[var(--surface-hover)]"><HelpCircle className="h-5 w-5 text-[var(--accent)]" /><span className="mt-3 block text-sm font-semibold">Spotly Support</span><span className="mt-1 block text-xs text-secondary">Guides and conversations</span></Link></div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Link href="/?view=activity" className="rounded-[16px] border border-[var(--border-subtle)] p-4 transition hover:bg-[var(--surface-hover)]"><History className="h-5 w-5 text-[var(--accent)]" /><span className="mt-3 block text-sm font-semibold">Activity</span><span className="mt-1 block text-xs text-secondary">Orders, bookings and trips</span></Link><Link href="/?view=saved" className="rounded-[16px] border border-[var(--border-subtle)] p-4 transition hover:bg-[var(--surface-hover)]"><Heart className="h-5 w-5 text-[var(--accent)]" /><span className="mt-3 block text-sm font-semibold">Saved</span><span className="mt-1 block text-xs text-secondary">Things you kept</span></Link><Link href="/referrals" className="rounded-[16px] border border-[var(--border-subtle)] p-4 transition hover:bg-[var(--surface-hover)]"><Gift className="h-5 w-5 text-[var(--accent)]" /><span className="mt-3 block text-sm font-semibold">Referrals</span><span className="mt-1 block text-xs text-secondary">Invite people and see rewards</span></Link><Link href="/support" className="rounded-[16px] border border-[var(--border-subtle)] p-4 transition hover:bg-[var(--surface-hover)]"><HelpCircle className="h-5 w-5 text-[var(--accent)]" /><span className="mt-3 block text-sm font-semibold">Spotly Support</span><span className="mt-1 block text-xs text-secondary">Guides and conversations</span></Link></div>
                 {companyRegistered ? <p className="mt-5 text-xs leading-5 text-secondary">{legal.tradingName || "Spotly"} is operated by <strong>{legal.legalName}</strong>. Company registration number: <strong>{legal.companyNumber}</strong>{legal.registeredAddress ? ` · ${legal.registeredAddress}` : ""}.</p> : null}
               </AccountSection>
 
@@ -238,6 +275,7 @@ export function AccountApp() {
           </div>
         </div>
 
+        <Modal open={deletionOpen} onClose={() => loading !== "deletion" && setDeletionOpen(false)} title="Close your Spotly account?" description="This creates a verified deletion request without hiding active transactions." size="sm"><div className="p-5"><p className="text-sm leading-6 text-secondary">Spotly will keep receipts, support access and active service records available until any open Bite, Shopper, Book, Live, Ride, Send or Assist transaction is resolved. Required financial and safety records follow the retention rules in the privacy notice.</p>{Number(deletionStatus?.blockers?.total || 0) > 0 ? <div className="mt-4 rounded-xl bg-[var(--warning-soft)] p-3 text-sm"><p className="font-semibold">{deletionStatus.blockers.total} active transaction{deletionStatus.blockers.total === 1 ? "" : "s"} currently block final deletion.</p></div> : null}<div className="mt-5 flex gap-3"><Button className="flex-1" variant="outline" disabled={loading === "deletion"} onClick={() => setDeletionOpen(false)}>Keep account</Button><Button className="flex-1" loading={loading === "deletion"} onClick={requestDeletion}>Request deletion</Button></div></div></Modal>
         <Modal open={placeOpen} onClose={() => setPlaceOpen(false)} title="Add a saved place" description="Save an address you use often. You can remove it at any time."><form onSubmit={savePlace} className="space-y-4 p-5"><label className="block"><span className="mb-2 block text-sm font-semibold">Label</span><input required value={placeForm.label} onChange={(event) => setPlaceForm({ ...placeForm, label: event.target.value })} className="field-control w-full" placeholder="Home" /></label><label className="block"><span className="mb-2 block text-sm font-semibold">Address or landmark</span><input required value={placeForm.address} onChange={(event) => setPlaceForm({ ...placeForm, address: event.target.value })} className="field-control w-full" placeholder="Street, building or landmark" /></label><div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Area</span><input value={placeForm.area} onChange={(event) => setPlaceForm({ ...placeForm, area: event.target.value })} className="field-control w-full" placeholder="Avondale" /></label><div><span className="mb-2 block text-sm font-semibold">City</span><EntityPicker value={placeForm.city} onChange={(city) => setPlaceForm({ ...placeForm, city })} options={(country?.cities || []).map((item) => ({ value: item.name, label: item.name, description: country.name }))} title="Choose city" searchPlaceholder="Search cities" allowClear disabled={!country} /></div></div><Button type="submit" className="w-full" loading={loading === "place"}>Save place</Button></form></Modal>
         <Modal open={profileOpen} onClose={() => setProfileOpen(false)} title="Edit profile and pickup contact" description="These details are saved to your Spotly account and used only where relevant."><form onSubmit={saveProfile} className="space-y-4 p-5"><label className="block"><span className="mb-2 block text-sm font-semibold">Display name</span><input required value={profileForm.displayName} onChange={(event) => setProfileForm({ ...profileForm, displayName: event.target.value })} className="field-control w-full" /></label><label className="block"><span className="mb-2 block text-sm font-semibold">Contact phone</span><input value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })} className="field-control w-full" placeholder={country?.dialCode ? `${country.dialCode}…` : "+country code"} /></label><ChoiceGroup label="Preferred contact" value={profileForm.preferredContact} onChange={(value) => setProfileForm({ ...profileForm, preferredContact: value })} options={[{ value: "email", label: "Email" }, { value: "phone", label: "Phone" }, { value: "whatsapp", label: "WhatsApp" }]} /><div className="grid gap-4 sm:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Pickup contact name</span><input value={profileForm.pickupContactName} onChange={(event) => setProfileForm({ ...profileForm, pickupContactName: event.target.value })} className="field-control w-full" /></label><label><span className="mb-2 block text-sm font-semibold">Pickup contact phone</span><input value={profileForm.pickupContactPhone} onChange={(event) => setProfileForm({ ...profileForm, pickupContactPhone: event.target.value })} className="field-control w-full" /></label></div><Button type="submit" className="w-full" loading={loading === "profile"}>Save profile</Button></form></Modal>
       </CustomerShell>

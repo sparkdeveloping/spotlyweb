@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { CircleUserRound, MapPin, Search } from "lucide-react";
 import { SpotlyNavIcon } from "@/components/spotly-navigation-icons";
 import { useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ThemeMenu } from "@/components/theme-menu";
 import { BrandLockup } from "@/components/brand-lockup";
 import { NotificationBell } from "@/components/notification-center";
@@ -47,6 +47,7 @@ export function CustomerShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const reduceMotion = useReducedMotion();
   const service = productServiceId(pathname);
   const selected = service ? null : current;
 
@@ -92,7 +93,7 @@ export function CustomerShell({
           {navItems.filter((item) => ["home", "activity", "saved"].includes(item.id)).map((item) => {
             const active = selected === item.id;
             return <Link key={item.id} href={item.href} aria-current={active ? "page" : undefined} onClick={(event) => activate(item.id, event)} className={cn("relative flex h-11 min-w-[92px] items-center justify-center gap-2 rounded-[12px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]", active ? "text-[var(--accent)]" : "text-[var(--text-2)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]")}>
-              {active ? <motion.span layoutId="customer-primary-nav" className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.12, duration: 0.42 }} /> : null}
+              {active ? <motion.span layoutId="customer-primary-nav" className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={reduceMotion ? { duration: 0 } : { type: "spring", bounce: 0.12, duration: 0.42 }} /> : null}
               <SpotlyNavIcon name={item.id} className="relative h-[19px] w-[19px]" />
               <span className="relative">{item.label}</span>
               {item.id === "activity" && activityCount > 0 ? <span className="relative flex min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-bold leading-none text-[var(--on-accent)]">{Math.min(activityCount, 99)}</span> : null}
@@ -127,9 +128,9 @@ export function CustomerShell({
       </div>
     </footer> : null}
 
-    <nav className="customer-mobile-nav safe-bottom fixed inset-x-2 bottom-2 z-40 grid h-[68px] grid-cols-5 items-start rounded-[24px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_94%,transparent)] px-1.5 pt-1.5 shadow-elevated backdrop-blur-2xl md:hidden" aria-label="Mobile customer navigation">
+    <nav className="customer-mobile-nav fixed inset-x-2 z-40 grid min-h-[68px] grid-cols-5 items-start rounded-[24px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_94%,transparent)] px-1.5 pt-1.5 shadow-elevated backdrop-blur-2xl md:hidden" aria-label="Mobile customer navigation">
       {navItems.map((item) => { const active = selected === item.id; return <Link key={item.id} href={item.href} aria-current={active ? "page" : undefined} onClick={(event) => activate(item.id, event)} className={cn("relative flex min-w-0 flex-col items-center gap-1 rounded-[12px] px-1 py-1.5 text-[10px] font-semibold transition", active ? "text-[var(--accent)]" : "text-[var(--text-3)]")}>
-        {active ? <motion.span layoutId="customer-mobile-nav" className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={{ type: "spring", bounce: 0.12, duration: 0.42 }} /> : null}
+        {active ? <motion.span layoutId="customer-mobile-nav" className="absolute inset-0 rounded-[12px] bg-[var(--accent-soft)]" transition={reduceMotion ? { duration: 0 } : { type: "spring", bounce: 0.12, duration: 0.42 }} /> : null}
         <span className="relative"><SpotlyNavIcon name={item.id} className="h-5 w-5" />{item.id === "activity" && activityCount > 0 ? <span className="absolute -right-2 -top-1 flex min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-[var(--on-accent)]">{Math.min(activityCount, 9)}</span> : null}</span>
         <span className="relative truncate">{item.label}</span>
       </Link>; })}

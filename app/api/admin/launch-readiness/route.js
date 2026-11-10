@@ -5,6 +5,8 @@ import { getSecretBundle, secretVaultReady } from "@/lib/platform-secrets-server
 import { SPOTLY_FIREBASE_PROJECT_ID, SPOTLY_FIREBASE_WEB_CONFIG } from "@/lib/firebase-project-config";
 import { SPOTLY_COUNTRIES } from "@/lib/country-engine";
 import { resolveServiceAvailability } from "@/lib/service-availability";
+import { ridePricingForCountry, ridePaymentMethodsForCountry } from "@/lib/ride-server";
+import { parcelPricingForCountry, parcelPaymentMethodsForCountry } from "@/lib/parcel-server";
 
 export const runtime = "nodejs";
 
@@ -64,23 +66,26 @@ export async function GET(request) {
     const sendLiveScopes = SPOTLY_COUNTRIES.flatMap((country) => (country.cities || []).map((city) => resolveServiceAvailability(settings, { service: "send", country: country.code, city: city.name }))).filter((decision) => decision.state === "live");
     const ridesEnabled = rideLiveScopes.length > 0;
     const sendEnabled = sendLiveScopes.length > 0;
-    const rideCities = [...new Set(rideLiveScopes.map((item) => item.city).filter(Boolean))];
-    const sendCities = [...new Set(sendLiveScopes.filter((item) => item.country === "ZW").map((item) => item.city).filter(Boolean))];
+    const rideCities = [...new Set(rideLiveScopes.map((item) => `${item.country}:${item.city}`).filter((value) => !value.endsWith(":")))];
+    const sendCities = [...new Set(sendLiveScopes.map((item) => `${item.country}:${item.city}`).filter((value) => !value.endsWith(":")))];
     const mobilityNeedsCron = ridesEnabled || sendEnabled;
-    const rideCountryReady=Array.isArray(mobility.enabledCountries)&&mobility.enabledCountries.length>0&&
-      Object.keys(mobility.cityGeofences||{}).length>=rideCities.length;
+    const rideCountryReady=rideLiveScopes.every((scope)=>Array.isArray(mobility.enabledCountries)&&mobility.enabledCountries.includes(scope.country)&&
+      mobility.cityGeofences?.[`${scope.country}:${String(scope.city).toLowerCase()}`]?.country===scope.country);
+    const rideMoneyReady=rideLiveScopes.every((scope)=>Boolean(ridePricingForCountry(settings,scope.country))&&ridePaymentMethodsForCountry(settings,scope.country).length>0);
     const rideTechReady=mobility.routingVerified===true&&mobility.dispatchSchedulerVerified===true&&
       present(process.env.SPOTLY_ROUTING_URL)&&present(process.env.SPOTLY_GEOCODING_URL)&&
       present(process.env.SPOTLY_REVERSE_GEOCODING_URL)&&
       String(process.env.SPOTLY_RIDE_PIN_KEY||"").length>=32;
-    const rideRolloutReady=!ridesEnabled||(rideCities.length>0&&rideCountryReady&&cronSecretConfigured&&rideTechReady);
+    const rideRolloutReady=!ridesEnabled||(rideCities.length>0&&rideCountryReady&&rideMoneyReady&&cronSecretConfigured&&rideTechReady);
     const sendTechReady=send.routingVerified===true&&send.dispatchSchedulerVerified===true&&
       present(process.env.SPOTLY_ROUTING_URL)&&present(process.env.SPOTLY_GEOCODING_URL)&&
       present(process.env.SPOTLY_REVERSE_GEOCODING_URL)&&
       String(process.env.SPOTLY_SEND_PIN_KEY||"").length>=32;
-    const sendFenceReady=sendCities.length>0&&sendCities.every(city=>
-      send.cityGeofences?.["ZW:"+String(city).toLowerCase()]?.country==="ZW");
-    const sendRolloutReady=!sendEnabled||(sendFenceReady&&cronSecretConfigured&&sendTechReady);
+    const sendFenceReady=sendLiveScopes.length>0&&sendLiveScopes.every((scope)=>
+      Array.isArray(send.enabledCountries)&&send.enabledCountries.includes(scope.country)&&
+      send.cityGeofences?.[`${scope.country}:${String(scope.city).toLowerCase()}`]?.country===scope.country);
+    const sendMoneyReady=sendLiveScopes.every((scope)=>Boolean(parcelPricingForCountry(settings,scope.country))&&parcelPaymentMethodsForCountry(settings,scope.country).length>0);
+    const sendRolloutReady=!sendEnabled||(sendFenceReady&&sendMoneyReady&&cronSecretConfigured&&sendTechReady);
 
     let marketplaceCheck;
     try {
@@ -107,8 +112,8 @@ export async function GET(request) {
       item("finance-encryption", "Finance encryption key", financeEncryptionConfigured ? "ready" : "blocked", financeEncryptionConfigured ? "Server-side finance encryption is configured." : "SPOTLY_FINANCE_ENCRYPTION_KEY is missing; protected payout/finance fields must not launch without it."),
       item("dispatch-cron", "Ride & Send dispatch scheduler", !mobilityNeedsCron ? "not_configured" : cronSecretConfigured&&(!ridesEnabled||mobility.dispatchSchedulerVerified===true)&&(!sendEnabled||send.dispatchSchedulerVerified===true)?"ready":"blocked",
       !mobilityNeedsCron?"Ride and Send dispatchers are not active.":!cronSecretConfigured?"Missing protected scheduler secret.":(ridesEnabled&&mobility.dispatchSchedulerVerified!==true||sendEnabled&&send.dispatchSchedulerVerified!==true)?"An external Ride or Send dispatcher has not been verified. A secret alone is not a schedule.":"Scheduler credentials and required Ride verification are recorded; monitor actual executions."),
-      item("ride-rollout", "Ride launch geography", rideRolloutReady ? (ridesEnabled ? "ready" : "not_configured") : "blocked", !ridesEnabled ? "Ride has no published live city scope in Countries & Services." : rideRolloutReady?`${rideCities.length} approved Ride cities, geography, routing, PIN, geocoding and scheduler prerequisites recorded.`:"Ride requires explicit approved countries/cities with real pickup geofences, licensed geocoding/reverse, road routing, PIN key and a verified live dispatch scheduler."),
-      item("send-rollout", "Send launch geography", sendRolloutReady ? (sendEnabled ? "ready" : "not_configured") : "blocked", !sendEnabled ? "Send has no published live city scope in Countries & Services." : sendRolloutReady ? `${sendCities.length} approved Zimbabwe Send pickup cities with verified geofences, routing, handoff codes and dispatcher prerequisites recorded.` : "SpotlySend requires approved Zimbabwe city geofences, secure handoff codes, road routing, licensed geocoding and a verified running scheduler."),
+      item("ride-rollout", "Ride launch geography", rideRolloutReady ? (ridesEnabled ? "ready" : "not_configured") : "blocked", !ridesEnabled ? "Ride has no published live city scope in Countries & Services." : rideRolloutReady?`${rideCities.length} approved Ride city scope${rideCities.length===1?"":"s"} with country pricing/payment, geography, routing, PIN, geocoding and scheduler prerequisites recorded.`:"Ride requires explicit country pricing/payment, approved cities with real pickup geofences, licensed geocoding/reverse, road routing, PIN key and a verified live dispatch scheduler."),
+      item("send-rollout", "Send launch geography", sendRolloutReady ? (sendEnabled ? "ready" : "not_configured") : "blocked", !sendEnabled ? "Send has no published live city scope in Countries & Services." : sendRolloutReady ? `${sendCities.length} approved Send city scope${sendCities.length===1?"":"s"} with country pricing/payment, verified geofences, routing, handoff codes and dispatcher prerequisites recorded.` : "Spotly Send requires an explicitly enabled country, approved country pricing/payment, city geofences, secure handoff codes, road routing, licensed geocoding and a verified running scheduler."),
       item("bootstrap-admin", "Administrator bootstrap lock-down", bootstrapAllowlistPresent ? "needs_verification" : "ready", bootstrapAllowlistPresent ? "BOOTSTRAP_ADMIN_EMAILS is still configured. Remove the bootstrap allowlist after the initial super administrator is established." : "No administrator bootstrap allowlist is present in the production environment."),
       item("firestore-rules", "Firestore & Storage security tests", rulesVerified ? "ready" : "needs_verification", rulesVerified ? "Verification markers are configured for this environment." : "Run the Firebase Emulator rules matrix, then set the verification timestamps for the deployed environment."),
       item("paynow", "Paynow", integrations.paynowEnabled && paynowCredentials ? "ready" : integrations.paynowEnabled ? "blocked" : "not_configured", integrations.paynowEnabled ? (paynowCredentials ? "Enabled with server credentials present." : "Enabled, but server credentials are incomplete.") : "Provider is disabled in platform settings."),

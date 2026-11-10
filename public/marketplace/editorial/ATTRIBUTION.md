@@ -1,37 +1,12 @@
-# Spotly marketplace editorial image attribution
+# Spotly marketplace media history
 
-These files are **generic category/editorial imagery only**. They must not be presented as photographs of a particular Spotly business, product, event, listing, inventory item, or merchant relationship. Spotly labels these fallbacks as **Category image**.
+The legacy `eat.webp`, `groceries.webp`, and `shop.webp` category prototypes were removed in Phase 9.
+They are not valid marketplace media and must not be referenced by web, iOS, search projections, merchant profiles, or SEO.
 
-## `eat.webp`
+Spotly marketplace discovery now uses the canonical responsive photography pack under:
 
-Derivative (resize/WebP conversion) of **“Sadza and beef bones.jpg”** by **Mtombe**, Wikimedia Commons.
+`/marketplace/photography/{family}-{320|768|1536}.webp`
 
-Source: https://commons.wikimedia.org/wiki/File:Sadza_and_beef_bones.jpg
+The media/discovery contract defines the approved families and paths. Generic editorial photography is presentation-only and never proves merchant ownership, inventory, pricing, event facts, availability, or a commercial relationship. Merchant-supplied media may replace the generic fallback only when its provenance satisfies Spotly's existing media-rights checks.
 
-License: **CC BY-SA 4.0** — https://creativecommons.org/licenses/by-sa/4.0/
-
-The `eat.webp` derivative is distributed under CC BY-SA 4.0.
-
-## `groceries.webp`
-
-Derivative (resize/WebP conversion) of **“Carts loaded with fruits and vegetables for sale in Harare.jpg”** by **Cecil Dzwowa / Wikimedia user Mabossi**, Wikimedia Commons.
-
-Source: https://commons.wikimedia.org/wiki/File:Carts_loaded_with_fruits_and_vegetables_for_sale_in_Harare.jpg
-
-License: **CC BY-SA 4.0** — https://creativecommons.org/licenses/by-sa/4.0/
-
-The `groceries.webp` derivative is distributed under CC BY-SA 4.0.
-
-## `shop.webp`
-
-Derivative (resize/WebP conversion) of **“ZimShopJM.jpg”**, attributed to **Guinnog / John at English Wikipedia**, Wikimedia Commons.
-
-Source: https://commons.wikimedia.org/wiki/File:ZimShopJM.jpg
-
-License: **CC BY-SA 3.0 Unported** — https://creativecommons.org/licenses/by-sa/3.0/
-
-The `shop.webp` derivative is distributed under CC BY-SA 3.0.
-
-## Spotly-supplied editorial pack
-
-Spotly also has a separate owner-supplied/generated editorial photo pack. Its project usage rules continue to apply: generic editorial imagery can enrich discovery, onboarding, service pages and empty states, but must never impersonate merchant-owned media or prove store inventory, product availability, event facts or merchant participation.
+Historical note: the removed prototypes were derivatives of Wikimedia Commons media and were previously documented here for CC BY-SA compliance. They are no longer distributed in the application bundle.

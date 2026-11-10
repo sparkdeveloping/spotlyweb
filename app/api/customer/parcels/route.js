@@ -4,20 +4,21 @@ import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { notifyUsers } from "@/lib/driver-delivery-server";
-import { dispatchParcel, estimateParcel, makeParcelNumber, makeParcelPin, normalizeParcelPoint, parcelAvailability, plainParcel, publicParcel } from "@/lib/parcel-server";
+import { dispatchParcel, estimateParcel, makeParcelNumber, makeParcelPin, normalizeParcelPoint, parcelAvailability, parcelPaymentMethodsForCountry, plainParcel, publicParcel } from "@/lib/parcel-server";
 import { safeText } from "@/lib/server-helpers";
 import {sealParcelPin} from "@/lib/send-security";
 import {validateSendTerritory} from "@/lib/send-territory";
 import {getVerifiedRideRoute} from "@/lib/ride-routing";
 import { sendCreateRequestSchema } from "@/lib/contracts/schemas";
 import { requireServiceLive } from "@/lib/service-availability-server";
+import { loadRealtimeDriverLocation } from "@/lib/customer-driver-tracking-server";
 
 export const runtime = "nodejs";
 const requestSchema = sendCreateRequestSchema;
 const cancelSchema = z.object({ action: z.literal("cancel"), parcelJobId: z.string().min(3).max(180), reason: z.string().min(3).max(500) });
 const schema = z.discriminatedUnion("action", [requestSchema, cancelSchema]);
 
-async function loadDriverBundle(db, parcel) {
+async function loadDriverBundle(db, database, parcel) {
   if (!parcel.assignedDriverId) return { driver: null, driverLocation: null };
   const [driverSnap, vehicleQuery, presenceSnap] = await Promise.all([
     db.collection("drivers").doc(parcel.assignedDriverId).get(), db.collection("driverVehicles").where("driverId", "==", parcel.assignedDriverId).limit(10).get(), db.collection("driverPresence").doc(parcel.assignedDriverId).get()
@@ -25,23 +26,23 @@ async function loadDriverBundle(db, parcel) {
   const driver = driverSnap.exists ? { id: driverSnap.id, ...plainParcel(driverSnap.data()) } : { id: parcel.assignedDriverId };
   const vehicle = vehicleQuery.docs.map((item) => ({ id: item.id, ...plainParcel(item.data()) })).find((item) => item.status === "approved") || null;
   driver.vehicle = vehicle ? { type: vehicle.type || "car", make: vehicle.make || "", model: vehicle.model || "", registration: vehicle.registration || "", color: vehicle.color || "" } : null;
-  let driverLocation = null;
-  if (presenceSnap.exists) { const presence = presenceSnap.data(); const updatedAt = presence.locationUpdatedAt?.toDate?.(); if (presence.currentLocation && updatedAt && Date.now() - updatedAt.getTime() < 180000) driverLocation = { ...presence.currentLocation, updatedAt: updatedAt.toISOString() }; }
+  let driverLocation = await loadRealtimeDriverLocation(database, { workId: parcel.id, driverId: parcel.assignedDriverId });
+  if (!driverLocation && presenceSnap.exists) { const presence = presenceSnap.data(); const updatedAt = presence.locationUpdatedAt?.toDate?.(); if (presence.currentLocation && updatedAt && Date.now() - updatedAt.getTime() < 180000) driverLocation = { ...presence.currentLocation, updatedAt: updatedAt.toISOString(), source: "firestore_presence" }; }
   return { driver, driverLocation };
 }
 
 export async function GET(request) {
   try {
-    const user = await authenticateRequest(request); const { db } = getAdminServices(); const url = new URL(request.url); const parcelJobId = url.searchParams.get("parcelJobId");
+    const user = await authenticateRequest(request); const { db, database } = getAdminServices(); const url = new URL(request.url); const parcelJobId = url.searchParams.get("parcelJobId");
     if (parcelJobId) {
       const snap = await db.collection("parcelJobs").doc(parcelJobId).get(); if (!snap.exists) throw Object.assign(new Error("The Send request was not found."), { status: 404 });
       const parcel = { id: snap.id, ...snap.data() }; if (parcel.customerId !== user.uid) throw Object.assign(new Error("You cannot view this Send request."), { status: 403 });
-      return Response.json({ ok: true, parcel: publicParcel(parcel, { includePins: true, ...(await loadDriverBundle(db, parcel)) }) });
+      return Response.json({ ok: true, parcel: publicParcel(parcel, { includePins: true, ...(await loadDriverBundle(db, database, parcel)) }) });
     }
     const query = await db.collection("parcelJobs").where("customerId", "==", user.uid).limit(60).get();
     const parcels = query.docs.map((item) => ({ id: item.id, ...item.data() })).sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     const active = parcels.find((item) => !["delivered", "cancelled", "failed", "returned"].includes(item.state));
-    return Response.json({ ok: true, activeParcel: active ? publicParcel(active, { includePins: true, ...(await loadDriverBundle(db, active)) }) : null, parcels: parcels.map((item) => publicParcel(item)) });
+    return Response.json({ ok: true, activeParcel: active ? publicParcel(active, { includePins: true, ...(await loadDriverBundle(db, database, active)) }) : null, parcels: parcels.map((item) => publicParcel(item)) });
   } catch (error) { return apiError(error); }
 }
 
@@ -56,13 +57,22 @@ export async function POST(request) {
         const snap = await transaction.get(ref); if (!snap.exists) throw Object.assign(new Error("The Send request was not found."), { status: 404 });
         const parcel = snap.data(); if (parcel.customerId !== user.uid) throw Object.assign(new Error("You cannot cancel this Send request."), { status: 403 });
         if (!["requested", "scheduled", "awaiting_payment", "searching_driver", "driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification"].includes(parcel.state)) throw Object.assign(new Error("This Send request can no longer be cancelled in the app. Contact Spotly Support."), { status: 409 });
-        if (["paid", "refund_pending", "refunded"].includes(parcel.paymentStatus)) throw Object.assign(new Error("This request has already been paid. Contact Spotly Support to cancel and review the refund."), { status: 409 });
+        if (["refund_pending", "refunded"].includes(parcel.paymentStatus)) throw Object.assign(new Error("This Send cancellation is already in the refund workflow."), { status: 409 });
         assignedDriverId = parcel.assignedDriverId || null; number = parcel.number || body.parcelJobId; orderId = parcel.orderId || null; paymentStatus = parcel.paymentStatus || "";
         const presenceRef=assignedDriverId?db.collection("driverPresence").doc(assignedDriverId):null;
-        const driverPresence=presenceRef?await transaction.get(presenceRef):null;
-        const now = FieldValue.serverTimestamp();
-        transaction.set(ref, { state: "cancelled", cancellationReason: safeText(body.reason, 500), cancelledBy: "customer", cancelledAt: now, updatedAt: now }, { merge: true });
-        if (orderId) transaction.set(db.collection("orders").doc(orderId), { status: "cancelled", sendStatus: "cancelled", cancellationReason: safeText(body.reason, 500), cancelledAt: now, updatedAt: now }, { merge: true });
+        const orderRef=orderId?db.collection("orders").doc(orderId):null;
+        const [driverPresence,orderSnap]=await Promise.all([presenceRef?transaction.get(presenceRef):Promise.resolve(null),orderRef?transaction.get(orderRef):Promise.resolve(null)]);
+        const order=orderSnap?.exists?orderSnap.data():{};
+        const paid=parcel.paymentStatus==="paid"||order.paymentStatus==="paid";
+        const refundRef=paid?db.collection("refundRequests").doc(`customer_cancel_send_${body.parcelJobId}`):null;
+        const intentRef=paid&&order.paymentIntentReference?db.collection("paymentIntents").doc(order.paymentIntentReference):null;
+        const [refundSnap]=paid?await Promise.all([transaction.get(refundRef),intentRef?transaction.get(intentRef):Promise.resolve(null)]):[null];
+        const now = FieldValue.serverTimestamp(); const cancellationReason=safeText(body.reason,500);
+        if(paid&&!refundSnap?.exists)transaction.create(refundRef,{orderId,parcelJobId:body.parcelJobId,paymentIntentReference:order.paymentIntentReference||null,amount:Number(parcel.quote?.total||order.total||0),currency:parcel.currency||order.currency||"USD",reason:cancellationReason,status:"refund_requested",requestedBy:user.uid,requestedByType:"customer",requestedAt:now,createdAt:now,updatedAt:now});
+        if(intentRef)transaction.set(intentRef,{status:"refund_pending",refundRequestId:refundRef.id,updatedAt:now},{merge:true});
+        paymentStatus=paid?"refund_pending":parcel.paymentStatus||"unpaid";
+        transaction.set(ref, { state: "cancelled", paymentStatus, ...(paid?{refundRequestId:refundRef.id}:{}), cancellationReason, cancelledBy: "customer", cancelledAt: now, updatedAt: now }, { merge: true });
+        if (orderRef) transaction.set(orderRef, { status: "cancelled", sendStatus: "cancelled", paymentStatus:paid?"refund_pending":order.paymentStatus||parcel.paymentStatus||"unpaid", ...(paid?{refundRequestId:refundRef.id}:{}), cancellationReason, cancelledAt: now, updatedAt: now }, { merge: true });
         if(assignedDriverId){
           // Read the presence record before all transaction writes.
           if(driverPresence?.exists&&driverPresence.data().currentJobId===body.parcelJobId)
@@ -83,7 +93,7 @@ export async function POST(request) {
     const availability = parcelAvailability(settings, pickup);
     if (!availability.enabled) throw Object.assign(new Error(availability.reason), { status: 409 });
     validateSendTerritory(pickup,dropoff,availability.config);
-    if (!availability.config.paymentMethods.includes(body.paymentMethod)) throw Object.assign(new Error("Choose an available Send payment method."), { status: 409 });
+    if (!parcelPaymentMethodsForCountry(settings, pickup.country).includes(body.paymentMethod)) throw Object.assign(new Error("Choose an available Send payment method for this country."), { status: 409 });
     const active = await db.collection("parcelJobs").where("customerId", "==", user.uid).where("state", "in", ["requested", "scheduled", "awaiting_payment", "searching_driver", "driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification", "collected", "en_route", "driver_arrived_dropoff", "handoff_verification","handoff_exception","return_in_progress"]).limit(1).get();
     if (!active.empty) throw Object.assign(new Error("Finish or cancel your active Send request before creating another one."), { status: 409 });
     const roadRoute=await getVerifiedRideRoute(pickup,dropoff);
@@ -101,7 +111,7 @@ export async function POST(request) {
     const pickupPinCiphertext=sealParcelPin(pickupPin),dropoffPinCiphertext=sealParcelPin(dropoffPin); const now = FieldValue.serverTimestamp(); const state = body.paymentMethod === "paynow" ? "awaiting_payment" : scheduledPickupAt ? "scheduled" : "requested";
     const senderName = safeText(body.senderName, 160); const senderPhone = safeText(body.senderPhone, 50); const recipientName = safeText(body.recipientName, 160); const recipientPhone = safeText(body.recipientPhone, 50);
     await db.runTransaction(async (transaction) => {
-      transaction.create(parcelRef, { number, customerId: user.uid, orderId: orderRef.id, state, pickup, dropoff, parcelSize: body.parcelSize, parcelDescription: safeText(body.parcelDescription, 500), estimatedWeightKg: Number(body.estimatedWeightKg || 0) || null, declaredValue: Number(body.declaredValue || 0), instructions: safeText(body.instructions || "", 500), senderName, senderPhone, recipientName, recipientPhone, quote, currency: quote.currency, requiredVehicleTypes: quote.requiredVehicleTypes, proofPhotoRequired: quote.proofPhotoRequired === true, paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupMode: scheduledPickupAt ? "scheduled" : "now", scheduledPickupAt, pickupPinCiphertext, dropoffPinCiphertext, country:"ZW", requestedAt: now, createdAt: now, updatedAt: now });
+      transaction.create(parcelRef, { number, customerId: user.uid, orderId: orderRef.id, state, pickup, dropoff, parcelSize: body.parcelSize, parcelDescription: safeText(body.parcelDescription, 500), estimatedWeightKg: Number(body.estimatedWeightKg || 0) || null, declaredValue: Number(body.declaredValue || 0), instructions: safeText(body.instructions || "", 500), senderName, senderPhone, recipientName, recipientPhone, quote, currency: quote.currency, requiredVehicleTypes: quote.requiredVehicleTypes, proofPhotoRequired: quote.proofPhotoRequired === true, paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupMode: scheduledPickupAt ? "scheduled" : "now", scheduledPickupAt, pickupPinCiphertext, dropoffPinCiphertext, country:pickup.country, requestedAt: now, createdAt: now, updatedAt: now });
       transaction.create(orderRef, { number, customerId: user.uid, customerName: senderName, businessName: "Spotly Send", transactionType: "send", fulfilment: "send", parcelJobId: parcelRef.id, sendStatus: state, status: body.paymentMethod === "paynow" ? "awaiting_payment" : scheduledPickupAt ? "accepted" : "requested", paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupMode: scheduledPickupAt ? "scheduled" : "now", scheduledPickupAt, currency: quote.currency, pickup, dropoff, items: [{ productId: `send_${body.parcelSize}`, name: `${quote.parcelSizeLabel} parcel delivery`, variant: body.estimatedWeightKg ? `${Number(body.estimatedWeightKg)} kg` : "", quantity: 1, unitPrice: quote.total, lineTotal: quote.total }], totals: { subtotal: quote.total, serviceFee: quote.bookingFee, deliveryFee: 0, discount: 0, total: quote.total }, total: quote.total, createdAt: now, updatedAt: now });
       transaction.create(db.collection("parcelEvents").doc(), { parcelJobId: parcelRef.id, type: "parcel.requested", actorType: "customer", actorId: user.uid, previousState: null, state, metadata: { orderId: orderRef.id, paymentMethod: body.paymentMethod }, createdAt: now });
     });

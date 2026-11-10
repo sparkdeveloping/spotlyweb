@@ -21,15 +21,15 @@ import {
 } from "firebase/auth";
 import { getToken } from "firebase/messaging";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { getFirebaseClient, getFirebaseMessaging } from "@/lib/firebase";
+import { getFirebaseAppCheckToken, getFirebaseClient, getFirebaseMessaging, getFirebasePerformance } from "@/lib/firebase";
 import { clearUserSessionState } from "@/lib/browser-state";
+import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { sharedSessionDecision } from "@/lib/auth-session-policy";
 import { portalForHostname, spotlyPortalUrl } from "@/lib/spotly-domains";
 import {
   DEFAULT_PLATFORM_SETTINGS,
   ensureUserProfile,
   subscribeMemberships,
-  subscribePlatformSettings,
   subscribeUserProfile,
   track
 } from "@/lib/firebase-services";
@@ -75,11 +75,12 @@ async function persistSharedBrowserSession(firebaseUser, { required = false } = 
     if (delay) await wait(delay);
     try {
       const idToken = await firebaseUser.getIdToken(attempt > 0);
+      const appCheck = await getFirebaseAppCheckToken();
       const response = await fetch("/api/auth/session", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
-        headers: { Authorization: `Bearer ${idToken}` }
+        headers: { Authorization: `Bearer ${idToken}`, ...(appCheck ? { "X-Firebase-AppCheck": appCheck } : {}) }
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -132,6 +133,7 @@ export function FirebaseProvider({ children }) {
 
   useEffect(() => {
     const client = getFirebaseClient();
+    getFirebasePerformance();
     if (!client) {
       setAuthReady(true);
       return undefined;
@@ -560,21 +562,62 @@ export function FirebaseProvider({ children }) {
   return <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>;
 }
 
+function mergePlatformSettings(override = {}) {
+  return Object.fromEntries(Object.entries(DEFAULT_PLATFORM_SETTINGS).map(([key, value]) => [
+    key,
+    value && typeof value === "object" && !Array.isArray(value)
+      ? { ...value, ...(override?.[key] || {}) }
+      : override?.[key] ?? value
+  ]));
+}
+
+function canReadAuthoritativePlatformSettings(profile = {}) {
+  const roles = new Set(profile?.roles || []);
+  const permissions = new Set(profile?.customPermissions || []);
+  return ["super_admin", "admin", "platform_admin"].some((role) => roles.has(role)) ||
+    permissions.has("*") || permissions.has("admin.*") || permissions.has("admin.configuration");
+}
+
 export function PlatformProvider({ children }) {
+  const { profile, authReady } = useAuth();
   const [settings, setSettings] = useState(DEFAULT_PLATFORM_SETTINGS);
   const [settingsReady, setSettingsReady] = useState(false);
+  const privileged = canReadAuthoritativePlatformSettings(profile);
 
   useEffect(() => {
-    const client = getFirebaseClient();
-    if (!client) {
-      setSettingsReady(true);
-      return undefined;
-    }
-    return subscribePlatformSettings((next) => {
-      setSettings(next);
-      setSettingsReady(true);
-    }, () => setSettingsReady(true));
-  }, []);
+    let active = true;
+    if (!authReady) return () => { active = false; };
+
+    const refresh = async () => {
+      try {
+        const result = privileged
+          ? await authenticatedFetch("/api/admin/settings", { cache: "no-store" })
+          : await publicApiFetch("/api/public/runtime", { cache: "no-store" });
+        if (active) setSettings(mergePlatformSettings(result.settings || {}));
+      } catch {
+        if (privileged) {
+          try {
+            const fallback = await publicApiFetch("/api/public/runtime", { cache: "no-store" });
+            if (active) setSettings(mergePlatformSettings(fallback.settings || {}));
+          } catch { /* Preserve safe defaults when runtime configuration cannot be reached. */ }
+        }
+      } finally {
+        if (active) setSettingsReady(true);
+      }
+    };
+
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [authReady, privileged]);
 
   const value = useMemo(() => ({ settings, settingsReady }), [settings, settingsReady]);
   return <PlatformContext.Provider value={value}>{children}</PlatformContext.Provider>;

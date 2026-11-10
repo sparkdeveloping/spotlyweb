@@ -44,13 +44,17 @@ test("customer Activity supports cancellation and keeps sensitive idempotency re
   assert.match(rules, /customerTransactionRequests\/\{requestId\}.*allow read, write: if false/s);
 });
 
-test("ticket issuance creates an entry code and customer Activity renders it", async () => {
+test("ticket issuance creates durable ticket entitlements and customer Activity renders each entry code", async () => {
   const businessUpdate = await source("app/api/business-orders/update/route.js");
-  const conversion = await source("components/customer-conversion.js");
-  assert.match(businessUpdate, /createTicketCode/);
+  const entitlements = await source("lib/ticket-entitlements-server.js");
+  const status = await source("app/api/customer/orders/status/route.js");
+  const app = await source("components/marketplace-app.js");
+  assert.match(businessUpdate, /issueTicketEntitlementsInTransaction/);
   assert.match(businessUpdate, /nextStatus === "issued"/);
-  assert.match(businessUpdate, /changes\.ticketCode/);
-  assert.match(conversion, /Entry code/);
+  assert.match(entitlements, /ticketEntitlements/);
+  assert.match(entitlements, /code: codes\[index\]/);
+  assert.match(status, /ticketEntitlements/);
+  assert.match(app, /Entry code/);
 });
 
 test("shareable customer routes resolve into live marketplace state", async () => {

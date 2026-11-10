@@ -43,9 +43,10 @@ test("fixtures encode the contract regressions Phase 1 is meant to prevent", asy
   assert.equal(send.prohibitedAcknowledged, true);
   assert.equal(typeof send.quotedTotal, "number");
 
-  const malawiSend = await json("contracts/fixtures/send-request.invalid-malawi.json");
+  const malawiSend = await json("contracts/fixtures/send-request.valid-malawi.json");
   assert.equal(malawiSend.pickup.country, "MW");
-  assert.notEqual(malawiSend.pickup.country, "ZW");
+  assert.equal(malawiSend.dropoff.country, "MW");
+  assert.equal(malawiSend.quotedCurrency, "MWK");
 
   const activity = await json("contracts/fixtures/activity-record.valid.json");
   assert.ok(ACTIVITY_KINDS.includes(activity.kind));
@@ -72,7 +73,7 @@ test("canonical Zod schemas accept/reject the fixtures through the dependency-fr
   assert.equal(schemas.rideCreateRequestSchema.safeParse(await json("contracts/fixtures/ride-request.valid.json")).success, true);
   assert.equal(schemas.rideCreateRequestSchema.safeParse(await json("contracts/fixtures/ride-request.invalid-missing-country.json")).success, false);
   assert.equal(schemas.sendCreateRequestSchema.safeParse(await json("contracts/fixtures/send-request.valid.json")).success, true);
-  assert.equal(schemas.sendCreateRequestSchema.safeParse(await json("contracts/fixtures/send-request.invalid-malawi.json")).success, false);
+  assert.equal(schemas.sendCreateRequestSchema.safeParse(await json("contracts/fixtures/send-request.valid-malawi.json")).success, true);
   assert.equal(schemas.orderCreateRequestSchema.safeParse(await json("contracts/fixtures/order-create.valid.json")).success, true);
   assert.equal(schemas.transactionCreateRequestSchema.safeParse(await json("contracts/fixtures/transaction-appointment.valid.json")).success, true);
   assert.equal(schemas.activityRecordSchema.safeParse(await json("contracts/fixtures/activity-record.valid.json")).success, true);

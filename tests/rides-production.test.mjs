@@ -7,12 +7,12 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 test("Ride customer request is server-authoritative and creates Activity continuity", async () => {
   const source = await read("app/api/customer/rides/route.js");
   assert.match(source, /rideAvailability\(settings, pickup\)/);
-  assert.match(source, /paymentMethods\.includes\(body\.paymentMethod\)/);
+  assert.match(source, /ridePaymentMethodsForCountry\(settings, pickup\.country\)\.includes\(body\.paymentMethod\)/);
   assert.match(source, /transaction\.create\(rideRef/);
   assert.match(source, /transaction\.create\(orderRef/);
   assert.match(source, /transactionType: "ride"/);
   assert.match(source, /businessName: "Spotly Ride"/);
-  assert.match(source, /where\("state", "in", \["requested", "searching_driver"/);
+  assert.match(source, /where\("state", "in", \["awaiting_payment", "requested", "searching_driver"/);
 });
 
 test("Ride pricing and area rollout are controlled by platform mobility settings", async () => {
@@ -70,7 +70,7 @@ test("Ride cash and Paynow completion use different Driver money treatment", asy
 
 test("Customer Activity can rate completed rides through the dedicated ride endpoint", async () => {
   const [activity, rating] = await Promise.all([read("components/marketplace-app.js"), read("app/api/customer/rides/rating/route.js")]);
-  assert.match(activity, /order\.transactionType === "ride"/);
+  assert.match(activity, /activityKind\(order\).*ride|kind === "ride"/);
   assert.match(activity, /\/api\/customer\/rides\/rating/);
   assert.match(rating, /ride\.state !== "completed"/);
   assert.match(rating, /ratingCount/);

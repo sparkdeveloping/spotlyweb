@@ -54,6 +54,12 @@ function orderSubtitle(order = {}, kind = "order") {
   return clean(order.number || order.orderNumber) ? `Reference ${clean(order.number || order.orderNumber)}` : "Spotly activity";
 }
 
+function paymentAttention(paymentStatus, total, state = "") {
+  if (["unpaid", "failed", "action_required", "awaiting_payment"].includes(clean(paymentStatus).toLowerCase()) && (total || 0) > 0) return "Payment required";
+  if (clean(state).toLowerCase().includes("substitution") || clean(state).toLowerCase().includes("action")) return "Action required";
+  return null;
+}
+
 function orderRecord(id, order = {}) {
   const rawType = clean(order.transactionType || "").toLowerCase();
   if (["ride", "send"].includes(rawType)) return null;
@@ -63,19 +69,28 @@ function orderRecord(id, order = {}) {
   const state = clean(order.status || order.state || "submitted") || "submitted";
   const businessName = clean(order.businessName || order.merchantName);
   const title = businessName || (kind === "ticket" ? "Event ticket" : kind === "booking" ? "Booking" : kind === "appointment" ? "Appointment" : "Spotly order");
-  const attention = ["unpaid", "failed", "action_required", "awaiting_payment"].includes(paymentStatus.toLowerCase()) && (total || 0) > 0
-    ? "Payment required"
-    : (state.toLowerCase().includes("substitution") || state.toLowerCase().includes("action")) ? "Action required" : null;
+  const attention = paymentAttention(paymentStatus, total, state);
   return {
     id: `order:${id}`,
     kind,
+    transactionType: kind,
     service: serviceForOrder(order, kind),
     title,
+    businessName: businessName || null,
+    businessId: order.businessId || null,
+    branchId: order.branchId || null,
+    branchName: clean(order.branchName) || null,
+    country: clean(order.country || order.countryCode) || null,
+    timeZone: clean(order.timeZone || order.timezone) || null,
     subtitle: orderSubtitle(order, kind),
     state,
+    status: state,
+    deliveryStatus: clean(order.deliveryStatus) || null,
     paymentStatus,
+    paymentMethod: clean(order.paymentMethod) || null,
     number: clean(order.number || order.orderNumber || id),
     total,
+    totals: order.totals || (total == null ? null : { total }),
     currency: clean(order.currency || "USD") || "USD",
     createdAt: iso(order.createdAt || order.requestedAt || order.updatedAt),
     scheduledAt: iso(order.scheduledAt || order.appointmentAt || order.startDate || order.eventStartsAt),
@@ -83,28 +98,47 @@ function orderRecord(id, order = {}) {
     primaryAction: attention ? "pay" : null,
     orderId: id,
     rideId: null,
-    parcelId: null
+    rideTripId: null,
+    parcelId: null,
+    parcelJobId: null,
+    fulfilment: clean(order.fulfilment || order.fulfilmentMode) || null,
+    delivery: order.delivery || null,
+    pickup: order.pickup || null,
+    promotion: order.promotion || null,
+    items: Array.isArray(order.items) ? order.items : [],
+    appointment: order.appointment || null,
+    booking: order.booking || null,
+    event: order.event || null,
+    ticketEntitlements: Array.isArray(order.ticketEntitlements) ? order.ticketEntitlements : [],
+    customerRating: number(order.customerRating, null),
+    customerReviewComment: clean(order.customerReviewComment) || null,
+    href: `/?view=activity&order=${encodeURIComponent(id)}`
   };
 }
 
 function rideRecord(id, ride = {}) {
-  const pickup = clean(ride.pickup?.area || ride.pickup?.label || ride.pickup?.formattedAddress);
-  const dropoff = clean(ride.dropoff?.area || ride.dropoff?.label || ride.dropoff?.formattedAddress);
+  const pickup = clean(ride.pickup?.area || ride.pickup?.label || ride.pickup?.formattedAddress || ride.pickup?.address);
+  const dropoff = clean(ride.dropoff?.area || ride.dropoff?.label || ride.dropoff?.formattedAddress || ride.dropoff?.address);
   const subtitle = [pickup, dropoff].filter(Boolean).join(" → ") || "Ride request";
   const total = number(ride.quote?.total ?? ride.total, null);
   const paymentStatus = clean(ride.paymentStatus || (ride.paymentMethod === "cash" ? "cash_due" : "unpaid")) || "not_required";
   const state = clean(ride.state || "requested") || "requested";
-  const attention = ["unpaid", "failed", "action_required", "awaiting_payment"].includes(paymentStatus.toLowerCase()) && (total || 0) > 0 ? "Payment required" : null;
+  const attention = paymentAttention(paymentStatus, total, state);
   return {
     id: `ride:${id}`,
     kind: "ride",
+    transactionType: "ride",
     service: "ride",
     title: "Spotly Ride",
     subtitle,
     state,
+    status: state,
+    rideStatus: state,
     paymentStatus,
+    paymentMethod: clean(ride.paymentMethod) || null,
     number: clean(ride.number || id),
     total,
+    totals: total == null ? null : { total },
     currency: clean(ride.quote?.currency || ride.currency || "USD") || "USD",
     createdAt: iso(ride.createdAt || ride.requestedAt || ride.updatedAt),
     scheduledAt: iso(ride.scheduledAt),
@@ -112,38 +146,60 @@ function rideRecord(id, ride = {}) {
     primaryAction: attention ? "pay" : null,
     orderId: ride.orderId || null,
     rideId: id,
-    parcelId: null
+    rideTripId: id,
+    parcelId: null,
+    parcelJobId: null,
+    pickup: ride.pickup || null,
+    dropoff: ride.dropoff || null,
+    serviceType: ride.serviceType || null,
+    customerRating: number(ride.riderRating, null),
+    customerReviewComment: clean(ride.riderReviewComment) || null,
+    href: `/?view=activity&ride=${encodeURIComponent(id)}`
   };
 }
 
 function parcelRecord(id, parcel = {}) {
-  const pickup = clean(parcel.pickup?.area || parcel.pickup?.label || parcel.pickup?.formattedAddress);
-  const dropoff = clean(parcel.dropoff?.area || parcel.dropoff?.label || parcel.dropoff?.formattedAddress);
+  const pickup = clean(parcel.pickup?.area || parcel.pickup?.label || parcel.pickup?.formattedAddress || parcel.pickup?.address);
+  const dropoff = clean(parcel.dropoff?.area || parcel.dropoff?.label || parcel.dropoff?.formattedAddress || parcel.dropoff?.address);
   const route = [pickup, dropoff].filter(Boolean).join(" → ");
   const description = clean(parcel.parcelDescription);
   const subtitle = route || description || "Parcel delivery";
   const total = number(parcel.quote?.total ?? parcel.total, null);
   const paymentStatus = clean(parcel.paymentStatus || (parcel.paymentMethod === "cash" ? "cash_due" : "unpaid")) || "not_required";
   const state = clean(parcel.state || "requested") || "requested";
-  const attention = ["unpaid", "failed", "action_required", "awaiting_payment"].includes(paymentStatus.toLowerCase()) && (total || 0) > 0 ? "Payment required" : null;
+  const attention = paymentAttention(paymentStatus, total, state);
   return {
     id: `send:${id}`,
     kind: "send",
+    transactionType: "send",
     service: "send",
     title: "Spotly Send",
     subtitle,
     state,
+    status: state,
+    deliveryStatus: state,
     paymentStatus,
+    paymentMethod: clean(parcel.paymentMethod) || null,
     number: clean(parcel.number || id),
     total,
+    totals: total == null ? null : { total },
     currency: clean(parcel.quote?.currency || parcel.currency || "USD") || "USD",
     createdAt: iso(parcel.createdAt || parcel.requestedAt || parcel.updatedAt),
     scheduledAt: iso(parcel.scheduledPickupAt),
+    scheduledPickupAt: iso(parcel.scheduledPickupAt),
     attentionReason: attention,
     primaryAction: attention ? "pay" : null,
     orderId: parcel.orderId || null,
     rideId: null,
-    parcelId: id
+    rideTripId: null,
+    parcelId: id,
+    parcelJobId: id,
+    pickup: parcel.pickup || null,
+    dropoff: parcel.dropoff || null,
+    parcelDescription: description || null,
+    customerRating: number(parcel.customerRating, null),
+    customerReviewComment: clean(parcel.customerReviewComment) || null,
+    href: `/?view=activity&parcel=${encodeURIComponent(id)}`
   };
 }
 
@@ -155,23 +211,25 @@ export async function GET(request) {
     const requestedOffset = Number(url.searchParams.get("offset") || 0);
     const requestedLimit = Number(url.searchParams.get("limit") || 30);
     const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
-    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 10), 60) : 30;
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 10), 200) : 80;
     const { db } = getAdminServices();
 
     const [ordersSnapshot, ridesSnapshot, parcelsSnapshot, shoppingSnapshot, bookingsSnapshot] = await Promise.all([
-      db.collection("orders").where("customerId", "==", user.uid).limit(160).get(),
-      db.collection("rideTrips").where("customerId", "==", user.uid).limit(80).get(),
-      db.collection("parcelJobs").where("customerId", "==", user.uid).limit(80).get(),
-      db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(80).get(),
-      db.collection("assistedBookings").where("customerId", "==", user.uid).limit(80).get()
+      db.collection("orders").where("customerId", "==", user.uid).limit(200).get(),
+      db.collection("rideTrips").where("customerId", "==", user.uid).limit(120).get(),
+      db.collection("parcelJobs").where("customerId", "==", user.uid).limit(120).get(),
+      db.collection("independentShoppingRequests").where("customerId", "==", user.uid).limit(100).get(),
+      db.collection("assistedBookings").where("customerId", "==", user.uid).limit(100).get()
     ]);
 
+    const assistShopping = shoppingSnapshot.docs.map((doc) => ({ ...shoppingActivity(doc.id, doc.data() || {}), transactionType: "assist_shopping", status: doc.data()?.state || "pending_manual_quote" }));
+    const assistBookings = bookingsSnapshot.docs.map((doc) => ({ ...bookingActivity(doc.id, doc.data() || {}), transactionType: "assist_booking", status: doc.data()?.state || "requested" }));
     const records = [
       ...ordersSnapshot.docs.map((doc) => orderRecord(doc.id, doc.data() || {})).filter(Boolean),
       ...ridesSnapshot.docs.map((doc) => rideRecord(doc.id, doc.data() || {})),
       ...parcelsSnapshot.docs.map((doc) => parcelRecord(doc.id, doc.data() || {})),
-      ...shoppingSnapshot.docs.map(doc=>shoppingActivity(doc.id,doc.data()||{})),
-      ...bookingsSnapshot.docs.map(doc=>bookingActivity(doc.id,doc.data()||{}))
+      ...assistShopping,
+      ...assistBookings
     ].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || String(a.id).localeCompare(String(b.id)));
 
     const page = records.slice(offset, offset + limit);

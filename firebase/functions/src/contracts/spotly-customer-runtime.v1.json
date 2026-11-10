@@ -1,0 +1,17 @@
+{
+  "customerRuntimeContractVersion": "1.0.0",
+  "callables": {
+    "customerRuntime": {"auth": "optional", "appCheck": "recommended"},
+    "customerRideQuote": {"auth": "optional", "appCheck": "recommended"},
+    "customerSendQuote": {"auth": "optional", "appCheck": "recommended"}
+  },
+  "runtime": {
+    "countryPrecedence": ["admin_override", "account_preference", "explicit_selection", "device_suggestion"],
+    "availabilityStates": ["hidden", "preview", "discover", "live", "paused"]
+  },
+  "mobility": {
+    "rideServiceTypes": ["economy", "comfort", "xl"],
+    "parcelSizes": ["small", "medium", "large", "bulky"],
+    "pointFields": ["lat", "lng", "label", "formattedAddress", "area", "city", "country"]
+  }
+}

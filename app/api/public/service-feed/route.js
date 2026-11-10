@@ -6,7 +6,8 @@ import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebas
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { pickupAvailability } from "@/lib/pickup-availability";
 import { promotionWindowActive, publicPromotionRecord } from "@/lib/customer-growth";
-import { queryOpenPlaces, mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
+import { mergeCuratedWithFirestore } from "@/lib/open-marketplace-data";
+import { projectedDiscoveryBusinesses } from "@/lib/discovery-projection";
 import { publicBusinessRecord } from "@/lib/marketplace-public";
 import { isMarketplaceDiscoverable, marketplaceTrust } from "@/lib/marketplace-trust";
 import { marketplaceProfile, serviceMatchesMarketplaceBusiness } from "@/lib/marketplace-taxonomy";
@@ -118,6 +119,13 @@ function itemRecord(doc, business, service) {
     durationMinutes: Number(item.durationMinutes || 0),
     capacity: Number(item.capacity || 0),
     remainingCapacity,
+    eventId: item.eventId || doc.id,
+    eventName: item.eventName || item.name || "",
+    ticketTier: item.ticketTier || item.variant || "Standard",
+    maxQuantity: Number(item.maxQuantity || 0) || null,
+    transferable: item.transferable === true,
+    salesStartAt: plainDate(item.salesStartAt),
+    salesEndAt: plainDate(item.salesEndAt),
     startsAt: plainDate(item.startsAt),
     endsAt: plainDate(item.endsAt),
     venue: item.venue || "",
@@ -275,7 +283,7 @@ export async function GET(request) {
 
 
     const firestoreBusinesses = businessSnapshot.docs.filter((doc) => liveBusiness(doc.data()) && canShowDirectoryRecord(doc.data(),showUnclaimed)).map(businessRecord);
-    const curatedBusinesses = (showUnclaimed ? queryOpenPlaces({ country, city, service, limit: 2500 }).records : []).map((item) => publicBusinessRecord(item.id, item));
+    const curatedBusinesses = (showUnclaimed ? projectedDiscoveryBusinesses({ country, city, service }) : []).map((item) => publicBusinessRecord(item.id, item));
     const allBusinesses = mergeCuratedWithFirestore(curatedBusinesses, firestoreBusinesses);
     const branchMap = new Map();
     branchSnapshot.docs.forEach((doc) => {

@@ -538,18 +538,7 @@
       }
     },
     "sendLocationPoint": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/locationPoint"
-        },
-        {
-          "properties": {
-            "country": {
-              "const": "ZW"
-            }
-          }
-        }
-      ]
+      "$ref": "#/$defs/locationPoint"
     },
     "sendCreateRequest": {
       "type": "object",
@@ -741,7 +730,7 @@
             "action_required",
             "awaiting_payment",
             "pay_later",
-                  "cash_driver_attested"
+            "cash_driver_attested"
           ]
         },
         "number": {

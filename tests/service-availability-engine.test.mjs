@@ -75,6 +75,9 @@ test("legacy Ride and Send launch controls migrate through the central resolver 
   assert.equal(resolveServiceAvailability(settings, { service: "ride", country: "ZW", city: "Bulawayo" }).state, "discover");
   assert.equal(resolveServiceAvailability(settings, { service: "send", country: "ZW", city: "Bulawayo" }).state, "live");
   assert.equal(resolveServiceAvailability(settings, { service: "send", country: "ZW", city: "Harare" }).state, "discover");
+  assert.equal(resolveServiceAvailability(settings, { service: "send", country: "MW", city: "Lilongwe" }).state, "hidden");
+  settings.mobility.send.enabledCountries = ["ZW", "MW"]; settings.mobility.send.enabledCities.push("Lilongwe");
+  assert.equal(resolveServiceAvailability(settings, { service: "send", country: "MW", city: "Lilongwe" }).state, "live");
   settings.serviceAvailability = { services: { ride: { cities: { "ZW:harare": { state: "paused" } } } } };
   assert.equal(resolveServiceAvailability(settings, { service: "ride", country: "ZW", city: "Harare" }).state, "paused");
 });

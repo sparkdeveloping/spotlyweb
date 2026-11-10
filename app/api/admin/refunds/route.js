@@ -4,6 +4,7 @@ import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-
 import { requirePlatformPermission } from "@/lib/access-control-server";
 import { canTransitionPayment } from "@/lib/payment-state";
 import { releaseReservationInTransaction } from "@/lib/order-reservations-server";
+import { revokeTicketEntitlementsInTransaction } from "@/lib/ticket-entitlements-server";
 import { safeText } from "@/lib/server-helpers";
 import { merchantNetAmount, moneyEntryId, postLedgerEntry, refundLedgerEffects } from "@/lib/business-money-server";
 
@@ -150,6 +151,7 @@ export async function POST(request) {
         transaction.set(orderRef, { paymentStatus: "refunded", refundedAt: FieldValue.serverTimestamp(), refundRequestId: body.refundId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       }
       if (intentRef) transaction.set(intentRef, { status: "refunded", refundedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (order.transactionType === "ticket") revokeTicketEntitlementsInTransaction(transaction, db, orderRef, order, { reason: "refunded" });
       const merchantRefund = merchantNetAmount(order);
       if (order.businessId && merchantRefund > 0) {
         postLedgerEntry(transaction, db, { id: moneyEntryId("refund", body.refundId), businessId: order.businessId, orderId: refund.orderId, paymentIntentId: refund.paymentIntentReference || null, refundId: body.refundId, currency: order.currency || "USD", amount: merchantRefund, direction: "debit", type: "refund", effects: refundLedgerEffects(merchantRefund, order.merchantSettlementStatus), reference: body.providerReference, source: "manual_refund", createdBy: user.uid });

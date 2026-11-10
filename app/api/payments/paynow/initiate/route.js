@@ -40,8 +40,8 @@ export async function POST(request) {
       if(order.transactionType==="send"&&
         (order.sendStatus!=="awaiting_payment"||order.paymentReviewRequired===true))
         throw Object.assign(new Error("Paynow Send payment is allowed only before dispatch on an undisputed request."),{status:409});
-      if(order.transactionType==="ride"&&(order.rideStatus!=="completed"||order.paymentReviewRequired===true))
-         throw Object.assign(new Error("Paynow Ride payments open only after a completed trip without an active payment dispute."),{status:409});
+      if(order.transactionType==="ride"&&(order.rideStatus!=="awaiting_payment"||order.paymentReviewRequired===true))
+         throw Object.assign(new Error("Paynow Ride payment is allowed only before Driver matching on an undisputed request."),{status:409});
       if (["paid", "refund_pending", "refunded"].includes(order.paymentStatus)) throw Object.assign(new Error("This order no longer requires payment."), { status: 409 });
 
       if (order.paymentIntentReference && livePending(order.paymentStatus)) {

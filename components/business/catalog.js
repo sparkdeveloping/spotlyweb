@@ -25,6 +25,7 @@ import { useToast } from "@/components/providers";
 import { authenticatedFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { countryDefinition } from "@/lib/country-engine";
+import { defaultAppointmentSchedule, localDateTimeEpoch } from "@/lib/book-live-domain";
 import { removeProduct, saveProduct, uploadFile } from "@/lib/firebase-services";
 import {
   duplicateProduct,
@@ -52,12 +53,24 @@ function priceLabel(product) {
   return value ? formatCurrency(value, product.currency || "USD") : "Price required";
 }
 
-function dateTimeValue(value) {
+function dateTimeValue(value, timeZone = "UTC") {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+  } catch {
+    return date.toISOString().slice(0, 16);
+  }
+}
+
+function isoFromWallDateTime(value, timeZone) {
+  if (!value) return null;
+  const [date, time] = String(value).split("T");
+  const epoch = localDateTimeEpoch(date, time, timeZone);
+  return Number.isFinite(epoch) ? new Date(epoch).toISOString() : null;
 }
 
 function itemDefaults(archetype) {
@@ -69,12 +82,33 @@ function itemDefaults(archetype) {
     itemType,
     pickupEligible: isPickup,
     substitutionAllowed: isPickup && archetype.id === "grocery_retail",
-    requiresBusinessReview: archetype.id === "directory_profile"
+    requiresBusinessReview: archetype.id === "directory_profile",
+    ...(archetype.id === "ticketing_events" ? { eventId: "", eventName: "", ticketTier: "Standard", maxQuantity: 10, transferable: true, cancellationCutoffMinutes: 1440, salesStartAt: "", salesEndAt: "" } : {}),
+    ...(archetype.id === "appointments_services" ? { durationMinutes: 30, slotIntervalMinutes: 30, minLeadMinutes: 60, maxAdvanceDays: 90, cancellationCutoffMinutes: 120, rescheduleCutoffMinutes: 120, capacity: 1, availabilitySchedule: defaultAppointmentSchedule() } : {}),
+    ...(archetype.id === "accommodation_activities" ? { capacity: 1, capacityMode: "booking", minStayDays: 1, maxStayDays: 30, minLeadMinutes: 60, maxAdvanceDays: 365, cancellationCutoffMinutes: 1440, rescheduleCutoffMinutes: 1440 } : {})
   };
 }
 
+
+const WEEK_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+function WeeklyScheduleEditor({ value, onChange }) {
+  const schedule = value || defaultAppointmentSchedule();
+  const patch = (day, values) => onChange({ ...schedule, [day]: values });
+  return <div className="space-y-2">{WEEK_DAYS.map((day) => {
+    const window = schedule?.[day]?.[0] || null;
+    const enabled = Boolean(window);
+    return <div key={day} className="grid items-center gap-2 rounded-xl bg-grouped p-3 sm:grid-cols-[120px_90px_1fr_1fr]">
+      <span className="text-sm font-semibold capitalize">{day}</span>
+      <label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={enabled} onChange={(event) => patch(day, event.target.checked ? [{ start: "09:00", end: "17:00" }] : [])} />Open</label>
+      <input type="time" disabled={!enabled} value={window?.start || "09:00"} onChange={(event) => patch(day, [{ start: event.target.value, end: window?.end || "17:00" }])} className={fieldClass} aria-label={`${day} opening time`} />
+      <input type="time" disabled={!enabled} value={window?.end || "17:00"} onChange={(event) => patch(day, [{ start: window?.start || "09:00", end: event.target.value }])} className={fieldClass} aria-label={`${day} closing time`} />
+    </div>;
+  })}</div>;
+}
+
 function OfferingModal({ product, open, onClose }) {
-  const { selectedBusinessId, user, branches, selectedBranchId, archetype } = useBusinessWorkspace();
+  const { selectedBusinessId, user, business, branches, selectedBranchId, archetype } = useBusinessWorkspace();
   const defaults = useMemo(() => itemDefaults(archetype), [archetype]);
   const isInventory = archetype.capabilities.includes("inventory") || archetype.capabilities.includes("menu");
   const isPickup = archetype.capabilities.includes("pickup_orders");
@@ -86,13 +120,16 @@ function OfferingModal({ product, open, onClose }) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [task, setTask] = useState({ open: false, state: "processing", title: "", description: "", active: 0 });
   const { toast } = useToast();
+  const primaryBranch = branches.find((branch) => branch.id === selectedBranchId) || branches[0] || null;
+  const locationCountry = primaryBranch?.country || business?.country || "ZW";
+  const eventTimeZone = countryDefinition(locationCountry)?.timeZone || "UTC";
 
   useEffect(() => {
     if (!open) return;
     setForm(product
-      ? { ...defaults, ...product, startsAt: dateTimeValue(product.startsAt), endsAt: dateTimeValue(product.endsAt) }
-      : { ...defaults, branchIds: selectedBranchId ? [selectedBranchId] : branches.map((branch) => branch.id) });
-  }, [open, product, defaults, selectedBranchId, branches]);
+      ? { ...defaults, ...product, startsAt: dateTimeValue(product.startsAt, product.timeZone || eventTimeZone), endsAt: dateTimeValue(product.endsAt, product.timeZone || eventTimeZone), salesStartAt: dateTimeValue(product.salesStartAt, product.timeZone || eventTimeZone), salesEndAt: dateTimeValue(product.salesEndAt, product.timeZone || eventTimeZone), availabilitySchedule: product.availabilitySchedule || defaultAppointmentSchedule() }
+      : { ...defaults, country: locationCountry, timeZone: eventTimeZone, branchIds: selectedBranchId ? [selectedBranchId] : branches.map((branch) => branch.id) });
+  }, [open, product, defaults, selectedBranchId, branches, locationCountry, eventTimeZone]);
 
   const update = (values) => setForm((current) => ({ ...current, ...values }));
   const toggleBranch = (id) => update({ branchIds: (form.branchIds || []).includes(id) ? form.branchIds.filter((item) => item !== id) : [...(form.branchIds || []), id] });
@@ -132,8 +169,22 @@ function OfferingModal({ product, open, onClose }) {
         stockQuantity: Number(form.stockQuantity || 0),
         durationMinutes: Number(form.durationMinutes || 0),
         capacity: Number(form.capacity || 0),
-        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
-        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
+        slotIntervalMinutes: Number(form.slotIntervalMinutes || 30),
+        minLeadMinutes: Number(form.minLeadMinutes || 0),
+        maxAdvanceDays: Number(form.maxAdvanceDays || (isBooking ? 365 : 90)),
+        cancellationCutoffMinutes: Number(form.cancellationCutoffMinutes || 0),
+        rescheduleCutoffMinutes: Number(form.rescheduleCutoffMinutes || form.cancellationCutoffMinutes || 0),
+        minStayDays: Number(form.minStayDays || 1),
+        maxStayDays: Number(form.maxStayDays || 30),
+        maxQuantity: Number(form.maxQuantity || 10),
+        country: form.country || locationCountry,
+        timeZone: form.timeZone || eventTimeZone,
+        eventName: form.eventName || form.name || "",
+        ticketTier: form.ticketTier || form.variant || "Standard",
+        startsAt: isoFromWallDateTime(form.startsAt, form.timeZone || eventTimeZone),
+        endsAt: isoFromWallDateTime(form.endsAt, form.timeZone || eventTimeZone),
+        salesStartAt: isoFromWallDateTime(form.salesStartAt, form.timeZone || eventTimeZone),
+        salesEndAt: isoFromWallDateTime(form.salesEndAt, form.timeZone || eventTimeZone),
         branchIds: form.branchIds?.length ? form.branchIds : branches.map((branch) => branch.id),
         prices: { ...(form.prices || {}), [form.currency || "USD"]: Number(form.price || 0) }
       }, selectedBusinessId, user);
@@ -170,11 +221,11 @@ function OfferingModal({ product, open, onClose }) {
 
         {isInventory && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Availability and stock</h3><p className="mt-1 text-xs text-secondary">Keep the customer promise accurate without forcing exact inventory when the business does not use it.</p></div><div className="grid gap-4 sm:grid-cols-3"><FieldLabel label="Tracking"><select value={form.stockMode || "status"} onChange={(event) => update({ stockMode: event.target.value })} className={selectClass}><option value="status">Availability only</option><option value="quantity">Exact quantity</option></select></FieldLabel><FieldLabel label="Availability"><select value={form.stockStatus || "in_stock"} onChange={(event) => update({ stockStatus: event.target.value })} className={selectClass}><option value="in_stock">Available</option><option value="low_stock">Limited</option><option value="unavailable">Unavailable</option></select></FieldLabel><FieldLabel label="Quantity" hint={form.stockMode === "quantity" ? "Used for stock alerts." : "Optional reference."}><input type="number" min="0" value={form.stockQuantity ?? 0} onChange={(event) => update({ stockQuantity: event.target.value })} className={fieldClass} /></FieldLabel></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="SKU"><input value={form.sku || ""} onChange={(event) => update({ sku: event.target.value })} className={fieldClass} autoComplete="off" /></FieldLabel><FieldLabel label="Barcode"><input value={form.barcode || ""} onChange={(event) => update({ barcode: event.target.value })} className={fieldClass} inputMode="numeric" autoComplete="off" /></FieldLabel></div></div>}
 
-        {isTicket && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Event and admission</h3><p className="mt-1 text-xs text-secondary">The venue is a location under the business. Ticket types stay inside this event catalogue.</p></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Starts"><input type="datetime-local" value={form.startsAt || ""} onChange={(event) => update({ startsAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Ends"><input type="datetime-local" value={form.endsAt || ""} onChange={(event) => update({ endsAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Venue or area"><input value={form.venue || ""} onChange={(event) => update({ venue: event.target.value })} className={fieldClass} placeholder="Main stage, hall, or venue" /></FieldLabel><FieldLabel label="Ticket capacity"><input type="number" min="0" value={form.capacity || 0} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel></div></div>}
+        {isTicket && <div className="space-y-5 rounded-2xl border p-4"><div><h3 className="font-bold">Event and ticket tier</h3><p className="mt-1 text-xs text-secondary">Create one catalogue item per ticket tier and give related tiers the same Event ID. Times are interpreted in <strong>{form.timeZone || eventTimeZone}</strong>.</p></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><FieldLabel label="Event name"><input value={form.eventName || form.name || ""} onChange={(event) => update({ eventName: event.target.value })} className={fieldClass} placeholder="Festival, show, match…" /></FieldLabel><FieldLabel label="Event ID" hint="Use the same ID for every tier of this event."><input value={form.eventId || ""} onChange={(event) => update({ eventId: event.target.value.trim().replace(/\s+/g, "-").toLowerCase() })} className={fieldClass} placeholder="summer-festival-2026" /></FieldLabel><FieldLabel label="Ticket tier"><input value={form.ticketTier || "Standard"} onChange={(event) => update({ ticketTier: event.target.value })} className={fieldClass} placeholder="General admission" /></FieldLabel><FieldLabel label="Starts"><input required type="datetime-local" value={form.startsAt || ""} onChange={(event) => update({ startsAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Ends"><input type="datetime-local" value={form.endsAt || ""} onChange={(event) => update({ endsAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Venue or area"><input value={form.venue || ""} onChange={(event) => update({ venue: event.target.value })} className={fieldClass} placeholder="Main stage, hall, or venue" /></FieldLabel><FieldLabel label="Tier capacity"><input type="number" min="0" value={form.capacity || 0} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Max per checkout"><input type="number" min="1" max="50" value={form.maxQuantity || 10} onChange={(event) => update({ maxQuantity: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Cancellation cutoff (hours)"><input type="number" min="0" value={Math.round(Number(form.cancellationCutoffMinutes || 0) / 60)} onChange={(event) => update({ cancellationCutoffMinutes: Number(event.target.value || 0) * 60 })} className={fieldClass} /></FieldLabel><FieldLabel label="Sales open"><input type="datetime-local" value={form.salesStartAt || ""} onChange={(event) => update({ salesStartAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Sales close"><input type="datetime-local" value={form.salesEndAt || ""} onChange={(event) => update({ salesEndAt: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Timezone"><input value={form.timeZone || eventTimeZone} readOnly className={fieldClass} /></FieldLabel></div><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={form.transferable !== false} onChange={(event) => update({ transferable: event.target.checked })} /><span><span className="block text-sm font-semibold">Ticket ownership can be transferred later</span><span className="mt-1 block text-xs text-secondary">Spotly records ownership per issued ticket. Sharing an event never exposes an entry code.</span></span></label></div>}
 
-        {isAppointment && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Appointment details</h3><p className="mt-1 text-xs text-secondary">Define the normal session length and whether the team must approve each request.</p></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Duration in minutes"><input type="number" min="5" step="5" value={form.durationMinutes || 30} onChange={(event) => update({ durationMinutes: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="People per slot"><input type="number" min="1" value={form.capacity || 1} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel></div><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={Boolean(form.requiresBusinessReview)} onChange={(event) => update({ requiresBusinessReview: event.target.checked })} /><span><span className="block text-sm font-semibold">Approve requests before confirming</span><span className="mt-1 block text-xs text-secondary">Useful when staff schedules or service details require a manual check.</span></span></label></div>}
+        {isAppointment && <div className="space-y-5 rounded-2xl border p-4"><div><h3 className="font-bold">Appointment availability</h3><p className="mt-1 text-xs text-secondary">Customers only see generated slots inside this schedule. Capacity is checked atomically at confirmation.</p></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><FieldLabel label="Duration (minutes)"><input type="number" min="5" step="5" value={form.durationMinutes || 30} onChange={(event) => update({ durationMinutes: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Slot interval (minutes)"><input type="number" min="5" step="5" value={form.slotIntervalMinutes || 30} onChange={(event) => update({ slotIntervalMinutes: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="People per slot"><input type="number" min="1" value={form.capacity || 1} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Minimum lead time (hours)"><input type="number" min="0" step="0.5" value={Number(form.minLeadMinutes || 0) / 60} onChange={(event) => update({ minLeadMinutes: Math.round(Number(event.target.value || 0) * 60) })} className={fieldClass} /></FieldLabel><FieldLabel label="Book ahead (days)"><input type="number" min="1" max="730" value={form.maxAdvanceDays || 90} onChange={(event) => update({ maxAdvanceDays: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Cancellation cutoff (hours)"><input type="number" min="0" step="0.5" value={Number(form.cancellationCutoffMinutes || 0) / 60} onChange={(event) => update({ cancellationCutoffMinutes: Math.round(Number(event.target.value || 0) * 60) })} className={fieldClass} /></FieldLabel><FieldLabel label="Reschedule cutoff (hours)"><input type="number" min="0" step="0.5" value={Number(form.rescheduleCutoffMinutes || 0) / 60} onChange={(event) => update({ rescheduleCutoffMinutes: Math.round(Number(event.target.value || 0) * 60) })} className={fieldClass} /></FieldLabel><FieldLabel label="Timezone"><input value={form.timeZone || eventTimeZone} readOnly className={fieldClass} /></FieldLabel></div><div><p className="mb-2 text-sm font-semibold">Weekly schedule</p><WeeklyScheduleEditor value={form.availabilitySchedule} onChange={(availabilitySchedule) => update({ availabilitySchedule })} /></div><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={Boolean(form.requiresBusinessReview)} onChange={(event) => update({ requiresBusinessReview: event.target.checked })} /><span><span className="block text-sm font-semibold">Approve requests before confirming</span><span className="mt-1 block text-xs text-secondary">When off, a capacity-safe slot can confirm immediately. When on, Spotly reserves capacity while the business reviews it.</span></span></label></div>}
 
-        {isBooking && <div className="space-y-4 rounded-2xl border p-4"><div><h3 className="font-bold">Booking details</h3><p className="mt-1 text-xs text-secondary">Use capacity for rooms, seats, participants, or another bookable unit.</p></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Capacity"><input type="number" min="1" value={form.capacity || 1} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Typical duration in minutes"><input type="number" min="0" value={form.durationMinutes || 0} onChange={(event) => update({ durationMinutes: event.target.value })} className={fieldClass} placeholder="Leave 0 for overnight stays" /></FieldLabel></div><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={Boolean(form.requiresBusinessReview)} onChange={(event) => update({ requiresBusinessReview: event.target.checked })} /><span><span className="block text-sm font-semibold">Approve requests before confirming</span><span className="mt-1 block text-xs text-secondary">Spotly will collect the request without promising unavailable capacity.</span></span></label></div>}
+        {isBooking && <div className="space-y-5 rounded-2xl border p-4"><div><h3 className="font-bold">Booking capacity and policy</h3><p className="mt-1 text-xs text-secondary">Spotly checks every reserved day before it commits the reservation.</p></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><FieldLabel label="Capacity"><input type="number" min="1" value={form.capacity || 1} onChange={(event) => update({ capacity: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Capacity represents"><select value={form.capacityMode || "booking"} onChange={(event) => update({ capacityMode: event.target.value })} className={selectClass}><option value="booking">Bookings / units</option><option value="guests">Guests / participants</option></select></FieldLabel><FieldLabel label="Typical duration in minutes"><input type="number" min="0" value={form.durationMinutes || 0} onChange={(event) => update({ durationMinutes: event.target.value })} className={fieldClass} placeholder="0 for day/overnight bookings" /></FieldLabel><FieldLabel label="Minimum stay / length (days)"><input type="number" min="1" max="60" value={form.minStayDays || 1} onChange={(event) => update({ minStayDays: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Maximum stay / length (days)"><input type="number" min="1" max="90" value={form.maxStayDays || 30} onChange={(event) => update({ maxStayDays: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Book ahead (days)"><input type="number" min="1" max="730" value={form.maxAdvanceDays || 365} onChange={(event) => update({ maxAdvanceDays: event.target.value })} className={fieldClass} /></FieldLabel><FieldLabel label="Minimum lead time (hours)"><input type="number" min="0" step="0.5" value={Number(form.minLeadMinutes || 0) / 60} onChange={(event) => update({ minLeadMinutes: Math.round(Number(event.target.value || 0) * 60) })} className={fieldClass} /></FieldLabel><FieldLabel label="Cancellation cutoff (hours)"><input type="number" min="0" step="0.5" value={Number(form.cancellationCutoffMinutes || 0) / 60} onChange={(event) => update({ cancellationCutoffMinutes: Math.round(Number(event.target.value || 0) * 60) })} className={fieldClass} /></FieldLabel><FieldLabel label="Reschedule cutoff (hours)"><input type="number" min="0" step="0.5" value={Number(form.rescheduleCutoffMinutes || 0) / 60} onChange={(event) => update({ rescheduleCutoffMinutes: Math.round(Number(event.target.value || 0) * 60) })} className={fieldClass} /></FieldLabel></div><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={Boolean(form.requiresBusinessReview)} onChange={(event) => update({ requiresBusinessReview: event.target.checked })} /><span><span className="block text-sm font-semibold">Approve requests before confirming</span><span className="mt-1 block text-xs text-secondary">Capacity is still reserved when a request is submitted, so manual review cannot overbook the same dates.</span></span></label></div>}
 
         {isPickup && <div className="grid gap-3 sm:grid-cols-2"><label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={form.pickupEligible !== false} onChange={(event) => update({ pickupEligible: event.target.checked })} /><span><span className="block text-sm font-semibold">Available for pickup</span><span className="mt-1 block text-xs leading-5 text-secondary">Customers can include this item in a pickup order.</span></span></label>{archetype.id === "grocery_retail" && <label className="flex items-start gap-3 rounded-2xl bg-grouped p-4"><input type="checkbox" className="mt-1" checked={form.substitutionAllowed !== false} onChange={(event) => update({ substitutionAllowed: event.target.checked })} /><span><span className="block text-sm font-semibold">Allow substitutions</span><span className="mt-1 block text-xs leading-5 text-secondary">The team can suggest a comparable item when this one is unavailable.</span></span></label>}</div>}
 

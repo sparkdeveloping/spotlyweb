@@ -8,7 +8,7 @@ import { safeText } from "@/lib/server-helpers";
 import {matchesParcelPin,expectedParcelProofPath} from "@/lib/send-security";
 
 export const runtime = "nodejs";
-const schema = z.object({ parcelJobId: z.string().min(3).max(180), action: z.enum(["start_to_pickup", "arrive_pickup", "begin_pickup_verification", "verify_pickup", "start_delivery", "arrive_dropoff", "begin_handoff", "complete","report_handoff_problem","confirm_return"]), code: z.string().max(12).optional(), proofPhotoUrl: z.string().url().max(1000).optional(),cashReceived:z.boolean().optional(),cashAmount:z.number().finite().min(0).max(100000).optional(), note: z.string().max(500).optional() });
+const schema = z.object({ parcelJobId: z.string().min(3).max(180), action: z.enum(["start_to_pickup", "arrive_pickup", "begin_pickup_verification", "verify_pickup", "start_delivery", "arrive_dropoff", "begin_handoff", "complete","report_handoff_problem","start_return","confirm_return"]), code: z.string().max(12).optional(), proofPhotoUrl: z.string().url().max(1000).optional(),cashReceived:z.boolean().optional(),cashAmount:z.number().finite().min(0).max(100000).optional(), note: z.string().max(500).optional() });
 
 export async function POST(request) {
   try {
@@ -19,7 +19,7 @@ export async function POST(request) {
       if (parcel.assignedDriverId !== user.uid) throw Object.assign(new Error("This Send request is not assigned to your Driver account."), { status: 403 });
       if(parcel.safetyReviewHold===true)throw Object.assign(new Error("Send is paused for a safety investigation. Contact Operations."),{status:409});
       if (parcel.state !== requiredState) throw Object.assign(new Error("Refresh the Send job and follow the current next action."), { status: 409 });
-      const needsPin=body.action==="verify_pickup"||body.action==="complete"||body.action==="confirm_return";
+      const needsPin=body.action==="verify_pickup"||body.action==="complete";
       const pinKind=body.action==="complete"?"dropoff":"pickup";
       const pinRef=db.collection("parcelPinAttempts").doc(body.parcelJobId+"_"+pinKind);
       const pinSnap=needsPin?await transaction.get(pinRef):null;
@@ -52,6 +52,8 @@ export async function POST(request) {
       }
       if(body.action==="complete"&&parcel.proofPhotoRequired===true&&!body.proofPhotoUrl&&!parcel.proofPhotoUrl)
         throw Object.assign(new Error("Upload delivery proof before completing this Send request."),{status:409});
+      if(body.action==="confirm_return"&&parcel.proofPhotoRequired===true&&!body.proofPhotoUrl&&!parcel.returnProofPhotoUrl)
+        throw Object.assign(new Error("Upload return proof before confirming the parcel was returned."),{status:409});
       const now = FieldValue.serverTimestamp(); const patch = { state: nextState, updatedAt: now };
       if (body.action === "arrive_pickup") patch.arrivedPickupAt = now;
       if (body.action === "verify_pickup") patch.collectedAt = now;
@@ -65,13 +67,18 @@ export async function POST(request) {
       }
       if(body.action==="confirm_return"){
         patch.returnedAt=now;patch.exceptionCode="returned_to_sender";
-        patch.paymentReviewRequired=true;patch.driverEarningsStatus="on_hold";
-        transaction.set(db.collection("drivers").doc(user.uid),{sendFinanceHold:true,sendFinanceHoldAt:now},{merge:true});
-        transaction.set(db.collection("sendFinanceReviews").doc(body.parcelJobId),{
-          parcelJobId:body.parcelJobId,driverId:user.uid,status:"open",
-          issueType:"returned_to_sender",createdAt:now,updatedAt:now},{merge:true});
+        if(parcel.paymentStatus==="paid"){
+          patch.paymentReviewRequired=true;patch.driverEarningsStatus="on_hold";
+          transaction.set(db.collection("drivers").doc(user.uid),{sendFinanceHold:true,sendFinanceHoldAt:now},{merge:true});
+          transaction.set(db.collection("sendFinanceReviews").doc(body.parcelJobId),{
+            parcelJobId:body.parcelJobId,driverId:user.uid,status:"open",
+            issueType:"returned_to_sender",createdAt:now,updatedAt:now},{merge:true});
+        }
       }
-      if (body.proofPhotoUrl) patch.proofPhotoUrl = safeText(body.proofPhotoUrl, 1000);
+      if (body.proofPhotoUrl) {
+        if(body.action==="confirm_return") patch.returnProofPhotoUrl = safeText(body.proofPhotoUrl, 1000);
+        else patch.proofPhotoUrl = safeText(body.proofPhotoUrl, 1000);
+      }
       if (body.action === "complete"){
         patch.deliveredAt=now;
         if(parcel.paymentMethod==="cash"){
@@ -80,13 +87,13 @@ export async function POST(request) {
         }else if(parcel.paymentStatus!=="paid")patch.driverEarningsStatus="awaiting_customer_payment";
       }
       transaction.set(ref, patch, { merge: true });
-      if (parcel.orderId) { const orderPatch = { sendStatus: nextState, status: nextState === "delivered" ? "completed" : "in_progress", updatedAt: now }; if (nextState === "delivered"){
+      if (parcel.orderId) { const orderPatch = { sendStatus: nextState, status: nextState === "delivered" ? "completed" : nextState === "returned" ? "exception" : "in_progress", updatedAt: now }; if (nextState === "delivered"){
           orderPatch.completedAt=now;
           if(parcel.paymentMethod==="cash"){orderPatch.paymentStatus="cash_driver_attested";orderPatch.cashAttestedAt=now;}
         } transaction.set(db.collection("orders").doc(parcel.orderId), orderPatch, { merge: true }); }
       appendParcelEvent(transaction, db, { parcelJobId: body.parcelJobId, type: `parcel.${body.action}`, actorType: "driver", actorId: user.uid, previousState: parcel.state, state: nextState, note: safeText(body.note || "", 500), metadata: body.proofPhotoUrl ? { proofPhotoUrl: safeText(body.proofPhotoUrl, 1000) } : {} });
       if(["complete","confirm_return"].includes(body.action)){
-        if(body.action==="confirm_return"){
+        if(body.action==="confirm_return"&&parcel.paymentStatus==="paid"){
          transaction.set(db.collection("adminQueueItems").doc("send_return_finance_"+body.parcelJobId),{
           queue:"parcel-exceptions",type:"returned_parcel_finance_review",
           parcelJobId:body.parcelJobId,entityId:body.parcelJobId,status:"open",priority:"high",
@@ -103,12 +110,12 @@ export async function POST(request) {
             transaction.set(ref,{earningsCreditedAt:now,driverEarningsStatus:"available"},{merge:true});
           }
         }
-        transaction.create(db.collection("auditLogs").doc(), { actorId: user.uid, action: "parcel.delivered", entityType: "parcelJob", entityId: body.parcelJobId, metadata: { orderId: parcel.orderId || null }, source: "send_network", createdAt: now });
+        transaction.create(db.collection("auditLogs").doc(), { actorId: user.uid, action: body.action === "confirm_return" ? "parcel.returned" : "parcel.delivered", entityType: "parcelJob", entityId: body.parcelJobId, metadata: { orderId: parcel.orderId || null }, source: "send_network", createdAt: now });
       }
       notification = { customerId: parcel.customerId, number: parcel.number, action: body.action };
     });
     if(pinError)throw Object.assign(new Error(pinError),{status:409});
-    const messages = { start_to_pickup: "Your Driver is on the way to the pickup.", arrive_pickup: "Your Driver has arrived at the pickup point.", verify_pickup: "Your parcel has been collected.", start_delivery: "Your parcel is on the way.", arrive_dropoff: "Your Driver has arrived at the recipient.", complete: "Your parcel was delivered.",report_handoff_problem:"Recipient handoff needs Operations support.",confirm_return:"Your parcel was returned to the sender." };
+    const messages = { start_to_pickup: "Your Driver is on the way to the pickup.", arrive_pickup: "Your Driver has arrived at the pickup point.", verify_pickup: "Your parcel has been collected.", start_delivery: "Your parcel is on the way.", arrive_dropoff: "Your Driver has arrived at the recipient.", complete: "Your parcel was delivered.",report_handoff_problem:"Recipient handoff needs Operations support.",start_return:"Your Driver is returning the parcel to the sender.",confirm_return:"Your parcel was returned to the sender." };
     if (notification && messages[notification.action]) await notifyUsers(db, messaging, [notification.customerId], { title: notification.number || "Send update", body: messages[notification.action], href: "/send", category: "send", workspace: "customer", module: "send" });
     return Response.json({ ok: true, state: nextState });
   } catch (error) {

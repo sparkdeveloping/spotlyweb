@@ -10,7 +10,7 @@
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || root.child('runtimeAccess/driverPresenceReaders/' + $uid + '/' + auth.uid).val() === true)",
         ".write": "auth != null && auth.uid === $uid && (!newData.exists() || root.child('runtimeAccess/driverEligible/' + auth.uid).val() === true)",
-        ".validate": "!newData.exists() || (newData.hasChildren(['uid','state','updatedAt']) && newData.child('uid').val() === auth.uid && newData.child('state').isString() && newData.child('state').val().matches(/^(offline|online|busy)$/) && newData.child('updatedAt').isNumber() && (!newData.child('location').exists() || (newData.child('location').hasChildren(['lat','lng']) && newData.child('location/lat').isNumber() && newData.child('location/lng').isNumber() && newData.child('location/lat').val() >= -90 && newData.child('location/lat').val() <= 90 && newData.child('location/lng').val() >= -180 && newData.child('location/lng').val() <= 180)))"
+        ".validate": "!newData.exists() || (newData.hasChildren(['uid','state','updatedAt']) && newData.child('uid').val() === auth.uid && newData.child('state').isString() && newData.child('state').val().matches(/^(offline|online|busy)$/) && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 60000 && newData.child('updatedAt').val() >= now - 600000 && (!newData.child('location').exists() || (newData.child('location').hasChildren(['lat','lng']) && newData.child('location/lat').isNumber() && newData.child('location/lng').isNumber() && newData.child('location/lat').val() >= -90 && newData.child('location/lat').val() <= 90 && newData.child('location/lng').val() >= -180 && newData.child('location/lng').val() <= 180 && (!newData.child('location/accuracy').exists() || (newData.child('location/accuracy').isNumber() && newData.child('location/accuracy').val() >= 0 && newData.child('location/accuracy').val() <= 500)))))"
       }
     },
     "dispatchPresence": {
@@ -19,7 +19,7 @@
           "$uid": {
             ".read": false,
             ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (root.child('runtimeAccess/driverEligible/' + auth.uid).val() === true && root.child('runtimeAccess/driverDispatchScope/' + auth.uid + '/' + $country + '/' + $area).val() === true))",
-            ".validate": "!newData.exists() || (newData.hasChildren(['uid','lat','lng','updatedAt']) && newData.child('uid').val() === auth.uid && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('updatedAt').isNumber())"
+            ".validate": "!newData.exists() || (newData.hasChildren(['uid','lat','lng','updatedAt']) && newData.child('uid').val() === auth.uid && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 60000 && newData.child('updatedAt').val() >= now - 300000)"
           }
         }
       }
@@ -29,7 +29,7 @@
         ".read": "auth != null && root.child('runtimeAccess/activeTrips/' + $tripId + '/readers/' + auth.uid).val() === true",
         "driverLocation": {
           ".write": "auth != null && root.child('runtimeAccess/activeTrips/' + $tripId + '/drivers/' + auth.uid).val() === true",
-          ".validate": "!newData.exists() || (newData.hasChildren(['driverId','lat','lng','updatedAt']) && newData.child('driverId').val() === auth.uid && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('updatedAt').isNumber())"
+          ".validate": "!newData.exists() || (newData.hasChildren(['driverId','lat','lng','updatedAt']) && newData.child('driverId').val() === auth.uid && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 60000 && newData.child('updatedAt').val() >= now - 300000)"
         },
         "$other": {
           ".write": false

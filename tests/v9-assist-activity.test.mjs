@@ -19,11 +19,13 @@ test("Activity includes customer-scoped Assist documents",()=>{
  assert.match(api,/shoppingActivity\(/);assert.match(api,/bookingActivity\(/);
  assert.match(api,/independentShoppingRequests/);assert.match(api,/assistedBookings/);
 });
-test("UI offers real quote decisions, never a merchant payment shortcut",()=>{
- assert.match(read("components/marketplace-app.js"),/AssistActivitySection/);
- const ui=read("components/assist-activity-section.js");
+test("Unified Activity preserves real Assist quote decisions without a merchant payment shortcut",()=>{
+ const ui=read("components/marketplace-app.js");
+ assert.doesNotMatch(ui,/AssistActivitySection/);
+ assert.match(ui,/AssistActivityActions/);
  assert.match(ui,/Accept quote \(no payment\)/);
- assert.doesNotMatch(ui,/payments\/paynow/);
+ assert.match(ui,/independent-shopping\/requests\/respond/);
+ assert.doesNotMatch(ui,/assist.*payments\/paynow/i);
 });
 test("operator evidence and customer expiry plus region checks are mandatory",()=>{
  assert.match(read("app/api/admin/assist-shopping/actions/route.js"),/body.note.trim\(\).length<12/);

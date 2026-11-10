@@ -38,6 +38,24 @@ export async function loadStyle(){
 function coordinates(p){const lat=Number(p?.lat),lng=Number(p?.lng);return Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180?[lng,lat]:null}
 const defaultCenter=country=>country==="MW"?[33.78,-13.96]:[31.05,-17.83];
 
+function driverVehicleMarker(type="car") {
+ const value=String(type||"car").toLowerCase();
+ const icon=value.includes("motor")||value.includes("bike")
+  ? '<path d="M7.2 15.5a3 3 0 1 1-3-3 3 3 0 0 1 3 3Zm12.6 0a3 3 0 1 1-3-3 3 3 0 0 1 3 3ZM7.3 14.2l3.2-6h3.2l2.6 6M9.4 10.2h5.9M11.2 8.2 9.7 6.3"/>'
+  : value.includes("bicycle")
+   ? '<path d="M8 17.5a3.5 3.5 0 1 1-3.5-3.5A3.5 3.5 0 0 1 8 17.5Zm15 0a3.5 3.5 0 1 1-3.5-3.5 3.5 3.5 0 0 1 3.5 3.5ZM4.5 17.5 9 9h4l-3 5.5h9.5L16 8h-3"/>'
+   : value.includes("van")||value.includes("pickup")||value.includes("truck")
+    ? '<path d="M3.5 8.5h10v8h-10zM13.5 11h4l3 3v2.5h-7zM7 18.5a2 2 0 1 1-2-2 2 2 0 0 1 2 2Zm12 0a2 2 0 1 1-2-2 2 2 0 0 1 2 2Z"/>'
+    : '<path d="M5 14.5 6.8 10a2 2 0 0 1 1.9-1.3h6.6a2 2 0 0 1 1.9 1.3l1.8 4.5M4 14.5h16v4H4zM7 18.5v1.5m10-1.5v1.5M7.5 14.5h9"/>';
+ const label=value.replace(/_/g," ");
+ const el=document.createElement("div");
+ el.setAttribute("role","img");
+ el.setAttribute("aria-label",`Driver ${label} location`);
+ el.innerHTML=`<svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`;
+ el.style.cssText="width:38px;height:38px;border:2px solid white;border-radius:50%;background:#1e65a7;color:white;display:grid;place-items:center;box-shadow:0 3px 10px #0005;";
+ return el;
+}
+
 export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",label="Choose location"}){
  const container=useRef(null),mapInstance=useRef(null),marker=useRef(null);
  const [selected,setSelected]=useState(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[ready,setReady]=useState(false);
@@ -92,13 +110,13 @@ export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",labe
  </div>;
 }
 
-export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverUpdatedAt=null,compact=false}){
+export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverUpdatedAt=null,driverVehicleType="car",compact=false}){
  const container=useRef(null),map=useRef(null),pinMarkers=useRef([]),driverMarker=useRef(null);
  const [error,setError]=useState("");
  const coords=[pickup,...path,dropoff].map(coordinates).filter(Boolean);
  const hasRoute=Array.isArray(path)&&path.length>=2;
- const routeRef=useRef({path,pickup,dropoff,driverLocation,driverUpdatedAt});
- routeRef.current={path,pickup,dropoff,driverLocation,driverUpdatedAt};
+ const routeRef=useRef({path,pickup,dropoff,driverLocation,driverUpdatedAt,driverVehicleType});
+ routeRef.current={path,pickup,dropoff,driverLocation,driverUpdatedAt,driverVehicleType};
  useEffect(()=>{
   if(!container.current||!coordinates(pickup)||!coordinates(dropoff))return;
   let cancelled=false;let instance;
@@ -126,8 +144,7 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
     }
     const initialFix=new Date(data.driverUpdatedAt||data.driverLocation?.updatedAt||0).getTime();
     if(initialFix&&Date.now()-initialFix<=120000&&coordinates(data.driverLocation)){
-      const car=document.createElement("div");car.textContent="Dvr";
-      car.style.cssText="width:36px;height:28px;border:2px solid white;border-radius:12px;background:#1e65a7;color:white;font-size:11px;display:grid;place-items:center;font-weight:700;box-shadow:0 2px 8px #0005;";
+      const car=driverVehicleMarker(data.driverVehicleType);
       driverMarker.current=new lib.Marker({element:car}).setLngLat(coordinates(data.driverLocation)).addTo(instance);
     }
     const all=line.concat([coordinates(data.pickup),coordinates(data.dropoff)]).filter(Boolean);
@@ -153,11 +170,10 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
   }
   if(driverMarker.current)driverMarker.current.setLngLat(pos);
   else if(window.maplibregl){
-    const car=document.createElement("div");car.textContent="Dvr";
-    car.style.cssText="width:36px;height:28px;border:2px solid white;border-radius:12px;background:#1e65a7;color:white;font-size:11px;display:grid;place-items:center;font-weight:700;box-shadow:0 2px 8px #0005;";
+    const car=driverVehicleMarker(driverVehicleType);
     driverMarker.current=new window.maplibregl.Marker({element:car}).setLngLat(pos).addTo(instance);
   }
- },[driverLocation?.lat,driverLocation?.lng,driverLocation?.updatedAt,driverUpdatedAt]);
+ },[driverLocation?.lat,driverLocation?.lng,driverLocation?.updatedAt,driverUpdatedAt,driverVehicleType]);
  const lastFix=new Date(driverUpdatedAt||driverLocation?.updatedAt||0).getTime();
  const recentDriver=lastFix&&Date.now()-lastFix<=120000&&coordinates(driverLocation);
  return <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]">
