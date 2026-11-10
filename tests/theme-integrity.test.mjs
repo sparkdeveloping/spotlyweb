@@ -62,11 +62,16 @@ test("shared primary button uses paired semantic foreground and background", () 
   assert.doesNotMatch(source, /primary:[^\n]*text-white/);
 });
 
-test("theme is resolved before hydration and system mode exposes resolvedTheme", () => {
+test("theme is resolved before hydration, defaults to light, and still supports system/dark", () => {
   const layout = readFileSync(new URL("../app/layout.js", import.meta.url), "utf8");
   const providers = readFileSync(new URL("../components/providers.js", import.meta.url), "utf8");
   assert.match(layout, /themeBootstrap/);
+  assert.match(layout, /candidate.*:\s*"light"/s);
   assert.match(layout, /prefers-color-scheme: dark/);
+  assert.match(layout, /themeColor: "#ffffff"/);
+  assert.match(providers, /VALID_THEMES = new Set\(\["light", "dark", "system"\]\)/);
+  assert.match(providers, /return VALID_THEMES\.has\(value\) \? value : "light"/);
+  assert.match(providers, /function getThemeServerSnapshot\(\) \{\s*return "light"/);
   assert.match(providers, /resolvedTheme/);
   assert.match(providers, /isDark: resolvedTheme === "dark"/);
 });
