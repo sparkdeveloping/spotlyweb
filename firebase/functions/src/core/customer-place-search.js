@@ -30,7 +30,7 @@ function matchingName(row,query){
 export function mapTilerSearchUrl({query,country,center,apiKey}){
   const input=tidy(query,140);
   if(!bounds[country])throw new HttpsError("invalid-argument","Select Zimbabwe or Malawi.");
-  if(input.length<3)throw new HttpsError("invalid-argument","Enter at least three characters.");
+  if(input.length<2)throw new HttpsError("invalid-argument","Enter at least two characters.");
   if(!/^[A-Za-z0-9_-]{16,180}$/.test(tidy(apiKey,180)))
     throw new HttpsError("unavailable","Licensed location search is not configured.");
   const url=new URL("https://api.maptiler.com/geocoding/"+encodeURIComponent(input)+".json");
@@ -77,7 +77,7 @@ export async function searchCustomerPlaces({data={},apiKey=process.env.SPOTLY_MA
   const country=tidy(data.country,2).toUpperCase();
   const query=tidy(data.query,140),city=tidy(data.city,120);
   if(!bounds[country])throw new HttpsError("invalid-argument","Choose Zimbabwe or Malawi.");
-  if(query.length<3)return {ok:true,results:[]};
+  if(query.length<2)return {ok:true,results:[]};
   const center=data.center?{lat:Number(data.center.lat),lng:Number(data.center.lng)}:null;
   const url=mapTilerSearchUrl({query,country,center,apiKey});
   let response;
