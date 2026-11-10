@@ -4,13 +4,17 @@ import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("native Ride and Send quotes include verified backend road geometry", () => {
+test("native Ride and Send use bounded, server-verified road access", () => {
   const runtime = read("firebase/functions/src/core/customer-runtime.js");
-  assert.match(runtime, /base\.searchParams\.set\("geometries", "geojson"\)/);
-  assert.match(runtime, /route\?\.geometry\?\.coordinates/);
-  assert.match(runtime, /points\.some\(/);
-  assert.match(runtime, /haversineKm\(from, points\[0\]\)/);
-  assert.equal((runtime.match(/routePath: route\.path/g) || []).length, 2);
+  const routing = read("firebase/functions/src/core/mobility-road-access.js");
+  assert.match(runtime, /import \{ verifiedMobilityRoute \} from "\.\/mobility-road-access\.js"/);
+  assert.equal((runtime.match(/await verifiedMobilityRoute\(/g) || []).length, 2);
+  assert.equal((runtime.match(/routePath: route\.path, accessPoints: route\.accessPoints/g) || []).length, 2);
+  assert.match(routing, /MAX_ACCESS_METERS = 350/);
+  assert.match(routing, /route\?\.geometry\?\.coordinates/);
+  assert.match(routing, /interpretDrivingRoute/);
+  assert.match(routing, /nearestCandidates/);
+  assert.match(routing, /requiresConfirmation/);
   assert.doesNotMatch(runtime, /routePath: \[\]/);
 });
 
