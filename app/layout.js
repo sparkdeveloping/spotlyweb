@@ -40,16 +40,18 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0d12" }
-  ]
+  // First paint is intentionally light. ThemeProvider updates this dynamically
+  // if a returning user has explicitly selected Dark or System resolves dark.
+  themeColor: "#ffffff"
 };
 
 const themeBootstrap = `(() => {
   try {
+    const cookie = document.cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith("spotly_theme="));
+    const shared = cookie ? decodeURIComponent(cookie.slice("spotly_theme=".length)) : "";
     const stored = localStorage.getItem("spotly-theme");
-    const selected = ["light", "dark", "system"].includes(stored) ? stored : "system";
+    const candidate = shared || stored;
+    const selected = ["light", "dark", "system"].includes(candidate) ? candidate : "light";
     const resolved = selected === "system"
       ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
       : selected;
