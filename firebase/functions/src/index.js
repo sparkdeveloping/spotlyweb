@@ -34,7 +34,9 @@ setGlobalOptions({
   region: SPOTLY_FUNCTIONS_REGION,
   memory: "256MiB",
   timeoutSeconds: 30,
-  maxInstances: 50
+  // europe-west1 currently allows 20 vCPU of regional Cloud Run capacity.
+  // Keep new functions conservatively scaled until quota/traffic is verified.
+  maxInstances: 2
 });
 
 const DRIVER_RIDE_PIN_KEY = defineSecret("SPOTLY_RIDE_PIN_KEY");
