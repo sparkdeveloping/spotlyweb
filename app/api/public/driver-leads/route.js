@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
-import { enforceRateLimit } from "@/lib/rate-limit-server";
+import { enforceRateLimits } from "@/lib/rate-limit-server";
+import { DRIVER_LEAD_RATE_POLICY } from "@/lib/driver-lead-rate-policy";
 import { cleanLead, contactKey } from "@/lib/driver-leads";
 import { driverAcquisitionAttribution, driverAcquisitionSlug } from "@/lib/driver-acquisition";
 import { publicDriverCampaign, recordDriverAcquisitionEvent } from "@/lib/driver-acquisition-server";
@@ -33,15 +34,22 @@ const hashSession = (value) => createHash("sha256").update(String(value || "")).
 export async function POST(request) {
   try {
     await verifyAppCheckRequest(request);
-    await enforceRateLimit(request, { key: "public-driver-lead", limit: 6, windowMs: 30 * 60_000 });
     const body = schema.parse(await request.json());
     const contactErrors = validateDriverLeadContact(body.lead);
     if (Object.keys(contactErrors).length) return Response.json({ ok: false, error: "Correct the highlighted contact details and try again.", fieldErrors: contactErrors }, { status: 400 });
-    const { db, auth } = getAdminServices();
     const canonicalCountry = normalizeCountryCode(body.lead.country);
     const canonicalCity = countryCity(canonicalCountry, body.lead.city);
     if (!canonicalCountry || !canonicalCity) throw Object.assign(new Error("Choose a supported country and city."), { status: 400 });
     const lead = cleanLead({ ...body.lead, country: canonicalCountry, city: canonicalCity.name, vehicleMake: "", vehicleModel: "", vehicleRegistration: "", licenceReference: "", preferredZones: [], notes: "" });
+    // Limit repeated attempts by the validated, normalized contact details rather than
+    // treating everyone on a carrier-grade NAT or office Wi-Fi as one applicant.
+    // The much higher network-level cap still stops high-volume public abuse.
+    const contactIdentity = lead.phone ? contactKey("phone", lead.phone) : contactKey("email", lead.email);
+    await enforceRateLimits(request, [
+      { ...DRIVER_LEAD_RATE_POLICY.contact, identity: contactIdentity },
+      DRIVER_LEAD_RATE_POLICY.network,
+    ]);
+    const { db, auth } = getAdminServices();
     const campaignSlug = driverAcquisitionSlug(body.campaign);
     const campaign = campaignSlug ? await publicDriverCampaign(db, campaignSlug) : null;
     const attribution = driverAcquisitionAttribution(body.attribution);
@@ -125,6 +133,17 @@ export async function POST(request) {
     if (created) await recordDriverAcquisitionEvent(db, { event: "new_lead", campaign, campaignSlug, sessionId: body.sessionId, attribution, country: lead.country, city: lead.city }).catch(() => null);
     return Response.json({ ok: true, received: true });
   } catch (error) {
+    if (error?.status === 429 && error?.code === "rate-limited") {
+      const scope = error.scope === "network" ? "network" : "contact";
+      const retryAfterSeconds = Math.max(1, Number(error.retryAfterSeconds) || 60);
+      const message = scope === "network"
+        ? "This internet connection has reached its temporary signup limit."
+        : "These contact details have been submitted too often."; 
+      return Response.json({ ok: false, error: message, code: "rate-limited", scope, retryAfterSeconds }, {
+        status: 429,
+        headers: { "Retry-After": String(retryAfterSeconds), "Cache-Control": "no-store" },
+      });
+    }
     if (error instanceof z.ZodError) {
       const fieldErrors = publicDriverLeadFieldErrors(error.issues);
       return Response.json({

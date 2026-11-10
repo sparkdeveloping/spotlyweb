@@ -149,6 +149,11 @@ export function DriverAcquisitionLanding({ campaignSlug = "" }) {
       if (["legalName", "country", "city", "phone", "email"].some((field) => issues[field])) {
         setStep(1);
         setError("Correct the highlighted contact details before submitting.");
+      } else if (err.status === 429) {
+        const seconds = Number(err?.payload?.retryAfterSeconds);
+        const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.ceil(seconds / 60)) : null;
+        const wait = minutes ? ` Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.` : " Please try again later.";
+        setError(`${err.message || "Signup attempts are temporarily limited."}${wait} Your entered details are still here.`);
       } else {
         setError(err.message || "We could not save your details. Try again.");
       }
