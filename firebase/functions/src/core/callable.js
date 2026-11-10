@@ -9,7 +9,8 @@ const DEFAULT_OPTIONS = Object.freeze({
   region: SPOTLY_FUNCTIONS_REGION,
   memory: "256MiB",
   timeoutSeconds: 30,
-  maxInstances: 50
+  // Must match the deployment-safe global cap; onCall spreads these options.
+  maxInstances: 2
 });
 
 function normalizeError(error, requestId) {
