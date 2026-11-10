@@ -19,6 +19,13 @@ test("autocomplete requests named POIs without stuffing a city into the search t
   assert.equal(url.searchParams.get("country"),"zw");
   assert.ok(url.searchParams.get("bbox"));
 });
+test("two-letter autocomplete keeps the typed query and city bias", () => {
+  const url=mod.mapTilerSearchUrl({query:"ai",country:"ZW",
+    center:{lat:-17.825,lng:31.03},apiKey:"abcdefghijklmnopqrs"});
+  assert.ok(url.pathname.endsWith("/ai.json"));
+  assert.equal(url.searchParams.get("autocomplete"),"true");
+  assert.equal(url.searchParams.get("country"),"zw");
+});
 test("KFC results cannot become unrelated roads and real branches remain distinct",()=>{
   const results=mod.normalizeMapTilerSuggestions({features:[
     sample("Harare Road",31.03,-17.82),sample("KFC Avondale",31.02,-17.80),
