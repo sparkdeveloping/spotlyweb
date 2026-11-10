@@ -12,6 +12,9 @@ test("Driver recruitment limits individual contacts without imposing a six-perso
   assert.equal(DRIVER_LEAD_RATE_POLICY.contact.scope, "contact");
   assert.equal(DRIVER_LEAD_RATE_POLICY.network.scope, "network");
   assert.equal(DRIVER_LEAD_RATE_POLICY.contact.windowMs, 30 * 60_000);
+  assert.equal(DRIVER_LEAD_RATE_POLICY.network.windowMs, 30 * 60_000);
+  assert.equal(DRIVER_LEAD_RATE_POLICY.contact.limit, 15);
+  assert.equal(DRIVER_LEAD_RATE_POLICY.network.limit, 500);
   assert.ok(DRIVER_LEAD_RATE_POLICY.contact.limit > 0);
   assert.ok(DRIVER_LEAD_RATE_POLICY.network.limit >= 100);
   assert.ok(DRIVER_LEAD_RATE_POLICY.network.limit > DRIVER_LEAD_RATE_POLICY.contact.limit * 20);
