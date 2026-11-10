@@ -16,7 +16,25 @@ This script explicitly selects the following `platform` codebase exports:
 
 **Scope:** bootstrapping, service availability, discovery, runtime, and quote callable deployment. Quote calculations **still require a configured and functioning road-routing provider** to return valid road routes/fare estimates. Final Ride/Send transaction creation and dispatch are separate; **this is not an end-to-end Ride/Send launch**. The app's Apple/native and local business search can still be used where available, but MapTiler-backed `customerPlaceSearch` is not deployed in core-only mode.
 
-**Secrets:** none of these seven callables bind `SPOTLY_RIDE_PIN_KEY`, `SPOTLY_SEND_PIN_KEY`, or `SPOTLY_MAPTILER_GEOCODING_KEY` in `firebase/functions/src/index.js`. The Firebase CLI or Cloud Functions project may still require the Secret Manager **API to be enabled** for discovery/other deployment infrastructure; omitting secret-bound functions does not guarantee every Google Cloud prerequisite is absent.
+**Secrets:** none of these seven callables bind `SPOTLY_RIDE_PIN_KEY`, `SPOTLY_SEND_PIN_KEY`, or `SPOTLY_MAPTILER_GEOCODING_KEY` in `firebase/functions/src/index.js`. **Important correction from the November 10 first-deploy log:** Firebase CLI can still prompt to create *all three* secrets during codebase source analysis even when `--only` targets the seven core exports. This deployment mode does **not** guarantee a no-secret-prompt experience. Entering a dummy value is not a functional PIN encryption migration. If zero prompts are a requirement, move secret-free functions into a separately sourced Firebase codebase; that is a separate architecture change. Do not disable PIN verification to silence prompts.
+
+## Cloud Run CPU quota: initial deployment
+
+On November 10, `europe-west1` returned `CpuAllocPerProjectRegion requested: 50000 allowed: 20000` for a `maxInstances: 50` deployment, so all seven core function creations failed. Both `firebase/functions/src/index.js` and `firebase/functions/src/core/callable.js` now cap instances at **2 per function**. With the existing one-vCPU per function assumption, seven core callables have a combined theoretical ceiling of 14 vCPU, below the observed 20-vCPU regional quota. Actual concurrent regional usage, revisions, other Cloud Run services and quotas can still affect deployment.
+
+The maximum instance limit is **not** a request-per-minute or user signup limit. Firebase 2nd-gen HTTPS callables can serve concurrent requests per instance, subject to normal runtime and rate-limit configuration. Monitor Cloud Run load, latency, 429s and cost, then deliberately raise limits after securing more quota or validating available capacity. Never raise only one of the two Spotly caps without checking effective callable options.
+
+After merging this patch, use:
+
+```bash
+cd ~/Desktop/spotlyweb
+git pull origin main
+node --test tests/firebase-functions-cloud-run-quota.test.mjs
+npm --prefix firebase/functions run check
+npm run firebase:deploy:functions:core -- --account spotlyafrica@gmail.com
+```
+
+If the deployment still fails, inspect the exact *new* error; do not repeat a full deployment until you know whether the failure is IAM, secret access, project billing, quota or runtime startup.
 
 ## Optional enhanced place search
 
