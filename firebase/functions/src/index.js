@@ -108,7 +108,7 @@ export const customerRideQuote = defineCallable({
   auth: "optional",
   enforceAppCheck: true,
   rateLimit: { limit: 60, windowMs: 60_000 },
-  handler: async ({ request }) => rideQuote({ firestore: spotlyAdmin().firestore, data: request.data || {} })
+  handler: async ({ request, actor }) => rideQuote({ firestore: spotlyAdmin().firestore, data: request.data || {}, actor })
 });
 
 export const customerSendQuote = defineCallable({
@@ -116,7 +116,7 @@ export const customerSendQuote = defineCallable({
   auth: "optional",
   enforceAppCheck: true,
   rateLimit: { limit: 60, windowMs: 60_000 },
-  handler: async ({ request }) => sendQuote({ firestore: spotlyAdmin().firestore, data: request.data || {} })
+  handler: async ({ request, actor }) => sendQuote({ firestore: spotlyAdmin().firestore, data: request.data || {}, actor })
 });
 
 export const customerDiscovery = defineCallable({
