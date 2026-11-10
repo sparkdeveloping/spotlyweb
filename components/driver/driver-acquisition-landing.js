@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Bike, CarFront, CheckCircle2, Mail, MapPin, MessageCircle, PackageCheck, ShieldCheck, Sparkles, Truck } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { publicApiFetch } from "@/lib/api-client";
+import { validateDriverLeadContact } from "@/lib/driver-lead-form-validation";
 import { DRIVER_CAPABILITIES, capabilitySupportsVehicle } from "@/lib/driver-capabilities";
 import { SPOTLY_COUNTRIES, countryDefinition } from "@/lib/country-engine";
 import { driverAcquisitionAttribution, driverAcquisitionSlug } from "@/lib/driver-acquisition";
@@ -54,12 +55,21 @@ export function DriverAcquisitionLanding({ campaignSlug = "" }) {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [complete, setComplete] = useState(false);
   const session = useRef("");
   const source = useRef({});
   const started = useRef(false);
   const contactCompleted = useRef(false);
   const country = countryDefinition(form.country);
+
+  useEffect(() => {
+    if (!error) return;
+    const firstField = Object.keys(fieldErrors)[0];
+    const node = (firstField && document.getElementById(`driver-join-${firstField}`)) || document.getElementById("driver-join-error");
+    node?.scrollIntoView({ behavior: "smooth", block: "center" });
+    node?.focus?.({ preventScroll: true });
+  }, [error, fieldErrors, step]);
 
   useEffect(() => {
     session.current = sessionId();
@@ -85,12 +95,17 @@ export function DriverAcquisitionLanding({ campaignSlug = "" }) {
     started.current = true;
     if (navigator.doNotTrack !== "1") publicApiFetch("/api/public/driver-acquisition", { method: "POST", body: JSON.stringify({ event: "start", campaign: slug, sessionId: session.current, attribution: source.current, country: form.country, city: form.city }) }).catch(() => null);
   }
-  function update(name, value) { trackStart(); setForm((current) => ({ ...current, [name]: value })); }
+  function update(name, value) {
+    trackStart();
+    setForm((current) => ({ ...current, [name]: value }));
+    setFieldErrors((current) => { const next = { ...current }; delete next[name]; return next; });
+    setError("");
+  }
   function continueForm() {
     setError("");
-    if (form.legalName.trim().length < 2) return setError("Add your full name so our Driver team knows who to contact.");
-    if (!form.country || !form.city) return setError("Choose your country and city.");
-    if (!form.phone.trim() && !form.email.trim()) return setError("Add a phone number or email address so we can contact you.");
+    const contactErrors = validateDriverLeadContact(form);
+    setFieldErrors(contactErrors);
+    if (Object.keys(contactErrors).length) return setError("Correct the highlighted details before continuing.");
     if (!contactCompleted.current) {
       contactCompleted.current = true;
       if (navigator.doNotTrack !== "1") publicApiFetch("/api/public/driver-acquisition", { method: "POST", body: JSON.stringify({ event: "contact_complete", campaign: slug, sessionId: session.current, attribution: source.current, country: form.country, city: form.city }) }).catch(() => null);
@@ -107,12 +122,18 @@ export function DriverAcquisitionLanding({ campaignSlug = "" }) {
     setForm((current) => ({ ...current, requestedCapabilities: current.requestedCapabilities.includes(id) ? current.requestedCapabilities.filter((value) => value !== id) : [...current.requestedCapabilities, id] }));
   }
   async function submit(event) {
-    event.preventDefault(); setError("");
+    event.preventDefault(); setError(""); setFieldErrors({});
+    const contactErrors = validateDriverLeadContact(form);
+    if (Object.keys(contactErrors).length) {
+      setFieldErrors(contactErrors);
+      setStep(1);
+      return setError("Correct the highlighted contact details before submitting.");
+    }
     if (!form.consent) return setError("Confirm that Spotly may contact you about Driver onboarding and that you accept the Privacy Policy.");
     setBusy(true);
     try {
       await publicApiFetch("/api/public/driver-leads", { method: "POST", body: JSON.stringify({
-        lead: { legalName: form.legalName, phone: form.phone, email: form.email, country: form.country, city: form.city, vehicleType: form.vehicleType, requestedCapabilities: form.requestedCapabilities },
+        lead: { legalName: form.legalName.trim(), phone: form.phone.trim(), email: form.email.trim(), country: form.country, city: form.city, vehicleType: form.vehicleType, requestedCapabilities: form.requestedCapabilities },
         campaign: slug,
         sessionId: session.current,
         attribution: source.current,
@@ -122,7 +143,16 @@ export function DriverAcquisitionLanding({ campaignSlug = "" }) {
       }) });
       setComplete(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err) { setError(err.message || "We could not save your details. Try again."); }
+    } catch (err) {
+      const issues = err?.payload?.fieldErrors || {};
+      setFieldErrors(issues);
+      if (["legalName", "country", "city", "phone", "email"].some((field) => issues[field])) {
+        setStep(1);
+        setError("Correct the highlighted contact details before submitting.");
+      } else {
+        setError(err.message || "We could not save your details. Try again.");
+      }
+    }
     finally { setBusy(false); }
   }
 
@@ -147,21 +177,21 @@ export function DriverAcquisitionLanding({ campaignSlug = "" }) {
       <Card elevated className="overflow-hidden p-0">
         <div className="border-b p-5 sm:p-6"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.12em] text-driver">Driver interest</p><h2 className="mt-1 text-2xl font-bold">{step === 1 ? "Tell us where to reach you" : "A little about how you would work"}</h2></div><span className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-xs font-bold">{step} of 2</span></div><div className="mt-4 grid grid-cols-2 gap-2"><span className="h-1.5 rounded-full bg-driver"/><span className={`h-1.5 rounded-full ${step === 2 ? "bg-driver" : "bg-[var(--border)]"}`}/></div></div>
         {step === 1 ? <div className="space-y-4 p-5 sm:p-6">
-          <label className="block text-sm font-semibold">Full name *<input className="field-control mt-2 w-full" autoComplete="name" value={form.legalName} onChange={(e)=>update("legalName",e.target.value)} placeholder="Your full name"/></label>
-          <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-semibold">Country *<select className="field-control mt-2 w-full" value={form.country} onChange={(e)=>setForm((current)=>({...current,country:e.target.value,city:""}))}><option value="">Choose country</option>{SPOTLY_COUNTRIES.map((item)=><option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label className="block text-sm font-semibold">City *<select className="field-control mt-2 w-full" value={form.city} disabled={!form.country} onChange={(e)=>update("city",e.target.value)}><option value="">Choose city</option>{(country?.cities||[]).map((item)=><option key={item.id} value={item.name}>{item.name}</option>)}</select></label></div>
-          <label className="block text-sm font-semibold">Phone / WhatsApp<input className="field-control mt-2 w-full" type="tel" autoComplete="tel" value={form.phone} onChange={(e)=>update("phone",e.target.value)} placeholder={country?.dialCode ? `${country.dialCode} …` : "+…"}/></label>
-          <label className="block text-sm font-semibold">Email <span className="font-normal text-tertiary">Optional if you added a phone</span><input className="field-control mt-2 w-full" type="email" autoComplete="email" value={form.email} onChange={(e)=>update("email",e.target.value)} placeholder="you@example.com"/></label>
-          <label className="block text-sm font-semibold">Best way to contact you<select className="field-control mt-2 w-full" value={form.contactPreference} onChange={(e)=>update("contactPreference",e.target.value)}><option value="whatsapp">WhatsApp</option><option value="phone">Phone call</option><option value="email">Email</option><option value="either">Any of these</option></select></label>
-          {error ? <p className="rounded-xl bg-[var(--danger-soft)] p-3 text-sm text-danger" role="alert">{error}</p> : null}
+          <label className="block text-sm font-semibold">Full name *<input id="driver-join-legalName" aria-invalid={Boolean(fieldErrors.legalName)} className="field-control mt-2 w-full" autoComplete="name" value={form.legalName} onChange={(e)=>update("legalName",e.target.value)} placeholder="Your full name"/>{fieldErrors.legalName ? <span className="mt-1 block text-xs text-danger">{fieldErrors.legalName}</span> : null}</label>
+          <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-semibold">Country *<select id="driver-join-country" aria-invalid={Boolean(fieldErrors.country)} className="field-control mt-2 w-full" value={form.country} onChange={(e)=>{trackStart();setError("");setFieldErrors({});setForm((current)=>({...current,country:e.target.value,city:""}));}}><option value="">Choose country</option>{SPOTLY_COUNTRIES.map((item)=><option key={item.code} value={item.code}>{item.name}</option>)}</select>{fieldErrors.country ? <span className="mt-1 block text-xs text-danger">{fieldErrors.country}</span> : null}</label><label className="block text-sm font-semibold">City *<select id="driver-join-city" aria-invalid={Boolean(fieldErrors.city)} className="field-control mt-2 w-full" value={form.city} disabled={!form.country} onChange={(e)=>update("city",e.target.value)}><option value="">Choose city</option>{(country?.cities||[]).map((item)=><option key={item.id} value={item.name}>{item.name}</option>)}</select>{fieldErrors.city ? <span className="mt-1 block text-xs text-danger">{fieldErrors.city}</span> : null}</label></div>
+          <label className="block text-sm font-semibold">Phone / WhatsApp<input id="driver-join-phone" aria-invalid={Boolean(fieldErrors.phone)} className="field-control mt-2 w-full" type="tel" autoComplete="tel" value={form.phone} onChange={(e)=>update("phone",e.target.value)} placeholder={country?.dialCode ? `${country.dialCode} …` : "+…"}/>{fieldErrors.phone ? <span className="mt-1 block text-xs text-danger">{fieldErrors.phone}</span> : null}</label>
+          <label className="block text-sm font-semibold">Email <span className="font-normal text-tertiary">Optional if you added a phone</span><input className="field-control mt-2 w-full" id="driver-join-email" aria-invalid={Boolean(fieldErrors.email)} type="email" autoComplete="email" value={form.email} onChange={(e)=>update("email",e.target.value)} placeholder="you@example.com"/>{fieldErrors.email ? <span className="mt-1 block text-xs text-danger">{fieldErrors.email}</span> : null}</label>
+          <label className="block text-sm font-semibold">Best way to contact you<select id="driver-join-contactPreference" aria-invalid={Boolean(fieldErrors.contactPreference)} className="field-control mt-2 w-full" value={form.contactPreference} onChange={(e)=>update("contactPreference",e.target.value)}><option value="whatsapp">WhatsApp</option><option value="phone">Phone call</option><option value="email">Email</option><option value="either">Any of these</option></select>{fieldErrors.contactPreference ? <span className="mt-1 block text-xs text-danger">{fieldErrors.contactPreference}</span> : null}</label>
+          {error ? <p id="driver-join-error" tabIndex={-1} className="rounded-xl bg-[var(--danger-soft)] p-3 text-sm text-danger" role="alert">{error}</p> : null}
           <Button className="w-full" size="lg" onClick={continueForm}>Continue<ArrowRight className="h-4 w-4"/></Button>
           <p className="text-center text-xs text-tertiary">No account or document upload required at this stage.</p>
         </div> : <form className="space-y-5 p-5 sm:p-6" onSubmit={submit}>
-          <div><p className="text-sm font-semibold">What would you use for work?</p><p className="mt-1 text-xs text-secondary">Optional. You can confirm or change this with Spotly later.</p><div className="mt-3 grid grid-cols-2 gap-2">{VEHICLES.map(({id,label,icon:Icon})=><button type="button" key={id} onClick={()=>vehicle(form.vehicleType===id?"":id)} className={`rounded-xl border p-3 text-left ${form.vehicleType===id?"border-driver bg-driver-soft":"bg-[var(--surface)]"}`}><Icon className="h-5 w-5 text-driver"/><span className="mt-2 block text-sm font-semibold">{label}</span></button>)}</div></div>
-          <label className="block text-sm font-semibold">Driver licence status <span className="font-normal text-tertiary">Optional</span><select className="field-control mt-2 w-full" value={form.licenceStatus} onChange={(e)=>update("licenceStatus",e.target.value)}><option value="">Prefer not to say</option>{LICENCE.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
-          {form.vehicleType ? <div><p className="text-sm font-semibold">What work interests you?</p><div className="mt-2 space-y-2">{Object.values(DRIVER_CAPABILITIES).filter((cap)=>capabilitySupportsVehicle(cap.id,form.vehicleType)).map((cap)=><label key={cap.id} className="flex cursor-pointer items-start gap-3 rounded-xl bg-[var(--surface-2)] p-3"><input type="checkbox" className="mt-1" checked={form.requestedCapabilities.includes(cap.id)} onChange={()=>toggleCapability(cap.id)}/><span><span className="block text-sm font-semibold">{cap.label}</span><span className="mt-0.5 block text-xs leading-5 text-secondary">{cap.description}</span></span></label>)}</div></div> : null}
+          <div id="driver-join-vehicleType" tabIndex={-1}><p className="text-sm font-semibold">What would you use for work?</p><p className="mt-1 text-xs text-secondary">Optional. You can confirm or change this with Spotly later.</p><div className="mt-3 grid grid-cols-2 gap-2">{VEHICLES.map(({id,label,icon:Icon})=><button type="button" key={id} onClick={()=>{setError("");setFieldErrors({});vehicle(form.vehicleType===id?"":id);}} className={`rounded-xl border p-3 text-left ${form.vehicleType===id?"border-driver bg-driver-soft":"bg-[var(--surface)]"}`}><Icon className="h-5 w-5 text-driver"/><span className="mt-2 block text-sm font-semibold">{label}</span></button>)}</div></div>
+          <label className="block text-sm font-semibold">Driver licence status <span className="font-normal text-tertiary">Optional</span><select id="driver-join-licenceStatus" aria-invalid={Boolean(fieldErrors.licenceStatus)} className="field-control mt-2 w-full" value={form.licenceStatus} onChange={(e)=>update("licenceStatus",e.target.value)}><option value="">Prefer not to say</option>{LICENCE.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>{fieldErrors.licenceStatus ? <span className="mt-1 block text-xs text-danger">{fieldErrors.licenceStatus}</span> : null}</label>
+          {form.vehicleType ? <div id="driver-join-requestedCapabilities" tabIndex={-1}><p className="text-sm font-semibold">What work interests you?</p><div className="mt-2 space-y-2">{Object.values(DRIVER_CAPABILITIES).filter((cap)=>capabilitySupportsVehicle(cap.id,form.vehicleType)).map((cap)=><label key={cap.id} className="flex cursor-pointer items-start gap-3 rounded-xl bg-[var(--surface-2)] p-3"><input type="checkbox" className="mt-1" checked={form.requestedCapabilities.includes(cap.id)} onChange={()=>toggleCapability(cap.id)}/><span><span className="block text-sm font-semibold">{cap.label}</span><span className="mt-0.5 block text-xs leading-5 text-secondary">{cap.description}</span></span></label>)}</div></div> : null}
           <label className="flex items-start gap-3 rounded-xl border p-4 text-sm leading-6"><input type="checkbox" className="mt-1" checked={form.consent} onChange={(e)=>update("consent",e.target.checked)}/><span>Spotly may contact me about Driver onboarding. I have read the <Link className="font-semibold underline" href={spotlyPortalUrl("customer","/privacy")} target="_blank">Privacy Policy</Link>.</span></label>
-          {error ? <p className="rounded-xl bg-[var(--danger-soft)] p-3 text-sm text-danger" role="alert">{error}</p> : null}
-          <div className="grid grid-cols-[auto_1fr] gap-2"><Button type="button" variant="outline" onClick={()=>{setError("");setStep(1);}}>Back</Button><Button type="submit" size="lg" loading={busy}>Send my details<ArrowRight className="h-4 w-4"/></Button></div>
+          {error ? <p id="driver-join-error" tabIndex={-1} className="rounded-xl bg-[var(--danger-soft)] p-3 text-sm text-danger" role="alert">{error}</p> : null}
+          <div className="grid grid-cols-[auto_1fr] gap-2"><Button type="button" variant="outline" onClick={()=>{setError("");setFieldErrors({});setStep(1);window.scrollTo({top:0,behavior:"smooth"});}}>Back</Button><Button type="submit" size="lg" loading={busy}>Send my details<ArrowRight className="h-4 w-4"/></Button></div>
           <p className="flex items-center justify-center gap-1.5 text-center text-xs text-tertiary"><ShieldCheck className="h-3.5 w-3.5"/>Your details enter Spotly’s private Driver recruitment pipeline.</p>
         </form>}
       </Card>
