@@ -24,6 +24,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { customerRuntimeSnapshot, rideQuote, sendQuote } from "./core/customer-runtime.js";
+import { searchCustomerPlaces } from "./core/customer-place-search.js";
 import { queryDiscoveryProjection } from "./core/discovery-projection.js";
 import { notifyLiveEventUpdate, runBookLiveReminders } from "./core/book-live-notifications.js";
 import { driverBootstrapData, updateDriverApplication, registerDriverDocument, submitDriverApplication, driverRealtimeSession as setDriverRealtimeSession, registerDriverPushToken, registerDriverWorkProof, driverOfferAction as runDriverOfferAction, driverWorkAction as runDriverWorkAction, createDriverIncident, markDriverNotificationRead } from "./core/driver-runtime.js";
@@ -38,6 +39,7 @@ setGlobalOptions({
 
 const DRIVER_RIDE_PIN_KEY = defineSecret("SPOTLY_RIDE_PIN_KEY");
 const DRIVER_SEND_PIN_KEY = defineSecret("SPOTLY_SEND_PIN_KEY");
+const CUSTOMER_PLACE_SEARCH_KEY = defineSecret("SPOTLY_MAPTILER_GEOCODING_KEY");
 
 export const platformFoundation = defineCallable({
   name: "platformFoundation",
@@ -117,6 +119,18 @@ export const customerSendQuote = defineCallable({
   enforceAppCheck: true,
   rateLimit: { limit: 60, windowMs: 60_000 },
   handler: async ({ request, actor }) => sendQuote({ firestore: spotlyAdmin().firestore, data: request.data || {}, actor })
+});
+
+// Dedicated licensed place/POI search for native Ride, Send and address flows.
+// Authentication is optional for early destination discovery; App Check and
+// per-identity rate limits are enforced by the shared callable wrapper.
+export const customerPlaceSearch = defineCallable({
+  name: "customerPlaceSearch",
+  auth: "optional",
+  enforceAppCheck: true,
+  rateLimit: { limit: 45, windowMs: 60_000 },
+  options: { secrets: [CUSTOMER_PLACE_SEARCH_KEY] },
+  handler: async ({ request }) => searchCustomerPlaces({ data: request.data || {} })
 });
 
 export const customerDiscovery = defineCallable({
