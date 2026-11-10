@@ -88,16 +88,19 @@ test("customer location normalization rejects cross-country city drift and can i
   assert.equal(inferred.inferredCountry, true);
 });
 
-test("Marketplace Home and detail decisions consume the central customer runtime instead of legacy launch cities", () => {
+test("Marketplace Home uses the central customer runtime and falls back to the active launch market only when location is empty", () => {
   const marketplace = source("components/marketplace-app.js");
   assert.match(marketplace, /useCustomerRuntime/);
   assert.match(marketplace, /serviceAvailability = customerRuntime\.services/);
+  assert.match(marketplace, /settings\?\.launch\?\.supportedCountries\?\.\[0\]/);
+  assert.match(marketplace, /settings\?\.launch\?\.primaryCity/);
+  assert.match(marketplace, /countryDefinition\(configuredCountry\)\?\.cities\?\.\[0\]\?\.name/);
+  assert.match(marketplace, /useCustomerRuntime\(\{ country: configuredCountry, city: location\.city \|\| launchFallbackCity \}\)/);
   assert.match(marketplace, /searchLiveBusinesses\(query, 100, \{ country: availabilityCountry, city: location\.city \}\)/);
   assert.match(marketplace, /searchSpotly\(term, 60, \{ country: availabilityCountry, city: location\.city, service \}\)/);
   assert.match(marketplace, /selectedScopeCountry/);
   assert.match(marketplace, /customerServiceDecision\(settings, \{ service: selectedService, country: selectedScopeCountry, city: selectedScopeCity, grants: customerRuntime\.grants \}\)/);
   assert.match(marketplace, /!customerRuntime\.ready/);
-  assert.doesNotMatch(marketplace, /launchCities|primaryCity/);
 });
 
 test("customer API clients and public discovery routes carry canonical country scope", () => {
