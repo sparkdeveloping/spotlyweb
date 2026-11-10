@@ -121,6 +121,22 @@ async function verifiedRoute(from, to) {
     path
   };
 }
+// Quote discovery may remain visible during First Access, but requests must
+// observe the same launch gate as the existing trusted website mutations.
+async function customerTransactionLaunchReadiness(firestore, settings, actor) {
+  const mode = text(settings.launch?.publicMode || "first_access", 40).toLowerCase();
+  if (mode === "maintenance") return {
+    allowed: false, reason: "Spotly is temporarily under maintenance. New requests are paused."
+  };
+  if (["first_access", "coming-soon", "private-beta"].includes(mode)) {
+    const grants = actor?.uid ? await loadOperationGrants(firestore, actor.uid) : [];
+    const preview = grants.some((grant) => ["service_preview", "service_operations"].includes(grant.type));
+    if (!preview) return {
+      allowed: false, reason: "New requests are currently reserved for accounts with an active Spotly Operations preview grant."
+    };
+  }
+  return { allowed: true, reason: "" };
+}
 function liveDecision(settings, service, country, city) {
   return resolveServiceAvailabilitySet(settings, { country, city }).find((row) => row.service === service);
 }
@@ -153,7 +169,7 @@ export async function customerRuntimeSnapshot({ firestore, actor, requestedCount
   const operationsByService = actor ? Object.fromEntries((services || []).map((row) => [row.service, operationContext(grants, { service: row.service, country, city })])) : {};
   return { country, city, countrySource: source || "unresolved", revision: { id: settings.serviceAvailabilityRevisionId || null, number: Number(settings.serviceAvailabilityRevisionNumber || 0) }, services, operationsByService, nativeMobility: nativeMobilityReadiness(settings) };
 }
-export async function rideQuote({ firestore, data }) {
+export async function rideQuote({ firestore, data, actor }) {
   const pickup = normalizeMobilityPoint(data?.pickup), dropoff = normalizeMobilityPoint(data?.dropoff), serviceType = text(data?.serviceType, 24).toLowerCase();
   if (!pickup || !dropoff || !RIDE_TYPES[serviceType] || pickup.country !== dropoff.country) throw new HttpsError("invalid-argument", "Review the Ride pickup, destination and service type.");
   const settingsSnap = await firestore.collection("platformSettings").doc("global").get(); const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
@@ -165,10 +181,14 @@ export async function rideQuote({ firestore, data }) {
   const type = { ...RIDE_TYPES[serviceType], ...(pricing.serviceTypes?.[serviceType] || {}) };
   const raw = number(pricing.baseFare) + route.distanceKm * number(pricing.perKm) + route.durationMinutes * number(pricing.perMinute) + number(pricing.bookingFee); const total = Number((Math.max(number(pricing.minimumFare), raw) * number(type.multiplier || 1)).toFixed(2)); const driverPay = Number((total * Math.max(0, Math.min(100, number(pricing.driverSharePercent || 80))) / 100).toFixed(2));
   const quote = { serviceType, routeSource: route.source, routePath: route.path, serviceLabel: type.label || serviceType, seats: number(type.seats || 4), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), directDistanceKm: Number(haversineKm(pickup, dropoff).toFixed(1)), durationMinutes: route.durationMinutes, baseFare: Number(number(pricing.baseFare).toFixed(2)), bookingFee: Number(number(pricing.bookingFee).toFixed(2)), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: type.vehicleTypes || ["car", "van"] };
-  const methods = paymentMethods(settings, mobility.cashEnabled !== false, pickup.country, pricing.currency); const bookingAvailable = decision.transactable === true && mobility.routingVerified === true && mobility.dispatchSchedulerVerified === true && methods.length > 0;
-  return { ok: true, quote, serviceAvailability: decision, bookingAvailable, bookingReason: bookingAvailable ? "" : decision.reason || "Ride requests are not live here yet.", serviceTypes: Object.fromEntries(Object.entries(RIDE_TYPES).map(([key, value]) => [key, { ...value, ...(pricing.serviceTypes?.[key] || {}) }])), paymentMethods: methods };
+  const methods = paymentMethods(settings, mobility.cashEnabled !== false, pickup.country, pricing.currency);
+  const launchAccess = await customerTransactionLaunchReadiness(firestore, settings, actor);
+  const bookingAvailable = launchAccess.allowed && decision.transactable === true &&
+    mobility.routingVerified === true && mobility.dispatchSchedulerVerified === true && methods.length > 0;
+  const bookingReason = bookingAvailable ? "" : launchAccess.reason || decision.reason || "Ride requests are not live here yet.";
+  return { ok: true, quote, serviceAvailability: decision, bookingAvailable, bookingReason, serviceTypes: Object.fromEntries(Object.entries(RIDE_TYPES).map(([key, value]) => [key, { ...value, ...(pricing.serviceTypes?.[key] || {}) }])), paymentMethods: methods };
 }
-export async function sendQuote({ firestore, data }) {
+export async function sendQuote({ firestore, data, actor }) {
   const pickup = normalizeMobilityPoint(data?.pickup), dropoff = normalizeMobilityPoint(data?.dropoff), parcelSize = text(data?.parcelSize, 24).toLowerCase();
   if (!pickup || !dropoff || !PARCEL_SIZES[parcelSize] || pickup.country !== dropoff.country) throw new HttpsError("invalid-argument", "Review the Send pickup, destination and parcel size.");
   const settingsSnap = await firestore.collection("platformSettings").doc("global").get(); const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
@@ -179,6 +199,10 @@ export async function sendQuote({ firestore, data }) {
   const route = await verifiedRoute(pickup, dropoff); const size = { ...PARCEL_SIZES[parcelSize], ...(pricing.parcelSizes?.[parcelSize] || {}) };
   const raw = number(pricing.baseFare) + route.distanceKm * number(pricing.perKm) + number(pricing.bookingFee); const total = Number((Math.max(number(pricing.minimumFare), raw) * number(size.multiplier || 1)).toFixed(2)); const driverPay = Number((total * Math.max(0, Math.min(100, number(pricing.driverSharePercent || 80))) / 100).toFixed(2));
   const quote = { parcelSize, routeSource: route.source, routePath: route.path, parcelSizeLabel: size.label || parcelSize, maxKg: number(size.maxKg || 15), currency: String(pricing.currency || "USD").toUpperCase(), distanceKm: Number(route.distanceKm.toFixed(1)), durationMinutes: route.durationMinutes, baseFare: number(pricing.baseFare), bookingFee: number(pricing.bookingFee), total, driverPay, platformFee: Number((total - driverPay).toFixed(2)), requiredVehicleTypes: size.vehicleTypes || ["car", "van"], proofPhotoRequired: pricing.proofPhotoRequired === true };
-  const methods = paymentMethods(settings, send.cashEnabled !== false, pickup.country, pricing.currency); const bookingAvailable = decision.transactable === true && send.routingVerified === true && send.dispatchSchedulerVerified === true && methods.length > 0;
-  return { ok: true, quote, parcelSizes: Object.fromEntries(Object.entries(PARCEL_SIZES).map(([key, value]) => [key, { ...value, ...(pricing.parcelSizes?.[key] || {}) }])), paymentMethods: methods, scheduledEnabled: send.scheduledEnabled !== false, serviceAvailability: decision, bookingAvailable, bookingReason: bookingAvailable ? "" : decision.reason || "Send requests are not live here yet." };
+  const methods = paymentMethods(settings, send.cashEnabled !== false, pickup.country, pricing.currency);
+  const launchAccess = await customerTransactionLaunchReadiness(firestore, settings, actor);
+  const bookingAvailable = launchAccess.allowed && decision.transactable === true &&
+    send.routingVerified === true && send.dispatchSchedulerVerified === true && methods.length > 0;
+  const bookingReason = bookingAvailable ? "" : launchAccess.reason || decision.reason || "Send requests are not live here yet.";
+  return { ok: true, quote, parcelSizes: Object.fromEntries(Object.entries(PARCEL_SIZES).map(([key, value]) => [key, { ...value, ...(pricing.parcelSizes?.[key] || {}) }])), paymentMethods: methods, scheduledEnabled: send.scheduledEnabled !== false, serviceAvailability: decision, bookingAvailable, bookingReason };
 }
