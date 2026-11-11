@@ -106,3 +106,12 @@ test("web Ride and Send present the same curb consent and retry contract as iOS"
   assert.match(src,/crypto\.randomUUID\(\)/);
  }
 });
+
+test("fare quote adapters carry their actual road access points to both clients",()=>{
+ for(const file of ["lib/ride-server.js","lib/parcel-server.js"]){
+  const src=read(file);
+  assert.match(src,/accessPoints:route\.accessPoints/);
+  assert.match(src,/A verified driving route is required before calculating a fare/);
+  assert.doesNotMatch(src,/routeSource:route\?\.source\|\|"approximate"/);
+ }
+});
