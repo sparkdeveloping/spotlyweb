@@ -12,6 +12,8 @@ test("D8 finance returns a separate, strictly verified balance projection", () =
   assert.match(source, /MWK: "unsupported"/);
   assert.match(source, /supportedPayoutCurrencies: \["USD", "ZWG"\]/);
   assert.match(source, /ledgerTruncated: ledger\.size >= 500/);
+  assert.match(source, /where\("driverId", "==", user\.uid\)\.orderBy\("createdAt", "desc"\)\.limit\(500\)/);
+  assert.match(source, /where\("driverId", "==", user\.uid\)\.orderBy\("createdAt", "desc"\)\.limit\(100\)/);
   assert.match(source, /payoutsTruncated: payouts\.size >= 100/);
   assert.match(source, /entries\.filter\(\(entry\) => String\(entry\.currency \|\| ""\)\.toUpperCase\(\) === "USD"\)/);
   assert.doesNotMatch(source, /const legacy = derivedBalances\(entries\);/);
