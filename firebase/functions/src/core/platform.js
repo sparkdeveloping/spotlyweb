@@ -36,6 +36,14 @@ export const SPOTLY_MEDIA_DISCOVERY_CONTRACT = Object.freeze(JSON.parse(mediaDis
 export const SPOTLY_MEDIA_DISCOVERY_CONTRACT_VERSION = SPOTLY_MEDIA_DISCOVERY_CONTRACT.version;
 export const SPOTLY_MEDIA_DISCOVERY_CONTRACT_SHA256 = createHash("sha256").update(mediaDiscoveryManifestBytes).digest("hex");
 
+// Match the native customer money contract during Foundation preflight.
+// A missing money fingerprint prevents iOS from loading its runtime at all.
+const moneyManifestUrl = new URL("../contracts/spotly-money.v1.json", import.meta.url);
+const moneyManifestBytes = readFileSync(fileURLToPath(moneyManifestUrl));
+export const SPOTLY_MONEY_CONTRACT = Object.freeze(JSON.parse(moneyManifestBytes));
+export const SPOTLY_MONEY_CONTRACT_VERSION = SPOTLY_MONEY_CONTRACT.moneyContractVersion;
+export const SPOTLY_MONEY_CONTRACT_SHA256 = createHash("sha256").update(moneyManifestBytes).digest("hex");
+
 export const FOUNDATION_CAPABILITIES = Object.freeze({
   firestore: true,
   realtimeDatabase: true,

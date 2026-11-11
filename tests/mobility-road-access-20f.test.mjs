@@ -67,7 +67,7 @@ const mapMapKey = "snk_" + "a".repeat(24);
 const mapMapSettings = (fetcher, key = mapMapKey) => ({
   endpoint: "https://api.mapmap.ai", key, fetcher
 });
-test("MapMap quote uses supported snap_retry without OSRM radiuses", async () => {
+test("MapMap keeps wide retry disabled and never uses OSRM radiuses", async () => {
   const calls = [];
   const result = await verifiedMobilityRoute(a, b, mapMapSettings(async (url, options) => {
     calls.push({ url: new URL(url), options });
@@ -75,7 +75,7 @@ test("MapMap quote uses supported snap_retry without OSRM radiuses", async () =>
   }));
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url.pathname, "/route/v1/driving/31.030000,-17.825000;31.050000,-17.830000");
-  assert.equal(calls[0].url.searchParams.get("snap_retry"), "true");
+  assert.equal(calls[0].url.searchParams.get("snap_retry"), "false");
   assert.equal(calls[0].url.searchParams.has("radiuses"), false);
   assert.equal(calls[0].options.headers.Authorization, "Bearer " + mapMapKey);
   assert.equal(result.routeSource, undefined);
@@ -104,4 +104,39 @@ test("Firebase readiness requires MapMap's server-side routing key", () => {
   assert.equal(routingCredentialsConfigured("https://api.mapmap.ai", mapMapKey), true);
   assert.equal(routingCredentialsConfigured("https://routing.example.com"), true);
   assert.equal(routingCredentialsConfigured("http://routing.example.com"), false);
+});
+
+test("MapMap HTTP 400 NoRoute is a geography failure rather than provider outage", async () => {
+  for (const code of ["NoRoute", "NoSegment"]) {
+    await assert.rejects(
+      verifiedMobilityRoute(a, b, mapMapSettings(async () => ({
+        ok: false, status: 400, json: async () => ({ code, routes: [] })
+      }))),
+      (error) => error.code === "failed-precondition" && /No connected drivable route/.test(error.message)
+    );
+  }
+});
+
+test("MapMap HTTP 400 InvalidQuery remains provider integration failure", async () => {
+  await assert.rejects(
+    verifiedMobilityRoute(a, b, mapMapSettings(async () => ({
+      ok: false, status: 400, json: async () => ({ code: "InvalidQuery", message: "unknown option" })
+    }))),
+    (error) => error.code === "unavailable" && /provider rejected/.test(error.message)
+  );
+});
+
+test("MapMap rejects roads farther than 350 metres despite valid geometry", async () => {
+  const farStart = { lat: a.lat + 0.004, lng: a.lng };
+  await assert.rejects(
+    verifiedMobilityRoute(a, b, mapMapSettings(async () => wrapped(success(farStart, b)))),
+    (error) => error.code === "failed-precondition" && /access is too far/.test(error.message)
+  );
+});
+
+test("routing rejects coincident and almost coincident pickup and destination", async () => {
+  await assert.rejects(
+    verifiedMobilityRoute(a, {lat:a.lat+0.00005,lng:a.lng+0.00001}, mapMapSettings(async()=>wrapped(success()))),
+    (error) => error.code === "invalid-argument"
+  );
 });
