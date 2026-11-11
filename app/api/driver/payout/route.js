@@ -1,4 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { docsData, docData } from "@/lib/driver-delivery-server";
@@ -6,7 +7,7 @@ import { driverBalanceAccountId, driverLedgerEntryId, postDriverLedgerEntry, san
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 
 export const runtime = "nodejs";
-const schema = z.object({ action: z.literal("request"), amount: z.number().positive().max(100000), currency: z.enum(["USD", "ZWG"]).default("USD") });
+const schema = z.object({ action: z.literal("request"), amount: z.number().positive().max(100000), currency: z.enum(["USD", "ZWG"]).default("USD"), requestKey: z.string().uuid().optional() });
 
 function derivedBalances(entries = []) {
   const result = { pending: 0, available: 0, reserved: 0, processing: 0, paid_out: 0 };
@@ -34,13 +35,24 @@ export async function GET(request) {
       db.collection("platformSettings").doc("global").get()
     ]);
     const entries = docsData(ledger);
-    const legacy = derivedBalances(entries);
+    // Legacy derived totals remain for older web clients only, scoped to USD.
+    // The mobile app must never treat them as a verified balance account.
+    const legacy = derivedBalances(entries.filter((entry) => String(entry.currency || "").toUpperCase() === "USD"));
     const balances = {
       USD: usdBalance.exists ? sanitizeDriverBalance(usdBalance.data()) : legacy,
       ZWG: zwgBalance.exists ? sanitizeDriverBalance(zwgBalance.data()) : { pending: 0, available: 0, reserved: 0, processing: 0, paid_out: 0 }
     };
     const payoutAccount = account.exists ? { ...docData(account), identifierEncrypted: undefined } : null;
-    return Response.json({ ok: true, balances, ledger: entries, payouts: docsData(payouts), payoutAccount, policy: { minimum: Number(settings.data()?.commerce?.driverPayoutMinimum ?? settings.data()?.commerce?.payoutMinimum ?? 20), cadence: settings.data()?.commerce?.driverPayoutCadence || settings.data()?.commerce?.payoutCadence || "weekly" } });
+    const verifiedBalances = {
+      USD: usdBalance.exists ? sanitizeDriverBalance(usdBalance.data()) : null,
+      ZWG: zwgBalance.exists ? sanitizeDriverBalance(zwgBalance.data()) : null
+    };
+    const balanceState = {
+      USD: usdBalance.exists ? "verified" : "unavailable",
+      ZWG: zwgBalance.exists ? "verified" : "unavailable",
+      MWK: "unsupported"
+    };
+    return Response.json({ ok: true, balances, verifiedBalances, balanceState, supportedPayoutCurrencies: ["USD", "ZWG"], ledger: entries, ledgerTruncated: ledger.size >= 500, payouts: docsData(payouts), payoutsTruncated: payouts.size >= 100, payoutAccount, policy: { minimum: Number(settings.data()?.commerce?.driverPayoutMinimum ?? settings.data()?.commerce?.payoutMinimum ?? 20), cadence: settings.data()?.commerce?.driverPayoutCadence || settings.data()?.commerce?.payoutCadence || "weekly" } });
   } catch (error) { return apiError(error); }
 }
 
@@ -55,11 +67,22 @@ export async function POST(request) {
     const minimum = Number(settings.data()?.commerce?.driverPayoutMinimum ?? settings.data()?.commerce?.payoutMinimum ?? 20);
     if (amount + 0.001 < minimum) throw Object.assign(new Error(`Driver payouts currently require at least ${body.currency} ${minimum.toFixed(2)}.`), { status: 422 });
     if (!driver.exists || !["approved", "ready", "active"].includes(driver.data().status) || driver.data().complianceHold || driver.data().safetyHold || driver.data().rideFinanceHold || driver.data().sendFinanceHold) throw Object.assign(new Error("Your Driver account cannot request a payout right now."), { status: 409 });
-    const payoutRef = db.collection("driverPayouts").doc();
+    // Stable, actor-scoped payout IDs make retries after an ambiguous response safe.
+    const requestHash = body.requestKey ? createHash("sha256")
+      .update(`driver-payout:${user.uid}:${body.requestKey}`).digest("hex").slice(0, 48) : "";
+    const payoutRef = requestHash ? db.collection("driverPayouts").doc(requestHash) : db.collection("driverPayouts").doc();
+    let replayed = false;
     await db.runTransaction(async (transaction) => {
       const accountRef = db.collection("driverPayoutAccounts").doc(user.uid);
       const balanceRef = db.collection("driverBalanceAccounts").doc(driverBalanceAccountId(user.uid, body.currency));
-      const [account, balance] = await Promise.all([transaction.get(accountRef), transaction.get(balanceRef)]);
+      const [account, balance, previous] = await Promise.all([transaction.get(accountRef), transaction.get(balanceRef), requestHash ? transaction.get(payoutRef) : Promise.resolve(null)]);
+      if (previous?.exists) {
+        const original = previous.data() || {};
+        if (original.driverId !== user.uid || original.currency !== body.currency || Number(original.amount) !== amount)
+          throw Object.assign(new Error("This payout request identifier was used for different details."), { status: 409 });
+        replayed = true;
+        return;
+      }
       if (!account.exists || account.data().verificationState !== "verified") throw Object.assign(new Error("Spotly must verify your payout account before you can request a payout."), { status: 409 });
       const available = Number(balance.data()?.available || 0);
       if (amount > available + 0.001) throw Object.assign(new Error("That payout is more than your available earnings."), { status: 422 });
@@ -67,7 +90,7 @@ export async function POST(request) {
       postDriverLedgerEntry(transaction, db, { id: driverLedgerEntryId("payout_reserved", payoutRef.id), driverId: user.uid, payoutId: payoutRef.id, type: "payout_reserved", amount, currency: body.currency, effects: { available: -amount, reserved: amount }, description: "Payout requested", reference: payoutRef.id, source: "driver_payout_request", createdBy: user.uid });
       transaction.create(db.collection("auditLogs").doc(), { actorId: user.uid, action: "driver_payout.requested", entityType: "driverPayout", entityId: payoutRef.id, metadata: { amount, currency: body.currency }, source: "driver_money", createdAt: FieldValue.serverTimestamp() });
     });
-    return Response.json({ ok: true, payoutId: payoutRef.id, status: "requested" });
+    return Response.json({ ok: true, payoutId: payoutRef.id, status: "requested", reused: replayed });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the payout amount." }, { status: 400 });
     return apiError(error);
