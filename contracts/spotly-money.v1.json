@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spotlyafrica.com/contracts/spotly-money.v1.json",
+  "title": "Spotly Money & Payment Contract v1",
+  "moneyContractVersion": "1.0.0",
+  "publishedAt": "2026-11-09",
+  "compatibility": "additive-only-within-major",
+  "currencies": {
+    "USD": {
+      "name": "US Dollar",
+      "minorUnit": 2,
+      "symbol": "$"
+    },
+    "ZWG": {
+      "name": "Zimbabwe Gold",
+      "minorUnit": 2,
+      "symbol": "ZiG"
+    },
+    "MWK": {
+      "name": "Malawian Kwacha",
+      "minorUnit": 2,
+      "symbol": "MK"
+    }
+  },
+  "countries": {
+    "ZW": {
+      "defaultCurrency": "USD",
+      "currencies": [
+        "USD",
+        "ZWG"
+      ],
+      "paymentMethods": [
+        "cash",
+        "paynow",
+        "ecocash",
+        "onemoney"
+      ],
+      "digitalProvider": "paynow",
+      "providerCurrencies": [
+        "USD",
+        "ZWG"
+      ],
+      "refundMode": "full_only"
+    },
+    "MW": {
+      "defaultCurrency": "MWK",
+      "currencies": [
+        "MWK"
+      ],
+      "paymentMethods": [
+        "cash"
+      ],
+      "digitalProvider": null,
+      "providerCurrencies": [],
+      "refundMode": "full_only"
+    }
+  },
+  "providers": {
+    "paynow": {
+      "countries": [
+        "ZW"
+      ],
+      "currencies": [
+        "USD",
+        "ZWG"
+      ],
+      "signedCallbacks": true,
+      "pollConfirmation": true
+    }
+  },
+  "ledger": {
+    "businessBuckets": [
+      "pending",
+      "available",
+      "reserved",
+      "payoutProcessing",
+      "paidOut"
+    ],
+    "driverBuckets": [
+      "pending",
+      "available",
+      "reserved",
+      "processing",
+      "paid_out"
+    ],
+    "idempotency": "deterministic_document_id"
+  },
+  "operatorOverride": {
+    "mayMarkPaid": false,
+    "mayChangeCapturedAmount": false,
+    "allowedActions": [
+      "open_review",
+      "clear_review",
+      "release_stale_lock"
+    ]
+  }
+}
