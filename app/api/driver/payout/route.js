@@ -72,6 +72,7 @@ export async function POST(request) {
       .update(`driver-payout:${user.uid}:${body.requestKey}`).digest("hex").slice(0, 48) : "";
     const payoutRef = requestHash ? db.collection("driverPayouts").doc(requestHash) : db.collection("driverPayouts").doc();
     let replayed = false;
+    let responseStatus = "requested";
     await db.runTransaction(async (transaction) => {
       const accountRef = db.collection("driverPayoutAccounts").doc(user.uid);
       const balanceRef = db.collection("driverBalanceAccounts").doc(driverBalanceAccountId(user.uid, body.currency));
@@ -81,6 +82,7 @@ export async function POST(request) {
         if (original.driverId !== user.uid || original.currency !== body.currency || Number(original.amount) !== amount)
           throw Object.assign(new Error("This payout request identifier was used for different details."), { status: 409 });
         replayed = true;
+        responseStatus = String(original.status || "requested");
         return;
       }
       if (!account.exists || account.data().verificationState !== "verified") throw Object.assign(new Error("Spotly must verify your payout account before you can request a payout."), { status: 409 });
@@ -90,7 +92,7 @@ export async function POST(request) {
       postDriverLedgerEntry(transaction, db, { id: driverLedgerEntryId("payout_reserved", payoutRef.id), driverId: user.uid, payoutId: payoutRef.id, type: "payout_reserved", amount, currency: body.currency, effects: { available: -amount, reserved: amount }, description: "Payout requested", reference: payoutRef.id, source: "driver_payout_request", createdBy: user.uid });
       transaction.create(db.collection("auditLogs").doc(), { actorId: user.uid, action: "driver_payout.requested", entityType: "driverPayout", entityId: payoutRef.id, metadata: { amount, currency: body.currency }, source: "driver_money", createdAt: FieldValue.serverTimestamp() });
     });
-    return Response.json({ ok: true, payoutId: payoutRef.id, status: "requested", reused: replayed });
+    return Response.json({ ok: true, payoutId: payoutRef.id, status: responseStatus, reused: replayed });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the payout amount." }, { status: 400 });
     return apiError(error);
