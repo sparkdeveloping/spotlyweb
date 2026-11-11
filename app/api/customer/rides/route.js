@@ -1,16 +1,17 @@
 import { requireCustomerLaunchAccess } from "@/lib/customer-launch-server";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { dispatchRide, estimateRide, makeRideNumber, makeRidePin, normalizeRidePoint, plainRide, publicRide, rideAvailability, ridePaymentMethodsForCountry } from "@/lib/ride-server";
 import { safeText } from "@/lib/server-helpers";
 import {validateRideTerritory} from "@/lib/ride-geography";
-import {getVerifiedRideRoute} from "@/lib/ride-routing";
+import {getVerifiedRideRoute,assertRoadAccessConsent} from "@/lib/ride-routing";
 import {sealRidePin} from "@/lib/ride-security";
 import { rideCreateRequestSchema } from "@/lib/contracts/schemas";
 import { requireServiceLive } from "@/lib/service-availability-server";
 import { loadRealtimeDriverLocation } from "@/lib/customer-driver-tracking-server";
+import { liveMobilityState, mobilityRequestFingerprint, mobilityRequestReferences, requireMatchingReplay } from "@/lib/mobility-request-integrity";
 
 export const runtime = "nodejs";
 const requestSchema = rideCreateRequestSchema;
@@ -97,6 +98,13 @@ export async function POST(request) {
       return Response.json({ ok: true, rideId: body.rideId, state: "cancelled" });
     }
 
+    const { requestRef, activeRef } = mobilityRequestReferences(db, user.uid, "ride", body.idempotencyKey);
+    const fingerprint = mobilityRequestFingerprint(body);
+    // Safe retries return the original booking without pricing, charging or dispatching again.
+    if(requestRef){
+      const replay=requireMatchingReplay(await requestRef.get(),fingerprint);
+      if(replay)return Response.json({ok:true,...replay,reused:true});
+    }
     const pickup = normalizeRidePoint(body.pickup); const dropoff = normalizeRidePoint(body.dropoff);
     if (!pickup || !dropoff) throw Object.assign(new Error("Set valid pickup and destination locations."), { status: 400 });
     const settingsSnap = await db.collection("platformSettings").doc("global").get(); const settings = settingsSnap.exists ? settingsSnap.data() : {};
@@ -107,6 +115,7 @@ export async function POST(request) {
     if (!active.empty) throw Object.assign(new Error("Finish or cancel your active ride before requesting another one."), { status: 409 });
     validateRideTerritory(pickup,dropoff,settings.mobility||{});
     const route=await getVerifiedRideRoute(pickup,dropoff);
+    const roadAccessConsentVerified=assertRoadAccessConsent(route,body.roadAccessConsent);
     const quote = estimateRide({ pickup, dropoff, serviceType: body.serviceType, settings,route });
     if(Math.round(Number(body.quotedTotal)*100)!==Math.round(Number(quote.total)*100)||
        body.quotedCurrency!==quote.currency)
@@ -115,11 +124,28 @@ export async function POST(request) {
     const number = makeRideNumber(); const pickupPinCiphertext=sealRidePin(makeRidePin()); const now = FieldValue.serverTimestamp();
     const riderName = safeText(body.riderName || user.profile?.displayName || user.name || "", 160); const riderPhone = safeText(body.riderPhone || user.profile?.phone || user.phone_number || "", 50);
     const initialState=body.paymentMethod==="paynow"?"awaiting_payment":"requested";
-    await db.runTransaction(async (transaction) => {
-      transaction.create(rideRef, { number, customerId: user.uid, orderId: orderRef.id, state: initialState, serviceType: body.serviceType, pickup, dropoff, quote, currency: quote.currency, requiredVehicleTypes: quote.requiredVehicleTypes, paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupPinCiphertext, country:pickup.country,riderName, riderPhone, riderNote: safeText(body.note || "", 500), requestedAt: now, createdAt: now, updatedAt: now });
+    const transactionResult=await db.runTransaction(async (transaction) => {
+      const replaySnap=requestRef?await transaction.get(requestRef):null;
+      const replay=requireMatchingReplay(replaySnap,fingerprint);
+      if(replay)return {reused:true,response:replay};
+      const lockSnap=await transaction.get(activeRef);
+      if(lockSnap.exists&&lockSnap.data().entityId){
+        const previous=await transaction.get(db.collection("rideTrips").doc(lockSnap.data().entityId));
+        if(previous.exists&&liveMobilityState(previous.data().state,"ride"))
+          throw Object.assign(new Error("Finish or cancel your active Ride request before creating another one."),{status:409});
+      }
+      const response={rideId:rideRef.id,orderId:orderRef.id,number,
+        state:body.paymentMethod==="paynow"?"awaiting_payment":"searching_driver",
+        paymentRequired:body.paymentMethod==="paynow",quote};
+      transaction.set(activeRef,{entityId:rideRef.id,updatedAt:now});
+      if(requestRef)transaction.create(requestRef,{fingerprint,response,createdAt:now,
+        expiresAt:Timestamp.fromMillis(Date.now()+30*24*60*60_000)});
+      transaction.create(rideRef, { number, customerId: user.uid, orderId: orderRef.id, state: initialState, roadAccessConsentVerified, serviceType: body.serviceType, pickup, dropoff, quote, currency: quote.currency, requiredVehicleTypes: quote.requiredVehicleTypes, paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupPinCiphertext, country:pickup.country,riderName, riderPhone, riderNote: safeText(body.note || "", 500), requestedAt: now, createdAt: now, updatedAt: now });
       transaction.create(orderRef, { number, customerId: user.uid, customerName: riderName, businessName: "Spotly Ride", transactionType: "ride", fulfilment: "ride", rideTripId: rideRef.id, rideStatus: initialState, status: initialState, paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", currency: quote.currency, pickup, dropoff, items: [{ productId: `ride_${body.serviceType}`, name: `${quote.serviceLabel} ride`, quantity: 1, unitPrice: quote.total, lineTotal: quote.total }], totals: { subtotal: quote.total, serviceFee: quote.bookingFee, deliveryFee: 0, discount: 0, total: quote.total }, total: quote.total, createdAt: now, updatedAt: now });
       transaction.create(db.collection("rideEvents").doc(), { rideId: rideRef.id, type: "ride.requested", actorType: "customer", actorId: user.uid, state: initialState, metadata: { serviceType: body.serviceType, quotedFare: quote.total, currency: quote.currency, paymentMethod: body.paymentMethod }, createdAt: now });
+      return {reused:false,response};
     });
+    if(transactionResult.reused)return Response.json({ok:true,...transactionResult.response,reused:true});
     let dispatch=null;
     if(body.paymentMethod==="cash") dispatch=await dispatchRide({ db, messaging, rideId: rideRef.id, actorId: user.uid })
       .catch(async error=>{
