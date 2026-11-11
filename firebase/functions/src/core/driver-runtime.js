@@ -263,6 +263,13 @@ function workPayload(kind, work) {
     items: Array.isArray(work.shopping?.items) ? plain(work.shopping.items) : Array.isArray(work.items) ? plain(work.items) : [], substitutionsAllowed: work.substitutionsAllowed !== false,
     distanceKm: num(work.deliveryDistanceKm ?? work.quote?.distanceKm), estimatedDurationMinutes: Math.max(0, Math.round(num(work.expectedMinutes ?? work.quote?.durationMinutes))), earnings: num(work.acceptedDriverPay ?? work.quotedDriverPay ?? work.quote?.driverPay), tip: num(work.tip),
     createdAt: plain(work.createdAt || new Date()), acceptedAt: plain(work.assignedAt || work.acceptedAt || null), completedAt: plain(work.deliveredAt || work.completedAt || null), notes: text(work.notes || work.parcelDescription, 500),
+    // Driver-specific routing is a projection of the previously verified customer
+    // road route. Never request Apple directions or synthesize a straight line.
+    serviceType: kind === "ride" ? text(work.serviceType || work.quote?.serviceType || "economy", 20) : null,
+    routePath: kind === "ride" && Array.isArray(work.quote?.routePath)
+      ? work.quote.routePath.filter((point) => point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
+        && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180).slice(0, 250)
+        .map((point) => ({ lat: point.lat, lng: point.lng })) : [],
     fulfilmentMode: work.fulfilmentMode || null, proofPhotoRequired: work.proofPhotoRequired === true, proofPhotoUploaded: Boolean(work.proofPhotoUrl), paymentMethod, amountToCollect: paymentMethod === "cash" ? num(work.quote?.total || work.cashToCollect) : num(work.cashToCollect), currency: work.currency || "USD",
     pickupCodeRequired: Boolean(work.pickupCode || work.pickupPin || work.pickupPinCiphertext), dropoffCodeRequired: Boolean(work.customerPin || work.dropoffPin || work.dropoffPinCiphertext)
   };
