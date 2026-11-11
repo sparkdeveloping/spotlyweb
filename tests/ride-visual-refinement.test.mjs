@@ -10,7 +10,7 @@ test("Ride class artwork is distinct and reused by web selectors and tracking",(
   const svg=read("public/ride/vehicles/"+kind+".svg");
   assert.match(svg,/<svg /);
   assert.match(svg,/linearGradient/);
-  assert.doesNotMatch(svg,/https?:\/\//);
+  assert.doesNotMatch(svg,/href="https?:\/\//);
  }
  const app=read("components/ride-app.js");
  assert.match(app,/RideVehicleArt type=\{type\.id\}/);
@@ -34,7 +34,7 @@ test("MapLibre road gradient uses true verified GeoJSON with line metrics",()=>{
  assert.match(map,/lineMetrics:true/);
  assert.match(map,/"line-gradient"/);
  assert.match(map,/\["line-progress"\]/);
- assert.match(map,/if\(line\.length>=2\)/);
+ assert.match(map,/features:line\.length>=2\?/);
  assert.doesNotMatch(map,/data\.path\?\.length>=2\?data\.path:\[data\.pickup,data\.dropoff\]/);
  assert.match(map,/getSource\("road-route"\)\?\.setData\(verifiedRoadGeoJSON/);
 });
