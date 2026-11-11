@@ -76,7 +76,8 @@ function RideTimeline({ state }) {
     driver_arrived_pickup:1,pickup_verification:1,in_trip:2,
     driver_arrived_dropoff:2,completed:3
   };
-  const current = stages[state] ?? 0;
+  if (!(state in stages)) return null;
+  const current = stages[state];
   return <ol aria-label="Ride progress" className="mt-5 flex items-start gap-0">
     {steps.map((label,i)=><li key={label} className="min-w-0 flex-1 text-center">
       <div className="flex items-center">
