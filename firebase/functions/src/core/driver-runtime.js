@@ -266,11 +266,30 @@ function workPayload(kind, work) {
     // Driver-specific routing is a projection of the previously verified customer
     // road route. Never request Apple directions or synthesize a straight line.
     serviceType: kind === "ride" ? text(work.serviceType || work.quote?.serviceType || "economy", 20) : null,
-    routePath: kind === "ride" && work.quote?.routeSource === "verified_road_route" && Array.isArray(work.quote?.routePath)
+    routePath: ["ride", "send"].includes(kind) && work.quote?.routeSource === "verified_road_route" && Array.isArray(work.quote?.routePath)
       ? work.quote.routePath.filter((point) => point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
         && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180).slice(0, 250)
         .map((point) => ({ lat: point.lat, lng: point.lng })) : [],
     fulfilmentMode: work.fulfilmentMode || null, proofPhotoRequired: work.proofPhotoRequired === true, proofPhotoUploaded: Boolean(work.proofPhotoUrl), paymentMethod, amountToCollect: paymentMethod === "cash" ? num(work.quote?.total || work.cashToCollect) : num(work.cashToCollect), currency: work.currency || "USD",
+    // Shopping actions must use the existing funded basket/receipt route, not
+    // generic work transitions. Expose only the assigned basket projection.
+    shopping: kind === "delivery" && work.fulfilmentMode === "driver_shops" ? {
+      state: text(work.shopping?.state || work.state, 40),
+      substitutionPreference: text(work.shopping?.substitutionPreference || "contact_me", 40),
+      checkoutAuthorized: Boolean(work.shopping?.checkoutAuthorizedAt),
+      maxAuthorized: num(work.shopping?.maxAuthorizedMerchandise),
+      projectedSubtotal: num(work.shopping?.projectedSubtotal),
+      items: (Array.isArray(work.shopping?.items) ? work.shopping.items : []).slice(0, 100).map(item => ({
+        productId: text(item.productId, 180), name: text(item.name, 180),
+        requestedQuantity: num(item.requestedQuantity || 1), estimatedUnitPrice: num(item.estimatedUnitPrice),
+        actualQuantity: item.actualQuantity == null ? null : num(item.actualQuantity),
+        actualUnitPrice: item.actualUnitPrice == null ? null : num(item.actualUnitPrice),
+        status: text(item.status || "pending", 40), substitutionAllowed: item.substitutionAllowed !== false,
+        replacementName: text(item.replacementName || item.proposedReplacementName, 180),
+        note: text(item.note, 500)
+      }))
+    } : null,
+    returnProofUploaded: kind === "send" && Boolean(work.returnProofPhotoUrl),
     pickupCodeRequired: Boolean(work.pickupCode || work.pickupPin || work.pickupPinCiphertext), dropoffCodeRequired: Boolean(work.customerPin || work.dropoffPin || work.dropoffPinCiphertext)
   };
 }
@@ -402,16 +421,26 @@ export async function registerDriverWorkProof(actor, data = {}) {
   const kind = text(data.kind, 20); const workId = text(data.workId, 180); const config = COLLECTIONS[kind];
   if (!config || !["delivery", "send"].includes(kind) || !workId) throw new HttpsError("invalid-argument", "Choose the work request that needs proof.");
   const { firestore, storage } = spotlyAdmin();
+  const purpose = text(data.purpose || "delivery", 16);
+  if (!["delivery", "return"].includes(purpose) || (purpose === "return" && kind !== "send"))
+    throw new HttpsError("invalid-argument", "Choose a valid work-proof purpose.");
   const proofPhotoUrl = await validateDriverProofUrl(storage, { actorId: actor.uid, kind, workId, url: data.proofPhotoUrl });
   const ref = firestore.collection(config.work).doc(workId); const doc = await ref.get();
   if (!doc.exists) throw new HttpsError("not-found", "This work request no longer exists.");
   const work = doc.data() || {};
   if (work.assignedDriverId !== actor.uid) throw new HttpsError("permission-denied", "This work is assigned to another Driver.");
   if (finished(kind, work.state)) throw new HttpsError("failed-precondition", "Completed work cannot accept new proof.");
+  if (purpose === "return" && work.state !== "return_in_progress")
+    throw new HttpsError("failed-precondition", "Start the confirmed return before uploading return proof.");
+  if (purpose === "delivery" && kind === "send" && ["handoff_exception","return_in_progress"].includes(work.state))
+    throw new HttpsError("failed-precondition", "This parcel needs return proof, not delivery proof.");
   const now = FieldValue.serverTimestamp();
+  const patch = purpose === "return" ?
+    { returnProofPhotoUrl: proofPhotoUrl, returnProofUploadedAt: now, updatedAt: now } :
+    { proofPhotoUrl, proofUploadedAt: now, updatedAt: now };
   const batch = firestore.batch();
-  batch.set(ref, { proofPhotoUrl, proofUploadedAt: now, updatedAt: now }, { merge: true });
-  batch.create(firestore.collection(config.event).doc(), { ...(kind === "send" ? { parcelJobId: workId } : { deliveryJobId: workId, orderId: work.orderId || null }), type: `${kind}.proof_uploaded`, actorType: "driver", actorId: actor.uid, previousState: work.state, state: work.state, createdAt: now });
+  batch.set(ref, patch, { merge: true });
+  batch.create(firestore.collection(config.event).doc(), { ...(kind === "send" ? { parcelJobId: workId } : { deliveryJobId: workId, orderId: work.orderId || null }), type: `${kind}.${purpose}_proof_uploaded`, actorType: "driver", actorId: actor.uid, previousState: work.state, state: work.state, createdAt: now });
   await batch.commit();
   return { workId, kind, proofPhotoUrl };
 }
@@ -463,6 +492,9 @@ export async function driverWorkAction(actor, data = {}) {
     if (!doc.exists) throw new HttpsError("not-found", "This active work no longer exists.");
     const work = doc.data() || {};
     if (work.assignedDriverId !== actor.uid) throw new HttpsError("permission-denied", "This work is assigned to another Driver.");
+    if (kind === "delivery" && work.fulfilmentMode === "driver_shops" &&
+        ["start_shopping", "finish_shopping"].includes(action))
+      throw new HttpsError("failed-precondition", "Use the funded shopping checklist and receipt review to update this order.");
     if (work.safetyReviewHold === true) throw new HttpsError("failed-precondition", "A safety review has paused this work. Contact Spotly Operations.");
     const next = TRANSITIONS[kind]?.[work.state]?.[action];
     if (!next) throw new HttpsError("failed-precondition", "Refresh the job and follow the current next action.");
