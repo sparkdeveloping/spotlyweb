@@ -493,7 +493,7 @@ export async function driverWorkAction(actor, data = {}) {
     const work = doc.data() || {};
     if (work.assignedDriverId !== actor.uid) throw new HttpsError("permission-denied", "This work is assigned to another Driver.");
     if (kind === "delivery" && work.fulfilmentMode === "driver_shops" &&
-        ["start_shopping", "finish_shopping"].includes(action))
+        ["start_shopping", "finish_shopping", "begin_pickup_verification", "verify_pickup"].includes(action))
       throw new HttpsError("failed-precondition", "Use the funded shopping checklist and receipt review to update this order.");
     if (work.safetyReviewHold === true) throw new HttpsError("failed-precondition", "A safety review has paused this work. Contact Spotly Operations.");
     const next = TRANSITIONS[kind]?.[work.state]?.[action];
@@ -507,15 +507,26 @@ export async function driverWorkAction(actor, data = {}) {
       if (!valid) throw new HttpsError("failed-precondition", "The pickup code is not correct.");
     }
     if (action === "complete" || (kind === "send" && action === "confirm_return")) {
-      if (work.proofPhotoRequired === true && ["delivery", "send"].includes(kind) && !proofPhotoUrl && !work.proofPhotoUrl && !work.returnProofPhotoUrl) throw new HttpsError("failed-precondition", action === "confirm_return" ? "Upload return proof before confirming the parcel was returned." : "Upload delivery proof before completing this work.");
+      if (work.proofPhotoRequired === true && ["delivery", "send"].includes(kind)) {
+        const verifiedForStage = kind === "send" && action === "confirm_return" ?
+          Boolean(work.returnProofPhotoUrl || proofPhotoUrl) : Boolean(work.proofPhotoUrl || proofPhotoUrl);
+        if (!verifiedForStage) throw new HttpsError("failed-precondition",
+          action === "confirm_return" ? "Upload fresh return proof before confirming the parcel was returned." :
+            "Upload delivery proof before completing this work.");
+      }
       if (action === "complete") {
         let valid = true;
         if (kind === "send" && (work.dropoffPin || work.dropoffPinCiphertext)) valid = matchesSecretPin({ plaintext: work.dropoffPin, ciphertext: work.dropoffPinCiphertext, value: code, secret: process.env.SPOTLY_SEND_PIN_KEY });
         else if (kind === "delivery" && work.customerPin) valid = String(work.customerPin) === code;
         if (!valid) throw new HttpsError("failed-precondition", "The handoff code is not correct.");
-        if (["ride", "send"].includes(kind) && work.paymentMethod === "cash") {
-          const expected = Number(work.quote?.total || work.cashToCollect || 0); const supplied = Number(data.cashAmount);
-          if (data.cashReceived !== true || !Number.isFinite(supplied) || Math.round(supplied * 100) !== Math.round(expected * 100)) throw new HttpsError("failed-precondition", "Confirm the exact cash amount before completing this work.");
+        const expectedCash = kind === "delivery" ? Number(work.cashToCollect || 0) :
+          Number(work.quote?.total || work.cashToCollect || 0);
+        if ((["ride", "send"].includes(kind) && work.paymentMethod === "cash") ||
+            (kind === "delivery" && expectedCash > 0)) {
+          const supplied = Number(data.cashAmount);
+          if (data.cashReceived !== true || !Number.isFinite(supplied) ||
+              Math.round(supplied * 100) !== Math.round(expectedCash * 100))
+            throw new HttpsError("failed-precondition", "Confirm the exact cash amount before completing this work.");
         }
       }
     }
@@ -531,8 +542,14 @@ export async function driverWorkAction(actor, data = {}) {
     if (action === "complete") {
       if (kind === "ride") patch.completedAt = now; else patch.deliveredAt = now;
       if (proofPhotoUrl) { patch.proofPhotoUrl = proofPhotoUrl; patch.proofUploadedAt = now; }
-      if (["ride", "send"].includes(kind) && work.paymentMethod === "cash") { patch.paymentStatus = "cash_driver_attested"; patch.cashReceived = Number(data.cashAmount); patch.cashAttestedAt = now; patch.cashAttestedBy = actor.uid; }
-      else if (["ride", "send"].includes(kind) && work.paymentStatus !== "paid") patch.driverEarningsStatus = "awaiting_customer_payment";
+      if (["ride", "send"].includes(kind) && work.paymentMethod === "cash") {
+        patch.paymentStatus = "cash_driver_attested"; patch.cashReceived = Number(data.cashAmount);
+        patch.cashAttestedAt = now; patch.cashAttestedBy = actor.uid;
+      } else if (kind === "delivery" && Number(work.cashToCollect || 0) > 0) {
+        // Attestation is evidence of collection, not a settlement or payout.
+        patch.cashReceived = Number(data.cashAmount);
+        patch.cashAttestedAt = now; patch.cashAttestedBy = actor.uid;
+      } else if (["ride", "send"].includes(kind) && work.paymentStatus !== "paid") patch.driverEarningsStatus = "awaiting_customer_payment";
     }
     transaction.set(ref, patch, { merge: true });
     transaction.create(firestore.collection(config.event).doc(), { ...(kind === "ride" ? { rideId: workId } : kind === "send" ? { parcelJobId: workId } : { deliveryJobId: workId, orderId: work.orderId || null }), type: `${kind}.${action}`, actorType: "driver", actorId: actor.uid, previousState: work.state, state: next, createdAt: now });
