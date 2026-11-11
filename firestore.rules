@@ -607,13 +607,37 @@ service cloud.firestore {
     match /driverPayoutAccounts/{uid} { allow read, write: if false; }
     match /driverPresence/{uid} { allow read, write: if false; }
     match /deliveryJobs/{jobId} { allow read, write: if false; }
-    match /deliveryOffers/{offerId} { allow read, write: if false; }
+    match /deliveryOffers/{offerId} {
+      // An authenticated Driver may observe only offers explicitly addressed
+      // to their UID. All offer assignment/state mutations remain server-only.
+      // Queries must filter by driverId and request at most 40 results.
+      allow get: if activeAccount() && resource.data.driverId == request.auth.uid;
+      allow list: if activeAccount() && request.query.limit != null
+        && request.query.limit <= 40 && resource.data.driverId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
     match /deliveryEvents/{eventId} { allow read, write: if false; }
     match /rideTrips/{rideId} { allow read, write: if false; }
-    match /rideOffers/{offerId} { allow read, write: if false; }
+    match /rideOffers/{offerId} {
+      // An authenticated Driver may observe only offers explicitly addressed
+      // to their UID. All offer assignment/state mutations remain server-only.
+      // Queries must filter by driverId and request at most 40 results.
+      allow get: if activeAccount() && resource.data.driverId == request.auth.uid;
+      allow list: if activeAccount() && request.query.limit != null
+        && request.query.limit <= 40 && resource.data.driverId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
     match /rideEvents/{eventId} { allow read, write: if false; }
     match /parcelJobs/{jobId} { allow read, write: if false; }
-    match /parcelOffers/{offerId} { allow read, write: if false; }
+    match /parcelOffers/{offerId} {
+      // An authenticated Driver may observe only offers explicitly addressed
+      // to their UID. All offer assignment/state mutations remain server-only.
+      // Queries must filter by driverId and request at most 40 results.
+      allow get: if activeAccount() && resource.data.driverId == request.auth.uid;
+      allow list: if activeAccount() && request.query.limit != null
+        && request.query.limit <= 40 && resource.data.driverId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
     match /parcelEvents/{eventId} { allow read, write: if false; }
     match /driverEarningsLedger/{entryId} { allow read, write: if false; }
     match /driverBalanceAccounts/{accountId} { allow read, write: if false; }
