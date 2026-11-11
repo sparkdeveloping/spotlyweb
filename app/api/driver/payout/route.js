@@ -27,8 +27,8 @@ export async function GET(request) {
     const user = await authenticateRequest(request);
     const { db } = getAdminServices();
     const [ledger, payouts, account, usdBalance, zwgBalance, settings] = await Promise.all([
-      db.collection("driverEarningsLedger").where("driverId", "==", user.uid).limit(500).get(),
-      db.collection("driverPayouts").where("driverId", "==", user.uid).limit(100).get(),
+      db.collection("driverEarningsLedger").where("driverId", "==", user.uid).orderBy("createdAt", "desc").limit(500).get(),
+      db.collection("driverPayouts").where("driverId", "==", user.uid).orderBy("createdAt", "desc").limit(100).get(),
       db.collection("driverPayoutAccounts").doc(user.uid).get(),
       db.collection("driverBalanceAccounts").doc(driverBalanceAccountId(user.uid, "USD")).get(),
       db.collection("driverBalanceAccounts").doc(driverBalanceAccountId(user.uid, "ZWG")).get(),
