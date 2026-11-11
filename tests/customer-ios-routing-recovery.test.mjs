@@ -34,7 +34,7 @@ test("routing remains verified and bounded; no invented route fallback", () => {
   const source = read("firebase/functions/src/core/mobility-road-access.js");
   assert.match(source, /DEFAULT_ROUTING_ENDPOINT = 'https:\/\/api\.mapmap\.ai'/);
   assert.match(source, /MAX_ACCESS_METERS = 350/);
-  assert.match(source, /snap_retry', 'true'/);
+  assert.match(source, /snap_retry', 'false'/);
   assert.match(source, /interpretDrivingRoute/);
   assert.doesNotMatch(source, /getStraightLineRoute|distance-only fallback/);
   const runtime = read("firebase/functions/src/core/customer-runtime.js");
