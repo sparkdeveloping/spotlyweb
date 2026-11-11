@@ -9,6 +9,14 @@
 
 These findings identify concrete code mismatches. They **do not prove** which failures occurred in the currently deployed production build without authorized Firebase logs and live probes.
 
+## Evidence reused from the uploaded Phase 41 web archive
+
+- `components/mobility-map.js` already renders OSM-derived vector maps via MapLibre GL JS, licensed `/api/public/map-config` style, real road GeoJSON lines, confirmed roadside access markers and recent Driver positions; the image asset archives do not contain routing engines, tile data or map styles. Reuse this *architecture*, not browser-specific JS, when implementing MapLibre Native iOS.
+- `docs/SPOTLY-MAPMAP-ROUTING-INTEGRATION.md` records MapMap production variables in **Vercel only**. Neither the presence nor the live validity of those values in Firebase can be assumed.
+- Phase 41 `firebase/functions/src/core/mobility-road-access.js` disables MapMap's optional wide `snap_retry`, handles provider HTTP 400 `NoRoute`/`NoSegment` as geographic outcomes, rejects invalid provider geometry separately, and checks explicit maximum road-access distances. These safety fixes have been ported into this branch.
+- MapMap official route documentation explicitly states default `snap_retry=true` retries with a **1,000 m** road snap. We set it to `false` and enforce Spotly's 350 m access cap rather than accepting distant or disconnected pickup geometries: https://mapmap.ai/docs/api/get-route-v1-profile-coordinates
+- The archived web mock routing checks passed: 17 tests (existing route/map suites) and 5 additional simulated provider-response cases. **This is not a passing CI run of the PR branch, an Xcode build, or a live provider verification.**
+
 ## Changes in this branch
 
 - Synchronize the byte-identical `spotly-money.v1.json` across web and Firebase, expose `moneyContractVersion` and `moneyContractSHA256` from `platformFoundation`.
