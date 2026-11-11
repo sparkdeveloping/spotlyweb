@@ -2,6 +2,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 
 // Routing and tariff must share one verified road geometry. A selected POI or
 // GPS fix is an intent coordinate, not necessarily safe vehicle access.
+const DEFAULT_ROUTING_ENDPOINT = 'https://api.mapmap.ai';
 const MAX_ACCESS_METERS = 350;
 const CONFIRM_ACCESS_METERS = 35;
 const MAX_ROUTE_POINTS = 110;
@@ -19,7 +20,7 @@ export function metersBetween(a, b) {
   const h = Math.sin(dlat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dlng / 2) ** 2;
   return 2 * METERS_PER_RADIAN * Math.asin(Math.min(1, Math.sqrt(Math.max(0, h))));
 }
-export function routingConfigured(endpoint = process.env.SPOTLY_ROUTING_URL) {
+export function routingConfigured(endpoint = process.env.SPOTLY_ROUTING_URL || DEFAULT_ROUTING_ENDPOINT) {
   try {
     const url = new URL(endpoint);
     return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash;
@@ -28,7 +29,7 @@ export function routingConfigured(endpoint = process.env.SPOTLY_ROUTING_URL) {
 // A deployed callable is not necessarily ready to route. MapMap requires a
 // full server key; Vercel's environment is not inherited by Firebase.
 export function routingCredentialsConfigured(
-  endpoint = process.env.SPOTLY_ROUTING_URL,
+  endpoint = process.env.SPOTLY_ROUTING_URL || DEFAULT_ROUTING_ENDPOINT,
   key = process.env.SPOTLY_ROUTING_API_KEY
 ) {
   if (!routingConfigured(endpoint)) return false;
@@ -71,7 +72,8 @@ async function fetchOSRM(url, { key, fetcher, signal } = {}) {
   } catch {
     throw new HttpsError('unavailable', 'The routing service could not be reached.');
   }
-  if (response.status === 429) throw new HttpsError('resource-exhausted', 'Routing is busy.');
+  if (response.status === 401 || response.status === 403) throw new HttpsError('failed-precondition', 'Road routing credentials were rejected.', { reason: 'ROUTING_CONFIGURATION' });
+  if (response.status === 402 || response.status === 429) throw new HttpsError('resource-exhausted', 'Routing is busy.');
   if (!response.ok && ![400, 404, 422].includes(response.status)) {
     throw new HttpsError('unavailable', 'Routing is temporarily unavailable.');
   }
@@ -145,12 +147,12 @@ function nearestCandidates(body, intent) {
 // Returns only a provider-verified drivable geometry. It never draws a fake
 // straight line and never assumes an arbitrary park/building point is road.
 export async function verifiedMobilityRoute(from, to, {
-  endpoint = process.env.SPOTLY_ROUTING_URL,
+  endpoint = process.env.SPOTLY_ROUTING_URL || DEFAULT_ROUTING_ENDPOINT,
   key = process.env.SPOTLY_ROUTING_API_KEY,
   fetcher = fetch
 } = {}) {
   if (!validPoint(from) || !validPoint(to)) throw new HttpsError('invalid-argument', 'Choose valid pickup and destination coordinates.');
-  if (!routingCredentialsConfigured(endpoint, key)) throw new HttpsError('failed-precondition', 'Verified road routing credentials are not configured.');
+  if (!routingCredentialsConfigured(endpoint, key)) throw new HttpsError('failed-precondition', 'Verified road routing credentials are not configured.', { reason: 'ROUTING_CONFIGURATION' });
   const root = new URL(endpoint);
   const route = async (a, b) => {
     const body = await fetchOSRM(endpointUrl(root, 'route', coordinates(a) + ";" + coordinates(b)), { key, fetcher });
@@ -163,7 +165,7 @@ export async function verifiedMobilityRoute(from, to, {
   // fallback. Never call a nonexistent endpoint and mislabel the result as an
   // inaccessible pickup point. Its returned geometry is still checked above.
   if (root.hostname === 'api.mapmap.ai') {
-    throw new HttpsError('failed-precondition', 'No connected drivable route is available near these locations.');
+    throw new HttpsError('failed-precondition', 'No connected drivable route is available near these locations.', { reason: 'NO_DRIVABLE_ROUTE' });
   }
 
   // Most OSRM-compatible engines already snap /route endpoints. For no segment
