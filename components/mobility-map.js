@@ -110,6 +110,14 @@ export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",labe
  </div>;
 }
 
+// Never render a fabricated straight line when a historical trip lacks route geometry.
+export function verifiedRoadGeoJSON(path) {
+ const line=Array.isArray(path)?path.map(coordinates).filter(Boolean):[];
+ return {type:"FeatureCollection",features:line.length>=2?[{
+  type:"Feature",properties:{},geometry:{type:"LineString",coordinates:line}
+ }]:[]};
+}
+
 export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverUpdatedAt=null,driverVehicleType="car",compact=false}){
  const container=useRef(null),map=useRef(null),pinMarkers=useRef([]),driverMarker=useRef(null);
  const [error,setError]=useState("");
@@ -129,10 +137,16 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
    instance.on("load",()=>{
     if(cancelled)return;
     const data=routeRef.current;
-    const line=(data.path?.length>=2?data.path:[data.pickup,data.dropoff]).map(coordinates).filter(Boolean);
-    instance.addSource("road-route",{type:"geojson",data:{type:"Feature",properties:{},geometry:{type:"LineString",coordinates:line}}});
-    instance.addLayer({id:"road-route-underlay",type:"line",source:"road-route",paint:{"line-color":"#ffffff","line-width":8,"line-opacity":.85}});
-    instance.addLayer({id:"road-route-line",type:"line",source:"road-route",paint:{"line-color":"#db623b","line-width":5,"line-opacity":.95}});
+    const line=Array.isArray(data.path)&&data.path.length>=2?data.path.map(coordinates).filter(Boolean):[];
+    instance.addSource("road-route",{type:"geojson",lineMetrics:true,data:verifiedRoadGeoJSON(data.path)});
+    instance.addLayer({id:"road-route-underlay",type:"line",source:"road-route",
+      layout:{"line-cap":"round","line-join":"round"},
+      paint:{"line-color":"#3288ff","line-width":12,"line-opacity":.18}});
+    instance.addLayer({id:"road-route-line",type:"line",source:"road-route",
+      layout:{"line-cap":"round","line-join":"round"},
+      paint:{"line-width":6,"line-opacity":.97,
+        "line-gradient":["interpolate",["linear"],["line-progress"],
+          0,"#45d8ff",.52,"#328fff",1,"#2774fa"]}});
     const pins=[
       {value:data.pickup,text:"P",color:"#177a55"},
       {value:data.dropoff,text:"D",color:"#d05243"}
@@ -158,8 +172,7 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
  },[pickup?.lat,pickup?.lng,dropoff?.lat,dropoff?.lng,compact]);
  useEffect(()=>{
   const instance=map.current;if(!instance?.isStyleLoaded?.())return;
-  const line=(hasRoute?path:[pickup,dropoff]).map(coordinates).filter(Boolean);
-  if(line.length>=2)instance.getSource("road-route")?.setData({type:"Feature",properties:{},geometry:{type:"LineString",coordinates:line}});
+  instance.getSource("road-route")?.setData(verifiedRoadGeoJSON(hasRoute?path:[]));
  },[path,hasRoute,pickup,dropoff]);
  useEffect(()=>{
   const instance=map.current,fixTime=new Date(driverUpdatedAt||driverLocation?.updatedAt||0).getTime(),
