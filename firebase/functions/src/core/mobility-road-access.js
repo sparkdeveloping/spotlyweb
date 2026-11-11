@@ -11,7 +11,7 @@ const DRIVING_ROUTE_MAX_METERS = 1_500_000;
 const METERS_PER_RADIAN = 6_371_000;
 const validPoint = (p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) &&
   Math.abs(Number(p.lat)) <= 90 && Math.abs(Number(p.lng)) <= 180;
-const point = (pair) => ({ lat: Number(pair[1]), lng: Number(pair[0]) });
+const point = (pair) => ({ lat: pair?.[1] == null ? NaN : Number(pair[1]), lng: pair?.[0] == null ? NaN : Number(pair[0]) });
 const coordinates = (p) => Number(p.lng).toFixed(6) + "," + Number(p.lat).toFixed(6);
 const rad = (degrees) => degrees * Math.PI / 180;
 
@@ -23,7 +23,10 @@ export function metersBetween(a, b) {
 export function routingConfigured(endpoint = process.env.SPOTLY_ROUTING_URL || DEFAULT_ROUTING_ENDPOINT) {
   try {
     const url = new URL(endpoint);
-    return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash;
+    const host = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash &&
+      !['localhost', '127.0.0.1', '[::1]', '::1', 'router.project-osrm.org'].includes(host) &&
+      (host !== 'api.mapmap.ai' || url.pathname === '/');
   } catch { return false; }
 }
 // A deployed callable is not necessarily ready to route. MapMap requires a
@@ -45,9 +48,10 @@ function endpointUrl(root, service, coordinateList) {
     url.searchParams.set('geometries', 'geojson');
     url.searchParams.set('steps', 'false');
     if (url.hostname === 'api.mapmap.ai') {
-      // MapMap rejects OSRM's radiuses option (HTTP 400) and performs its own
-      // bounded wider snap retry. Validate actual returned access offsets below.
-      url.searchParams.set('snap_retry', 'true');
+      // MapMap retries NoRoute with up to 1 km wider snapping by default.
+      // Disable this: Spotly's verified curb access is capped at 350m and
+      // post-hoc endpoint checks cannot certify intermediate discontinuities.
+      url.searchParams.set('snap_retry', 'false');
     } else {
       // Native OSRM supports per-waypoint radiuses.
       url.searchParams.set('radiuses', String(MAX_ACCESS_METERS) + ";" + MAX_ACCESS_METERS);
@@ -80,10 +84,13 @@ async function fetchOSRM(url, { key, fetcher, signal } = {}) {
   let body;
   try { body = await response.json(); }
   catch { throw new HttpsError('unavailable', 'The road routing provider returned unreadable data.'); }
-  // Invalid options and missing endpoints are integration failures, not
-  // evidence that the selected street or building has no nearby access.
-  if (!response.ok) {
+  // MapMap documents NoRoute/NoSegment as HTTP 400. Those are real road
+  // availability outcomes, not an upstream outage or invalid API option.
+  if (!response.ok && !(response.status === 400 && ['NoRoute', 'NoSegment'].includes(body?.code))) {
     throw new HttpsError('unavailable', 'The road routing provider rejected this request.');
+  }
+  if (body?.code && !['Ok', 'NoRoute', 'NoSegment'].includes(body.code)) {
+    throw new HttpsError('unavailable', 'The road routing provider returned an unsupported routing status.');
   }
   return body;
 }
@@ -152,11 +159,22 @@ export async function verifiedMobilityRoute(from, to, {
   fetcher = fetch
 } = {}) {
   if (!validPoint(from) || !validPoint(to)) throw new HttpsError('invalid-argument', 'Choose valid pickup and destination coordinates.');
+  if (metersBetween(from, to) < 150) throw new HttpsError('invalid-argument', 'Select two different locations at least 150 metres apart.');
   if (!routingCredentialsConfigured(endpoint, key)) throw new HttpsError('failed-precondition', 'Verified road routing credentials are not configured.', { reason: 'ROUTING_CONFIGURATION' });
   const root = new URL(endpoint);
   const route = async (a, b) => {
     const body = await fetchOSRM(endpointUrl(root, 'route', coordinates(a) + ";" + coordinates(b)), { key, fetcher });
-    return interpretDrivingRoute(body, from, to);
+    if (body.code === 'NoRoute' || body.code === 'NoSegment') return null;
+    const valid = interpretDrivingRoute(body, from, to);
+    if (valid) return valid;
+    const candidate = body.routes?.[0];
+    if (!candidate || !Number.isFinite(Number(candidate.distance)) ||
+        !Number.isFinite(Number(candidate.duration)) ||
+        !Array.isArray(candidate.geometry?.coordinates) || candidate.geometry.coordinates.length < 2 ||
+        candidate.geometry.coordinates.some(p => !validPoint(Array.isArray(p) ? point(p) : null))) {
+      throw new HttpsError('unavailable', 'The routing provider returned invalid road geometry.');
+    }
+    throw new HttpsError('failed-precondition', 'The nearest drivable access is too far away or does not match the selected route.', { reason: 'ROAD_ACCESS_TOO_FAR' });
   };
   const initial = await route(from, to);
   if (initial) return initial;
