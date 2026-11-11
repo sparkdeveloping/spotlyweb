@@ -4,6 +4,7 @@ import {readFileSync} from "node:fs";
 import {rideCreateRequestSchema,sendCreateRequestSchema} from "../lib/contracts/schemas.js";
 import {routeEndpoint,interpretVerifiedRoute,getVerifiedRideRoute,assertRoadAccessConsent} from "../lib/ride-routing.js";
 import {mobilityRequestFingerprint,mobilityRequestReferences,requireMatchingReplay,liveMobilityState} from "../lib/mobility-request-integrity.js";
+import {hasVerifiedRoadAccess,needsRoadAccessAcknowledgement,roadAccessConsent} from "../lib/mobility-road-access-client.js";
 
 const pickup={lat:-17.829,lng:31.047,country:"ZW",city:"Harare",area:"Harare",label:"Road pickup"};
 const dropoff={lat:-17.806,lng:31.061,country:"ZW",city:"Harare",label:"Destination"};
@@ -82,5 +83,26 @@ test("replays are stable, scoped to one customer and refuse changed content",()=
   assert.match(src,/transaction\.create\(requestRef/);
   assert.match(src,/assertRoadAccessConsent\(/);
   assert.match(src,/if\(transactionResult\.reused\)/);
+ }
+});
+
+test("web Ride and Send present the same curb consent and retry contract as iOS",()=>{
+ const direct={pickup:{lat:pickup.lat,lng:pickup.lng,distanceMeters:0,requiresConfirmation:false},
+  destination:{lat:dropoff.lat,lng:dropoff.lng,distanceMeters:0,requiresConfirmation:false}};
+ assert.equal(hasVerifiedRoadAccess(direct),true);
+ assert.equal(needsRoadAccessAcknowledgement(direct),false);
+ assert.equal(roadAccessConsent(direct,false),undefined);
+ const adjusted={...direct,pickup:{...direct.pickup,distanceMeters:80,requiresConfirmation:true,roadName:"Bessemer Road"}};
+ assert.equal(needsRoadAccessAcknowledgement(adjusted),true);
+ assert.equal(roadAccessConsent(adjusted,false),undefined);
+ assert.deepEqual(roadAccessConsent(adjusted,true),{acknowledged:true,
+  pickup:{lat:pickup.lat,lng:pickup.lng},destination:{lat:dropoff.lat,lng:dropoff.lng}});
+ assert.equal(hasVerifiedRoadAccess({...direct,pickup:{...direct.pickup,distanceMeters:800}}),false);
+ for(const file of ["components/ride-app.js","components/send-app.js"]){
+  const src=read(file);
+  assert.match(src,/roadAccessConsent\(quote\.accessPoints,roadAccessAcknowledged\)/);
+  assert.match(src,/hasVerifiedRoadAccess\(quote\.accessPoints\)/);
+  assert.match(src,/needsRoadAccessAcknowledgement\(quote\.accessPoints\)/);
+  assert.match(src,/crypto\.randomUUID\(\)/);
  }
 });
