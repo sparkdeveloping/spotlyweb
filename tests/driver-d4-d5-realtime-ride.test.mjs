@@ -9,7 +9,7 @@ test("offer collections expose only the authenticated Driver's own offers for re
   for(const kind of ["deliveryOffers","rideOffers","parcelOffers"]){
     const start=rules.indexOf("match /"+kind+"/{offerId}");
     assert.notEqual(start,-1,kind);
-    const block=rules.slice(start,rules.indexOf("}",start)+1);
+    const block=rules.slice(start,rules.indexOf("allow create, update, delete: if false;",start)+"allow create, update, delete: if false;".length);
     assert.match(block,/allow get: if activeAccount\(\) && resource\.data\.driverId == request\.auth\.uid/);
     assert.match(block,/allow list: if activeAccount\(\)/);
     assert.match(block,/request\.query\.limit <= 40 && resource\.data\.driverId == request\.auth\.uid/);
