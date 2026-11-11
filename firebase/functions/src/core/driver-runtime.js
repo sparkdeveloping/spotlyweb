@@ -421,8 +421,8 @@ export async function registerDriverWorkProof(actor, data = {}) {
   const kind = text(data.kind, 20); const workId = text(data.workId, 180); const config = COLLECTIONS[kind];
   if (!config || !["delivery", "send"].includes(kind) || !workId) throw new HttpsError("invalid-argument", "Choose the work request that needs proof.");
   const { firestore, storage } = spotlyAdmin();
-  const purpose = text(data.purpose || "delivery", 16);
-  if (!["delivery", "return"].includes(purpose) || (purpose === "return" && kind !== "send"))
+  const requestedPurpose = text(data.purpose || "delivery", 16);
+  if (!["delivery", "return"].includes(requestedPurpose) || (requestedPurpose === "return" && kind !== "send"))
     throw new HttpsError("invalid-argument", "Choose a valid work-proof purpose.");
   const proofPhotoUrl = await validateDriverProofUrl(storage, { actorId: actor.uid, kind, workId, url: data.proofPhotoUrl });
   const ref = firestore.collection(config.work).doc(workId); const doc = await ref.get();
@@ -430,6 +430,10 @@ export async function registerDriverWorkProof(actor, data = {}) {
   const work = doc.data() || {};
   if (work.assignedDriverId !== actor.uid) throw new HttpsError("permission-denied", "This work is assigned to another Driver.");
   if (finished(kind, work.state)) throw new HttpsError("failed-precondition", "Completed work cannot accept new proof.");
+  // Earlier Driver builds do not send a proof-purpose field. Interpret a legacy
+  // upload made DURING a confirmed return as return evidence, never as delivery.
+  const purpose = kind === "send" && work.state === "return_in_progress" && data.purpose == null ?
+    "return" : requestedPurpose;
   if (purpose === "return" && work.state !== "return_in_progress")
     throw new HttpsError("failed-precondition", "Start the confirmed return before uploading return proof.");
   if (purpose === "delivery" && kind === "send" && ["handoff_exception","return_in_progress"].includes(work.state))
