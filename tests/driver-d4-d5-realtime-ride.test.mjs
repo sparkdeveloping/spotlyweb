@@ -35,7 +35,7 @@ test("assigned Ride receives the original verified quote route, no Apple or fabr
  const start=source.indexOf("function workPayload(kind, work)");
  assert.notEqual(start,-1);
  const code=source.slice(start,start+4600);
- assert.match(code,/routePath: kind === "ride" && Array\.isArray\(work\.quote\?\.routePath\)/);
+ assert.match(code,/routePath: kind === "ride" && work\.quote\?\.routeSource === "verified_road_route" && Array\.isArray\(work\.quote\?\.routePath\)/);
  assert.match(code,/Math\.abs\(point\.lat\) <= 90/);
  assert.match(code,/Math\.abs\(point\.lng\) <= 180/);
  assert.match(code,/\.slice\(0, 250\)/);
