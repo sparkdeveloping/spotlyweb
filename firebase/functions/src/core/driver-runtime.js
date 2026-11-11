@@ -321,7 +321,19 @@ export async function driverBootstrapData(actor) {
   const incidents = rows(incidentsSnap).map((item) => ({ id: item.id, workId: item.deliveryJobId || item.rideId || item.parcelJobId || "", category: text(item.category || "other", 60), description: text(item.description, 2000), status: text(item.status || "open", 40), createdAt: item.createdAt || new Date().toISOString() })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const documents = rows(documentsSnap);
   const runtimeEligibility = evaluateDriverEligibility({ driver, application, vehicles, documents });
-  return { profile: profile(actor, application, driver, selectedVehicle), application, vehicle: selectedVehicle, documents, zones, presence: presenceDoc?.exists?.() ? plain(presenceDoc.val()) : null, offers: [...deliveryOffers, ...rideOffers, ...sendOffers], activeWork, completedWork, cancelledWork, earnings: earningsSummary(earnings), walletTransactions, notifications, incidents, canGoOnline: runtimeEligibility.eligible && !activeWork, applicationStatus: application.status || "not_started" };
+  // Review state is an owner-scoped projection. Never imply approval from a
+  // client edit or locally stored document, and do not leak internal notes.
+  const accountReadiness = {
+    driverStatus: text(driver.status || "not_approved", 60),
+    applicationStatus: text(application.status || "not_started", 60),
+    safetyHold: driver.safetyHold === true,
+    complianceHold: driver.complianceHold === true,
+    financeHold: driver.rideFinanceHold === true || driver.sendFinanceHold === true,
+    payoutVerificationState: text(driver.payoutVerificationState || "unverified", 60),
+    eligible: runtimeEligibility.eligible === true,
+    reason: runtimeEligibility.eligible ? "" : text(runtimeEligibility.reason || "Spotly Operations must approve your account and vehicle before work.", 300)
+  };
+  return { profile: profile(actor, application, driver, selectedVehicle), accountReadiness, application, vehicle: selectedVehicle, documents, zones, presence: presenceDoc?.exists?.() ? plain(presenceDoc.val()) : null, offers: [...deliveryOffers, ...rideOffers, ...sendOffers], activeWork, completedWork, cancelledWork, earnings: earningsSummary(earnings), walletTransactions, notifications, incidents, canGoOnline: runtimeEligibility.eligible && !activeWork, applicationStatus: application.status || "not_started" };
 }
 
 async function eligibility(firestore, uid, { kind = null, work = null } = {}) {
