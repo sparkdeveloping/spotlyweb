@@ -13,6 +13,8 @@ import {
   SPOTLY_FUNCTIONS_REGION,
   SPOTLY_MEDIA_DISCOVERY_CONTRACT_SHA256,
   SPOTLY_MEDIA_DISCOVERY_CONTRACT_VERSION,
+  SPOTLY_MONEY_CONTRACT_VERSION,
+  SPOTLY_MONEY_CONTRACT_SHA256,
   SPOTLY_PROJECT_ID
 } from "./core/platform.js";
 import { spotlyAdmin } from "./core/admin.js";
@@ -23,7 +25,8 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
-import { customerRuntimeSnapshot, rideQuote, sendQuote } from "./core/customer-runtime.js";
+import { customerRuntimeSnapshot, rideQuote, sendQuote, ridePickupSuggestions } from "./core/customer-runtime.js";
+import { verifiedMobilityRoute, routingCredentialsConfigured } from "./core/mobility-road-access.js";
 import { searchCustomerPlaces } from "./core/customer-place-search.js";
 import { queryDiscoveryProjection } from "./core/discovery-projection.js";
 import { notifyLiveEventUpdate, runBookLiveReminders } from "./core/book-live-notifications.js";
@@ -42,6 +45,9 @@ setGlobalOptions({
 const DRIVER_RIDE_PIN_KEY = defineSecret("SPOTLY_RIDE_PIN_KEY");
 const DRIVER_SEND_PIN_KEY = defineSecret("SPOTLY_SEND_PIN_KEY");
 const CUSTOMER_PLACE_SEARCH_KEY = defineSecret("SPOTLY_MAPTILER_GEOCODING_KEY");
+// Vercel environment values are NOT automatically available in Cloud Functions.
+// Bind the secret to every callable that tests or uses routing readiness.
+const CUSTOMER_ROUTING_KEY = defineSecret("SPOTLY_ROUTING_API_KEY");
 
 export const platformFoundation = defineCallable({
   name: "platformFoundation",
@@ -61,6 +67,8 @@ export const platformFoundation = defineCallable({
     customerRuntimeContractSHA256: SPOTLY_CUSTOMER_RUNTIME_CONTRACT_SHA256,
     mediaDiscoveryContractVersion: SPOTLY_MEDIA_DISCOVERY_CONTRACT_VERSION,
     mediaDiscoveryContractSHA256: SPOTLY_MEDIA_DISCOVERY_CONTRACT_SHA256,
+    moneyContractVersion: SPOTLY_MONEY_CONTRACT_VERSION,
+    moneyContractSHA256: SPOTLY_MONEY_CONTRACT_SHA256,
     capabilities: FOUNDATION_CAPABILITIES,
     serverTimeMs: Date.now()
   })
@@ -100,6 +108,7 @@ export const customerRuntime = defineCallable({
   name: "customerRuntime",
   auth: "optional",
   enforceAppCheck: true,
+  options: { secrets: [CUSTOMER_ROUTING_KEY] },
   rateLimit: { limit: 120, windowMs: 60_000 },
   handler: async ({ request, actor }) => {
     const { firestore } = spotlyAdmin();
@@ -111,6 +120,7 @@ export const customerRideQuote = defineCallable({
   name: "customerRideQuote",
   auth: "optional",
   enforceAppCheck: true,
+  options: { secrets: [CUSTOMER_ROUTING_KEY] },
   rateLimit: { limit: 60, windowMs: 60_000 },
   handler: async ({ request, actor }) => rideQuote({ firestore: spotlyAdmin().firestore, data: request.data || {}, actor })
 });
@@ -119,8 +129,45 @@ export const customerSendQuote = defineCallable({
   name: "customerSendQuote",
   auth: "optional",
   enforceAppCheck: true,
+  options: { secrets: [CUSTOMER_ROUTING_KEY] },
   rateLimit: { limit: 60, windowMs: 60_000 },
   handler: async ({ request, actor }) => sendQuote({ firestore: spotlyAdmin().firestore, data: request.data || {}, actor })
+});
+
+// Optional single pickup suggestion, validated against a real drivable route.
+export const customerRidePickupSuggestions = defineCallable({
+  name: "customerRidePickupSuggestions",
+  auth: "optional",
+  enforceAppCheck: true,
+  rateLimit: { limit: 20, windowMs: 60_000 },
+  options: { secrets: [CUSTOMER_ROUTING_KEY] },
+  handler: async ({ request }) => ridePickupSuggestions({ firestore: spotlyAdmin().firestore, data: request.data || {} })
+});
+
+// An authorized, bounded live probe for the SAME provider the iOS callables use.
+// Does not disclose coordinates, API keys, routes, user locations or secrets.
+const MOBILITY_PROBES = Object.freeze({
+  ZW: { city: "Harare", from: { lat: -17.8338, lng: 31.0385 }, to: { lat: -17.7588, lng: 31.0835 } },
+  MW: { city: "Lilongwe", from: { lat: -13.9626, lng: 33.7754 }, to: { lat: -13.9837, lng: 33.7867 } }
+});
+export const adminMobilityRouteCheck = defineCallable({
+  name: "adminMobilityRouteCheck",
+  auth: "required",
+  roles: ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager"],
+  enforceAppCheck: true,
+  rateLimit: { limit: 6, windowMs: 3_600_000 },
+  options: { secrets: [CUSTOMER_ROUTING_KEY] },
+  handler: async ({ request }) => {
+    const country = String(request.data?.country || "").toUpperCase();
+    const probe = MOBILITY_PROBES[country];
+    if (!probe) throw new HttpsError("invalid-argument", "Choose Zimbabwe or Malawi.");
+    if (!routingCredentialsConfigured()) return { configured: false, country, routeReady: false };
+    const started = Date.now();
+    const result = await verifiedMobilityRoute(probe.from, probe.to);
+    return { configured: true, country, city: probe.city, routeReady: true,
+      distanceKm: result.distanceKm, durationMinutes: result.durationMinutes,
+      durationMs: Date.now() - started };
+  }
 });
 
 // Dedicated licensed place/POI search for native Ride, Send and address flows.
