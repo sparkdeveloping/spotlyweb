@@ -266,7 +266,7 @@ function workPayload(kind, work) {
     // Driver-specific routing is a projection of the previously verified customer
     // road route. Never request Apple directions or synthesize a straight line.
     serviceType: kind === "ride" ? text(work.serviceType || work.quote?.serviceType || "economy", 20) : null,
-    routePath: kind === "ride" && Array.isArray(work.quote?.routePath)
+    routePath: kind === "ride" && work.quote?.routeSource === "verified_road_route" && Array.isArray(work.quote?.routePath)
       ? work.quote.routePath.filter((point) => point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
         && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180).slice(0, 250)
         .map((point) => ({ lat: point.lat, lng: point.lng })) : [],
