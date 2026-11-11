@@ -8,10 +8,11 @@ import { dispatchParcel, estimateParcel, makeParcelNumber, makeParcelPin, normal
 import { safeText } from "@/lib/server-helpers";
 import {sealParcelPin} from "@/lib/send-security";
 import {validateSendTerritory} from "@/lib/send-territory";
-import {getVerifiedRideRoute} from "@/lib/ride-routing";
+import {getVerifiedRideRoute,assertRoadAccessConsent} from "@/lib/ride-routing";
 import { sendCreateRequestSchema } from "@/lib/contracts/schemas";
 import { requireServiceLive } from "@/lib/service-availability-server";
 import { loadRealtimeDriverLocation } from "@/lib/customer-driver-tracking-server";
+import { liveMobilityState, mobilityRequestFingerprint, mobilityRequestReferences, requireMatchingReplay } from "@/lib/mobility-request-integrity";
 
 export const runtime = "nodejs";
 const requestSchema = sendCreateRequestSchema;
@@ -87,6 +88,12 @@ export async function POST(request) {
       return Response.json({ ok: true, parcelJobId: body.parcelJobId, state: "cancelled", paymentStatus });
     }
 
+    const {requestRef,activeRef}=mobilityRequestReferences(db,user.uid,"send",body.idempotencyKey);
+    const fingerprint=mobilityRequestFingerprint(body);
+    if(requestRef){
+      const replay=requireMatchingReplay(await requestRef.get(),fingerprint);
+      if(replay)return Response.json({ok:true,...replay,reused:true});
+    }
     const pickup = normalizeParcelPoint(body.pickup); const dropoff = normalizeParcelPoint(body.dropoff); if (!pickup || !dropoff) throw Object.assign(new Error("Set valid pickup and drop-off locations."), { status: 400 });
     const settingsSnap = await db.collection("platformSettings").doc("global").get(); const settings = settingsSnap.exists ? settingsSnap.data() : {};
     requireServiceLive(settings, { service: "send", country: pickup.country, city: pickup.city });
@@ -97,6 +104,7 @@ export async function POST(request) {
     const active = await db.collection("parcelJobs").where("customerId", "==", user.uid).where("state", "in", ["requested", "scheduled", "awaiting_payment", "searching_driver", "driver_assigned", "driver_to_pickup", "driver_arrived_pickup", "pickup_verification", "collected", "en_route", "driver_arrived_dropoff", "handoff_verification","handoff_exception","return_in_progress"]).limit(1).get();
     if (!active.empty) throw Object.assign(new Error("Finish or cancel your active Send request before creating another one."), { status: 409 });
     const roadRoute=await getVerifiedRideRoute(pickup,dropoff);
+    const roadAccessConsentVerified=assertRoadAccessConsent(roadRoute,body.roadAccessConsent);
     const quote = estimateParcel({ pickup, dropoff, parcelSize: body.parcelSize, settings,route:roadRoute });
     if(Math.round(quote.total*100)!==Math.round(body.quotedTotal*100)||quote.currency!==body.quotedCurrency)throw Object.assign(new Error("Send price changed; refresh the quote before booking."),{status:409}); if (body.estimatedWeightKg && Number(body.estimatedWeightKg) > Number(quote.maxKg || 100)) throw Object.assign(new Error(`This ${quote.parcelSizeLabel.toLowerCase()} parcel size supports up to ${quote.maxKg} kg. Choose a larger size.`), { status: 400 }); const parcelRef = db.collection("parcelJobs").doc(); const orderRef = db.collection("orders").doc();
     let scheduledPickupAt = null;
@@ -110,11 +118,28 @@ export async function POST(request) {
     const number = makeParcelNumber(); const pickupPin = makeParcelPin(); const dropoffPin = makeParcelPin();
     const pickupPinCiphertext=sealParcelPin(pickupPin),dropoffPinCiphertext=sealParcelPin(dropoffPin); const now = FieldValue.serverTimestamp(); const state = body.paymentMethod === "paynow" ? "awaiting_payment" : scheduledPickupAt ? "scheduled" : "requested";
     const senderName = safeText(body.senderName, 160); const senderPhone = safeText(body.senderPhone, 50); const recipientName = safeText(body.recipientName, 160); const recipientPhone = safeText(body.recipientPhone, 50);
-    await db.runTransaction(async (transaction) => {
-      transaction.create(parcelRef, { number, customerId: user.uid, orderId: orderRef.id, state, pickup, dropoff, parcelSize: body.parcelSize, parcelDescription: safeText(body.parcelDescription, 500), estimatedWeightKg: Number(body.estimatedWeightKg || 0) || null, declaredValue: Number(body.declaredValue || 0), instructions: safeText(body.instructions || "", 500), senderName, senderPhone, recipientName, recipientPhone, quote, currency: quote.currency, requiredVehicleTypes: quote.requiredVehicleTypes, proofPhotoRequired: quote.proofPhotoRequired === true, paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupMode: scheduledPickupAt ? "scheduled" : "now", scheduledPickupAt, pickupPinCiphertext, dropoffPinCiphertext, country:pickup.country, requestedAt: now, createdAt: now, updatedAt: now });
+    const transactionResult=await db.runTransaction(async (transaction) => {
+      const replaySnap=requestRef?await transaction.get(requestRef):null;
+      const replay=requireMatchingReplay(replaySnap,fingerprint);
+      if(replay)return {reused:true,response:replay};
+      const lockSnap=await transaction.get(activeRef);
+      if(lockSnap.exists&&lockSnap.data().entityId){
+        const previous=await transaction.get(db.collection("parcelJobs").doc(lockSnap.data().entityId));
+        if(previous.exists&&liveMobilityState(previous.data().state,"send"))
+          throw Object.assign(new Error("Finish or cancel your active Send request before creating another one."),{status:409});
+      }
+      // Handoff PINs remain sealed inside the parcel; never return them from creation.
+      const response={parcelJobId:parcelRef.id,orderId:orderRef.id,number,state,
+        paymentRequired:body.paymentMethod==="paynow"};
+      transaction.set(activeRef,{entityId:parcelRef.id,updatedAt:now});
+      if(requestRef)transaction.create(requestRef,{fingerprint,response,createdAt:now,
+        expiresAt:Timestamp.fromMillis(Date.now()+30*24*60*60_000)});
+      transaction.create(parcelRef, { number, customerId: user.uid, orderId: orderRef.id, state, roadAccessConsentVerified, pickup, dropoff, parcelSize: body.parcelSize, parcelDescription: safeText(body.parcelDescription, 500), estimatedWeightKg: Number(body.estimatedWeightKg || 0) || null, declaredValue: Number(body.declaredValue || 0), instructions: safeText(body.instructions || "", 500), senderName, senderPhone, recipientName, recipientPhone, quote, currency: quote.currency, requiredVehicleTypes: quote.requiredVehicleTypes, proofPhotoRequired: quote.proofPhotoRequired === true, paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupMode: scheduledPickupAt ? "scheduled" : "now", scheduledPickupAt, pickupPinCiphertext, dropoffPinCiphertext, country:pickup.country, requestedAt: now, createdAt: now, updatedAt: now });
       transaction.create(orderRef, { number, customerId: user.uid, customerName: senderName, businessName: "Spotly Send", transactionType: "send", fulfilment: "send", parcelJobId: parcelRef.id, sendStatus: state, status: body.paymentMethod === "paynow" ? "awaiting_payment" : scheduledPickupAt ? "accepted" : "requested", paymentMethod: body.paymentMethod, paymentStatus: body.paymentMethod === "cash" ? "cash_due" : "unpaid", pickupMode: scheduledPickupAt ? "scheduled" : "now", scheduledPickupAt, currency: quote.currency, pickup, dropoff, items: [{ productId: `send_${body.parcelSize}`, name: `${quote.parcelSizeLabel} parcel delivery`, variant: body.estimatedWeightKg ? `${Number(body.estimatedWeightKg)} kg` : "", quantity: 1, unitPrice: quote.total, lineTotal: quote.total }], totals: { subtotal: quote.total, serviceFee: quote.bookingFee, deliveryFee: 0, discount: 0, total: quote.total }, total: quote.total, createdAt: now, updatedAt: now });
       transaction.create(db.collection("parcelEvents").doc(), { parcelJobId: parcelRef.id, type: "parcel.requested", actorType: "customer", actorId: user.uid, previousState: null, state, metadata: { orderId: orderRef.id, paymentMethod: body.paymentMethod }, createdAt: now });
+      return {reused:false,response};
     });
+    if(transactionResult.reused)return Response.json({ok:true,...transactionResult.response,reused:true});
     if (body.paymentMethod === "cash" && !scheduledPickupAt)
       await dispatchParcel({ db, messaging, parcelJobId: parcelRef.id, actorId: user.uid })
        .catch(async err=>{await db.collection("adminQueueItems").doc("send_dispatch_failed_"+parcelRef.id).set({
@@ -122,7 +147,7 @@ export async function POST(request) {
          priority:"high",status:"open",title:"Send dispatch requires attention",
          detail:String(err?.message||"Unknown failure").slice(0,300),createdAt:FieldValue.serverTimestamp()
        },{merge:true}).catch(()=>{});});
-    return Response.json({ ok: true, parcelJobId: parcelRef.id, orderId: orderRef.id, number, state, paymentRequired: body.paymentMethod === "paynow", pickupPin, dropoffPin });
+    return Response.json({ ok: true, ...transactionResult.response });
   } catch (error) {
     if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the Send request details." }, { status: 400 });
     return apiError(error);
