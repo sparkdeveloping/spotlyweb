@@ -146,6 +146,32 @@ export async function rideQuote({ firestore, data, actor }) {
   const bookingReason = bookingAvailable ? "" : launchAccess.reason || decision.reason || "Ride requests are not live here yet.";
   return { ok: true, quote, serviceAvailability: decision, bookingAvailable, bookingReason, serviceTypes: Object.fromEntries(Object.entries(RIDE_TYPES).map(([key, value]) => [key, { ...value, ...(pricing.serviceTypes?.[key] || {}) }])), paymentMethods: methods };
 }
+// One suggested roadside pickup for the destination-first native Ride flow.
+// It is derived from the same verified routing engine as the fare quote;
+// never return a guessed curb, straight-line endpoint or fake vehicle.
+export async function ridePickupSuggestions({ firestore, data }) {
+  const origin = normalizeMobilityPoint(data?.origin);
+  const destination = normalizeMobilityPoint(data?.destination);
+  if (!origin || !destination || origin.country !== destination.country) {
+    throw new HttpsError("invalid-argument", "Choose a pickup and a destination in the same country.");
+  }
+  const settingsSnap = await firestore.collection("platformSettings").doc("global").get();
+  const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
+  const decision = liveDecision(settings, "ride", origin.country, origin.city);
+  if (!decision?.discoverable) return { ok: true, candidates: [] };
+  ensureTerritory(origin, settings.mobility || {});
+  if (!withinCountry(destination)) return { ok: true, candidates: [] };
+  const route = await verifiedMobilityRoute(origin, destination);
+  const access = route.accessPoints?.pickup;
+  if (!access || !withinCountry({ ...access, country: origin.country })) return { ok: true, candidates: [] };
+  const label = access.roadName ? `Near ${access.roadName}` : "Nearby road pickup";
+  return { ok: true, candidates: [{
+    lat: access.lat, lng: access.lng,
+    distanceMeters: access.distanceMeters,
+    label, verifiedRoute: true
+  }] };
+}
+
 export async function sendQuote({ firestore, data, actor }) {
   const pickup = normalizeMobilityPoint(data?.pickup), dropoff = normalizeMobilityPoint(data?.dropoff), parcelSize = text(data?.parcelSize, 24).toLowerCase();
   if (!pickup || !dropoff || !PARCEL_SIZES[parcelSize] || pickup.country !== dropoff.country) throw new HttpsError("invalid-argument", "Review the Send pickup, destination and parcel size.");
