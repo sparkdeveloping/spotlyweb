@@ -670,16 +670,94 @@ export async function driverWorkAction(actor, data = {}) {
 }
 
 export async function createDriverIncident(actor, data = {}) {
-  const { firestore } = spotlyAdmin(); const kind = text(data.kind, 20); const workId = text(data.workId, 180); const category = text(data.category, 60) || "other"; const description = text(data.description, 2000); const severity = ["low", "medium", "high", "critical"].includes(data.severity) ? data.severity : "medium";
-  if (!description || description.length < 3) throw new HttpsError("invalid-argument", "Describe what happened.");
-  let work = null; let config = null;
-  if (workId) { config = COLLECTIONS[kind]; if (!config) throw new HttpsError("invalid-argument", "Choose the related work type."); const doc = await firestore.collection(config.work).doc(workId).get(); if (!doc.exists || doc.data()?.assignedDriverId !== actor.uid) throw new HttpsError("permission-denied", "This work is not assigned to your Driver account."); work = doc.data() || {}; }
-  const ref = firestore.collection("driverIncidents").doc(); const now = FieldValue.serverTimestamp();
-  await ref.set({ driverId: actor.uid, deliveryJobId: kind === "delivery" ? workId || null : null, rideId: kind === "ride" ? workId || null : null, parcelJobId: kind === "send" ? workId || null : null, orderId: work?.orderId || null, businessId: work?.businessId || null, customerId: work?.customerId || null, category, description, severity, status: "open", createdAt: now, updatedAt: now });
-  if (["high", "critical"].includes(severity)) { await firestore.collection("drivers").doc(actor.uid).set({ safetyHold: true, updatedAt: now }, { merge: true }); if (workId && !finished(kind, work?.state)) await firestore.collection(config.work).doc(workId).set({ safetyReviewHold: true, safetyIncidentId: ref.id, exceptionCode: "safety_review", updatedAt: now }, { merge: true }); }
-  await firestore.collection("adminQueueItems").doc(`driver_incident_${ref.id}`).set({ queue: "driver-incidents", type: "driver_incident", entityId: ref.id, driverId: actor.uid, priority: severity === "critical" ? "urgent" : severity, status: "open", title: `${category.replaceAll("_", " ")} incident`, createdAt: now, updatedAt: now });
-  await writeFunctionAudit({ action: "driver.incident_reported", actor, entityType: "driverIncident", entityId: ref.id, metadata: { kind, workId: workId || null, category, severity } });
-  return { incidentId: ref.id };
+  const { firestore } = spotlyAdmin();
+  const kind = text(data.kind, 20);
+  const workId = text(data.workId, 180);
+  const category = text(data.category, 60) || "other";
+  const description = text(data.description, 2000);
+  const severity = text(data.severity, 20) || "medium";
+  const requestKey = text(data.requestKey, 64);
+  const categories = new Set(["safety", "crash", "unsafe_person", "breakdown",
+    "customer_unreachable", "business_problem", "merchant_closed", "customer_problem",
+    "order_damaged", "address_problem", "ride_no_show", "parcel_mismatch",
+    "checkout_problem", "return_required", "cancellation_request", "other"]);
+  if (!description || description.length < 3 || !categories.has(category))
+    throw new HttpsError("invalid-argument", "Review the incident details.");
+  if (!["low", "medium", "high", "critical"].includes(severity))
+    throw new HttpsError("invalid-argument", "Choose a valid incident severity.");
+  if (requestKey && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey))
+    throw new HttpsError("invalid-argument", "Use a valid incident request identifier.");
+  const config = workId ? COLLECTIONS[kind] : null;
+  if (workId && !config)
+    throw new HttpsError("invalid-argument", "Choose the related work type.");
+  if (!workId && kind)
+    throw new HttpsError("invalid-argument", "An unrelated incident must not reference a work type.");
+  const fingerprint = createHash("sha256").update(JSON.stringify({
+    driverId: actor.uid, kind, workId, category, description, severity
+  })).digest("hex");
+  const incidentId = requestKey ? createHash("sha256")
+    .update(`driver-incident:${actor.uid}:${requestKey}`).digest("hex").slice(0, 48) : null;
+  const ref = incidentId ? firestore.collection("driverIncidents").doc(incidentId) :
+    firestore.collection("driverIncidents").doc();
+  const queueRef = firestore.collection("adminQueueItems").doc(`driver_incident_${ref.id}`);
+  const workRef = workId ? firestore.collection(config.work).doc(workId) : null;
+  let reused = false;
+  let incidentStatus = "open";
+  await firestore.runTransaction(async (transaction) => {
+    const [previous, workDoc] = await Promise.all([
+      transaction.get(ref),
+      workRef ? transaction.get(workRef) : Promise.resolve(null)
+    ]);
+    if (previous.exists) {
+      const original = previous.data() || {};
+      if (original.driverId !== actor.uid || original.requestFingerprint !== fingerprint)
+        throw new HttpsError("already-exists", "This report request identifier was used for different details.");
+      reused = true;
+      incidentStatus = text(original.status, 40) || "open";
+      return;
+    }
+    let work = null;
+    if (workRef) {
+      if (!workDoc?.exists || workDoc.data()?.assignedDriverId !== actor.uid)
+        throw new HttpsError("permission-denied", "This work is not assigned to your Driver account.");
+      work = workDoc.data() || {};
+    }
+    const now = FieldValue.serverTimestamp();
+    transaction.create(ref, {
+      driverId: actor.uid, requestFingerprint: fingerprint,
+      deliveryJobId: kind === "delivery" ? workId : null,
+      rideId: kind === "ride" ? workId : null,
+      parcelJobId: kind === "send" ? workId : null,
+      orderId: work?.orderId || null, businessId: work?.businessId || null,
+      customerId: work?.customerId || null, category, description, severity,
+      status: "open", createdAt: now, updatedAt: now
+    });
+    transaction.create(queueRef, {
+      queue: "driver-incidents", type: "driver_incident", entityId: ref.id,
+      driverId: actor.uid, deliveryJobId: kind === "delivery" ? workId : null,
+      rideId: kind === "ride" ? workId : null, parcelJobId: kind === "send" ? workId : null,
+      priority: severity === "critical" ? "urgent" : severity,
+      status: "open", title: `${category.replaceAll("_", " ")} incident`,
+      createdAt: now, updatedAt: now
+    });
+    if (["high", "critical"].includes(severity)) {
+      transaction.set(firestore.collection("drivers").doc(actor.uid),
+        { safetyHold: true, updatedAt: now }, { merge: true });
+      if (workRef && !finished(kind, work.state))
+        transaction.set(workRef, {
+          safetyReviewHold: true, safetyIncidentId: ref.id, exceptionCode: "safety_review",
+          updatedAt: now
+        }, { merge: true });
+    }
+  });
+  // Audit logging is best-effort after the atomic incident+queue commit. An
+  // audit outage must not tell the Driver that a committed report has failed.
+  if (!reused)
+    await writeFunctionAudit({
+      action: "driver.incident_reported", actor, entityType: "driverIncident",
+      entityId: ref.id, metadata: { kind, workId: workId || null, category, severity }
+    }).catch(() => {});
+  return { incidentId: ref.id, status: incidentStatus, reused };
 }
 
 export async function markDriverNotificationRead(actor, data = {}) { const { firestore } = spotlyAdmin(); const id = text(data.id, 180); if (!id) throw new HttpsError("invalid-argument", "Choose a notification."); const ref = firestore.collection("notifications").doc(id); const doc = await ref.get(); if (!doc.exists || doc.data()?.userId !== actor.uid) throw new HttpsError("not-found", "This notification was not found."); await ref.set({ read: true, readAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return { id, read: true }; }
