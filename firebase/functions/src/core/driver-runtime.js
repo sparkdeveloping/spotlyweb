@@ -56,8 +56,24 @@ function row(doc) { return doc?.exists ? { id: doc.id, ...plain(doc.data()) } : 
 function rows(snapshot) { return snapshot?.docs?.map((doc) => ({ id: doc.id, ...plain(doc.data()) })) || []; }
 function text(value, max = 220) { return String(value || "").trim().slice(0, max); }
 function num(value, fallback = 0) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
-function country(value) { const result = text(value, 2).toUpperCase(); return ["MW", "ZW"].includes(result) ? result : "ZW"; }
+// Invalid or absent account territory is never silently treated as Zimbabwe.
+function country(value) { const result = text(value, 2).toUpperCase(); return ["MW", "ZW"].includes(result) ? result : ""; }
 function area(value) { return text(value || "default", 80).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "default"; }
+function approvedTerritory(driver = {}, application = {}) {
+  const code = country(driver.country || application.country);
+  const city = text(driver.city || application.city, 80).trim();
+  const cityArea = city ? area(city) : "";
+  const verified = Boolean(code && city && cityArea && cityArea !== "default");
+  return { verified, country: verified ? code : "", city: verified ? city : "",
+    defaultArea: verified ? cityArea : "", defaultAreaLabel: verified ? city : "",
+    reason: verified ? "" : "Your operating country or city needs approval in Spotly Driver." };
+}
+function matchingActiveDispatchZone(zone, territory, requestedArea) {
+  return territory.verified && zone && country(zone.country) === territory.country &&
+    (!zone.city || text(zone.city, 80).trim().toLowerCase() === territory.city.toLowerCase()) &&
+    zone.active !== false && zone.status !== "disabled" &&
+    area(zone.id) === requestedArea;
+}
 function finished(kind, state) { return FINISHED[kind]?.has(String(state || "")) === true; }
 function canonicalVehicleType(value) {
   const raw = text(value, 40).toLowerCase();
@@ -122,6 +138,8 @@ function capabilityReady({ driver, application, vehicle, documents, capability, 
 }
 function evaluateDriverEligibility({ driver = {}, application = {}, vehicles = [], documents = [], kind = null, work = null }) {
   const vehicle = vehicles.find((item) => item.id === driver.selectedVehicleId && item.status === "approved") || vehicles.find((item) => item.status === "approved") || null;
+  const territory = approvedTerritory(driver, application);
+  if (!territory.verified) return { eligible: false, reason: territory.reason, vehicle };
   if (!ACTIVE_DRIVER_STATES.has(driver.status) || !vehicle) return { eligible: false, reason: "Your Driver account and vehicle must be approved before accepting work.", vehicle: null };
   if (driver.complianceHold === true) return { eligible: false, reason: "A compliance review is preventing new Driver work.", vehicle };
   if (driver.safetyHold === true) return { eligible: false, reason: "A safety review is preventing new Driver work.", vehicle };
@@ -321,7 +339,14 @@ export async function driverBootstrapData(actor) {
   const incidents = rows(incidentsSnap).map((item) => ({ id: item.id, workId: item.deliveryJobId || item.rideId || item.parcelJobId || "", category: text(item.category || "other", 60), description: text(item.description, 2000), status: text(item.status || "open", 40), createdAt: item.createdAt || new Date().toISOString() })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const documents = rows(documentsSnap);
   const runtimeEligibility = evaluateDriverEligibility({ driver, application, vehicles, documents });
-  return { profile: profile(actor, application, driver, selectedVehicle), application, vehicle: selectedVehicle, documents, zones, presence: presenceDoc?.exists?.() ? plain(presenceDoc.val()) : null, offers: [...deliveryOffers, ...rideOffers, ...sendOffers], activeWork, completedWork, cancelledWork, earnings: earningsSummary(earnings), walletTransactions, notifications, incidents, canGoOnline: runtimeEligibility.eligible && !activeWork, applicationStatus: application.status || "not_started" };
+  // City scope is the safe default even when no optional dispatchZones exist.
+  // The app may offer active zones as optional finer-grained selections.
+  const dispatchReadiness = {
+    ...approvedTerritory(driver, application),
+    eligible: runtimeEligibility.eligible,
+    eligibilityReason: runtimeEligibility.eligible ? "" : runtimeEligibility.reason
+  };
+  return { profile: profile(actor, application, driver, selectedVehicle), dispatchReadiness, application, vehicle: selectedVehicle, documents, zones, presence: presenceDoc?.exists?.() ? plain(presenceDoc.val()) : null, offers: [...deliveryOffers, ...rideOffers, ...sendOffers], activeWork, completedWork, cancelledWork, earnings: earningsSummary(earnings), walletTransactions, notifications, incidents, canGoOnline: runtimeEligibility.eligible && !activeWork, applicationStatus: application.status || "not_started" };
 }
 
 async function eligibility(firestore, uid, { kind = null, work = null } = {}) {
@@ -332,7 +357,10 @@ async function eligibility(firestore, uid, { kind = null, work = null } = {}) {
   const driver = row(driverDoc) || {}; const application = row(applicationDoc) || {}; const vehicles = rows(vehicleSnap); const documents = rows(documentSnap);
   const result = evaluateDriverEligibility({ driver, application, vehicles, documents, kind, work });
   if (!result.eligible) throw new HttpsError("failed-precondition", result.reason);
-  return { vehicle: result.vehicle, capability: result.capability || null, country: country(driver.country || application.country), city: text(driver.city || application.city, 80) };
+  const territory = approvedTerritory(driver, application);
+  if (!territory.verified) throw new HttpsError("failed-precondition", territory.reason);
+  return { vehicle: result.vehicle, capability: result.capability || null,
+    country: territory.country, city: territory.city, defaultArea: territory.defaultArea };
 }
 async function activeWorkExists(firestore, uid) {
   const all = await Promise.all(Object.keys(COLLECTIONS).map((kind) => firestore.collection(COLLECTIONS[kind].work).where("assignedDriverId", "==", uid).limit(40).get()));
@@ -342,7 +370,10 @@ async function activeWorkExists(firestore, uid) {
 export async function updateDriverApplication(actor, data = {}) {
   const { firestore } = spotlyAdmin(); const ref = firestore.collection("driverApplications").doc(actor.uid); const snap = await ref.get(); const current = snap.exists ? snap.data() || {} : {};
   if (["approved", "ready", "active", "suspended", "offboarded"].includes(current.status)) throw new HttpsError("failed-precondition", "This Driver profile is already managed as an active account.");
-  const legalName = text(data.fullName || current.legalName, 160); const phone = text(data.phone || current.phone, 40); const city = text(data.city || current.city, 80); if (!legalName || !phone || !city) throw new HttpsError("invalid-argument", "Name, phone, country and city are required.");
+  const requestedTerritory = approvedTerritory({ country: data.country || current.country, city: data.city || current.city });
+  if (!requestedTerritory.verified)
+    throw new HttpsError("invalid-argument", "Choose a supported operating country and city.");
+  const legalName = text(data.fullName || current.legalName, 160); const phone = text(data.phone || current.phone, 40); const city = requestedTerritory.city; if (!legalName || !phone || !city) throw new HttpsError("invalid-argument", "Name, phone, country and city are required.");
   const now = FieldValue.serverTimestamp();
   await ref.set({ userId: actor.uid, legalName, phone, country: country(data.country || current.country), city, email: actor.profile?.email || actor.token?.email || "", agreementsAccepted: data.agreementsAccepted === true || current.agreementsAccepted === true, locationConsent: data.locationConsent === true || current.locationConsent === true, currentStep: Math.max(num(current.currentStep), num(data.currentStep)), status: current.status || "application_started", createdAt: current.createdAt || now, updatedAt: now }, { merge: true });
   if (data.vehicle) {
@@ -376,12 +407,30 @@ export async function driverRealtimeSession(actor, data = {}) {
   const currentPresence = await database.ref(`driverPresence/${actor.uid}`).get().catch(() => null);
   const current = currentPresence?.exists?.() ? currentPresence.val() || {} : {};
   const allowed = action === "online" ? await eligibility(firestore, actor.uid) : null;
-  const countryCode = country(data.country || allowed?.country || current.country);
-  const areaCode = area(data.area || allowed?.city || current.area);
+  // Never allow client input to override the approved country or invent a zone.
+  const countryCode = action === "online" ? allowed.country : country(current.country || data.country);
+  const requestedCountry = text(data.country, 2).toUpperCase();
+  if (action === "online" && requestedCountry && requestedCountry !== allowed.country)
+    throw new HttpsError("permission-denied", "Your country does not match your approved Driver territory.");
+  let areaCode = action === "online" ? allowed.defaultArea : area(current.area || data.area);
+  if (action === "online") {
+    const requestedArea = data.area ? area(data.area) : allowed.defaultArea;
+    if (requestedArea !== allowed.defaultArea) {
+      const zonesSnap = await firestore.collection("dispatchZones").limit(200).get();
+      const authorizedZone = zonesSnap.docs.some((doc) =>
+        matchingActiveDispatchZone({ id: doc.id, ...doc.data() },
+          { verified: true, country: allowed.country, city: allowed.city }, requestedArea));
+      if (!authorizedZone)
+        throw new HttpsError("failed-precondition", "This dispatch zone is not active for your approved city.");
+    }
+    areaCode = requestedArea;
+  }
   const now = Date.now();
   const scopeRef = database.ref(`runtimeAccess/driverDispatchScope/${actor.uid}`);
 
   if (action === "online") {
+    if (current.country && current.area && (current.country !== countryCode || current.area !== areaCode))
+      await database.ref(`dispatchPresence/${current.country}/${current.area}/${actor.uid}`).remove().catch(() => null);
     await scopeRef.remove();
     await database.ref(`runtimeAccess/driverEligible/${actor.uid}`).set(true);
     await database.ref(`runtimeAccess/driverDispatchScope/${actor.uid}/${countryCode}/${areaCode}`).set(true);
