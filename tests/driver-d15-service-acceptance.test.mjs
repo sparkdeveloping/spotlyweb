@@ -90,11 +90,15 @@ function makeService(kind, state, overrides = {}, options = {}) {
   const end = runtime.indexOf("export async function createDriverIncident(",start);
   assert.ok(start >= 0 && end > start);
   const fragment = runtime.slice(start,end).replace("export async function","async function");
-  const callable = new Function("spotlyAdmin","COLLECTIONS","text","HttpsError",
+  const transitionStart = runtime.indexOf("const TRANSITIONS = ");
+  const transitionEnd = runtime.indexOf("function plain(", transitionStart);
+  assert.ok(transitionStart >= 0 && transitionEnd > transitionStart);
+  const transitions = new Function(runtime.slice(transitionStart,transitionEnd)+"\nreturn TRANSITIONS;")();
+  const callable = new Function("spotlyAdmin","COLLECTIONS","TRANSITIONS","text","HttpsError",
     "FieldValue","validateDriverProofUrl","matchesSecretPin","num","creditCompletion",
     "eligibility","writeFunctionAudit","sendUserPush",fragment+"\nreturn driverWorkAction;")(
     () => ({firestore,database,storage:{}}),
-    collections,(v,max=220)=>String(v||"").trim().slice(0,max),
+    collections,transitions,(v,max=220)=>String(v||"").trim().slice(0,max),
     TestHttpsError,{serverTimestamp:()=>Date.now()},
     async (_storage,{url})=>url,
     ({plaintext,value})=>String(plaintext)===String(value),
