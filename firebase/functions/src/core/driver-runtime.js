@@ -515,7 +515,7 @@ async function noActiveWork(transaction, firestore, uid) {
   for (const kind of Object.keys(COLLECTIONS)) { const snap = await transaction.get(firestore.collection(COLLECTIONS[kind].work).where("assignedDriverId", "==", uid).limit(40)); if (snap.docs.some((doc) => !finished(kind, doc.data().state))) throw new HttpsError("failed-precondition", "Finish your active Spotly work before accepting another request."); }
 }
 export async function driverOfferAction(actor, data = {}) {
-  const kind = text(data.kind, 20); const action = text(data.action, 20); const offerId = text(data.offerId, 180); const config = COLLECTIONS[kind]; if (!config || !offerId || !["view", "accept", "decline"].includes(action)) throw new HttpsError("invalid-argument", "Review the Driver offer action."); const { firestore, database } = spotlyAdmin(); let allowed = null; let workId = ""; let customerId = "";
+  const kind = text(data.kind, 20); const action = text(data.action, 20); const offerId = text(data.offerId, 180); const config = COLLECTIONS[kind]; if (!config || !offerId || !["view", "accept", "decline"].includes(action)) throw new HttpsError("invalid-argument", "Review the Driver offer action."); const { firestore, database } = spotlyAdmin(); let allowed = null; let workId = ""; let customerId = ""; let reused = false; let synchronizationPending = false;
   if (action === "accept") {
     const offerDoc = await firestore.collection(config.offers).doc(offerId).get();
     if (!offerDoc.exists) throw new HttpsError("not-found", "This Driver offer is no longer available.");
@@ -524,9 +524,21 @@ export async function driverOfferAction(actor, data = {}) {
     const candidateWorkId = offer[config.idField];
     const workDoc = candidateWorkId ? await firestore.collection(config.work).doc(candidateWorkId).get() : null;
     if (!workDoc?.exists) throw new HttpsError("not-found", "This work request no longer exists.");
-    allowed = await eligibility(firestore, actor.uid, { kind, work: workDoc.data() || {} });
+    const replayCandidate = offer.state === "accepted" && workDoc.data()?.assignedDriverId === actor.uid;
+    if (!replayCandidate) {
+      const presence = await database.ref("driverPresence/" + actor.uid).get().catch(() => null);
+      if (!presence?.exists?.() || presence.val()?.state !== "online")
+        throw new HttpsError("failed-precondition", "Go online with a verified Driver session before accepting new work.");
+      allowed = await eligibility(firestore, actor.uid, { kind, work: workDoc.data() || {} });
+    }
   }
-  await firestore.runTransaction(async (transaction) => { const offerRef = firestore.collection(config.offers).doc(offerId); const offerDoc = await transaction.get(offerRef); if (!offerDoc.exists) throw new HttpsError("not-found", "This Driver offer is no longer available."); const offer = offerDoc.data() || {}; if (offer.driverId !== actor.uid) throw new HttpsError("permission-denied", "This offer belongs to another Driver."); if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now()) throw new HttpsError("deadline-exceeded", "This offer expired. Refresh your work queue."); workId = offer[config.idField]; const workRef = firestore.collection(config.work).doc(workId); const workDoc = await transaction.get(workRef); if (!workDoc.exists) throw new HttpsError("not-found", "This work request no longer exists."); const work = workDoc.data() || {};
+  await firestore.runTransaction(async (transaction) => { const offerRef = firestore.collection(config.offers).doc(offerId); const offerDoc = await transaction.get(offerRef); if (!offerDoc.exists) throw new HttpsError("not-found", "This Driver offer is no longer available."); const offer = offerDoc.data() || {}; if (offer.driverId !== actor.uid) throw new HttpsError("permission-denied", "This offer belongs to another Driver."); workId = offer[config.idField]; const workRef = firestore.collection(config.work).doc(workId); const workDoc = await transaction.get(workRef); if (!workDoc.exists) throw new HttpsError("not-found", "This work request no longer exists."); const work = workDoc.data() || {};
+    reused = false;
+    if (action === "accept" && offer.state === "accepted" && work.assignedDriverId === actor.uid) {
+      reused = true; customerId = work.customerId || ""; return;
+    }
+    if (offer.expiresAt?.toMillis?.() && offer.expiresAt.toMillis() <= Date.now())
+      throw new HttpsError("deadline-exceeded", "This offer expired. Refresh your work queue.");
     if (action === "view") { if (offer.state === "offered") transaction.set(offerRef, { state: "viewed", viewedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return; }
     if (!LIVE_OFFER_STATES.has(offer.state)) throw new HttpsError("failed-precondition", "This Driver offer is no longer available."); if (action === "decline") { transaction.set(offerRef, { state: "declined", declinedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return; }
     await noActiveWork(transaction, firestore, actor.uid); const allowedStates = kind === "delivery" ? ["awaiting_dispatch", "searching_driver"] : ["requested", "searching_driver"]; if (work.assignedDriverId || !allowedStates.includes(work.state)) throw new HttpsError("aborted", "Another Driver already accepted this request."); const now = FieldValue.serverTimestamp();
@@ -536,6 +548,9 @@ export async function driverOfferAction(actor, data = {}) {
     customerId = work.customerId || "";
   });
   if (action === "accept") {
+    // Firestore acceptance has already committed. Do not misreport a secondary
+    // presence or notification failure as an uncommitted assignment.
+    try {
     const siblings = await firestore.collection(config.offers).where(config.idField, "==", workId).limit(100).get();
     const batch = firestore.batch(); let changed = false;
     for (const doc of siblings.docs) if (doc.id !== offerId && LIVE_OFFER_STATES.has(doc.data().state)) { batch.set(doc.ref, { state: "withdrawn", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); changed = true; }
@@ -545,9 +560,15 @@ export async function driverOfferAction(actor, data = {}) {
     await database.ref(`runtimeAccess/driverDispatchScope/${actor.uid}`).remove();
     await database.ref(`driverPresence/${actor.uid}`).update({ state: "busy", currentJobId: workId, currentWorkType: kind, updatedAt: Date.now() });
     await database.ref(`runtimeAccess/activeTrips/${workId}`).update({ [`drivers/${actor.uid}`]: true, [`readers/${actor.uid}`]: true, ...(customerId ? { [`readers/${customerId}`]: true } : {}) });
-    if (customerId) await sendUserPush({ userId: customerId, title: "Driver assigned", body: "A Spotly Driver accepted your request.", data: { kind, workId }, workspace: "customer" }).catch(() => null);
+    if (!reused && customerId) await sendUserPush({ userId: customerId, title: "Driver assigned", body: "A Spotly Driver accepted your request.", data: { kind, workId }, workspace: "customer" }).catch(() => null);
+    } catch (error) {
+      synchronizationPending = true;
+      await writeFunctionAudit({ action: "driver.dispatch_sync_pending", actor,
+        entityType: config.work, entityId: workId, metadata: { kind, offerId }
+      }).catch(() => null);
+    }
   }
-  return { kind, action, workId };
+  return { kind, action, workId, reused, synchronizationPending };
 }
 export async function driverWorkAction(actor, data = {}) {
   const kind = text(data.kind, 20); const workId = text(data.workId, 180); const action = text(data.action, 40); const code = text(data.code, 20); const config = COLLECTIONS[kind];
