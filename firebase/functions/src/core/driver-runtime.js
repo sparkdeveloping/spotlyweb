@@ -685,11 +685,20 @@ export async function driverWorkAction(actor, data = {}) {
     customerId = work.customerId || ""; resultState = next;
   });
   if (action === "complete" || (kind === "send" && action === "confirm_return")) {
+    // Firestore completion is already committed. Secondary RTDB failures must
+    // not present a finished ride or delivery as failed.
+    try {
     const presence = await database.ref(`driverPresence/${actor.uid}`).get(); const current = presence.exists() ? presence.val() : {};
     await database.ref(`runtimeAccess/activeTrips/${workId}`).remove();
     let dispatchEligible = false;
     try { await eligibility(firestore, actor.uid); dispatchEligible = true; } catch { dispatchEligible = false; }
-    if (dispatchEligible && current.country && current.area) {
+    const timestamp = Number(current.updatedAt || 0);
+    const gps = current.location || {};
+    const age = Date.now() - timestamp;
+    const freshGPS = Number.isFinite(age) && age >= -60000 && age <= 120000 &&
+      Number.isFinite(gps.lat) && Number.isFinite(gps.lng) &&
+      Math.abs(gps.lat) <= 90 && Math.abs(gps.lng) <= 180;
+    if (dispatchEligible && current.state === "busy" && freshGPS && current.country && current.area) {
       await database.ref(`runtimeAccess/driverEligible/${actor.uid}`).set(true);
       await database.ref(`runtimeAccess/driverDispatchScope/${actor.uid}`).remove();
       await database.ref(`runtimeAccess/driverDispatchScope/${actor.uid}/${current.country}/${current.area}`).set(true);
@@ -703,9 +712,15 @@ export async function driverWorkAction(actor, data = {}) {
       await database.ref(`driverPresence/${actor.uid}`).update({ state: "offline", currentJobId: null, currentWorkType: null, location: null, updatedAt: Date.now() });
       await firestore.collection("driverPresence").doc(actor.uid).set({ currentJobId: null, currentWorkType: null, availabilityState: "offline", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     }
+    } catch {
+      synchronizationPending = true;
+      await writeFunctionAudit({ action: "driver.completion_sync_pending", actor,
+        entityType: config.work, entityId: workId, metadata: { kind, action }
+      }).catch(() => {});
+    }
   }
-  if (customerId) await sendUserPush({ userId: customerId, title: "Spotly update", body: action === "complete" ? "Your Driver completed the trip." : action === "confirm_return" ? "Your parcel was returned to the sender. Spotly Support is reviewing the exception." : "Your Driver updated the trip.", data: { kind, workId, state: resultState }, workspace: "customer" }).catch(() => null);
-  return { kind, workId, state: resultState };
+  if (customerId && !reused) await sendUserPush({ userId: customerId, title: "Spotly update", body: action === "complete" ? "Your Driver completed the trip." : action === "confirm_return" ? "Your parcel was returned to the sender. Spotly Support is reviewing the exception." : "Your Driver updated the trip.", data: { kind, workId, state: resultState }, workspace: "customer" }).catch(() => null);
+  return { kind, workId, state: resultState, reused, synchronizationPending };
 }
 
 export async function createDriverIncident(actor, data = {}) {
