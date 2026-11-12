@@ -555,14 +555,16 @@ export async function driverOfferAction(actor, data = {}) {
     const batch = firestore.batch(); let changed = false;
     for (const doc of siblings.docs) if (doc.id !== offerId && LIVE_OFFER_STATES.has(doc.data().state)) { batch.set(doc.ref, { state: "withdrawn", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); changed = true; }
     if (changed) await batch.commit();
+    } catch { synchronizationPending = true; }
+    try {
     const presence = await database.ref(`driverPresence/${actor.uid}`).get().catch(() => null); const current = presence?.exists?.() ? presence.val() || {} : {};
     if (current.country && current.area) await database.ref(`dispatchPresence/${current.country}/${current.area}/${actor.uid}`).remove().catch(() => null);
     await database.ref(`runtimeAccess/driverDispatchScope/${actor.uid}`).remove();
     await database.ref(`driverPresence/${actor.uid}`).update({ state: "busy", currentJobId: workId, currentWorkType: kind, updatedAt: Date.now() });
     await database.ref(`runtimeAccess/activeTrips/${workId}`).update({ [`drivers/${actor.uid}`]: true, [`readers/${actor.uid}`]: true, ...(customerId ? { [`readers/${customerId}`]: true } : {}) });
+    } catch { synchronizationPending = true; }
     if (!reused && customerId) await sendUserPush({ userId: customerId, title: "Driver assigned", body: "A Spotly Driver accepted your request.", data: { kind, workId }, workspace: "customer" }).catch(() => null);
-    } catch (error) {
-      synchronizationPending = true;
+    if (synchronizationPending) {
       await writeFunctionAudit({ action: "driver.dispatch_sync_pending", actor,
         entityType: config.work, entityId: workId, metadata: { kind, offerId }
       }).catch(() => null);
