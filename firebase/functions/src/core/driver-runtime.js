@@ -527,8 +527,15 @@ export async function driverOfferAction(actor, data = {}) {
     const replayCandidate = offer.state === "accepted" && workDoc.data()?.assignedDriverId === actor.uid;
     if (!replayCandidate) {
       const presence = await database.ref("driverPresence/" + actor.uid).get().catch(() => null);
-      if (!presence?.exists?.() || presence.val()?.state !== "online")
-        throw new HttpsError("failed-precondition", "Go online with a verified Driver session before accepting new work.");
+      const current = presence?.exists?.() ? presence.val() || {} : {};
+      const fix = current.location || {};
+      const age = Date.now() - Number(current.updatedAt || 0);
+      if (current.state !== "online" ||
+          !Number.isFinite(fix.lat) || !Number.isFinite(fix.lng) ||
+          Math.abs(fix.lat) > 90 || Math.abs(fix.lng) > 180 ||
+          !Number.isFinite(age) || age < -60000 || age > 240000)
+        throw new HttpsError("failed-precondition",
+          "Go online with a recent verified GPS location before accepting work.");
       allowed = await eligibility(firestore, actor.uid, { kind, work: workDoc.data() || {} });
     }
   }
