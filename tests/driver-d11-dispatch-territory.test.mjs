@@ -41,6 +41,8 @@ test("optional zones cannot escape approved country or city or use disabled zone
   assert.equal(isAllowed({ id: "harare-east", country: "ZW", city: "", active: true }), false);
   assert.equal(isAllowed({ id: "harare-east", country: "ZW", city: "Harare", active: false }), false);
   assert.equal(isAllowed({ id: "harare-east", country: "ZW", city: "Harare", status: "disabled" }), false);
+  assert.equal(helpers.matchingActiveDispatchZone(
+    { id: "", country: "ZW", city: "Harare", active: true }, t, "default"), false);
 });
 
 test("bootstrap projects eligibility and approved city independently of optional zones", () => {
@@ -54,6 +56,7 @@ test("bootstrap projects eligibility and approved city independently of optional
 test("online session validates requested country and optional scoped zone", () => {
   assert.match(source, /const countryCode = action === "online" \? allowed\.country/);
   assert.match(source, /requestedCountry && requestedCountry !== allowed\.country/);
+  assert.match(source, /requestedCountry = text\(data\.country, 20\)/);
   assert.match(source, /let areaCode = action === "online" \? allowed\.defaultArea/);
   assert.match(source, /const requestedArea = data\.area \? area\(data\.area\) : allowed\.defaultArea/);
   assert.match(source, /if \(requestedArea !== allowed\.defaultArea\)/);
