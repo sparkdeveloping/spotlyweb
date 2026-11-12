@@ -702,6 +702,7 @@ export async function createDriverIncident(actor, data = {}) {
   const queueRef = firestore.collection("adminQueueItems").doc(`driver_incident_${ref.id}`);
   const workRef = workId ? firestore.collection(config.work).doc(workId) : null;
   let reused = false;
+  let incidentStatus = "open";
   await firestore.runTransaction(async (transaction) => {
     const [previous, workDoc] = await Promise.all([
       transaction.get(ref),
@@ -712,6 +713,7 @@ export async function createDriverIncident(actor, data = {}) {
       if (original.driverId !== actor.uid || original.requestFingerprint !== fingerprint)
         throw new HttpsError("already-exists", "This report request identifier was used for different details.");
       reused = true;
+      incidentStatus = text(original.status, 40) || "open";
       return;
     }
     let work = null;
@@ -755,7 +757,7 @@ export async function createDriverIncident(actor, data = {}) {
       action: "driver.incident_reported", actor, entityType: "driverIncident",
       entityId: ref.id, metadata: { kind, workId: workId || null, category, severity }
     }).catch(() => {});
-  return { incidentId: ref.id, status: "open", reused };
+  return { incidentId: ref.id, status: incidentStatus, reused };
 }
 
 export async function markDriverNotificationRead(actor, data = {}) { const { firestore } = spotlyAdmin(); const id = text(data.id, 180); if (!id) throw new HttpsError("invalid-argument", "Choose a notification."); const ref = firestore.collection("notifications").doc(id); const doc = await ref.get(); if (!doc.exists || doc.data()?.userId !== actor.uid) throw new HttpsError("not-found", "This notification was not found."); await ref.set({ read: true, readAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true }); return { id, read: true }; }
