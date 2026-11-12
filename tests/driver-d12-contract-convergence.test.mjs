@@ -50,7 +50,7 @@ test("Driver payout retries and Store receipts remain transactionally protected"
  const shop=read("app/api/driver/shopping/route.js");
  assert.match(payout,/requestKey: z\.string\(\)\.uuid\(\)\.optional\(\)/);
  assert.match(payout,/driver-payout:\$\{user\.uid\}:\$\{body\.requestKey\}/);
- assert.match(payout,/requestHash \\? transaction\\.get\\(payoutRef\\)/);
+ assert.match(payout,/requestHash \? transaction\.get\(payoutRef\)/);
  assert.match(payout,/if \(requestHash\) \{/);
  assert.match(payout,/const previous = await payoutRef\.get\(\)/);
  assert.match(payout,/return Response\.json\(\{ ok: true, payoutId: payoutRef\.id, status: String\(original\.status \|\| "requested"\), reused: true \}\)/);
