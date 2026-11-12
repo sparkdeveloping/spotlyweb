@@ -215,7 +215,8 @@ function postDriverLedgerEntry(transaction, firestore, entry) {
   return true;
 }
 function creditCompletion(transaction, firestore, kind, workId, work, driverId) {
-  const currencyCode = work.currency || "USD";
+  const currencyCode = String(work.currency || work.quote?.currency || "").toUpperCase();
+  if (!["USD", "ZWG", "MWK"].includes(currencyCode)) throw new HttpsError("failed-precondition", "This job has no verified payout currency. Contact Spotly Operations.");
   if (kind === "delivery") {
     return postDriverLedgerEntry(transaction, firestore, { id: driverLedgerEntryId("delivery_earned", workId), driverId, deliveryJobId: workId, orderId: work.orderId || null, type: "delivery_earned", amount: work.acceptedDriverPay ?? work.quotedDriverPay ?? 0, currency: currencyCode, description: "Delivery earnings", reference: workId, source: "delivery_completion" });
   }
@@ -582,13 +583,19 @@ export async function driverOfferAction(actor, data = {}) {
 export async function driverWorkAction(actor, data = {}) {
   const kind = text(data.kind, 20); const workId = text(data.workId, 180); const action = text(data.action, 40); const code = text(data.code, 20); const config = COLLECTIONS[kind];
   if (!config || !workId || !action) throw new HttpsError("invalid-argument", "Review the active Driver work action.");
-  const { firestore, database, storage } = spotlyAdmin(); let resultState = ""; let customerId = "";
+  const { firestore, database, storage } = spotlyAdmin(); let resultState = ""; let customerId = ""; let reused = false; let synchronizationPending = false;
   const proofPhotoUrl = data.proofPhotoUrl ? await validateDriverProofUrl(storage, { actorId: actor.uid, kind, workId, url: data.proofPhotoUrl }) : "";
   await firestore.runTransaction(async (transaction) => {
     const ref = firestore.collection(config.work).doc(workId); const doc = await transaction.get(ref);
     if (!doc.exists) throw new HttpsError("not-found", "This active work no longer exists.");
     const work = doc.data() || {};
     if (work.assignedDriverId !== actor.uid) throw new HttpsError("permission-denied", "This work is assigned to another Driver.");
+    // The same owner may safely replay only the exact terminal action that was committed.
+    if ((action === "complete" || (kind === "send" && action === "confirm_return")) &&
+        work.lastConfirmedDriverAction === action && work.lastConfirmedDriverActor === actor.uid &&
+        (action === "confirm_return" ? work.state === "returned" : work.state === (kind === "ride" ? "completed" : "delivered"))) {
+      resultState = work.state; customerId = work.customerId || ""; reused = true; return;
+    }
     if (kind === "delivery" && work.fulfilmentMode === "driver_shops" &&
         ["start_shopping", "finish_shopping", "begin_pickup_verification", "verify_pickup"].includes(action))
       throw new HttpsError("failed-precondition", "Use the funded shopping checklist and receipt review to update this order.");
@@ -628,8 +635,10 @@ export async function driverWorkAction(actor, data = {}) {
       }
     }
 
+    if (action === "complete" && !["USD", "ZWG", "MWK"].includes(String(work.currency || work.quote?.currency || "").toUpperCase()))
+      throw new HttpsError("failed-precondition", "This job has no verified payout currency.");
     const now = FieldValue.serverTimestamp();
-    const patch = { state: next, updatedAt: now };
+    const patch = { state: next, lastConfirmedDriverAction: action, lastConfirmedDriverActor: actor.uid, updatedAt: now };
     if (action === "arrive_pickup") patch.arrivedPickupAt = now;
     if (action === "verify_pickup") { if (kind === "ride") patch.startedAt = now; else patch.collectedAt = now; }
     if (["arrive_dropoff", "arrive_customer"].includes(action)) patch[kind === "delivery" ? "arrivedCustomerAt" : "arrivedDropoffAt"] = now;
