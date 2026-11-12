@@ -72,6 +72,7 @@ function matchingActiveDispatchZone(zone, territory, requestedArea) {
   return territory.verified && zone && country(zone.country) === territory.country &&
     Boolean(zone.city) && text(zone.city, 80).trim().toLowerCase() === territory.city.toLowerCase() &&
     zone.active !== false && zone.status !== "disabled" &&
+    requestedArea !== "default" && Boolean(zone.id) &&
     area(zone.id) === requestedArea;
 }
 function finished(kind, state) { return FINISHED[kind]?.has(String(state || "")) === true; }
@@ -409,7 +410,7 @@ export async function driverRealtimeSession(actor, data = {}) {
   const allowed = action === "online" ? await eligibility(firestore, actor.uid) : null;
   // Never allow client input to override the approved country or invent a zone.
   const countryCode = action === "online" ? allowed.country : country(current.country || data.country);
-  const requestedCountry = text(data.country, 2).toUpperCase();
+  const requestedCountry = text(data.country, 20).trim().toUpperCase();
   if (action === "online" && requestedCountry && requestedCountry !== allowed.country)
     throw new HttpsError("permission-denied", "Your country does not match your approved Driver territory.");
   let areaCode = action === "online" ? allowed.defaultArea : area(current.area || data.area);
