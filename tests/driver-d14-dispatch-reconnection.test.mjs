@@ -22,8 +22,11 @@ test("driver offer acceptance uses one atomic work assignment with a single winn
 
 test("no new acceptance from an unverified, offline, expired, or foreign session", () => {
   assert.match(accept,/offer\.driverId !== actor\.uid/);
-  assert.match(accept,/presence\.val\(\)\?\.state !== "online"/);
-  assert.match(accept,/Go online with a verified Driver session/);
+  assert.match(accept,/current\.state !== "online"/);
+  assert.match(accept,/const fix = current\.location \|\| \{\}/);
+  assert.match(accept,/age > 240000/);
+  assert.match(accept,/Math\.abs\(fix\.lat\) > 90 \|\| Math\.abs\(fix\.lng\) > 180/);
+  assert.match(accept,/Go online with a recent verified GPS location/);
   assert.match(accept,/await eligibility\(firestore, actor\.uid/);
   assert.match(accept,/offer\.expiresAt\?\.toMillis/);
   assert.match(accept,/This offer expired/);
