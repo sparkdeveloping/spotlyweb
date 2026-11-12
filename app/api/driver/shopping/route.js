@@ -56,7 +56,26 @@ export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
-    const { db, messaging, auth } = getAdminServices();
+    const { db, messaging, auth, storage } = getAdminServices();
+    if (body.action === "finalize") {
+      // The driver must actually upload an image to their own protected Storage
+      // scope. A plausible-looking path is not evidence of a receipt.
+      validateReceiptPath(body.receiptStoragePath, user.uid, body.deliveryJobId);
+      let metadata;
+      try {
+        const file = storage.bucket().file(body.receiptStoragePath);
+        const [exists] = await file.exists();
+        if (!exists) throw new Error("missing");
+        [metadata] = await file.getMetadata();
+      } catch {
+        throw Object.assign(new Error("Upload the actual store receipt before confirming checkout."), { status: 422 });
+      }
+      const size = Number(metadata?.size);
+      if (!Number.isFinite(size) || size <= 0 || size >= 10 * 1024 * 1024 ||
+          !String(metadata?.contentType || "").startsWith("image/")) {
+        throw Object.assign(new Error("The receipt must be a valid uploaded image smaller than 10 MB."), { status: 422 });
+      }
+    }
     const jobRef = db.collection("deliveryJobs").doc(body.deliveryJobId);
     let response = null;
     let notification = null;

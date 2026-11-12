@@ -48,7 +48,7 @@ test("optional zones cannot escape approved country or city or use disabled zone
 test("bootstrap projects eligibility and approved city independently of optional zones", () => {
   assert.match(source, /const dispatchReadiness = \{/);
   assert.match(source, /\.\.\.approvedTerritory\(driver, application\)/);
-  assert.match(source, /return \{ profile: profile\(actor, application, driver, selectedVehicle\), dispatchReadiness/);
+  assert.match(source, /return \{ profile: profile\(actor, application, driver, selectedVehicle\), accountReadiness, dispatchReadiness/);
   assert.match(source, /const territory = approvedTerritory\(driver, application\)/);
   assert.match(source, /if \(!territory\.verified\) return \{ eligible: false/);
 });
