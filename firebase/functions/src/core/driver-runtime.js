@@ -70,7 +70,7 @@ function approvedTerritory(driver = {}, application = {}) {
 }
 function matchingActiveDispatchZone(zone, territory, requestedArea) {
   return territory.verified && zone && country(zone.country) === territory.country &&
-    (!zone.city || text(zone.city, 80).trim().toLowerCase() === territory.city.toLowerCase()) &&
+    Boolean(zone.city) && text(zone.city, 80).trim().toLowerCase() === territory.city.toLowerCase() &&
     zone.active !== false && zone.status !== "disabled" &&
     area(zone.id) === requestedArea;
 }
