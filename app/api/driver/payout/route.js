@@ -59,18 +59,30 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
-    await enforceRateLimit(request, { key: "driver-payout", identity: user.uid, limit: 10, windowMs: 60 * 60_000 });
     const body = schema.parse(await request.json());
     const amount = Number(body.amount.toFixed(2));
     const { db } = getAdminServices();
+    const requestHash = body.requestKey ? createHash("sha256")
+      .update(`driver-payout:${user.uid}:${body.requestKey}`).digest("hex").slice(0, 48) : "";
+    const payoutRef = requestHash ? db.collection("driverPayouts").doc(requestHash) : db.collection("driverPayouts").doc();
+    // A previously committed payout must remain readable after an ambiguous
+    // network timeout, even when the minimum, hold or rate limit has changed.
+    // This owner-scoped read is a replay only: it cannot mutate money.
+    if (requestHash) {
+      const previous = await payoutRef.get();
+      if (previous.exists) {
+        const original = previous.data() || {};
+        if (original.driverId !== user.uid || original.currency !== body.currency || Number(original.amount) !== amount)
+          throw Object.assign(new Error("This payout request identifier was used for different details."), { status: 409 });
+        return Response.json({ ok: true, payoutId: payoutRef.id, status: String(original.status || "requested"), reused: true });
+      }
+    }
+    await enforceRateLimit(request, { key: "driver-payout", identity: user.uid, limit: 10, windowMs: 60 * 60_000 });
     const [settings, driver] = await Promise.all([db.collection("platformSettings").doc("global").get(), db.collection("drivers").doc(user.uid).get()]);
     const minimum = Number(settings.data()?.commerce?.driverPayoutMinimum ?? settings.data()?.commerce?.payoutMinimum ?? 20);
     if (amount + 0.001 < minimum) throw Object.assign(new Error(`Driver payouts currently require at least ${body.currency} ${minimum.toFixed(2)}.`), { status: 422 });
     if (!driver.exists || !["approved", "ready", "active"].includes(driver.data().status) || driver.data().complianceHold || driver.data().safetyHold || driver.data().rideFinanceHold || driver.data().sendFinanceHold) throw Object.assign(new Error("Your Driver account cannot request a payout right now."), { status: 409 });
-    // Stable, actor-scoped payout IDs make retries after an ambiguous response safe.
-    const requestHash = body.requestKey ? createHash("sha256")
-      .update(`driver-payout:${user.uid}:${body.requestKey}`).digest("hex").slice(0, 48) : "";
-    const payoutRef = requestHash ? db.collection("driverPayouts").doc(requestHash) : db.collection("driverPayouts").doc();
+    // Transaction still handles two identical requests racing past the preflight.
     let replayed = false;
     let responseStatus = "requested";
     await db.runTransaction(async (transaction) => {
