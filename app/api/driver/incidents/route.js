@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
@@ -8,71 +9,103 @@ const schema = z.object({
   deliveryJobId: z.string().max(180).optional(),
   rideId: z.string().max(180).optional(),
   parcelJobId: z.string().max(180).optional(),
-  category: z.enum(["safety", "crash", "unsafe_person", "breakdown", "customer_unreachable", "business_problem", "merchant_closed", "customer_problem", "order_damaged", "address_problem", "ride_no_show", "parcel_mismatch", "checkout_problem", "return_required", "other"]),
+  category: z.enum(["safety", "crash", "unsafe_person", "breakdown", "customer_unreachable",
+    "business_problem", "merchant_closed", "customer_problem", "order_damaged",
+    "address_problem", "ride_no_show", "parcel_mismatch", "checkout_problem",
+    "return_required", "cancellation_request", "other"]),
   description: z.string().min(3).max(2000),
-  severity: z.enum(["low", "medium", "high", "critical"]).default("medium")
-}).refine((value) => [value.deliveryJobId, value.rideId, value.parcelJobId].filter(Boolean).length <= 1, { message: "Attach only one active job." });
+  severity: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  requestKey: z.string().uuid().optional()
+}).refine((value) => [value.deliveryJobId, value.rideId, value.parcelJobId].filter(Boolean).length <= 1, {
+  message: "Attach only one work assignment."
+});
+
+const completed = Object.freeze({
+  delivery: new Set(["delivered", "returned", "cancelled", "failed"]),
+  ride: new Set(["completed", "cancelled", "failed"]),
+  send: new Set(["delivered", "returned", "cancelled", "failed"])
+});
 
 export async function POST(request) {
   try {
     const user = await authenticateRequest(request);
     const body = schema.parse(await request.json());
     const { db } = getAdminServices();
-    let job = null; let ride = null; let parcel = null;
-    if (body.deliveryJobId) {
-      const snap = await db.collection("deliveryJobs").doc(body.deliveryJobId).get();
-      if (!snap.exists || snap.data().assignedDriverId !== user.uid) throw Object.assign(new Error("This delivery is not assigned to your Driver account."), { status: 403 });
-      job = snap.data();
-    }
-    if (body.rideId) {
-      const snap = await db.collection("rideTrips").doc(body.rideId).get();
-      if (!snap.exists || snap.data().assignedDriverId !== user.uid) throw Object.assign(new Error("This ride is not assigned to your Driver account."), { status: 403 });
-      ride = snap.data();
-    }
-    if (body.parcelJobId) {
-      const snap = await db.collection("parcelJobs").doc(body.parcelJobId).get();
-      if (!snap.exists || snap.data().assignedDriverId !== user.uid) throw Object.assign(new Error("This Send request is not assigned to your Driver account."), { status: 403 });
-      parcel = snap.data();
-    }
-    const ref = db.collection("driverIncidents").doc();
-    await ref.set({
-      driverId: user.uid,
-      deliveryJobId: body.deliveryJobId || null,
-      rideId: body.rideId || null,
-      parcelJobId: body.parcelJobId || null,
-      orderId: job?.orderId || ride?.orderId || parcel?.orderId || null,
-      businessId: job?.businessId || null,
-      customerId: job?.customerId || ride?.customerId || parcel?.customerId || null,
-      category: body.category,
-      description: safeText(body.description, 2000),
-      severity: body.severity,
-      status: "open",
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp()
-    });
-    if (["high", "critical"].includes(body.severity)){
-      await db.collection("drivers").doc(user.uid).set({safetyHold:true,updatedAt:FieldValue.serverTimestamp()},{merge:true});
-      if(body.parcelJobId&&parcel&&!["delivered","returned","cancelled","failed"].includes(parcel.state)){
-        await db.collection("parcelJobs").doc(body.parcelJobId).set({
-          safetyReviewHold:true,safetyIncidentId:ref.id,exceptionCode:"safety_review",
-          updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    const kind = body.rideId ? "ride" : body.parcelJobId ? "send" : body.deliveryJobId ? "delivery" : "";
+    const workId = body.rideId || body.parcelJobId || body.deliveryJobId || "";
+    const workCollection = kind === "ride" ? "rideTrips" : kind === "send" ? "parcelJobs" : "deliveryJobs";
+    const workRef = workId ? db.collection(workCollection).doc(workId) : null;
+    const description = safeText(body.description, 2000);
+    const fingerprint = createHash("sha256").update(JSON.stringify({
+      driverId: user.uid, kind, workId, category: body.category,
+      description, severity: body.severity
+    })).digest("hex");
+    const incidentId = body.requestKey ? createHash("sha256")
+      .update(`driver-incident:${user.uid}:${body.requestKey}`).digest("hex").slice(0, 48) : null;
+    const incidentRef = incidentId ? db.collection("driverIncidents").doc(incidentId) :
+      db.collection("driverIncidents").doc();
+    const queueRef = db.collection("adminQueueItems").doc(`driver_incident_${incidentRef.id}`);
+    let reused = false;
+    let status = "open";
+    await db.runTransaction(async (transaction) => {
+      const [previous, assignment] = await Promise.all([
+        transaction.get(incidentRef),
+        workRef ? transaction.get(workRef) : Promise.resolve(null)
+      ]);
+      if (previous.exists) {
+        const original = previous.data() || {};
+        if (original.driverId !== user.uid || original.requestFingerprint !== fingerprint)
+          throw Object.assign(new Error("This incident request identifier was used for different details."), { status: 409 });
+        reused = true;
+        status = String(original.status || "open");
+        return;
       }
-      if(body.rideId&&ride&&!["completed","cancelled","failed"].includes(ride.state)){
-        await db.collection("rideTrips").doc(body.rideId).set({safetyReviewHold:true,
-          safetyIncidentId:ref.id,exceptionCode:"safety_review",
-          updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      let work = null;
+      if (workRef) {
+        if (!assignment?.exists || assignment.data()?.assignedDriverId !== user.uid)
+          throw Object.assign(new Error("This work is not assigned to your Driver account."), { status: 403 });
+        work = assignment.data() || {};
       }
-    }
-    await db.collection("adminQueueItems").doc(`driver_incident_${ref.id}`).set({
-      queue: "driver-incidents", type: "driver_incident", entityId: ref.id, driverId: user.uid,
-      deliveryJobId: body.deliveryJobId || null, rideId: body.rideId || null, parcelJobId: body.parcelJobId || null,
-      priority: body.severity === "critical" ? "urgent" : body.severity,
-      status: "open", title: `${body.category.replaceAll("_", " ")} incident`,
-      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+      const now = FieldValue.serverTimestamp();
+      transaction.create(incidentRef, {
+        driverId: user.uid, requestFingerprint: fingerprint,
+        deliveryJobId: body.deliveryJobId || null,
+        rideId: body.rideId || null, parcelJobId: body.parcelJobId || null,
+        orderId: work?.orderId || null, businessId: work?.businessId || null,
+        customerId: work?.customerId || null, category: body.category,
+        description, severity: body.severity, status: "open",
+        createdAt: now, updatedAt: now
+      });
+      transaction.create(queueRef, {
+        queue: "driver-incidents", type: "driver_incident", entityId: incidentRef.id,
+        driverId: user.uid, deliveryJobId: body.deliveryJobId || null,
+        rideId: body.rideId || null, parcelJobId: body.parcelJobId || null,
+        priority: body.severity === "critical" ? "urgent" : body.severity,
+        status: "open", title: `${body.category.replaceAll("_", " ")} incident`,
+        createdAt: now, updatedAt: now
+      });
+      if (["high", "critical"].includes(body.severity)) {
+        transaction.set(db.collection("drivers").doc(user.uid),
+          { safetyHold: true, updatedAt: now }, { merge: true });
+        if (workRef && !completed[kind].has(work.state))
+          transaction.set(workRef, {
+            safetyReviewHold: true, safetyIncidentId: incidentRef.id,
+            exceptionCode: "safety_review", updatedAt: now
+          }, { merge: true });
+      }
+      transaction.create(db.collection("auditLogs").doc(), {
+        actorId: user.uid, action: "driver.incident_reported",
+        entityType: "driverIncident", entityId: incidentRef.id,
+        metadata: { kind, workId: workId || null, category: body.category, severity: body.severity },
+        source: "driver_incident", createdAt: now
+      });
     });
-    return Response.json({ ok: true, incidentId: ref.id });
+    // Confirmation is returned only after the incident, queue and any safety
+    // hold have committed atomically. Incident reporting does not mutate job state.
+    return Response.json({ ok: true, incidentId: incidentRef.id, status, reused });
   } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the incident details." }, { status: 400 });
+    if (error instanceof z.ZodError)
+      return Response.json({ ok: false, error: "Review the incident details." }, { status: 400 });
     return apiError(error);
   }
 }
