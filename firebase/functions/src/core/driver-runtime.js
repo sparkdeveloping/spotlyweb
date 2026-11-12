@@ -57,7 +57,7 @@ function rows(snapshot) { return snapshot?.docs?.map((doc) => ({ id: doc.id, ...
 function text(value, max = 220) { return String(value || "").trim().slice(0, max); }
 function num(value, fallback = 0) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
 // Invalid or absent account territory is never silently treated as Zimbabwe.
-function country(value) { const result = text(value, 2).toUpperCase(); return ["MW", "ZW"].includes(result) ? result : ""; }
+function country(value) { const result = text(value, 20).trim().toUpperCase(); return ["MW", "ZW"].includes(result) ? result : ""; }
 function area(value) { return text(value || "default", 80).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "default"; }
 function approvedTerritory(driver = {}, application = {}) {
   const code = country(driver.country || application.country);
