@@ -74,6 +74,7 @@ import { SPOTLY_COUNTRIES, countryDefinition } from "@/lib/country-engine";
 import { defaultRoleTemplates } from "@/data/production-seed";
 import { authenticatedFetch } from "@/lib/api-client";
 import { canAccessAdminSection, hasAdminAccess } from "@/lib/admin-access";
+import { adminDataSourcesFor } from "@/lib/admin-data-scope.mjs";
 import { BUILD_INFO, buildLabel } from "@/lib/build-info";
 import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, Tabs } from "@/components/ui";
 import { AdminDirectoryManager } from "@/components/admin-directory-manager";
@@ -108,7 +109,7 @@ const sectionMeta = {
 
 const defaultRoles = defaultRoleTemplates.filter((role) => role.scope === "platform");
 
-export function useAdminData() {
+export function useAdminData(section = "all", enabled = true) {
   const [businesses, setBusinesses] = useState([]);
   const [claims, setClaims] = useState([]);
   const [users, setUsers] = useState([]);
@@ -121,34 +122,42 @@ export function useAdminData() {
   const [roles, setRoles] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [payouts, setPayouts] = useState([]);
-  const sourceNames = ["businesses", "claims", "users", "support", "waitlist", "partnerships", "audit", "help", "announcements", "roles", "tasks", "payouts"];
-  const [sources, setSources] = useState(() => Object.fromEntries(sourceNames.map((name) => [name, { status: "loading", error: "", checkedAt: null }])));
+  const requestedSources = adminDataSourcesFor(enabled ? section : "work");
+  const [sources, setSources] = useState({});
 
   useEffect(() => {
-    const updateSource = (name, status, error = "") => setSources((current) => ({ ...current, [name]: { status, error, checkedAt: new Date().toISOString() } }));
-    const bind = (name, setter) => (items) => { setter(items); updateSource(name, "loaded"); };
+    // Only active sources appear in readiness; deferred sources are neither
+    // "loaded" nor "failed" and must not produce misleading health alerts.
+    setSources(Object.fromEntries(requestedSources.map((name) => [name, { status: "loading", error: "", checkedAt: null }])));
+    let active = true;
+    const updateSource = (name, status, error = "") => {
+      if (active) setSources((current) => ({ ...current, [name]: { status, error, checkedAt: new Date().toISOString() } }));
+    };
+    const bind = (name, setter) => (items) => { if (active) { setter(items); updateSource(name, "loaded"); } };
     const fail = (name) => (reason) => updateSource(name, "failed", reason?.message || "Subscription failed");
-    const cleanups = [
-      subscribeBusinesses(bind("businesses", setBusinesses), { limit: 100, onError: fail("businesses") }),
-      subscribeClaims(bind("claims", setClaims), { limit: 75, onError: fail("claims") }),
-      subscribeUsers(bind("users", setUsers), { limit: 100, onError: fail("users") }),
-      subscribeSupportConversations(bind("support", setSupport), { limit: 75, onError: fail("support") }),
-      subscribeWaitlist(bind("waitlist", setWaitlist), { limit: 100, onError: fail("waitlist") }),
-      subscribePartnershipLeads(bind("partnerships", setPartnerships), { limit: 250, onError: fail("partnerships") }),
-      subscribeAuditLogs(bind("audit", setAudit), { limit: 300, onError: fail("audit") }),
-      subscribeHelpResources(bind("help", setHelp), { limit: 200, onError: fail("help") }),
-      subscribeAnnouncements(bind("announcements", setAnnouncements), { limit: 100, onError: fail("announcements") }),
-      subscribeRoleTemplates(bind("roles", setRoles), { limit: 100, onError: fail("roles") }),
-      subscribeAdminTasks(bind("tasks", setTasks), { limit: 250, onError: fail("tasks") }),
-      subscribeAllPayouts(bind("payouts", setPayouts), { limit: 250, onError: fail("payouts") })
-    ];
-    return () => cleanups.forEach((cleanup) => cleanup?.());
-  }, []);
+    const subscribers = {
+      businesses: () => subscribeBusinesses(bind("businesses", setBusinesses), { limit: 100, onError: fail("businesses") }),
+      claims: () => subscribeClaims(bind("claims", setClaims), { limit: 75, onError: fail("claims") }),
+      users: () => subscribeUsers(bind("users", setUsers), { limit: 100, onError: fail("users") }),
+      support: () => subscribeSupportConversations(bind("support", setSupport), { limit: 75, onError: fail("support") }),
+      waitlist: () => subscribeWaitlist(bind("waitlist", setWaitlist), { limit: 100, onError: fail("waitlist") }),
+      partnerships: () => subscribePartnershipLeads(bind("partnerships", setPartnerships), { limit: 250, onError: fail("partnerships") }),
+      audit: () => subscribeAuditLogs(bind("audit", setAudit), { limit: 300, onError: fail("audit") }),
+      help: () => subscribeHelpResources(bind("help", setHelp), { limit: 200, onError: fail("help") }),
+      announcements: () => subscribeAnnouncements(bind("announcements", setAnnouncements), { limit: 100, onError: fail("announcements") }),
+      roles: () => subscribeRoleTemplates(bind("roles", setRoles), { limit: 100, onError: fail("roles") }),
+      tasks: () => subscribeAdminTasks(bind("tasks", setTasks), { limit: 250, onError: fail("tasks") }),
+      payouts: () => subscribeAllPayouts(bind("payouts", setPayouts), { limit: 250, onError: fail("payouts") })
+    };
+    const cleanups = requestedSources.map((name) => subscribers[name]());
+    return () => { active = false; cleanups.forEach((cleanup) => cleanup?.()); };
+  }, [requestedSources]);
 
-  const values = Object.values(sources);
+  const activeSources = Object.fromEntries(requestedSources.map((name) => [name, sources[name] || { status: "loading", error: "", checkedAt: null }]));
+  const values = Object.values(activeSources);
   const ready = values.every((source) => ["loaded", "failed"].includes(source.status));
   const partiallyLoaded = values.some((source) => source.status === "loaded") && !values.every((source) => source.status === "loaded");
-  return { businesses, claims, users, support, waitlist, partnerships, audit, help, announcements, roles, tasks, payouts, ready, partiallyLoaded, sources };
+  return { businesses, claims, users, support, waitlist, partnerships, audit, help, announcements, roles, tasks, payouts, ready, partiallyLoaded, sources: activeSources };
 }
 
 export function AdminAccess({ children }) {
@@ -505,7 +514,7 @@ export function LegacyAdminApp({ section = "dashboard" }) {
   const { settings: liveSettings } = usePlatform();
   const [settings, setSettings] = useState(liveSettings || DEFAULT_PLATFORM_SETTINGS);
   const [saving, setSaving] = useState(false);
-  const data = useAdminData();
+  const data = useAdminData(safe, Boolean(user?.uid && canAccessAdminSection(profile, safe)));
   const { toast } = useToast();
   useEffect(() => setSettings(liveSettings || DEFAULT_PLATFORM_SETTINGS), [liveSettings]);
   async function saveSettings() { setSaving(true); try { await savePlatformSettings(settings, user); toast("Platform configuration saved.", { title: "Settings updated" }); } catch (error) { toast(error.message, { type: "error", title: "Could not save settings" }); } finally { setSaving(false); } }

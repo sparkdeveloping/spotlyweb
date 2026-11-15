@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Bike, CarFront, CheckCircle2, Clock3, Navigation, PackageCheck, Radio, RefreshCw, Route, ShieldAlert, Truck, UserRound, WifiOff, X } from "lucide-react";
 import { authenticatedFetch } from "@/lib/api-client";
@@ -51,8 +51,24 @@ function mapPosition(location) {
 
 function DriverNetwork({ refreshKey, onOpenDriver, onOpenWork }) {
   const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [filter, setFilter] = useState("all");
-  const load = useCallback(async () => { setLoading(true); try { setData(await authenticatedFetch("/api/admin/driver-network")); setError(""); } catch (err) { setError(err.message); } finally { setLoading(false); } }, []);
-  useEffect(() => { load(); const timer = window.setInterval(() => load(), 15000); return () => window.clearInterval(timer); }, [load, refreshKey]);
+  const requestInFlight = useRef(false);
+  const load = useCallback(async () => {
+    // A slow network must not stack 8,500-document scan requests every 15 seconds.
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setLoading(true);
+    try { setData(await authenticatedFetch("/api/admin/driver-network")); setError(""); }
+    catch (err) { setError(err.message); }
+    finally { requestInFlight.current = false; setLoading(false); }
+  }, []);
+  useEffect(() => {
+    const pollWhenVisible = () => { if (document.visibilityState !== "hidden") void load(); };
+    const resume = () => { if (document.visibilityState === "visible") void load(); };
+    pollWhenVisible();
+    const timer = window.setInterval(pollWhenVisible, 15000);
+    document.addEventListener("visibilitychange", resume);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", resume); };
+  }, [load, refreshKey]);
   if (loading && !data) return <PageSkeleton cards={6} rows={4} />;
   if (!data) return <EmptyState icon={AlertTriangle} title="Driver network could not be loaded" description={error || "Try again."} action={<Button onClick={load}>Try again</Button>} />;
   const summary = data.summary || {}; const allDrivers = data.drivers || [];

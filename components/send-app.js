@@ -14,10 +14,14 @@ import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {PinDropMap,RoadRouteMap} from "@/components/mobility-map";
+import {recentMobilityPlaces,rememberMobilityPlace,clearRecentMobilityPlaces} from "@/lib/recent-mobility-places.mjs";
+import {savedMobilityPlaces,saveMobilityPlace,isSavedMobilityPlace,forgetSavedMobilityPlace,clearSavedMobilityPlaces,findSavedMobilityPlaces} from "@/lib/saved-mobility-places.mjs";
 import { useCountry } from "@/components/country-provider";
 import { serviceUnavailableMessage } from "@/lib/service-availability";
 import { useCustomerRuntime } from "@/components/customer-runtime";
 import {hasVerifiedRoadAccess,needsRoadAccessAcknowledgement,roadAccessConsent} from "@/lib/mobility-road-access-client";
+import { useVisibleCustomerStatusPolling } from "@/components/customer-status-polling";
+import { customerStatusInterval, CUSTOMER_STATUS_INTERVALS } from "@/lib/customer-status-polling.mjs";
 
 const sizes = [
   { id: "small", label: "Small", note: "Documents or a small bag", icon: Box },
@@ -31,22 +35,42 @@ const stateCopy = {
 
 function LocationSearch({ label, value, onChange, point, onSelect, city = "", country = "", currentLocation }) {
   const [results, setResults] = useState([]); const [loading, setLoading] = useState(false);const [searchError,setSearchError]=useState(""); const timer = useRef(null);
+  const [recent,setRecent]=useState([]); const [saved,setSaved]=useState([]); const [showRecent,setShowRecent]=useState(false);
+  useEffect(()=>{setRecent(recentMobilityPlaces(country));setSaved(savedMobilityPlaces(country));setShowRecent(false);},[country]);
+  const remember=item=>{rememberMobilityPlace({lat:item.lat,lng:item.lng,label:item.label.split(",")[0],formattedAddress:item.label,area:item.area,city:item.city,country},country);setRecent(recentMobilityPlaces(country));setShowRecent(false);};
   useEffect(() => {
     clearTimeout(timer.current);
-    let active=true;
+    let active=true;const controller=new AbortController();
     if(!value||value.trim().length<3||point?.formattedAddress===value){setResults([]);setSearchError("");return undefined;}
     setSearchError("");
     timer.current=setTimeout(async()=>{
       setLoading(true);
       try{
-        const data=await publicApiFetch(`/api/public/geocode?q=${encodeURIComponent(value.trim())}&city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`);
-        if(active){setResults(data.results||[]);if(!data.results?.length)setSearchError("No matching address found. Refine your search or select a pin on the map.");}
-      }catch(error){if(active){setResults([]);setSearchError(error?.message||"Address search is unavailable.");}}
+        if(typeof navigator!=="undefined"&&navigator.onLine===false){
+          if(active){const offline=findSavedMobilityPlaces(country,value.trim());setResults(offline.map(item=>({...item,id:`saved:${item.lat}:${item.lng}`,label:item.formattedAddress,offline:true})));setSearchError(offline.length?"Previously saved on this device. You’ll need a connection for a route and fare.":"You’re offline. Choose a saved place below, or reconnect to search.");}
+          return;
+        }
+        const data=await publicApiFetch(`/api/public/geocode?q=${encodeURIComponent(value.trim())}&city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`,{signal:controller.signal});
+        if(active){setResults(data.results||[]);if(!data.results?.length)setSearchError("No matching place found. Try a landmark, business name, or select a point on the map.");}
+      }catch(error){if(active&&error?.name!=="AbortError"){const offline=error?.status===422?[]:findSavedMobilityPlaces(country,value.trim());setResults(offline.map(item=>({...item,id:`saved:${item.lat}:${item.lng}`,label:item.formattedAddress,offline:true})));error?.status===422?setSearchError(error?.message||"Country is not supported."):setSearchError(offline.length?"Showing places you saved on this device. Reconnect for a route and price.":"Place search is unavailable. Try a saved place or reconnect.");}}
       finally{if(active)setLoading(false);}
     },420);
-    return()=>{active=false;clearTimeout(timer.current);};
+    return()=>{active=false;controller.abort();clearTimeout(timer.current);};
   },[value,point?.formattedAddress,city,country]);
-  return <div className="relative"><label className="block text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">{label}</label><div className="mt-2 flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3"><MapPin className="h-5 w-5 shrink-0 text-[var(--accent)]" /><input value={value} onChange={(e)=>onChange(e.target.value)} placeholder={label === "Pickup" ? "Where is the parcel?" : "Where should we deliver it?"} className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none" />{loading ? <LoaderCircle className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : value ? <button type="button" onClick={()=>{onChange("");onSelect(null);}}><X className="h-4 w-4 text-[var(--text-3)]" /></button> : null}{currentLocation ? <button type="button" onClick={currentLocation} className="rounded-[12px] p-2 text-[var(--accent)] hover:bg-[var(--accent-soft)]"><LocateFixed className="h-5 w-5" /></button> : null}</div>{results.length ? <div className="surface absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[16px] shadow-elevated">{results.map((item)=><button key={item.id} type="button" onClick={()=>{onChange(item.label);onSelect({lat:item.lat,lng:item.lng,label:item.label.split(",")[0],formattedAddress:item.label,area:item.area,city:item.city,country:item.country||country});setResults([]);}} className="flex w-full items-start gap-3 border-b border-[var(--border-subtle)] p-3 text-left last:border-0 hover:bg-[var(--surface-hover)]"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]"/><span><span className="block text-sm font-semibold">{item.label.split(",")[0]}</span><span className="mt-0.5 block text-xs text-[var(--text-3)]">{item.label}</span></span></button>)}</div> : null}
+  return <div className="relative"><label className="block text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">{label}</label><div className="mt-2 flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3"><MapPin className="h-5 w-5 shrink-0 text-[var(--accent)]" /><input value={value} onChange={(e)=>{setShowRecent(false);onChange(e.target.value);}} onFocus={()=>{if(!value){setRecent(recentMobilityPlaces(country));setSaved(savedMobilityPlaces(country));setShowRecent(true);}}} placeholder={label === "Pickup" ? "Where is the parcel?" : "Where should we deliver it?"} className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none" />{loading ? <LoaderCircle className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : value ? <button type="button" onClick={()=>{onChange("");onSelect(null);}}><X className="h-4 w-4 text-[var(--text-3)]" /></button> : null}{currentLocation ? <button type="button" onClick={currentLocation} className="rounded-[12px] p-2 text-[var(--accent)] hover:bg-[var(--accent-soft)]"><LocateFixed className="h-5 w-5" /></button> : null}</div>{results.length ? <div className="surface absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[16px] shadow-elevated">{results.map((item)=><button key={item.id} type="button" onClick={()=>{onChange(item.label);onSelect({lat:item.lat,lng:item.lng,label:item.label.split(",")[0],formattedAddress:item.label,area:item.area,city:item.city,country:item.country||country});setResults([]);if(!item.offline)remember(item);}} className="flex w-full items-start gap-3 border-b border-[var(--border-subtle)] p-3 text-left last:border-0 hover:bg-[var(--surface-hover)]"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]"/><span><span className="block text-sm font-semibold">{item.label.split(",")[0]}{item.offline?" · Saved on device":null}</span><span className="mt-0.5 block text-xs text-[var(--text-3)]">{item.label}</span></span></button>)}</div> : null}
+   {showRecent&&!value&&saved.length>0?<div className="mt-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-2" aria-label="Places saved on this device">
+    <div className="flex items-center justify-between gap-2 px-2 py-1"><span className="text-xs font-semibold text-[var(--text-3)]">Saved on this device · available offline</span><button type="button" className="text-xs underline text-[var(--text-3)]" onClick={()=>{clearSavedMobilityPlaces();setSaved([]);}}>Clear all</button></div>
+    {saved.map(item=><button key={`${item.country}:${item.lat}:${item.lng}`} type="button" onClick={()=>{onChange(item.formattedAddress);onSelect(item);setResults([]);setShowRecent(false);}} className="flex w-full items-center gap-2 rounded-xl px-2 py-3 text-left text-sm hover:bg-[var(--surface-hover)]"><MapPin className="h-4 w-4 shrink-0"/><span className="line-clamp-2">{item.formattedAddress}</span></button>)}
+   </div>:null}
+   {showRecent&&!value&&recent.length>0?<div className="mt-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-2" aria-label="Recently selected places">
+    <div className="flex items-center justify-between gap-2 px-2 py-1"><span className="text-xs font-semibold text-[var(--text-3)]">Recent places · this tab</span><button type="button" className="text-xs underline text-[var(--text-3)]" onClick={()=>{clearRecentMobilityPlaces();setRecent([]);setShowRecent(false);}}>Clear</button></div>
+    {recent.map(item=><button key={`${item.country}:${item.lat}:${item.lng}`} type="button" onClick={()=>{onChange(item.formattedAddress);onSelect(item);setShowRecent(false);}} className="flex w-full items-center gap-2 rounded-xl px-2 py-3 text-left text-sm hover:bg-[var(--surface-hover)]"><MapPin className="h-4 w-4 shrink-0"/><span className="line-clamp-2">{item.formattedAddress}</span></button>)}
+   </div>:null}
+   {point?.formattedAddress===value&&point?.country===country?<div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+     {isSavedMobilityPlace(point,country)?<button type="button" className="font-medium underline" onClick={()=>{forgetSavedMobilityPlace(point,country);setSaved(savedMobilityPlaces(country));}}>Remove offline place</button>:
+       <button type="button" className="font-medium underline" onClick={()=>{if(saveMobilityPlace(point,country))setSaved(savedMobilityPlaces(country));}}>Save this place on my device</button>}
+     <span className="text-[var(--text-3)]">Stores precise coordinates here for up to 30 days. Others using this browser can see them. Booking still requires live road verification.</span>
+   </div>:null}
    {point?.formattedAddress===value?<p className="mt-2 flex items-center gap-1.5 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5"/>Location confirmed for delivery estimate</p>:
      searchError?<p role="alert" className="mt-2 text-xs text-danger">{searchError}</p>:
      value?.trim().length>=3&&!loading?<p className="mt-2 text-xs text-[var(--text-3)]">Select a suggested address or use the map pin to continue.</p>:null}
@@ -73,16 +97,54 @@ export function SendApp() {
   useEffect(()=>{setForm((f)=>({...f,senderName:f.senderName||profile?.displayName||user?.displayName||"",senderPhone:f.senderPhone||profile?.phone||user?.phoneNumber||""}));},[profile?.displayName,profile?.phone,user?.displayName,user?.phoneNumber]);
   useEffect(()=>{if(!countryContext.countryCode)return;setCountry(countryContext.countryCode);const allowed=countryContext.country?.cities?.some((item)=>item.name===city);if(!allowed)setCity(profile?.preferences?.preferredCity&&countryContext.country?.cities?.some((item)=>item.name===profile.preferences.preferredCity)?profile.preferences.preferredCity:"");},[countryContext.countryCode,countryContext.country,profile?.preferences?.preferredCity,city]);
   useEffect(()=>{const now=new Date();const offset=now.getTimezoneOffset()*60_000;const base=now.getTime();setScheduleBounds({min:new Date(base+20*60_000-offset).toISOString().slice(0,16),max:new Date(base+7*24*60*60_000-offset).toISOString().slice(0,16)});},[]);
-  const lastDispatchRef=useRef(0);
-  const load=useCallback(async({quiet=false}={})=>{if(!user)return;if(!quiet)setLoading("load");try{const data=await authenticatedFetch("/api/customer/parcels",{cache:"no-store"});setActiveParcel(data.activeParcel||null);setHistory(data.parcels||[]);
-     const active=data.activeParcel;
-     if(active&&["scheduled","requested","searching_driver"].includes(active.state)&&
-       Date.now()-lastDispatchRef.current>45000){
-       lastDispatchRef.current=Date.now();
-       authenticatedFetch("/api/customer/parcels/refresh",{method:"POST",
-        body:JSON.stringify({parcelJobId:active.id})}).catch(()=>{});
-     }}catch(e){if(!quiet)toast(e.message,{type:"error"});}finally{if(!quiet)setLoading("");}},[user,toast]);
-  useEffect(()=>{load();const timer=setInterval(()=>load({quiet:true}),10000);return()=>clearInterval(timer);},[load]);
+  const customerUID = user?.isAnonymous ? null : (user?.uid || null);
+  const ownerRef = useRef(customerUID);
+  ownerRef.current = customerUID;
+  const lastDispatchRef = useRef({ id: null, at: 0 });
+  const maybeRefreshDispatch = useCallback((active) => {
+    if (!active || !["scheduled", "requested", "searching_driver"].includes(active.state)) return;
+    const now = Date.now();
+    if (lastDispatchRef.current.id === active.id &&
+        now - lastDispatchRef.current.at < CUSTOMER_STATUS_INTERVALS.sendDispatchRetryMs) return;
+    lastDispatchRef.current = { id: active.id, at: now };
+    // Scheduling/dispatch still happens authoritatively on the server.
+    void authenticatedFetch("/api/customer/parcels/refresh", {
+      method: "POST", body: JSON.stringify({ parcelJobId: active.id })
+    }).catch(() => {});
+  }, []);
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!customerUID) return;
+    if (!quiet) setLoading("load");
+    try {
+      const data = await authenticatedFetch("/api/customer/parcels", { cache: "no-store" });
+      if (ownerRef.current !== customerUID) return;
+      setActiveParcel(data.activeParcel || null);
+      setHistory(data.parcels || []);
+      maybeRefreshDispatch(data.activeParcel);
+    } catch (error) { if (!quiet) toast(error.message, { type: "error" }); }
+    finally { if (!quiet) setLoading(""); }
+  }, [customerUID, toast, maybeRefreshDispatch]);
+  useEffect(() => { setActiveParcel(null); setHistory([]); }, [customerUID]);
+  useEffect(() => { void load(); }, [load]);
+  const activeParcelID = activeParcel?.id || null;
+  useVisibleCustomerStatusPolling({
+    enabled: Boolean(customerUID),
+    ownerKey: customerUID,
+    intervalMs: customerStatusInterval("send", Boolean(activeParcelID)),
+    poll: async () => {
+      if (!activeParcelID) { await load({ quiet: true }); return; }
+      const data = await authenticatedFetch(`/api/customer/parcels?parcelJobId=${encodeURIComponent(activeParcelID)}`, { cache: "no-store" });
+      if (ownerRef.current !== customerUID) return;
+      const next = data.parcel;
+      if (!next || ["delivered", "cancelled", "failed", "returned"].includes(next.state)) {
+        setActiveParcel(null);
+        await load({ quiet: true }); // History/receipts are never lost on completion.
+        return;
+      }
+      setActiveParcel(next);
+      maybeRefreshDispatch(next);
+    }
+  });
   useEffect(()=>setQuote(null),[pickup?.lat,pickup?.lng,dropoff?.lat,dropoff?.lng,parcelSize]);
   function useCurrentPickup(){if(!navigator.geolocation)return toast("Location is not available on this device.",{type:"error"});setLoading("location");navigator.geolocation.getCurrentPosition(async pos=>{
       try{
@@ -95,7 +157,7 @@ export function SendApp() {
   async function pay(parcel){if(!parcel?.orderId)return;setLoading("pay");try{const data=await authenticatedFetch("/api/payments/paynow/initiate",{method:"POST",body:JSON.stringify({orderId:parcel.orderId,channel:"web",client:"web"})});if(data.redirectUrl)window.location.assign(data.redirectUrl);else toast(data.instructions||"Payment request started.");}catch(e){toast(e.message,{type:"error"});setLoading("");}}
   async function requestSend(){if(!quote||!pickup||!dropoff)return;if(!hasVerifiedRoadAccess(quote.accessPoints))return toast("Refresh your route to verify roadside handoff points.",{type:"error"});if(needsRoadAccessAcknowledgement(quote.accessPoints)&&!roadAccessAcknowledged)return toast("Confirm the proposed pickup and drop-off road access first.",{type:"error"});if(quote.bookingAvailable!==true)return toast(quote.bookingReason||serviceUnavailableMessage(sendAvailability),{type:"error"});const required=[form.senderName,form.senderPhone,form.recipientName,form.recipientPhone,form.parcelDescription];if(required.some((v)=>String(v||"").trim().length<2)||!form.ack)return toast("Complete the sender, recipient, parcel and safety details.",{type:"error"});if(pickupMode==="scheduled"&&!scheduledPickupAt)return toast("Choose a scheduled pickup time.",{type:"error"});setLoading("request");try{const data=await authenticatedFetch("/api/customer/parcels",{method:"POST",body:JSON.stringify({action:"request",idempotencyKey:sendRequestKeyRef.current ??= window.crypto.randomUUID(),roadAccessConsent:roadAccessConsent(quote.accessPoints,roadAccessAcknowledged),pickup,dropoff,parcelSize,paymentMethod,quotedTotal:quote.total,quotedCurrency:quote.currency,pickupMode,scheduledPickupAt:pickupMode==="scheduled"?new Date(scheduledPickupAt).toISOString():undefined,senderName:form.senderName.trim(),senderPhone:form.senderPhone.trim(),recipientName:form.recipientName.trim(),recipientPhone:form.recipientPhone.trim(),parcelDescription:form.parcelDescription.trim(),estimatedWeightKg:form.estimatedWeightKg?Number(form.estimatedWeightKg):undefined,instructions:form.instructions.trim(),declaredValue:form.declaredValue?Number(form.declaredValue):0,prohibitedAcknowledged:true})});const next=await authenticatedFetch(`/api/customer/parcels?parcelJobId=${encodeURIComponent(data.parcelJobId)}`,{cache:"no-store"});setActiveParcel(next.parcel);sendRequestKeyRef.current=null;setQuote(null);toast(paymentMethod==="paynow"?"Send request created. Complete payment to confirm it.":pickupMode==="scheduled"?"Your Send pickup is scheduled.":"Your Send request is live.",{type:"success"});if(paymentMethod==="paynow")await pay(next.parcel);}catch(e){toast(e.message,{type:"error"});}finally{setLoading("");}}
   async function confirmCancel(){if(!cancelTarget||cancelReason.trim().length<3)return;setLoading("cancel");try{await authenticatedFetch("/api/customer/parcels",{method:"POST",body:JSON.stringify({action:"cancel",parcelJobId:cancelTarget.id,reason:cancelReason.trim()})});setCancelTarget(null);setCancelReason("");setActiveParcel(null);await load({quiet:true});toast("Send request cancelled.");}catch(e){toast(e.message,{type:"error"});}finally{setLoading("");}}
-  if(activeParcel)return <CustomerShell immersive><ActiveSend parcel={activeParcel} onRefresh={()=>load({quiet:true})} onCancel={setCancelTarget} onPay={pay}/></CustomerShell>;
+  if(activeParcel && customerUID)return <CustomerShell immersive><ActiveSend parcel={activeParcel} onRefresh={()=>load({quiet:true})} onCancel={setCancelTarget} onPay={pay}/></CustomerShell>;
   if(!customerRuntime.ready)return <CustomerPageSkeleton/>;
   if(!sendAvailability.publicDiscoverable)return <CustomerShell current="home" user={user} profile={profile} locationLabel={city}>
     <ServiceSwitcher service="send" serviceRuntime={customerRuntime.services} />

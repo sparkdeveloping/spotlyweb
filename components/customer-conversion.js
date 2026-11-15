@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Modal } from "@/components/ui";
 import { useToast } from "@/components/providers";
-import { authenticatedFetch } from "@/lib/api-client";
+import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { track } from "@/lib/firebase-services";
@@ -197,10 +197,9 @@ export function CustomerTransactionModal({ open, onClose, product, business, bra
     const controller = new AbortController();
     setAvailabilityLoading(true);
     setError("");
-    fetch(`/api/public/transactions/availability?itemId=${encodeURIComponent(product.id)}&branchId=${encodeURIComponent(form.branchId)}&days=90`, { signal: controller.signal })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok || payload.ok === false) throw new Error(payload.error || "Availability could not be loaded.");
+    publicApiFetch(`/api/public/transactions/availability?itemId=${encodeURIComponent(product.id)}&branchId=${encodeURIComponent(form.branchId)}&days=90`, { signal: controller.signal })
+      .then((payload) => {
+        if (payload.ok === false) throw new Error(payload.error || "Availability could not be loaded.");
         return payload;
       })
       .then((payload) => {

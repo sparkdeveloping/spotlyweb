@@ -25,10 +25,13 @@ test("customer order creation can create a durable delivery job without exposing
 });
 
 test("Driver bootstrap strips pickup and handoff secrets from every delivery payload", async () => {
-  const source = await read("app/api/driver/bootstrap/route.js");
-  assert.match(source, /pickupCode:\s*undefined/);
-  assert.match(source, /customerPin:\s*undefined/);
-  assert.match(source, /rawJobs\.map\(sanitizeJob\)/);
+  const [bootstrap, live] = await Promise.all([read("app/api/driver/bootstrap/route.js"), read("lib/driver-live-server.js")]);
+  assert.match(bootstrap, /driverLiveSnapshot/);
+  assert.match(live, /pickupCode:\s*undefined/);
+  assert.match(live, /customerPin:\s*undefined/);
+  assert.match(live, /pickupPin:\s*undefined/);
+  assert.match(live, /dropoffPin:\s*undefined/);
+  assert.match(live, /rawJobs\.map\(sanitizeJob\)/);
 });
 
 test("delivery completion uses a deterministic ledger entry and never reads after writing in the money helper", async () => {

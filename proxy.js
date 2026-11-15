@@ -86,6 +86,25 @@ export function proxy(request) {
   const isSpotlyHost = host === "spotlyafrica.com" || host === "www.spotlyafrica.com" || host.endsWith(".spotlyafrica.com");
   if (!isSpotlyHost) return NextResponse.next();
 
+  // Dedicated, uncluttered support site. It reuses canonical support APIs and
+  // authenticated/anonymous Firebase ownership; it does not create another store.
+  if (host === "tickets.spotlyafrica.com") {
+    if (matchesPrefix(pathname, ORIGIN_LOCAL_PREFIXES)) return NextResponse.next();
+    if (pathname === "/robots.txt") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/workspace-robots.txt";
+      return NextResponse.rewrite(url);
+    }
+    if (pathname === "/sitemap.xml") return NextResponse.redirect(productionUrl(request, "spotlyafrica.com", pathname), 308);
+    if (pathname === "/privacy" || pathname === "/terms") return NextResponse.redirect(productionUrl(request, "spotlyafrica.com", pathname), 308);
+    if (pathname === "/" || pathname === "/tickets") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/tickets";
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.redirect(productionUrl(request, host, "/"), 307);
+  }
+
   // Apex and www are both customer hosts. Vercel alone owns the apex/www canonical
   // redirect direction so application code cannot create a redirect loop.
   if (host === "spotlyafrica.com" || host === "www.spotlyafrica.com") {
@@ -94,6 +113,7 @@ export function proxy(request) {
       const loginHost = PATH_TO_HOST[requestedPortal];
       if (loginHost) return NextResponse.redirect(productionUrl(request, loginHost, "/login"), 307);
     }
+    if (pathname === "/tickets") return NextResponse.redirect(productionUrl(request, "tickets.spotlyafrica.com", "/"), 307);
     const destination = portalDestination(pathname);
     if (destination) return NextResponse.redirect(productionUrl(request, destination.destinationHost, destination.cleanPath), 308);
     return NextResponse.next();

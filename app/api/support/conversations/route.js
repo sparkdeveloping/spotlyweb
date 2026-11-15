@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
-import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
+import { apiError, authenticateRequest, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { hasPlatformPermission, isPlatformAdmin, requireBusinessPermission } from "@/lib/access-control-server";
 import { safeText } from "@/lib/server-helpers";
@@ -29,7 +29,8 @@ const schema = z.discriminatedUnion("action", [
     businessId: z.string().max(180).nullable().optional(),
     contextType: z.string().max(80).nullable().optional(),
     contextId: z.string().max(220).nullable().optional(),
-    context: z.record(z.string(), z.unknown()).nullable().optional()
+    context: z.record(z.string(), z.unknown()).nullable().optional(),
+    incidentReference: z.string().regex(/^SI-[0-9A-F]{12}$/).optional()
   }),
   z.object({
     action: z.literal("message"),
@@ -41,6 +42,17 @@ const schema = z.discriminatedUnion("action", [
     status: z.enum(["open", "waiting_for_spotly", "waiting_for_user"]).optional(),
     senderName: z.string().max(160).optional(),
     senderRole: z.string().max(80).optional()
+  }),
+  z.object({
+    action: z.literal("request_callback"),
+    conversationId: z.string().min(3).max(180),
+    phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,24}$/),
+    consent: z.literal(true)
+  }),
+  z.object({
+    action: z.literal("callback_review"),
+    conversationId: z.string().min(3).max(180),
+    status: z.enum(["contacting", "completed", "unable_to_reach", "declined"])
   }),
   z.object({
     action: z.literal("update"),
@@ -86,6 +98,8 @@ function publicSupportRecord(id, data = {}) {
     contextId: data.contextId || null,
     lastMessage: data.lastMessage || "",
     unreadForRequester: Number(data.unreadForRequester || 0),
+    callbackStatus: data.callbackRequest?.status || null,
+    incidentReference: data.reportedIncidentReference || null,
     lastMessageAt: iso(data.lastMessageAt),
     createdAt: iso(data.createdAt),
     updatedAt: iso(data.updatedAt)
@@ -140,6 +154,11 @@ export async function GET(request) {
       const conversation = snapshot.data() || {};
       const access = await participant(db, user, conversation);
       if (!access.allowed) throw Object.assign(new Error("You cannot access this support conversation."), { status: 403 });
+      // Cheap foreground heartbeat: 1 conversation read, no message scan or unread write.
+      // Used by tickets portal to detect a change before loading up to 250 messages.
+      if (url.searchParams.get("metadataOnly") === "1") {
+        return Response.json({ ok: true, conversation: publicSupportRecord(snapshot.id, conversation) }, { headers: { "Cache-Control": "no-store" } });
+      }
       const messageSnapshot = await db.collection("supportMessages")
         .where("conversationId", "==", conversationId)
         .limit(250)
@@ -179,6 +198,15 @@ export async function POST(request) {
 
     if (body.action === "create") {
       await enforceRateLimit(request, { key: `support-create:${user.uid}`, limit: 8, windowMs: 30 * 60_000 });
+      if (user?.firebase?.sign_in_provider === "anonymous") {
+        // An IP/network quota limits disposable anonymous UIDs without making
+        // shared mobile networks too restrictive. App Check can be required
+        // after the staging challenge has been tested on every workspace.
+        if (process.env.SPOTLY_SUPPORT_ANONYMOUS_APP_CHECK_REQUIRED === "true") {
+          await verifyAppCheckRequest(request, { required: true });
+        }
+        await enforceRateLimit(request, { key: "support-create-guest-network", limit: 100, windowMs: 60 * 60_000 });
+      }
       const conversationRef = db.collection("supportConversations").doc();
       const messageRef = db.collection("supportMessages").doc();
       await db.runTransaction(async (transaction) => {
@@ -195,6 +223,7 @@ export async function POST(request) {
           contextType: body.contextType || null,
           contextId: body.contextId || null,
           context: body.context || null,
+          reportedIncidentReference: body.incidentReference || null,
           assignedTo: null,
           assignedToName: null,
           unreadForSupport: 1,
@@ -216,6 +245,25 @@ export async function POST(request) {
           createdAt: FieldValue.serverTimestamp()
         });
       });
+      // A crash reference is a lookup hint, not proof of requester identity.
+      // Link only an existing and unlinked incident, without disclosing its internals.
+      if (body.incidentReference) {
+        try {
+          const incidentRef = db.collection("clientIncidents").doc(body.incidentReference);
+          await db.runTransaction(async (tx) => {
+            const incident = await tx.get(incidentRef);
+            if (incident.exists && !incident.data()?.linkedConversationId) {
+              tx.set(incidentRef, {
+                linkedConversationId: conversationRef.id,
+                linkedAt: FieldValue.serverTimestamp(),
+                status: "linked"
+              }, { merge: true });
+            }
+          });
+        } catch (incidentLinkError) {
+          console.warn("support_incident_reference_unlinked", incidentLinkError?.code || "unavailable");
+        }
+      }
       notifyRoleAudience({ db, messaging, auth, title: "New support conversation", body: safeText(body.subject, 180), href: "/work?view=support", workspace: "admin", module: "support", eventType: "support.conversation.created", entityType: "support_conversation", entityId: conversationRef.id, push: true }, ["support_agent", "support_manager"]).catch(() => null);
       return Response.json({ ok: true, conversationId: conversationRef.id });
     }
@@ -227,6 +275,29 @@ export async function POST(request) {
     const access = await participant(db, user, conversation);
     if (!access.allowed) throw Object.assign(new Error("You cannot access this support conversation."), { status: 403 });
 
+    if (body.action === "request_callback") {
+      if (!access.requester) throw Object.assign(new Error("Only the person who opened this case can request a callback."), { status: 403 });
+      await enforceRateLimit(request, { key: `support-callback:${user.uid}`, limit: 3, windowMs: 60 * 60_000 });
+      if (["requested", "contacting"].includes(conversation.callbackRequest?.status)) {
+        return Response.json({ ok: true, callbackStatus: conversation.callbackRequest.status }, { headers: { "Cache-Control": "no-store" } });
+      }
+      // Consent is explicit. Do not place telephone numbers into notification bodies or logs.
+      await conversationRef.set({
+        callbackRequest: {
+          phone: body.phone.trim(), status: "requested", consentedBy: user.uid,
+          consentAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+        },
+        unreadForSupport: FieldValue.increment(1), status: "waiting_for_spotly", updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return Response.json({ ok: true, callbackStatus: "requested" }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (body.action === "callback_review") {
+      if (!access.support || !supportResponder(user)) throw Object.assign(new Error("Support response access is required."), { status: 403 });
+      if (!conversation.callbackRequest?.consentedBy) throw Object.assign(new Error("No callback was requested."), { status: 400 });
+      await conversationRef.update({ "callbackRequest.status": body.status, "callbackRequest.updatedAt": FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      await supportAudit(db, user, body.conversationId, "support.callback.reviewed", { status: body.status });
+      return Response.json({ ok: true, callbackStatus: body.status });
+    }
     if (body.action === "message") {
       await enforceRateLimit(request, { key: `support-message:${user.uid}`, limit: 50, windowMs: 15 * 60_000 });
       if (access.support && !supportResponder(user)) throw Object.assign(new Error("Your support access is read-only."), { status: 403 });
@@ -342,6 +413,7 @@ export async function POST(request) {
     if (access.support && Object.keys(changes).length) await supportAudit(db, user, body.conversationId, "support.conversation.updated", changes);
     return Response.json({ ok: true, conversationId: body.conversationId, status: patch.status || conversation.status });
   } catch (error) {
+    if (error instanceof z.ZodError) return Response.json({ ok: false, error: "Review the support request details." }, { status: 400 });
     return apiError(error, "The support conversation could not be updated.");
   }
 }

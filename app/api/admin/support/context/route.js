@@ -117,6 +117,8 @@ export async function POST(request) {
       recentActivity,
       supportHistory,
       agents,
+      callbackRequest: conversation.callbackRequest ? { phone: conversation.callbackRequest.phone || "", status: conversation.callbackRequest.status || "requested" } : null,
+      incidentReference: conversation.reportedIncidentReference || null,
       rawContext: serialize(context)
     });
   } catch (error) {

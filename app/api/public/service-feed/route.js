@@ -18,6 +18,8 @@ import { regionalServicePolicy } from "@/lib/v9-assist-regions";
 import { filterSafeIndependentStores } from "@/lib/assist-store-safety";
 import { countryForCity, countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
 import { requireServiceDiscoverable } from "@/lib/service-availability-server";
+import { unstable_cache } from "next/cache";
+import { recordCostEvent } from "@/lib/cost-observability-server";
 
 export const runtime = "nodejs";
 
@@ -34,7 +36,11 @@ async function publicSeed(db) {
     db.collection("branches").where("public", "==", true).limit(1200).get(),
     db.collection("products").where("published", "==", true).limit(2000).get(),
     db.collection("promotions").where("active", "==", true).limit(1000).get()
-  ]).then((value) => { seedCache = { expiresAt: Date.now() + SEED_TTL_MS, value, pending: null }; return value; }).catch((error) => { seedCache.pending = null; throw error; });
+  ]).then((value) => {
+    const docsFetched = value.reduce((sum, result) => sum + result.docs.length, 0);
+    recordCostEvent("public.service-feed", { cacheMode: "none", queryCount: 4, docsFetched, estimatedReadFloor: value.reduce((sum, result) => sum + Math.max(1, result.docs.length), 0) });
+    seedCache = { expiresAt: Date.now() + SEED_TTL_MS, value, pending: null }; return value;
+  }).catch((error) => { seedCache.pending = null; throw error; });
   return seedCache.pending;
 }
 
@@ -247,31 +253,13 @@ function sortItems(service, a, b) {
   return Number(b.isFeatured) - Number(a.isFeatured) || a.name.localeCompare(b.name, "en", { sensitivity: "base" });
 }
 
-export async function GET(request) {
-  try {
-    await verifyAppCheckRequest(request, { required: false });
-    const rate = await enforceRateLimit(request, { key: "public-service-feed", limit: 100, windowMs: 60_000 });
-    const url = new URL(request.url);
-    const service = text(url.searchParams.get("service"));
-    if (!SERVICES.has(service)) throw Object.assign(new Error("Choose Eat, Shop, Book or Events."), { status: 422 });
-    const requestedCountry = normalizeCountryCode(url.searchParams.get("country"));
-    const city = text(url.searchParams.get("city"));
-    const country = requestedCountry || countryForCity(city)?.country?.code || "";
-    const area = text(url.searchParams.get("area"));
-    const query = String(url.searchParams.get("q") || "").trim();
-    const requestedOffset = Number(url.searchParams.get("offset") || 0);
-    const requestedLimit = Number(url.searchParams.get("limit") || 24);
-    const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
-    const itemLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 8), 48) : 24;
-    if (!country) return Response.json({ ok: true, service, businesses: [], items: [], totalBusinesses: 0, totalItems: 0, requiresLocation: true }, { headers: { "Cache-Control": "private, max-age=0", "X-RateLimit-Remaining": String(rate.remaining) } });
-    const { db } = getAdminServices();
-    const settingsSnapshot = await db.collection("platformSettings").doc("global").get();
-    const platformSettings = settingsSnapshot.exists ? settingsSnapshot.data() || {} : {};
-    const availability = requireServiceDiscoverable(platformSettings, { service, country, city });
-    const showUnclaimed = await unclaimedPublicationEnabled(db);
-
+// C2: Cache only an already-public response, never raw Firestore documents,
+// authenticated data or private platformSettings. Keep the source query
+// and commerce/publication policy identical for both code paths.
+async function computePublicServiceFeed({ service, country, city, area, query, offset, itemLimit, category, businessOffset, originalCity, originalArea, publicSettings, showUnclaimed, availability }) {
+  const { db } = getAdminServices();
     const [businessSnapshot, branchSnapshot, productSnapshot, promotionSnapshot] = await publicSeed(db);
-    const assistSettings = (service === "eat" || service === "shop") ? platformSettings : {};
+    const assistSettings = (service === "eat" || service === "shop") ? publicSettings : {};
     const assistedSnapshot = (service === "eat" || service === "shop") && independentShoppingFlags(assistSettings).browseEnabled
       ? await db.collection("independentShoppingStores").where("status", "==", "published").limit(160).get()
       : { docs: [] };
@@ -375,10 +363,8 @@ export async function GET(request) {
     ].filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), "en", { sensitivity: "base" }));
 
     const groupedBusinesses = groupMarketplaceBusinesses([...businesses].sort(sortBusinesses));
-    const category = url.searchParams.get("category") || "all";
     const businessCategories = [...new Map(groupedBusinesses.map(business=>{const profile=marketplaceProfile(business);return [profile.vertical,{key:profile.vertical,label:profile.displayCategory}];})).values()].sort((a,b)=>a.label.localeCompare(b.label));
     const categoryBusinesses = groupedBusinesses.filter(business=>category === "all" || (service === "shop" ? marketplaceProfile(business).vertical === category : marketplaceProfile(business).displayCategory === category || [business.category,...(business.categories||[])].includes(category)));
-    const businessOffset = Math.max(0,Math.floor(Number(url.searchParams.get("businessOffset")) || 0));
     const sortedBusinesses = categoryBusinesses.sort(sortBusinesses).slice(businessOffset,businessOffset+48);
     const items = itemsAll.slice(offset, offset + itemLimit);
     const facets = {
@@ -390,13 +376,13 @@ export async function GET(request) {
       freeEvents: service === "events" ? itemsAll.filter((item) => Number(item.price || 0) <= 0).length : 0
     };
 
-    return Response.json({
+  return {
       ok: true,
       service,
       country,
       availability,
-      city: url.searchParams.get("city") || "",
-      area: url.searchParams.get("area") || "",
+      city: originalCity,
+      area: originalArea,
       query,
       businesses: sortedBusinesses,
       businessCategories,
@@ -407,7 +393,74 @@ export async function GET(request) {
       totalBusinesses: categoryBusinesses.length,
       totalItems: itemsAll.length,
       nextOffset: offset + items.length < itemsAll.length ? offset + items.length : null
-    }, {
+  };
+}
+
+// Next 16 still supports unstable_cache; the response is small, serializable,
+// and platform cache sharing works only where the deployment provides it.
+// Opt-in after comparing cached/uncached responses and Runtime Cache billing.
+const sharedPublicServiceFeed = unstable_cache(
+  computePublicServiceFeed,
+  ["spotly-public-service-feed-response-v1"],
+  { revalidate: 20, tags: ["spotly-public-service-feed"] }
+);
+
+export async function GET(request) {
+  const startedAt = Date.now();
+  try {
+    await verifyAppCheckRequest(request, { required: false });
+    const rate = await enforceRateLimit(request, { key: "public-service-feed", limit: 100, windowMs: 60_000 });
+    const url = new URL(request.url);
+    const service = text(url.searchParams.get("service"));
+    if (!SERVICES.has(service)) throw Object.assign(new Error("Choose Eat, Shop, Book or Events."), { status: 422 });
+    const requestedCountry = normalizeCountryCode(url.searchParams.get("country"));
+    const city = text(url.searchParams.get("city"));
+    const country = requestedCountry || countryForCity(city)?.country?.code || "";
+    const area = text(url.searchParams.get("area"));
+    const query = String(url.searchParams.get("q") || "").trim();
+    const requestedOffset = Number(url.searchParams.get("offset") || 0);
+    const requestedLimit = Number(url.searchParams.get("limit") || 24);
+    const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
+    const itemLimit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 8), 48) : 24;
+    if (!country) return Response.json({ ok: true, service, businesses: [], items: [], totalBusinesses: 0, totalItems: 0, requiresLocation: true }, { headers: { "Cache-Control": "private, max-age=0", "X-RateLimit-Remaining": String(rate.remaining) } });
+    const { db } = getAdminServices();
+    const settingsSnapshot = await db.collection("platformSettings").doc("global").get();
+    const platformSettings = settingsSnapshot.exists ? settingsSnapshot.data() || {} : {};
+    const availability = requireServiceDiscoverable(platformSettings, { service, country, city });
+    const showUnclaimed = await unclaimedPublicationEnabled(db);
+
+    // Resolve only publication-safe settings before entering the shared cache.
+    // Discovery availability is checked afresh on *every* request above.
+    const publicSettings = {
+      independentShopping: { browseEnabled: platformSettings.independentShopping?.browseEnabled !== false },
+      assistCoverage: platformSettings.assistCoverage || {}
+    };
+    const category = url.searchParams.get("category") || "all";
+    const businessOffset = Math.max(0, Math.floor(Number(url.searchParams.get("businessOffset")) || 0));
+    const input = { service, country, city, area, query, offset, itemLimit, category, businessOffset,
+      originalCity: url.searchParams.get("city") || "", originalArea: url.searchParams.get("area") || "",
+      publicSettings, showUnclaimed, availability };
+    // Bound cache-key cardinality to popular initial unfiltered landing feeds.
+    const useSharedCache = process.env.SPOTLY_SHARED_SERVICE_FEED_CACHE === "true" && !query && !area
+      && offset === 0 && businessOffset === 0 && category === "all" && city.length <= 70;
+    let feed;
+    let cacheFallback = false;
+    if (useSharedCache) {
+      try { feed = await sharedPublicServiceFeed(input); }
+      catch {
+        // Failing open to the *same policy-checked* uncached read prevents a
+        // cache outage from turning public marketplace pages into failures.
+        cacheFallback = true;
+      }
+    }
+    if (!feed) feed = await computePublicServiceFeed(input);
+    recordCostEvent("public.service-feed", {
+      durationMs: Date.now() - startedAt,
+      cacheMode: cacheFallback ? "fallback" : useSharedCache ? "shared" : "local",
+      cacheFallback,
+      recordsReturned: feed.businesses.length + feed.items.length
+    });
+    return Response.json(feed, {
       headers: {
         "Cache-Control": query ? "public, max-age=10, stale-while-revalidate=30" : "public, max-age=20, stale-while-revalidate=60",
         "X-RateLimit-Remaining": String(rate.remaining)

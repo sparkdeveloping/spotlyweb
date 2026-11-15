@@ -54,7 +54,9 @@
     "media:generate": "node scripts/generate-media-discovery.mjs",
     "media:check": "node --test tests/media-discovery-platform.test.mjs",
     "media:verify-snapshots": "node scripts/verify-media-discovery-snapshots.mjs",
-    "audit:security": "node scripts/security-readiness-audit.mjs"
+    "audit:security": "node scripts/security-readiness-audit.mjs",
+    "audit:cost-release": "node scripts/c7-release-gate.mjs",
+    "audit:launch:lx12": "node scripts/lx12-launch-gate.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

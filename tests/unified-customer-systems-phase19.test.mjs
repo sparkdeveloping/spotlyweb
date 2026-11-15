@@ -51,7 +51,7 @@ test("Phase 19 customer notification preferences are one shared four-domain cont
 });
 
 test("Phase 19 account deletion sees all service and Assist blockers",()=>{
-  const route=read("app/api/customer/account/deletion/route.js");
+  const route=read("app/api/customer/account/deletion/route.js")+read("lib/account-deletion-context.js");
   for(const collection of ["rideTrips","parcelJobs","orders","independentShoppingRequests","assistedBookings"]) assert.ok(route.includes(collection),collection);
   assert.match(route,/export async function GET/);
   assert.match(route,/activeAssistShoppingCount/);

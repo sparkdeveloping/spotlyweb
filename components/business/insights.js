@@ -111,7 +111,7 @@ function locationName(branch) {
 }
 
 export function InsightsView() {
-  const { orders, products, branches, finance, archetype, selectedBranch, selectedBranchId, selectedBusinessId } = useBusinessWorkspace();
+  const { orders, ordersLoading, ordersError, contextSwitching, products, branches, finance, archetype, selectedBranch, selectedBranchId, selectedBusinessId } = useBusinessWorkspace();
   const [range, setRange] = useState("30");
   const [nowMs, setNowMs] = useState(0);
   const model = INSIGHT_MODELS[archetype.id] || INSIGHT_MODELS.directory_profile;
@@ -120,9 +120,17 @@ export function InsightsView() {
   const filtered = useMemo(() => scopedRecords.filter((record) => withinDays(record, range, nowMs)), [scopedRecords, range, nowMs]);
   const completed = filtered.filter((record) => model.completed.includes(record.status));
   const cancelled = filtered.filter((record) => model.cancelled.includes(record.status));
-  const revenue = completed.reduce((sum, record) => sum + valueOf(record), 0);
-  const currency = finance?.acceptedCurrencies?.[0] || filtered[0]?.currency || "USD";
-  const average = completed.length ? revenue / completed.length : 0;
+  const completedNotRefunded = completed.filter((record) => String(record.paymentStatus || "").toLowerCase() !== "refunded");
+  const revenue = completedNotRefunded.reduce((sum, record) => sum + valueOf(record), 0);
+  const recordedCurrencies = new Set(filtered.map((record) => String(record.currency || record.totals?.currency || "").trim().toUpperCase()).filter(Boolean));
+  const currency = [...recordedCurrencies][0] || finance?.acceptedCurrencies?.[0] || "USD";
+  const valuesVerified = recordedCurrencies.size === 1
+    && !filtered.some((record) => ["refund_pending", "chargeback", "chargeback_pending"].includes(String(record.paymentStatus || "").toLowerCase()))
+    && filtered.every((record) => {
+    const amount = Number(record.totals?.total ?? record.total);
+    return Boolean(record.currency || record.totals?.currency) && Number.isFinite(amount) && amount >= 0;
+  });
+  const average = completedNotRefunded.length ? revenue / completedNotRefunded.length : 0;
   const elapsedValues = completed.map((record) => elapsedMinutes(record, model)).filter((value) => value !== null);
   const averageElapsed = elapsedValues.length ? Math.round(elapsedValues.reduce((sum, value) => sum + value, 0) / elapsedValues.length) : null;
   const activeOfferings = products.filter((item) => item.active);
@@ -130,22 +138,22 @@ export function InsightsView() {
 
   const locationPerformance = useMemo(() => {
     const map = new Map(branches.map((branch) => [branch.id, { id: branch.id, name: locationName(branch), records: 0, completed: 0, revenue: 0 }]));
-    orders.filter((record) => withinDays(record, range)).forEach((record) => {
+    orders.filter((record) => withinDays(record, range, nowMs)).forEach((record) => {
       const key = record.branchId || "unassigned";
       if (!map.has(key)) map.set(key, { id: key, name: record.branchName || "Unassigned location", records: 0, completed: 0, revenue: 0 });
       const item = map.get(key);
       item.records += 1;
       if (model.completed.includes(record.status)) {
         item.completed += 1;
-        item.revenue += valueOf(record);
+        if (valuesVerified && String(record.paymentStatus || "").toLowerCase() !== "refunded") item.revenue += valueOf(record);
       }
     });
     return [...map.values()].filter((item) => item.records > 0).sort((a, b) => b.records - a.records);
-  }, [branches, orders, range, model.completed]);
+  }, [branches, orders, range, nowMs, model.completed, valuesVerified]);
 
   const topOfferings = useMemo(() => {
     const map = new Map();
-    filtered.forEach((record) => (record.items || []).forEach((line) => {
+    completed.forEach((record) => (record.items || []).forEach((line) => {
       const key = line.productId || line.offeringId || line.name;
       const current = map.get(key) || { id: key, name: line.name || "Offering", quantity: 0, value: 0 };
       current.quantity += Number(line.quantity || 1);
@@ -153,7 +161,7 @@ export function InsightsView() {
       map.set(key, current);
     }));
     return [...map.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
-  }, [filtered]);
+  }, [completed]);
 
   const paymentMethods = useMemo(() => {
     const map = new Map();
@@ -180,6 +188,24 @@ export function InsightsView() {
   const offeringLabel = archetype.nouns.items[0].toUpperCase() + archetype.nouns.items.slice(1);
   const locationLabel = archetype.nouns.branch === "venue" ? "Venue" : archetype.nouns.branch === "property" ? "Property" : "Location";
 
+  // The operational listener is limited to 500 records. Never label a truncated
+  // snapshot an all-time report or silently sum multiple currencies as one.
+  if (ordersLoading || contextSwitching || !nowMs || ordersError || orders.length >= 500) {
+    const unavailable = Boolean(ordersError);
+    const capped = orders.length >= 500;
+    return <div className="v7-page-enter space-y-6">
+      <PageHeader title="Insights" description="Reports based on verified business activity." actions={<BusinessSwitcher />} />
+      <Card className="p-6"><EmptyState icon={BarChart3}
+        title={unavailable ? "Insights are unavailable" : capped ? "A complete report is needed" : "Checking business activity"}
+        description={unavailable
+          ? "We could not verify the latest activity records. Your orders and payments are unchanged."
+          : capped ? "This workspace has reached the 500-record live activity limit. Spotly will not present partial totals as complete sales reports."
+          : "Loading actual activity. Estimated totals will not be shown."}
+        action={<Button variant="outline" href={businessHref("/business/activity", { businessId: selectedBusinessId })}>View activity</Button>}
+      /></Card>
+    </div>;
+  }
+
   return <div className="v7-page-enter space-y-6">
     <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
       <PageHeader title="Insights" description={`A clear view of real ${model.records}, customer value, and ${archetype.nouns.items} for ${locationName(selectedBranch)}.`} actions={<Button variant="outline" onClick={exportCsv} disabled={!filtered.length}><Download className="h-4 w-4" />Export this view</Button>} />
@@ -189,17 +215,17 @@ export function InsightsView() {
 
     <div className="metric-grid">
       <MetricCard label={`${recordLabel} received`} value={String(filtered.length)} hint={`${completed.length} completed`} icon={BarChart3} />
-      <MetricCard label="Completed value" value={formatCurrency(revenue, currency)} hint={`Average ${formatCurrency(average, currency)}`} icon={TrendingUp} />
-      <MetricCard label="Completion rate" value={`${percentage(completed.length, filtered.length)}%`} hint={`${cancelled.length} cancelled, refunded, or closed`} icon={CheckCircle2} tone={filtered.length && percentage(completed.length, filtered.length) < 80 ? "warning" : "success"} />
+      <MetricCard label="Completed value (less full refunds)" value={valuesVerified ? formatCurrency(revenue, currency) : "—"} hint={valuesVerified ? `Average ${formatCurrency(average, currency)}` : "Amount or currency not verified"} icon={TrendingUp} />
+      <MetricCard label="Completion rate" value={filtered.length ? `${percentage(completed.length, filtered.length)}%` : "—"} hint={`${cancelled.length} cancelled, refunded, or closed`} icon={CheckCircle2} tone={filtered.length && percentage(completed.length, filtered.length) < 80 ? "warning" : "success"} />
       {model.timeLabel ? <MetricCard label={model.timeLabel} value={averageElapsed === null ? "—" : `${averageElapsed} min`} hint={averageElapsed === null ? "Appears after completed timelines" : model.timeHint} icon={Clock3} /> : <MetricCard label="Active offerings" value={String(activeOfferings.length)} hint={`${products.length} total configured`} icon={PackageCheck} />}
       <MetricCard label={offeringLabel} value={String(activeOfferings.length)} hint={unavailableOfferings.length ? `${unavailableOfferings.length} unavailable` : "All available unless scheduled otherwise"} icon={PackageCheck} />
-      <MetricCard label="Exception rate" value={`${percentage(cancelled.length, filtered.length)}%`} hint={cancelled.length ? `Review exceptions in ${model.records}` : "No exceptions in this period"} icon={XCircle} tone={cancelled.length ? "warning" : "success"} />
+      <MetricCard label="Exception rate" value={filtered.length ? `${percentage(cancelled.length, filtered.length)}%` : "—"} hint={cancelled.length ? `Review exceptions in ${model.records}` : "No exceptions in this period"} icon={XCircle} tone={cancelled.length ? "warning" : "success"} />
     </div>
 
     {!filtered.length ? <Card><EmptyState icon={BarChart3} title="Nothing to measure yet" description={model.empty} action={<Button variant="outline" href={businessHref("/business/settings", { businessId: selectedBusinessId })}>Review business settings</Button>} /></Card> : <>
       <div className="grid gap-5 xl:grid-cols-2">
         <SectionCard title={`${locationLabel} performance`} description={`Volume and completion across the business for the selected period.`}>
-          <div className="p-5">{locationPerformance.length ? locationPerformance.map((item) => <div key={item.id} className="mb-5 last:mb-0"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.completed}/{item.records} completed{item.revenue ? ` · ${formatCurrency(item.revenue, currency)}` : ""}</p></div><Badge tone={percentage(item.completed, item.records) >= 85 ? "success" : "warning"}>{percentage(item.completed, item.records)}%</Badge></div><ProgressBar value={(item.records / maxLocation) * 100} className="mt-3" /></div>) : <p className="text-sm text-secondary">No location comparison is available yet.</p>}</div>
+          <div className="p-5">{locationPerformance.length ? locationPerformance.map((item) => <div key={item.id} className="mb-5 last:mb-0"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.completed}/{item.records} completed{valuesVerified && item.revenue ? ` · ${formatCurrency(item.revenue, currency)}` : ""}</p></div><Badge tone={percentage(item.completed, item.records) >= 85 ? "success" : "warning"}>{percentage(item.completed, item.records)}%</Badge></div><ProgressBar value={(item.records / maxLocation) * 100} className="mt-3" /></div>) : <p className="text-sm text-secondary">No location comparison is available yet.</p>}</div>
         </SectionCard>
         <SectionCard title={`Most selected ${archetype.nouns.items}`} description={`Quantity recorded across ${model.records} in this period.`}>
           <div className="p-5">{topOfferings.length ? topOfferings.map((item, index) => <div key={item.id} className="mb-5 last:mb-0"><div className="flex items-center justify-between gap-4"><div className="flex min-w-0 items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-business-soft text-xs font-semibold text-business">{index + 1}</span><div className="min-w-0"><p className="truncate text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs text-secondary">{item.quantity} selected{item.value ? ` · ${formatCurrency(item.value, currency)}` : ""}</p></div></div></div><ProgressBar value={(item.quantity / maxOffering) * 100} className="mt-3" /></div>) : <p className="text-sm text-secondary">Detailed offering lines are not available for these records yet.</p>}</div>
@@ -208,7 +234,7 @@ export function InsightsView() {
 
       <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
         {hasPayments ? <SectionCard title="Payment method mix"><div className="p-5">{paymentMethods.map((item) => <div key={item.name} className="flex items-center justify-between border-b py-3 last:border-0"><span className="text-sm font-semibold capitalize">{item.name.replaceAll("_", " ")}</span><span className="text-sm text-secondary">{item.count} · {percentage(item.count, filtered.length)}%</span></div>)}</div></SectionCard> : <SectionCard title="Payment information"><div className="p-5 text-sm leading-6 text-secondary">Payment breakdowns will appear when a transaction method is recorded for {model.records}.</div></SectionCard>}
-        <Card className="p-6"><h2 className="text-lg font-bold">What to do next</h2><div className="mt-5 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl bg-grouped p-4"><p className="text-sm font-semibold">{model.completionLabel}</p><p className="mt-2 text-2xl font-semibold">{percentage(completed.length, filtered.length)}%</p><p className="mt-2 text-xs leading-5 text-secondary">Keep every open {model.record} in Spotly so the team sees the same next action and nothing is lost in messages or paper notes.</p></div><div className="rounded-2xl bg-grouped p-4"><p className="text-sm font-semibold">Data quality</p><p className="mt-2 text-2xl font-semibold">{filtered.length}</p><p className="mt-2 text-xs leading-5 text-secondary">Real records included in this view. Spotly never fills performance cards with invented activity.</p></div></div><p className="mt-5 text-xs leading-5 text-secondary">Use these signals for daily operations. Reconcile settlement and tax records in Payments before formal reporting.</p></Card>
+        <Card className="p-6"><h2 className="text-lg font-bold">What to do next</h2><div className="mt-5 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl bg-grouped p-4"><p className="text-sm font-semibold">{model.completionLabel}</p><p className="mt-2 text-2xl font-semibold">{filtered.length ? `${percentage(completed.length, filtered.length)}%` : "—"}</p><p className="mt-2 text-xs leading-5 text-secondary">Keep every open {model.record} in Spotly so the team sees the same next action and nothing is lost in messages or paper notes.</p></div><div className="rounded-2xl bg-grouped p-4"><p className="text-sm font-semibold">Data quality</p><p className="mt-2 text-2xl font-semibold">{filtered.length}</p><p className="mt-2 text-xs leading-5 text-secondary">Records from the live workspace. This is operational activity, not a settlement or tax statement.</p></div></div><p className="mt-5 text-xs leading-5 text-secondary">Use these signals for daily operations. Reconcile settlement and tax records in Payments before formal reporting.</p></Card>
       </div>
     </>}
   </div>;

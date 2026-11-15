@@ -1,6 +1,7 @@
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { docsData } from "@/lib/driver-delivery-server";
 import { capabilityRequirements, normalizeCapabilities } from "@/lib/driver-capabilities";
+import { recordCostEvent } from "@/lib/cost-observability-server";
 
 export const runtime = "nodejs";
 const ADMIN_ROLES = ["super_admin", "admin", "platform_admin", "operations_manager", "regional_operations_manager", "driver_operations_coordinator", "risk_compliance_officer"];
@@ -15,10 +16,24 @@ function millis(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+async function getDriverQueueSnapshot(db) {
+  const queueRef = db.collection("adminQueueItems");
+  try {
+    return await queueRef.where("queue", "in", ["driver-applications", "driver-documents", "driver-vehicles"]).limit(2000).get();
+  } catch (error) {
+    // The old unfiltered query remains a compatibility fallback if a project
+    // disables the single-field queue index. Do not conceal unrelated outages.
+    if (![9, "failed-precondition"].includes(error?.code)) throw error;
+    console.warn("[driver-network] queue index unavailable; using legacy bounded scan");
+    return queueRef.limit(2000).get();
+  }
+}
+
 export async function GET(request) {
   try {
     await authenticateRequest(request, { roles: ADMIN_ROLES });
     const { db } = getAdminServices();
+    const startedAt = Date.now();
     const [driversSnap, applicationsSnap, presenceSnap, deliveriesSnap, ridesSnap, parcelsSnap, incidentsSnap, vehiclesSnap, documentsSnap, queueItemsSnap] = await Promise.all([
       db.collection("drivers").limit(500).get(),
       db.collection("driverApplications").limit(500).get(),
@@ -29,8 +44,19 @@ export async function GET(request) {
       db.collection("driverIncidents").limit(500).get(),
       db.collection("driverVehicles").limit(1000).get(),
       db.collection("driverDocuments").limit(2000).get(),
-      db.collection("adminQueueItems").limit(2000).get()
+      getDriverQueueSnapshot(db)
     ]);
+
+    const snapshots = [driversSnap, applicationsSnap, presenceSnap, deliveriesSnap, ridesSnap, parcelsSnap, incidentsSnap, vehiclesSnap, documentsSnap, queueItemsSnap];
+    const fetched = snapshots.map((snap) => snap.size ?? snap.docs?.length ?? 0);
+    // Estimates rather than invoice amounts: each empty Firestore query may
+    // still incur a minimum read, and index reads are billed separately.
+    recordCostEvent("admin.driver-network", {
+      durationMs: Date.now() - startedAt,
+      queryCount: 10,
+      docsFetched: fetched.reduce((sum, count) => sum + count, 0),
+      estimatedReadFloor: fetched.reduce((sum, count) => sum + Math.max(1, count), 0)
+    });
 
     const drivers = docsData(driversSnap);
     const applications = docsData(applicationsSnap);

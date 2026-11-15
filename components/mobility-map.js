@@ -4,6 +4,8 @@ import {useEffect,useRef,useState} from "react";
 import {MapPin,LocateFixed,Navigation,X,AlertTriangle} from "lucide-react";
 import {Button} from "@/components/ui";
 import {publicApiFetch} from "@/lib/api-client";
+import {rememberMobilityPlace} from "@/lib/recent-mobility-places.mjs";
+import {MAP_MODE_EVENT,mobilityMapMode,shouldShowMobilityMap,setMobilityMapMode} from "@/lib/mobility-map-preference.mjs";
 
 // Client-side SDK only; production map tiles/style are provided by a separately
 // licensed provider, never by OSMF's shared tile infrastructure.
@@ -59,11 +61,17 @@ function driverVehicleMarker(type="car") {
 export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",label="Choose location"}){
  const container=useRef(null),mapInstance=useRef(null),marker=useRef(null);
  const [selected,setSelected]=useState(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[ready,setReady]=useState(false);
+ const [online,setOnline]=useState(true);
+ useEffect(()=>{const sync=()=>setOnline(navigator.onLine!==false);sync();window.addEventListener("online",sync);window.addEventListener("offline",sync);return()=>{window.removeEventListener("online",sync);window.removeEventListener("offline",sync)};},[]);
  useEffect(()=>{
   if(!open)return;
   let cancelled=false;
   let map;
   setSelected(null);setError("");setReady(false);
+  if(!online || navigator.onLine===false){
+   setError("You’re offline. Reconnect to use the map, or return to search and choose a saved place.");
+   return;
+  }
   Promise.all([loadMapLibrary(),loadStyle()]).then(([lib,style])=>{
    if(cancelled||!container.current)return;
    const start=coordinates(initialPoint)||defaultCenter(country);
@@ -76,10 +84,10 @@ export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",labe
    map.on("click",event=>{pin.setLngLat(event.lngLat);update(event.lngLat)});
    pin.on("dragend",()=>update(pin.getLngLat()));
    map.on("load",()=>{if(!cancelled){setReady(true);map.resize();}});
-   map.on("error",()=>{if(!cancelled)setError("The map provider could not display this area.")});
-  }).catch(err=>{if(!cancelled)setError(err.message)});
+   map.on("error",()=>{if(!cancelled)setError("The map couldn’t load for this area. Return to search or try again when your connection improves.")});
+  }).catch(()=>{if(!cancelled)setError("The map couldn’t load. Try a place name or landmark in search instead.")});
   return()=>{cancelled=true;marker.current=null;mapInstance.current=null;map?.remove()};
- },[open,country,initialPoint?.lat,initialPoint?.lng]);
+ },[open,online,country,initialPoint?.lat,initialPoint?.lng]);
  async function confirm(){
   if(!selected)return setError("Tap the map or drag the marker to choose the exact location.");
   setBusy(true);setError("");
@@ -87,7 +95,7 @@ export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",labe
    const data=await publicApiFetch(`/api/public/reverse-geocode?lat=${encodeURIComponent(selected.lat)}&lng=${encodeURIComponent(selected.lng)}`);
    const location=data.location;
    if(!location||location.country!==country)throw new Error("Choose a location in the selected country.");
-   onSelect(location);onClose();
+   rememberMobilityPlace(location,country);onSelect(location);onClose();
   }catch(err){setError(err.message||"Could not verify this location. Try another pin position.");}
   finally{setBusy(false)}
  }
@@ -95,11 +103,11 @@ export function PinDropMap({open,onClose,onSelect,initialPoint,country="ZW",labe
  return <div className="fixed inset-0 z-[200] grid place-items-center bg-black/70 p-3" role="dialog" aria-modal="true" aria-label={label} onKeyDown={e=>{if(e.key==="Escape")onClose()}}>
   <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-[var(--surface)] shadow-2xl">
    <div className="flex items-center justify-between gap-3 p-4"><div><p className="text-lg font-semibold">{label}</p>
-    <p className="mt-1 text-xs text-secondary">Tap the street map or drag the orange pin. We verify the address before using it in pricing.</p></div>
+    <p className="mt-1 text-xs text-secondary">Move the pin to where the Driver can safely meet you. We’ll check road access before confirming a price.</p></div>
     <button aria-label="Close location map" className="rounded-xl p-2 hover:bg-[var(--surface-2)]" onClick={onClose}><X className="h-5 w-5"/></button>
    </div>
    <div ref={container} className="h-[min(56vh,490px)] w-full bg-[var(--surface-2)]" role="application" aria-label="Interactive street map. Tap or drag pin to choose address"/>
-   {error&&<p role="alert" className="flex items-start gap-2 px-4 pt-3 text-sm text-danger"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>{error}</p>}
+   {error&&<div role="alert" className="flex items-center justify-between gap-3 px-4 pt-3 text-sm text-danger"><span className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>{error}</span>{!ready?<button type="button" className="shrink-0 underline" onClick={onClose}>Back to search</button>:null}</div>}
    <div className="flex flex-wrap items-center justify-between gap-3 p-4">
     <span className="text-xs text-secondary">{selected?`${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}`:"No pin selected yet"}
       <span className="ml-2">Map data © OpenStreetMap contributors</span></span>
@@ -121,13 +129,26 @@ export function verifiedRoadGeoJSON(path) {
 export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverUpdatedAt=null,driverVehicleType="car",compact=false}){
  const container=useRef(null),map=useRef(null),pinMarkers=useRef([]),driverMarker=useRef(null);
  const [error,setError]=useState("");
+ // Loading map tiles is optional for people using limited mobile data.
+ // Wait until after hydration to inspect the browser's data-saver preference.
+ const [showMap,setShowMap]=useState(false);
+ useEffect(()=>{
+  const update=()=>setShowMap(shouldShowMobilityMap({mode:mobilityMapMode(),connection:navigator.connection,online:navigator.onLine}));
+  update();
+  window.addEventListener(MAP_MODE_EVENT,update);
+  window.addEventListener("online",update);window.addEventListener("offline",update);
+  navigator.connection?.addEventListener?.("change",update);
+  return()=>{window.removeEventListener(MAP_MODE_EVENT,update);window.removeEventListener("online",update);
+    window.removeEventListener("offline",update);navigator.connection?.removeEventListener?.("change",update);};
+ },[]);
  const coords=[pickup,...path,dropoff].map(coordinates).filter(Boolean);
  const hasRoute=Array.isArray(path)&&path.length>=2;
  const routeRef=useRef({path,pickup,dropoff,driverLocation,driverUpdatedAt,driverVehicleType});
  routeRef.current={path,pickup,dropoff,driverLocation,driverUpdatedAt,driverVehicleType};
  useEffect(()=>{
-  if(!container.current||!coordinates(pickup)||!coordinates(dropoff))return;
+  if(!showMap||!container.current||!coordinates(pickup)||!coordinates(dropoff))return;
   let cancelled=false;let instance;
+  const watchdog=setTimeout(()=>{if(!cancelled){setError("Map tiles could not load. Showing trip details without the map.");setShowMap(false);}},15000);
   Promise.all([loadMapLibrary(),loadStyle()]).then(([lib,style])=>{
    if(cancelled||!container.current)return;
    instance=new lib.Map({container:container.current,style,center:coordinates(pickup),zoom:11,
@@ -135,6 +156,7 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
    map.current=instance;
    instance.addControl(new lib.NavigationControl({showCompass:false}),"top-right");
    instance.on("load",()=>{
+    clearTimeout(watchdog);
     if(cancelled)return;
     const data=routeRef.current;
     const line=Array.isArray(data.path)&&data.path.length>=2?data.path.map(coordinates).filter(Boolean):[];
@@ -167,9 +189,9 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
      instance.fitBounds(bounds,{padding:compact?25:45,maxZoom:15,duration:0});
     }
    });
-  }).catch(e=>{if(!cancelled)setError(e.message)});
-  return()=>{cancelled=true;pinMarkers.current.forEach(m=>m.remove());pinMarkers.current=[];driverMarker.current?.remove();driverMarker.current=null;instance?.remove();map.current=null};
- },[pickup?.lat,pickup?.lng,dropoff?.lat,dropoff?.lng,compact]);
+  }).catch(()=>{if(!cancelled){setError("Map tiles are unavailable. Your confirmed trip information remains accessible.");setShowMap(false);}});
+  return()=>{cancelled=true;clearTimeout(watchdog);pinMarkers.current.forEach(m=>m.remove());pinMarkers.current=[];driverMarker.current?.remove();driverMarker.current=null;instance?.remove();map.current=null};
+ },[showMap,pickup?.lat,pickup?.lng,dropoff?.lat,dropoff?.lng,compact]);
  useEffect(()=>{
   const instance=map.current;if(!instance?.isStyleLoaded?.())return;
   instance.getSource("road-route")?.setData(verifiedRoadGeoJSON(hasRoute?path:[]));
@@ -191,9 +213,10 @@ export function RoadRouteMap({pickup,dropoff,path=[],driverLocation=null,driverU
  const recentDriver=lastFix&&Date.now()-lastFix<=120000&&coordinates(driverLocation);
  return <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]">
    <div className="flex items-center justify-between gap-2 p-3"><div><p className="text-sm font-semibold">Road route</p>
-     <p className="mt-1 text-xs text-secondary">Verified driving route · {recentDriver?"Driver GPS recent":"Driver position may be unavailable or stale"}</p></div><Navigation className="h-4 w-4 text-[var(--accent)]"/></div>
-   <div ref={container} className={compact?"h-48 w-full":"h-[290px] w-full"} aria-label="Route street map"/>
+     <p className="mt-1 text-xs text-secondary">{hasRoute?"Verified route available":"Route drawing unavailable"} · {recentDriver?"Driver GPS recent":"Driver position may be unavailable or stale"}</p></div><button type="button" onClick={()=>{if(!showMap && navigator.onLine===false){setError("Reconnect before loading the map. Trip status is still available without tiles.");return;}setError("");setMobilityMapMode(showMap?"low":"map");setShowMap(value=>!value);}} className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold">{showMap?"Use less data":"Show map"}</button></div>
+   {showMap?<div ref={container} className={compact?"h-48 w-full":"h-[290px] w-full"} aria-label="Route street map"/>:
+    <div className="px-4 py-6 text-sm text-secondary">Map tiles are paused. Your confirmed trip details and Driver status remain available when the connection allows updates. Offline maps have not been downloaded.</div>}
    {error&&<p className="px-3 py-2 text-xs text-secondary">{error}</p>}
-   <p className="p-3 text-xs text-secondary">Map data © OpenStreetMap contributors. Traffic-aware arrival times are not guaranteed.</p>
+   <p className="p-3 text-xs text-secondary">{showMap?"Map data © OpenStreetMap contributors. ":""}Traffic-aware arrival times are not guaranteed.</p>
   </div>;
 }

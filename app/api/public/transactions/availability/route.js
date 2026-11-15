@@ -1,4 +1,5 @@
-import { apiError, getAdminServices } from "@/lib/firebase-admin";
+import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
+import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { appointmentReservationSpecs, bookingReservationSpecs } from "@/lib/availability-reservations";
 import { appointmentRules, appointmentSlotTimes, bookingRangeValidation, bookingRules, dateKey, addDays, ticketRules } from "@/lib/book-live-domain";
 import { countryTimeZone, normalizeCountryCode } from "@/lib/country-engine";
@@ -24,6 +25,9 @@ function kindFor(type) {
 
 export async function GET(request) {
   try {
+    await verifyAppCheckRequest(request);
+    // This endpoint can read many reservations; throttle before any catalogue scans.
+    await enforceRateLimit(request, { key: "public-transaction-availability", limit: 60, windowMs: 60_000 });
     const url = new URL(request.url);
     const itemId = String(url.searchParams.get("itemId") || "").trim();
     const branchId = String(url.searchParams.get("branchId") || "").trim();
@@ -32,10 +36,9 @@ export async function GET(request) {
     if (!itemId || !branchId) throw Object.assign(new Error("Choose an offering and location."), { status: 422 });
 
     const { db } = getAdminServices();
-    const [productSnapshot, branchSnapshot, reservationsSnapshot, settingsSnapshot] = await Promise.all([
+    const [productSnapshot, branchSnapshot, settingsSnapshot] = await Promise.all([
       db.collection("products").doc(itemId).get(),
       db.collection("branches").doc(branchId).get(),
-      db.collection("availabilityReservations").where("itemId", "==", itemId).limit(2500).get(),
       db.collection("platformSettings").doc("global").get()
     ]);
     if (!productSnapshot.exists) throw Object.assign(new Error("This offering is no longer available."), { status: 404 });
@@ -54,7 +57,13 @@ export async function GET(request) {
     const timeZone = countryTimeZone(country);
     const service = kind === "ticket" ? "events" : "book";
     const availability = requireServiceDiscoverable(settingsSnapshot.data() || {}, { service, country, city });
-    const reservationMap = new Map(reservationsSnapshot.docs.map((doc) => [doc.id, doc.data() || {}]));
+    // Ticket capacity comes from the offering itself; ticket availability must
+    // not download up to 2,500 appointment/stay reservation documents.
+    const reservationMap = new Map();
+    if (kind !== "ticket") {
+      const reservationsSnapshot = await db.collection("availabilityReservations").where("itemId", "==", itemId).limit(2500).get();
+      for (const doc of reservationsSnapshot.docs) reservationMap.set(doc.id, doc.data() || {});
+    }
     const today = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
     if (kind === "appointment") {

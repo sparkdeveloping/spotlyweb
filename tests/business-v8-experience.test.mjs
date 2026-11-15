@@ -9,13 +9,12 @@ test("Spotly Business root sells the product instead of showing an auth wall", (
   const marketing = read("components/business/business-marketing.js");
   assert.match(auth, /BusinessMarketingPage/);
   assert.match(auth, /portal === "business" && isBusinessLanding/);
-  assert.match(marketing, /Run your business where Zimbabwe discovers it/);
-  assert.match(marketing, /Find or claim my business/);
-  assert.match(marketing, /Sell products/);
-  assert.match(marketing, /Serve food/);
-  assert.match(marketing, /Take bookings/);
-  assert.match(marketing, /Sell experiences/);
-  assert.match(marketing, /ProductPreview/);
+  assert.match(marketing, /Your business\./);
+  assert.match(marketing, /More possibilities\./);
+  assert.match(marketing, /Get started/);
+  for (const kind of ["Food & drink", "Shops", "Services", "Experiences"]) assert.ok(marketing.includes(kind));
+  assert.match(marketing, /Once approved/);
+  assert.doesNotMatch(marketing, /statValue|statLabel|money:|\$391\.20|\$1,032\.00|ProductPreview/);
 });
 
 test("Business acquisition stays on the Business domain", () => {

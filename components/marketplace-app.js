@@ -351,9 +351,8 @@ function BookLiveManagePanel({ order, onCancel }) {
     if (!itemId || !branchId) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch(`/api/public/transactions/availability?itemId=${encodeURIComponent(itemId)}&branchId=${encodeURIComponent(branchId)}&days=90`);
-      const value = await response.json().catch(() => ({}));
-      if (!response.ok || value.ok === false) throw new Error(value.error || "Availability could not be loaded.");
+      const value = await publicApiFetch(`/api/public/transactions/availability?itemId=${encodeURIComponent(itemId)}&branchId=${encodeURIComponent(branchId)}&days=90`);
+      if (value.ok === false) throw new Error(value.error || "Availability could not be loaded.");
       setAvailability(value);
       if (kind === "appointment") {
         const day = (value.days || []).find((row) => row.slots?.some((slot) => slot.available));

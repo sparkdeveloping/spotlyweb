@@ -1,43 +1,9 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
+import { deletionContext } from "@/lib/account-deletion-context";
 
 export const runtime = "nodejs";
-
-const terminal = new Set(["completed", "delivered", "cancelled", "canceled", "failed", "refunded", "expired", "rejected", "returned", "closed"]);
-const assistShoppingTerminal = new Set(["completed", "cancelled", "canceled", "declined", "expired", "refunded", "closed"]);
-const assistBookingTerminal = new Set(["completed", "cancelled", "canceled", "declined", "expired", "closed"]);
-
-function activeCount(snapshot, field, terminalStates = terminal, filter = () => true) {
-  return snapshot.docs.filter((doc) => {
-    const data = doc.data() || {};
-    return filter(data) && !terminalStates.has(String(data[field] || "").toLowerCase());
-  }).length;
-}
-
-async function deletionContext(db, userId) {
-  const [rides, parcels, orders, shopping, bookings, existing] = await Promise.all([
-    db.collection("rideTrips").where("customerId", "==", userId).limit(100).get(),
-    db.collection("parcelJobs").where("customerId", "==", userId).limit(100).get(),
-    db.collection("orders").where("customerId", "==", userId).limit(200).get(),
-    db.collection("independentShoppingRequests").where("customerId", "==", userId).limit(100).get(),
-    db.collection("assistedBookings").where("customerId", "==", userId).limit(100).get(),
-    db.collection("accountDeletionRequests").doc(userId).get()
-  ]);
-  // Ride and Send create linked orders. Exclude those linked order shells here so one
-  // active customer transaction is never presented as two separate blockers.
-  const activeOrderCount = activeCount(orders, "status", terminal, (order) => !["ride", "send"].includes(String(order.transactionType || "").toLowerCase()));
-  const blockers = {
-    activeRideCount: activeCount(rides, "state"),
-    activeParcelCount: activeCount(parcels, "state"),
-    activeOrderCount,
-    activeAssistShoppingCount: activeCount(shopping, "state", assistShoppingTerminal),
-    activeAssistBookingCount: activeCount(bookings, "state", assistBookingTerminal)
-  };
-  blockers.total = Object.values(blockers).reduce((sum, value) => sum + Number(value || 0), 0);
-  const request = existing.exists ? existing.data() || {} : null;
-  return { blockers, request };
-}
 
 export async function GET(request) {
   try {

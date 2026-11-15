@@ -18,7 +18,7 @@ export function routeHarness(root, injected = {}) {
     return { path, doc: id => ref(path + '/' + (id || `auto-${++next}`)),
       where: (field, op, value) => collection(path,[...filters,[field,op,value]],max),
       limit: amount => collection(path,filters,amount),
-      get: async () => { const docs=[...records.keys()].filter(key=>key.startsWith(path+'/')&&key.slice(path.length+1).indexOf('/')<0).map(snapshot).filter(doc=>filters.every(([field,op,value])=>op==='=='&&doc.data()[field]===value)).slice(0,max); return {docs,size:docs.length}; },
+      get: async () => { const docs=[...records.keys()].filter(key=>key.startsWith(path+'/')&&key.slice(path.length+1).indexOf('/')<0).map(snapshot).filter(doc=>filters.every(([field,op,value])=>(op==='==' ? doc.data()[field]===value : op==='in' ? value.includes(doc.data()[field]) : false))).slice(0,max); return {docs,size:docs.length}; },
       add: async value => { const r=ref(path+`/auto-${++next}`); await r.create(value); return r; } };
   }
   const db = { collection, getAll: async (...refs)=>Promise.all(refs.map(r=>r.get())),
@@ -30,7 +30,8 @@ export function routeHarness(root, injected = {}) {
       const result=await fn(tx); for(const write of writes)await write(); return result; } };
   const mocks = {
     'server-only': {},
-    'firebase-admin/firestore': { FieldValue:{serverTimestamp:()=>({toDate:()=>new Date()})} },
+    'next/cache': { unstable_cache: fn => fn },
+    'firebase-admin/firestore': { Timestamp:class Timestamp {}, FieldValue:{serverTimestamp:()=>({toDate:()=>new Date()}),increment:(amount)=>({__increment:amount})} },
     '@/lib/firebase-admin': { authenticateRequest:async()=>actor, verifyAppCheckRequest:async()=>{}, getAdminServices:()=>({db,messaging:{},auth:{}}), apiError:error=>Response.json({ok:false,error:error.message},{status:error.status||500}) },
     '@/lib/rate-limit-server': { enforceRateLimit:async()=>({remaining:10}) },
     '@/lib/customer-launch-server': { requireCustomerLaunchAccess:async()=>{} },
@@ -103,11 +104,14 @@ export function routeHarness(root, injected = {}) {
     safeParse(value) { try { return { success: true, data: this.parse(value) }; } catch (error) { return { success: false, error }; } }
     optional() { const inner=this; return new Schema(value => value === undefined ? undefined : inner.parse(value)); }
     nullable() { const inner=this; return new Schema(value => value === null ? null : inner.parse(value)); }
+    or(other) { const inner=this; return new Schema(value => { const attempt=inner.safeParse(value); return attempt.success ? attempt.data : other.parse(value); }); }
     default(fallback) { const inner=this; return new Schema(value => inner.parse(value === undefined ? (typeof fallback === "function" ? fallback() : fallback) : value)); }
     refine(check, params) { const inner=this; return new Schema(value => { const parsed=inner.parse(value); if (!check(parsed)) throw new ZodError(typeof params === "string" ? params : params?.message); return parsed; }); }
     transform(fn) { const inner=this; return new Schema(value => fn(inner.parse(value))); }
     strict() { return this; }
     passthrough() { return this; }
+    nonnegative() { const inner=this; return new Schema(value => { const parsed=inner.parse(value); if (parsed < 0) throw new ZodError(); return parsed; }); }
+    email() { const inner=this; return new Schema(value => { const parsed=inner.parse(value); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsed)) throw new ZodError(); return parsed; }); }
     positive() { const inner=this; return new Schema(value => { const parsed=inner.parse(value); if (!(parsed > 0)) throw new ZodError(); return parsed; }); }
     datetime() { const inner=this; return new Schema(value => { const parsed=inner.parse(value); if (typeof parsed !== "string" || !Number.isFinite(Date.parse(parsed))) throw new ZodError(); return parsed; }); }
     min(limit) { const inner=this; return new Schema(value => { const parsed=inner.parse(value); if ((typeof parsed === "number" ? parsed : parsed?.length) < limit) throw new ZodError(); return parsed; }); }

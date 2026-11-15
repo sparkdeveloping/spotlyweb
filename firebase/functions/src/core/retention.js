@@ -1,6 +1,8 @@
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { spotlyAdmin } from "./admin.js";
+import { drainExpiredQuotaPages } from "./quota-retention.js";
+import { summarizeDriverRetentionScan } from "./retention-scan-metrics.js";
 
 export const DRIVER_LOCATION_RETENTION = Object.freeze({
   dispatchStaleMs: 10 * 60_000,
@@ -48,6 +50,16 @@ export async function sweepDriverLocationRetention({ now = Date.now() } = {}) {
       stats.activeTripsRemoved += 1;
     }
   }
+  Object.assign(stats, summarizeDriverRetentionScan({ dispatch, presence, active, access }));
+  // No additional RTDB query: these counts measure the current full-tree
+  // approach, allowing a separately tested indexed/expiry migration later.
+  if (stats.dispatchDriversScanned > 1_000 || stats.presenceDriversScanned > 2_000 || stats.activeTripsScanned > 500) {
+    logger.warn("Driver retention sweep is reading large RTDB trees; review indexing before fleet growth", {
+      dispatchDriversScanned: stats.dispatchDriversScanned,
+      presenceDriversScanned: stats.presenceDriversScanned,
+      activeTripsScanned: stats.activeTripsScanned
+    });
+  }
   if (Object.keys(updates).length) await database.ref().update(updates);
 
   const cutoff = Timestamp.fromMillis(now - DRIVER_LOCATION_RETENTION.firestoreLocationMs);
@@ -67,12 +79,17 @@ export async function sweepDriverLocationRetention({ now = Date.now() } = {}) {
 
 
 async function deleteQueryBatch(firestore, query, limit = 300) {
-  const snapshot = await query.limit(limit).get().catch(() => null);
+  const snapshot = await query.limit(limit).get();
   if (!snapshot?.docs?.length) return 0;
   const batch = firestore.batch();
   snapshot.docs.forEach((document) => batch.delete(document.ref));
   await batch.commit();
   return snapshot.docs.length;
+}
+
+function retentionPageBudget() {
+  const configured = Number(process.env.SPOTLY_RETENTION_QUOTA_MAX_PAGES || 4);
+  return Number.isSafeInteger(configured) ? Math.min(Math.max(configured, 1), 12) : 4;
 }
 
 export async function sweepSecurityRetention({ now = Date.now() } = {}) {
@@ -82,10 +99,25 @@ export async function sweepSecurityRetention({ now = Date.now() } = {}) {
   const auditRetentionDays = Math.min(Math.max(Number.isFinite(configuredDays) ? configuredDays : 730, 90), 2555);
   const expired = Timestamp.fromMillis(now);
   const auditCutoff = Timestamp.fromMillis(now - auditRetentionDays * 24 * 60 * 60_000);
-  const stats = { rateLimitsRemoved: 0, securityRateLimitsRemoved: 0, auditLogsRemoved: 0, auditRetentionDays };
+  const maxPages = retentionPageBudget();
+  const stats = {
+    rateLimitsRemoved: 0, securityRateLimitsRemoved: 0,
+    rateLimitPages: 0, securityRateLimitPages: 0,
+    rateLimitBacklogPossible: false, securityRateLimitBacklogPossible: false,
+    quotaPageSize: 250, quotaMaxPages: maxPages,
+    auditLogsRemoved: 0, auditRetentionDays
+  };
 
-  stats.rateLimitsRemoved = await deleteQueryBatch(firestore, firestore.collection("rateLimits").where("expiresAt", "<", expired));
-  stats.securityRateLimitsRemoved = await deleteQueryBatch(firestore, firestore.collection("securityRateLimits").where("expiresAt", "<", expired));
+  const rate = await drainExpiredQuotaPages(firestore, { collection: "rateLimits", cutoff: expired, pageSize: 250, maxPages });
+  const security = await drainExpiredQuotaPages(firestore, { collection: "securityRateLimits", cutoff: expired, pageSize: 250, maxPages });
+  stats.rateLimitsRemoved = rate.removed;
+  stats.securityRateLimitsRemoved = security.removed;
+  stats.rateLimitPages = rate.pages;
+  stats.securityRateLimitPages = security.pages;
+  stats.rateLimitBacklogPossible = rate.couldHaveBacklog;
+  stats.securityRateLimitBacklogPossible = security.couldHaveBacklog;
+  // Audit history is a separate policy. Do not accelerate or apply TTL to
+  // auditLogs without a retention/legal review; preserve the existing cap.
   stats.auditLogsRemoved = await deleteQueryBatch(firestore, firestore.collection("auditLogs").where("createdAt", "<", auditCutoff));
 
   logger.info("Spotly security retention sweep completed", stats);

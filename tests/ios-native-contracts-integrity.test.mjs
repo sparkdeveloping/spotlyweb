@@ -44,7 +44,9 @@ test("open marketplace deduplication keeps same-name nearby OSM features as one 
 });
 
 test("customer account deletion initiation contract exists and records requested state", () => {
-  const source = read("app/api/customer/account/deletion/route.js");
+  const route = read("app/api/customer/account/deletion/route.js");
+  const source = route + read("lib/account-deletion-context.js");
+  assert.match(route, /deletionContext/);
   assert.match(source, /accountDeletionRequests/);
   assert.match(source, /status: "requested"/);
   assert.match(source, /activeRideCount/);

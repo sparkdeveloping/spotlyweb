@@ -15,12 +15,16 @@ import { authenticatedFetch, publicApiFetch } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {PinDropMap,RoadRouteMap} from "@/components/mobility-map";
+import {recentMobilityPlaces,rememberMobilityPlace,clearRecentMobilityPlaces} from "@/lib/recent-mobility-places.mjs";
+import {savedMobilityPlaces,saveMobilityPlace,isSavedMobilityPlace,forgetSavedMobilityPlace,clearSavedMobilityPlaces,findSavedMobilityPlaces} from "@/lib/saved-mobility-places.mjs";
 import {RideVehicleArt,RideMatchingBeacon} from "@/components/ride-visuals";
 import { validateOperationsRideLocations } from "@/lib/operations-run-validation";
 import { serviceUnavailableMessage } from "@/lib/service-availability";
 import { useCustomerRuntime } from "@/components/customer-runtime";
 import {hasVerifiedRoadAccess,needsRoadAccessAcknowledgement,roadAccessConsent} from "@/lib/mobility-road-access-client";
 import { SPOTLY_COUNTRIES, countryDefinition } from "@/lib/country-engine";
+import { useVisibleCustomerStatusPolling } from "@/components/customer-status-polling";
+import { customerStatusInterval, CUSTOMER_STATUS_INTERVALS } from "@/lib/customer-status-polling.mjs";
 
 const rideTypes = [
   { id: "economy", label: "Economy", description: "Everyday rides", seats: "Up to 4" },
@@ -46,23 +50,43 @@ const stateCopy = {
 
 function LocationSearch({ label, value, onChange, point, onSelect, city = "", country = "", currentLocation = false }) {
   const [results, setResults] = useState([]); const [loading, setLoading] = useState(false); const [searchError,setSearchError]=useState(""); const timer = useRef(null);
+  const [recent,setRecent]=useState([]); const [saved,setSaved]=useState([]); const [showRecent,setShowRecent]=useState(false);
+  useEffect(()=>{setRecent(recentMobilityPlaces(country));setSaved(savedMobilityPlaces(country));setShowRecent(false);},[country]);
+  const remember=item=>{rememberMobilityPlace({lat:item.lat,lng:item.lng,label:item.label.split(",")[0],formattedAddress:item.label,area:item.area,city:item.city,country},country);setRecent(recentMobilityPlaces(country));setShowRecent(false);};
   useEffect(() => {
     clearTimeout(timer.current);
-    let active=true;
+    let active=true;const controller=new AbortController();
     if (!value || value.trim().length < 3 || point?.formattedAddress === value) { setResults([]);setSearchError(""); return undefined; }
     setSearchError("");
     timer.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const data=await publicApiFetch(`/api/public/geocode?q=${encodeURIComponent(value.trim())}&city=${encodeURIComponent(city)}&country=${country}`);
-        if(active){setResults(data.results||[]);if(!data.results?.length)setSearchError("No matching address found. Refine the search or drop a pin on the map.");}
+        if(typeof navigator!=="undefined"&&navigator.onLine===false){
+          if(active){const offline=findSavedMobilityPlaces(country,value.trim());setResults(offline.map(item=>({...item,id:`saved:${item.lat}:${item.lng}`,label:item.formattedAddress,offline:true})));setSearchError(offline.length?"Previously saved on this device. You’ll need a connection for a route and fare.":"You’re offline. Choose a saved place below, or reconnect to search.");}
+          return;
+        }
+        const data=await publicApiFetch(`/api/public/geocode?q=${encodeURIComponent(value.trim())}&city=${encodeURIComponent(city)}&country=${country}`,{signal:controller.signal});
+        if(active){setResults(data.results||[]);if(!data.results?.length)setSearchError("No matching place found. Try a landmark, business name, or select a point on the map.");}
       } catch(error) {
-        if(active){setResults([]);setSearchError(error?.message||"Address search is unavailable. Try the map pin if configured.");}
+        if(active&&error?.name!=="AbortError"){const offline=error?.status===422?[]:findSavedMobilityPlaces(country,value.trim());setResults(offline.map(item=>({...item,id:`saved:${item.lat}:${item.lng}`,label:item.formattedAddress,offline:true})));error?.status===422?setSearchError(error?.message||"Country is not supported."):setSearchError(offline.length?"Showing places you saved on this device. Reconnect for a route and price.":"Place search is unavailable. Try a saved place or reconnect.");}
       } finally {if(active)setLoading(false);}
     }, 420);
-    return () => {active=false;clearTimeout(timer.current);};
+    return () => {active=false;controller.abort();clearTimeout(timer.current);};
   }, [value, point?.formattedAddress, city,country]);
-  return <div className="relative"><label className="block text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">{label}</label><div className="mt-2 flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3"><MapPin className="h-5 w-5 shrink-0 text-[var(--accent)]" /><input value={value} onChange={(e) => onChange(e.target.value)} placeholder={label === "Pickup" ? "Where should we pick you up?" : "Where are you going?"} className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none" />{loading ? <LoaderCircle className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : value ? <button onClick={() => { onChange(""); onSelect(null); }} aria-label={`Clear ${label}`}><X className="h-4 w-4 text-[var(--text-3)]" /></button> : null}{currentLocation ? <button type="button" onClick={currentLocation} className="rounded-[12px] p-2 text-[var(--accent)] hover:bg-[var(--accent-soft)]" aria-label="Use current location"><LocateFixed className="h-5 w-5" /></button> : null}</div>{results.length ? <div className="surface absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[16px] shadow-elevated">{results.map((item) => <button key={item.id} type="button" onClick={() => { onChange(item.label); onSelect({ lat: item.lat, lng: item.lng, label: item.label.split(",")[0], formattedAddress: item.label, area: item.area, city: item.city, country:item.country }); setResults([]); }} className="flex w-full items-start gap-3 border-b border-[var(--border-subtle)] p-3 text-left last:border-0 hover:bg-[var(--surface-hover)]"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" /><span><span className="block text-sm font-semibold">{item.label.split(",")[0]}</span><span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-[var(--text-3)]">{item.label}</span></span></button>)}</div> : null}
+  return <div className="relative"><label className="block text-xs font-semibold uppercase tracking-[.1em] text-[var(--text-3)]">{label}</label><div className="mt-2 flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] px-3"><MapPin className="h-5 w-5 shrink-0 text-[var(--accent)]" /><input value={value} onChange={(e) => {setShowRecent(false);onChange(e.target.value);}} onFocus={()=>{if(!value){setRecent(recentMobilityPlaces(country));setSaved(savedMobilityPlaces(country));setShowRecent(true);}}} placeholder={label === "Pickup" ? "Where should we pick you up?" : "Where are you going?"} className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none" />{loading ? <LoaderCircle className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : value ? <button onClick={() => { onChange(""); onSelect(null); }} aria-label={`Clear ${label}`}><X className="h-4 w-4 text-[var(--text-3)]" /></button> : null}{currentLocation ? <button type="button" onClick={currentLocation} className="rounded-[12px] p-2 text-[var(--accent)] hover:bg-[var(--accent-soft)]" aria-label="Use current location"><LocateFixed className="h-5 w-5" /></button> : null}</div>{results.length ? <div className="surface absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[16px] shadow-elevated">{results.map((item) => <button key={item.id} type="button" onClick={() => { onChange(item.label); onSelect({ lat: item.lat, lng: item.lng, label: item.label.split(",")[0], formattedAddress: item.label, area: item.area, city: item.city, country:item.country }); setResults([]);if(!item.offline)remember(item); }} className="flex w-full items-start gap-3 border-b border-[var(--border-subtle)] p-3 text-left last:border-0 hover:bg-[var(--surface-hover)]"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" /><span><span className="block text-sm font-semibold">{item.label.split(",")[0]}{item.offline?" · Saved on device":null}</span><span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-[var(--text-3)]">{item.label}</span></span></button>)}</div> : null}
+   {showRecent&&!value&&saved.length>0?<div className="mt-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-2" aria-label="Places saved on this device">
+    <div className="flex items-center justify-between gap-2 px-2 py-1"><span className="text-xs font-semibold text-[var(--text-3)]">Saved on this device · available offline</span><button type="button" className="text-xs underline text-[var(--text-3)]" onClick={()=>{clearSavedMobilityPlaces();setSaved([]);}}>Clear all</button></div>
+    {saved.map(item=><button key={`${item.country}:${item.lat}:${item.lng}`} type="button" onClick={()=>{onChange(item.formattedAddress);onSelect(item);setResults([]);setShowRecent(false);}} className="flex w-full items-center gap-2 rounded-xl px-2 py-3 text-left text-sm hover:bg-[var(--surface-hover)]"><MapPin className="h-4 w-4 shrink-0"/><span className="line-clamp-2">{item.formattedAddress}</span></button>)}
+   </div>:null}
+   {showRecent&&!value&&recent.length>0?<div className="mt-2 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-2" aria-label="Recently selected places">
+    <div className="flex items-center justify-between gap-2 px-2 py-1"><span className="text-xs font-semibold text-[var(--text-3)]">Recent places · this tab</span><button type="button" className="text-xs underline text-[var(--text-3)]" onClick={()=>{clearRecentMobilityPlaces();setRecent([]);setShowRecent(false);}}>Clear</button></div>
+    {recent.map(item=><button key={`${item.country}:${item.lat}:${item.lng}`} type="button" onClick={()=>{onChange(item.formattedAddress);onSelect(item);setShowRecent(false);}} className="flex w-full items-center gap-2 rounded-xl px-2 py-3 text-left text-sm hover:bg-[var(--surface-hover)]"><MapPin className="h-4 w-4 shrink-0"/><span className="line-clamp-2">{item.formattedAddress}</span></button>)}
+   </div>:null}
+   {point?.formattedAddress===value&&point?.country===country?<div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+     {isSavedMobilityPlace(point,country)?<button type="button" className="font-medium underline" onClick={()=>{forgetSavedMobilityPlace(point,country);setSaved(savedMobilityPlaces(country));}}>Remove offline place</button>:
+       <button type="button" className="font-medium underline" onClick={()=>{if(saveMobilityPlace(point,country))setSaved(savedMobilityPlaces(country));}}>Save this place on my device</button>}
+     <span className="text-[var(--text-3)]">Stores precise coordinates here for up to 30 days. Others using this browser can see them. Booking still requires live road verification.</span>
+   </div>:null}
    {point?.formattedAddress===value?<p className="mt-2 flex items-center gap-1.5 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5"/>Location confirmed for fare calculation</p>:
      searchError?<p role="alert" className="mt-2 text-xs text-danger">{searchError}</p>:
      value?.trim().length>=3&&!loading?<p className="mt-2 text-xs text-[var(--text-3)]">Select a suggested address or choose a location on the map to continue.</p>:null}
@@ -190,12 +214,52 @@ export function RideApp() {
     window.location.assign("/login?portal=customer&mode=" + encodeURIComponent(mode) + "&next=%2Fride");
   }
 
-  const load = useCallback(async ({ quiet = false } = {}) => { if (!user?.uid || user.isAnonymous) return; if (!quiet) setLoading("load"); try { const data = await authenticatedFetch("/api/customer/rides", { cache: "no-store" }); setActiveRide(data.activeRide || null); setHistory(data.rides || []); } catch (error) { if (!quiet) toast(error.message, { type: "error" }); } finally { if (!quiet) setLoading(""); } }, [user, toast, setLoading, setActiveRide, setHistory]);
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (!activeRide?.id) return undefined; const timer = window.setInterval(async () => { try { const data = await authenticatedFetch(`/api/customer/rides?rideId=${encodeURIComponent(activeRide.id)}`, { cache: "no-store" }); const next = data.ride || null; setActiveRide(["completed", "cancelled", "failed"].includes(next?.state) ? null : next); if (["completed", "cancelled", "failed"].includes(next?.state)) load({ quiet: true });
-      if(next?.state==="searching_driver")await authenticatedFetch("/api/customer/rides/refresh",{
-       method:"POST",body:JSON.stringify({rideId:next.id})
-      }).catch(()=>{}); } catch {} }, 8000); return () => clearInterval(timer); }, [activeRide?.id, load]);
+  const customerUID = user?.uid || null;
+  const ownerRef = useRef(customerUID);
+  ownerRef.current = customerUID;
+  const isGuest = Boolean(user?.isAnonymous);
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!customerUID || isGuest) return;
+    if (!quiet) setLoading("load");
+    try {
+      const data = await authenticatedFetch("/api/customer/rides", { cache: "no-store" });
+      if (ownerRef.current !== customerUID) return;
+      setActiveRide(data.activeRide || null);
+      setHistory(data.rides || []);
+    } catch (error) { if (!quiet) toast(error.message, { type: "error" }); }
+    finally { if (!quiet) setLoading(""); }
+  }, [customerUID, isGuest, toast]);
+  useEffect(() => { setActiveRide(null); setHistory([]); }, [customerUID]);
+  useEffect(() => { void load(); }, [load]);
+  const activeRideID = activeRide?.id || null;
+  const lastRideDispatchRef = useRef({ id: null, at: 0 });
+  useVisibleCustomerStatusPolling({
+    // Idle Ride keeps the original one-shot history behavior; there is no new idle poll.
+    enabled: Boolean(customerUID && !isGuest && activeRideID),
+    ownerKey: customerUID,
+    intervalMs: customerStatusInterval("ride", true),
+    poll: async () => {
+      if (!activeRideID) { await load({ quiet: true }); return; }
+      const data = await authenticatedFetch(`/api/customer/rides?rideId=${encodeURIComponent(activeRideID)}`, { cache: "no-store" });
+      if (ownerRef.current !== customerUID) return;
+      const next = data.ride;
+      if (!next || ["completed", "cancelled", "failed"].includes(next.state)) {
+        setActiveRide(null);
+        await load({ quiet: true }); // Reconcile history as soon as the trip finishes.
+        return;
+      }
+      setActiveRide(next);
+      if (next.state === "searching_driver" &&
+          (lastRideDispatchRef.current.id !== next.id ||
+           Date.now() - lastRideDispatchRef.current.at >= CUSTOMER_STATUS_INTERVALS.rideDispatchRetryMs)) {
+        lastRideDispatchRef.current = { id: next.id, at: Date.now() };
+        // Server still owns dispatch authorization and idempotency; retry is a recovery path.
+        await authenticatedFetch("/api/customer/rides/refresh", {
+          method: "POST", body: JSON.stringify({ rideId: next.id })
+        }).catch(() => {});
+      }
+    }
+  });
 
   function useCurrentPickup() {
     if (!navigator.geolocation) return toast("This browser cannot access your location.", { type: "error" });
@@ -238,7 +302,7 @@ export function RideApp() {
   }
   async function confirmCancel() { if (!cancelRide || cancelReason.trim().length < 3) return; setLoading("cancel"); try { await authenticatedFetch("/api/customer/rides", { method: "POST", body: JSON.stringify({ action: "cancel", rideId: cancelRide.id, reason: cancelReason.trim() }) }); setCancelRide(null); setCancelReason(""); setActiveRide(null); await load({ quiet: true }); toast("Ride cancelled."); } catch (error) { toast(error.message, { type: "error" }); } finally { setLoading(""); } }
 
-  if (activeRide) return <CustomerShell immersive><ActiveRide ride={activeRide} onRefresh={() => load({ quiet: true })} onCancel={setCancelRide} onPay={pay} /></CustomerShell>;
+  if (activeRide && customerUID && !isGuest) return <CustomerShell immersive><ActiveRide ride={activeRide} onRefresh={() => load({ quiet: true })} onCancel={setCancelRide} onPay={pay} /></CustomerShell>;
 
   if (!customerRuntime.ready) return <CustomerPageSkeleton />;
 

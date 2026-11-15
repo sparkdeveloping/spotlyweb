@@ -392,8 +392,20 @@ export async function registerDriverDocument(actor, data = {}) {
 export async function submitDriverApplication(actor) {
   const { firestore } = spotlyAdmin(); const [appDoc, vehicleDoc, documents] = await Promise.all([firestore.collection("driverApplications").doc(actor.uid).get(), firestore.collection("driverVehicles").doc(`${actor.uid}_primary`).get(), firestore.collection("driverDocuments").where("driverId", "==", actor.uid).limit(100).get()]);
   if (!appDoc.exists || !vehicleDoc.exists) throw new HttpsError("failed-precondition", "Complete your Driver profile and vehicle first."); const application = appDoc.data() || {}; if ([application.legalName, application.phone, application.country, application.city].some((v) => !text(v))) throw new HttpsError("failed-precondition", "Complete your Driver profile before submitting.");
+  if (application.agreementsAccepted !== true || application.locationConsent !== true) {
+    throw new HttpsError("failed-precondition", "Read and accept Spotly's terms and location-sharing notice before submitting.");
+  }
+  if (!country(application.country)) throw new HttpsError("failed-precondition", "Choose a supported operating country.");
   const types = new Set(documents.docs.map((doc) => doc.data().type)); const required = vehicleDoc.data()?.type === "bicycle" ? ["identity"] : ["identity", "licence", "registration", "insurance"]; for (const type of required) if (!types.has(type)) throw new HttpsError("failed-precondition", `Upload your ${type} before submitting.`);
-  await appDoc.ref.set({ status: "application_submitted", submittedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  const now = FieldValue.serverTimestamp();
+  await appDoc.ref.set({ status: "application_submitted", submittedAt: now, updatedAt: now,
+    consentEvidence: {
+      scope: "published_pilot_notices", country: country(application.country),
+      termsVersion: "2026-08-18", privacyVersion: "2026-08-18",
+      termsUrl: "https://www.spotlyafrica.com/terms", privacyUrl: "https://www.spotlyafrica.com/privacy",
+      driverSpecificAgreement: "not_yet_verified", method: "driver_onboarding", actorId: actor.uid, recordedAt: now
+    }
+  }, { merge: true });
   await writeFunctionAudit({ action: "driver.application_submitted", actor, entityType: "driverApplication", entityId: actor.uid, metadata: { requiredDocumentCount: required.length } });
   return { status: "application_submitted" };
 }

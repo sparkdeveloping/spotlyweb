@@ -8,6 +8,7 @@ import { countryCity, normalizeCountryCode } from "@/lib/country-engine";
 import { normalizeDriverPhone, validCountry } from "@/lib/driver-regions";
 import { accountLast4, encryptFinancialValue } from "@/lib/business-money-server";
 import { notifyRoleAudience, notifyUser } from "@/lib/notification-server";
+import { driverConsentSnapshot } from "@/lib/lx6-policy-snapshot.mjs";
 
 export const runtime = "nodejs";
 
@@ -285,7 +286,14 @@ export async function POST(request) {
     const documents = documentQuery.docs.map((item) => ({ id: item.id, ...item.data() }));
     const readiness = applicationReadiness(submittedApplication, primaryVehicle, documents, payoutSnap.exists ? payoutSnap.data() : null);
     if (!readiness.complete) throw Object.assign(new Error("Complete every Driver application step before submitting."), { status: 409, blockers: readiness.checks.filter((item) => !item.ok) });
-    await appRef.set({ status: "application_submitted", submittedAt: now, updatedAt: now }, { merge: true });
+    const consentEvidence = driverConsentSnapshot({
+      agreementsAccepted: submittedApplication.agreementsAccepted,
+      locationConsent: submittedApplication.locationConsent,
+      country: submittedCountry
+    });
+    await appRef.set({ status: "application_submitted", submittedAt: now, updatedAt: now,
+      consentEvidence: { ...consentEvidence, recordedAt: now, actorId: user.uid }
+    }, { merge: true });
     await db.collection("adminQueueItems").doc(`driver_application_${user.uid}`).set({
       queue: "driver-applications", type: "driver_application", entityId: user.uid, driverId: user.uid, status: "open", priority: "normal", title: safeText(appSnap.data().legalName || user.name || "Driver application", 160), createdAt: now, updatedAt: now
     }, { merge: true });

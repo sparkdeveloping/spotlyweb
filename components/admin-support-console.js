@@ -140,7 +140,7 @@ function RelatedObject({ label, item, kind }) {
   </div>;
 }
 
-function ContextPanel({ context, conversation, currentUserId, onAssign, onOpenConversation, busy }) {
+function ContextPanel({ context, conversation, currentUserId, onAssign, onOpenConversation, onCallbackReview, busy }) {
   const requester = context?.requester;
   const business = context?.business;
   const related = context?.related || {};
@@ -166,6 +166,9 @@ function ContextPanel({ context, conversation, currentUserId, onAssign, onOpenCo
     {business ? <section><div className="flex items-center gap-2"><Store className="h-4 w-4 text-[var(--admin)]" /><h3 className="text-sm font-semibold">Business</h3></div><div className="mt-3 rounded-[14px] border border-[var(--border-subtle)] p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{business.name || business.id}</p><div className="mt-2 flex flex-wrap gap-1.5"><StatusBadge status={business.status || "unknown"} />{business.verificationStatus ? <StatusBadge status={business.verificationStatus} /> : null}</div></div><div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="ghost"><Link href={`/support-view/${business.id}`} aria-label="Open business support view"><ArrowUpRight className="h-4 w-4" /></Link></Button><Button asChild size="sm" variant="outline"><Link href="/business-register">Business register</Link></Button></div></div></div></section> : null}
 
     {(related.order || related.ride || related.parcel || related.delivery || related.claim || related.paymentIntent) ? <section><h3 className="text-sm font-semibold">Attached context</h3><div className="mt-3 grid gap-2"><RelatedObject label="Order / booking" item={related.order} kind={related.order?.transactionType} /><RelatedObject label="Ride" item={related.ride} kind="Ride" /><RelatedObject label="Send" item={related.parcel} kind="Send" /><RelatedObject label="Delivery" item={related.delivery} kind="Delivery" /><RelatedObject label="Business claim" item={related.claim} kind="Claim" /><RelatedObject label="Payment" item={related.paymentIntent} kind="Payment intent" /></div></section> : null}
+
+    {context?.incidentReference ? <section><div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-[var(--admin)]" /><h3 className="text-sm font-semibold">Linked application report</h3></div><p className="mt-2 break-all text-xs text-secondary">{context.incidentReference}</p><p className="mt-1 text-xs text-secondary">An incident reference is a diagnostic lookup hint, not proof of requester identity.</p></section> : null}
+    {context?.callbackRequest ? <section><div className="flex items-center gap-2"><Phone className="h-4 w-4 text-[var(--admin)]" /><h3 className="text-sm font-semibold">Callback requested</h3></div><p className="mt-2 text-xs text-secondary">{context.callbackRequest.status || "requested"}</p><InfoRow label="Requested number" value={context.callbackRequest.phone} href={context.callbackRequest.phone ? `tel:${context.callbackRequest.phone}` : undefined}/><p className="mt-2 text-xs text-secondary">Contact only about this support request, as consented by the requester.</p><div className="mt-3 flex flex-wrap gap-2">{["contacting", "completed", "unable_to_reach", "declined"].map((value) => <Button key={value} size="sm" variant="outline" disabled={busy} onClick={() => onCallbackReview(value)}>{cleanLabel(value)}</Button>)}</div></section> : null}
 
     {context?.recentActivity?.length ? <section><h3 className="text-sm font-semibold">Recent Spotly activity</h3><div className="mt-2 divide-y divide-[var(--border-subtle)]">{context.recentActivity.slice(0, 6).map((item) => <div key={`${item.kind}-${item.id}`} className="py-2.5"><div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-xs font-semibold">{item.number || item.id}</span><StatusBadge status={item.status || item.state || item.paymentStatus || "unknown"} /></div><p className="mt-1 text-[11px] text-[var(--text-3)]">{cleanLabel(item.kind)} · {shortTime(item.updatedAt || item.createdAt)}</p></div>)}</div></section> : null}
 
@@ -283,6 +286,17 @@ export function AdminSupportConsole() {
     await patch({ assignedTo: agentId || null, assignedToName: agent?.displayName || null }, agentId ? `Assigned to ${agent?.displayName || "agent"}.` : "Conversation unassigned.");
   }
 
+  async function reviewCallback(status) {
+    if (!selectedId || busy) return;
+    setBusy("callback");
+    try {
+      await authenticatedFetch("/api/support/conversations", { method: "POST", body: JSON.stringify({ action: "callback_review", conversationId: selectedId, status }) });
+      await loadContext(selectedId);
+      toast("Callback status updated.", { type: "success" });
+    } catch (reason) { toast("Callback status could not be updated.", { type: "error" }); }
+    finally { setBusy(""); }
+  }
+
   function chooseFiles(event) {
     const chosen = Array.from(event.target.files || []).slice(0, 6);
     const invalid = chosen.find((file) => !SUPPORTED_ATTACHMENTS.has(file.type) || file.size > 10 * 1024 * 1024);
@@ -364,9 +378,9 @@ export function AdminSupportConsole() {
         </> : <EmptyState icon={Headphones} title="Choose a conversation" description="Select a support conversation to read the full history, reply, add an internal note or inspect attached Spotly context." />}
       </section>
 
-      <aside className="hidden min-h-[720px] overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--surface)] xl:block"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--surface)] px-4 py-3"><div><p className="text-sm font-semibold">Context</p><p className="text-[11px] text-[var(--text-3)]">What the agent needs to know</p></div>{contextLoading ? <RefreshCw className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : null}</div>{selected ? <ContextPanel context={context} conversation={selected} currentUserId={user?.uid} onAssign={assign} onOpenConversation={openConversation} busy={busy === "update"} /> : <div className="p-5 text-sm text-[var(--text-3)]">Select a conversation.</div>}</aside>
+      <aside className="hidden min-h-[720px] overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--surface)] xl:block"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--surface)] px-4 py-3"><div><p className="text-sm font-semibold">Context</p><p className="text-[11px] text-[var(--text-3)]">What the agent needs to know</p></div>{contextLoading ? <RefreshCw className="h-4 w-4 animate-spin text-[var(--text-3)]" /> : null}</div>{selected ? <ContextPanel context={context} conversation={selected} currentUserId={user?.uid} onAssign={assign} onOpenConversation={openConversation} onCallbackReview={reviewCallback} busy={Boolean(busy)} /> : <div className="p-5 text-sm text-[var(--text-3)]">Select a conversation.</div>}</aside>
     </div>
 
-    {contextOpen && selected ? <div className="fixed inset-0 z-[90] xl:hidden"><button type="button" className="absolute inset-0 bg-black/40" onClick={() => setContextOpen(false)} aria-label="Close context"/><aside className="absolute inset-y-0 right-0 w-[min(92vw,380px)] overflow-y-auto bg-[var(--surface)] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b bg-[var(--surface)] px-4 py-3"><div><p className="font-semibold">Conversation context</p><p className="text-xs text-[var(--text-3)]">Customer, assignment and Spotly activity</p></div><Button variant="ghost" size="sm" onClick={() => setContextOpen(false)} aria-label="Close context"><X className="h-4 w-4" /></Button></div><ContextPanel context={context} conversation={selected} currentUserId={user?.uid} onAssign={assign} onOpenConversation={(id) => { openConversation(id); setContextOpen(false); }} busy={busy === "update"} /></aside></div> : null}
+    {contextOpen && selected ? <div className="fixed inset-0 z-[90] xl:hidden"><button type="button" className="absolute inset-0 bg-black/40" onClick={() => setContextOpen(false)} aria-label="Close context"/><aside className="absolute inset-y-0 right-0 w-[min(92vw,380px)] overflow-y-auto bg-[var(--surface)] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b bg-[var(--surface)] px-4 py-3"><div><p className="font-semibold">Conversation context</p><p className="text-xs text-[var(--text-3)]">Customer, assignment and Spotly activity</p></div><Button variant="ghost" size="sm" onClick={() => setContextOpen(false)} aria-label="Close context"><X className="h-4 w-4" /></Button></div><ContextPanel context={context} conversation={selected} currentUserId={user?.uid} onAssign={assign} onOpenConversation={(id) => { openConversation(id); setContextOpen(false); }} onCallbackReview={reviewCallback} busy={Boolean(busy)} /></aside></div> : null}
   </div>;
 }

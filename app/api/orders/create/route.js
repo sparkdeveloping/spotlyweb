@@ -6,6 +6,7 @@ import { pickupAvailability } from "@/lib/pickup-availability";
 import { safeText } from "@/lib/server-helpers";
 import { haversineKm, makeCode, makeDeliveryNumber } from "@/lib/driver-delivery-server";
 import { buildOrderTotals, shoppingReserveAmount } from "@/lib/order-money";
+import { effectiveCommercialTerms } from "@/lib/commercial-policies.mjs";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
 import { marketplaceTrust } from "@/lib/marketplace-trust";
@@ -187,7 +188,19 @@ export async function POST(request) {
       const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines, code: body.promoCode || "", isNewCustomer: priorOrders.empty, previewAccess: operations.servicePreview });
       if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
       const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
-      const commissionPercent = Number(finance.commissionPercent ?? settings.commerce?.commissionPercent ?? 0);
+      // The policy engine is opt-in, and an owner must accept the exact current terms.
+      // Existing finance overrides continue unchanged until that acceptance occurs.
+      const legacyCommission = Number(finance.commissionPercent ?? settings.commerce?.commissionPercent ?? 0);
+      const [commercialOverride, commercialAgreement] = process.env.SPOTLY_COMMERCIAL_PRICING_ENABLED === "true"
+        ? await Promise.all([
+            transaction.get(db.collection("businessCommercialOverrides").doc(body.businessId)),
+            transaction.get(db.collection("businessCommercialAgreements").doc(body.businessId))
+          ]) : [null, null];
+      const commercialTerms = effectiveCommercialTerms({ config: process.env.SPOTLY_COMMERCIAL_PRICING_ENABLED === "true" ? settings.commercialPlans : null,
+        override: commercialOverride?.data(), agreement: process.env.SPOTLY_COMMERCIAL_PRICING_ENABLED === "true" ? commercialAgreement?.data() : null,
+        country: countryCode, service: orderService, businessType: currentBusiness?.businessType || "directory_profile",
+        fallbackPercent: legacyCommission });
+      const commissionPercent = commercialTerms.commissionPercent;
       const totals = buildOrderTotals({ subtotal, discount: promotionDiscount, serviceFee, deliveryFee, shoppingReserve, commissionPercent });
       const total = totals.total;
       const paymentRequired = paymentMethodRequiresCapture && total > 0;
@@ -208,7 +221,7 @@ export async function POST(request) {
         branchName: branchData.branchName || branchData.name,
         items: lines,
         totals,
-        commerceSnapshot: { commissionPercent: totals.commissionPercent, settlementModel: "platform", deliveryFulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", promotionId: promotionResult?.quote?.eligible ? promotionResult.promotion.id : null },
+        commerceSnapshot: { commissionPercent: totals.commissionPercent, policySource: commercialTerms.source, policyRevision: commercialTerms.policyRevision, agreementVersion: commercialTerms.agreementVersion || null, trialApplied: commercialTerms.trialApplied, trialEndAt: commercialTerms.trialEndAt || null, settlementModel: "platform", deliveryFulfilmentMode: driverShopping ? "driver_shops" : "merchant_prepared", promotionId: promotionResult?.quote?.eligible ? promotionResult.promotion.id : null },
         promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         shopping: driverShopping ? { mode: "driver_shops", state: "funding_pending", reservePercent, estimatedSubtotal: subtotal, reserveAmount: shoppingReserve, maxAuthorizedMerchandise: Number((subtotal + shoppingReserve).toFixed(2)), actualSubtotal: null, finalTotal: null, unusedReserve: null, topUpRequired: 0, substitutionPreference: normalizedSubstitution, receiptStoragePath: "", changes: [], updatedAt: new Date().toISOString() } : null,
         country: countryCode,

@@ -53,6 +53,9 @@ export function BusinessDataProvider({ children }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const requestedBusinessId = searchParams.get("business") || "";
+  // Account-level pages use the authoritative portfolio endpoint, not the
+  // selected merchant's full operational Firestore listener set.
+  const accountLevel = isBusinessAccountSection(businessSectionFromPath(pathname));
   const [businessChoices, setBusinessChoices] = useState([]);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [portfolioError, setPortfolioError] = useState("");
@@ -215,7 +218,7 @@ export function BusinessDataProvider({ children }) {
   }, [allBranches, membership, selectedChoice?.businessWide]);
 
   useEffect(() => {
-    if (!selectedBusinessId) {
+    if (!selectedBusinessId || accountLevel) {
       setBusiness(null);
       setLoadedBusinessId("");
       setAllBranches([]);
@@ -301,20 +304,20 @@ export function BusinessDataProvider({ children }) {
       subscribeSupportConversations(setSupport, { businessId: selectedBusinessId, onError })
     ];
     return () => cleanups.forEach((cleanup) => cleanup?.());
-  }, [selectedBusinessId, user]);
+  }, [accountLevel, selectedBusinessId, user]);
 
   useEffect(() => {
-    if (!selectedBusinessId) return;
+    if (!selectedBusinessId || accountLevel) return;
     setAuthoritativeLifecycle(null);
     setLifecycleBusinessId("");
     refreshLifecycle(selectedBusinessId);
-  }, [refreshLifecycle, selectedBusinessId]);
+  }, [accountLevel, refreshLifecycle, selectedBusinessId]);
 
   useEffect(() => {
-    if (!selectedBusinessId || loadedBusinessId !== selectedBusinessId) return undefined;
+    if (!selectedBusinessId || accountLevel || loadedBusinessId !== selectedBusinessId) return undefined;
     const timer = setTimeout(() => { refreshLifecycle(selectedBusinessId, { silent: true }); }, 180);
     return () => clearTimeout(timer);
-  }, [allBranches, business, claims, invitations, loadedBusinessId, members, operations, products, refreshLifecycle, selectedBusinessId]);
+  }, [accountLevel, allBranches, business, claims, invitations, loadedBusinessId, members, operations, products, refreshLifecycle, selectedBusinessId]);
 
   useEffect(() => {
     if (!branches.length) { setSelectedBranchId(""); return; }
@@ -328,7 +331,10 @@ export function BusinessDataProvider({ children }) {
     if (selectedBusinessId && selectedBranchId) writeState(`spotly-branch-id:${selectedBusinessId}`, user, selectedBranchId, "local");
   }, [selectedBusinessId, selectedBranchId, user]);
 
-  useEffect(() => subscribeCatalogTemplates(setTemplates, () => {}), []);
+  useEffect(() => {
+    if (accountLevel) return undefined;
+    return subscribeCatalogTemplates(setTemplates, () => {});
+  }, [accountLevel]);
 
   const authoritativeBranch = authoritativeLifecycle?.canonicalLocation || null;
   const selectedBranch = useMemo(() => branches.find((branch) => branch.id === selectedBranchId) || branches.find((branch) => branch.id === authoritativeBranch?.id) || branches[0] || authoritativeBranch || null, [authoritativeBranch, branches, selectedBranchId]);

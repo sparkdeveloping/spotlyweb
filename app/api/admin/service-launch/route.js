@@ -10,6 +10,7 @@ import {paynowCredentialsConfigured} from "@/lib/paynow-server";
 import {routingConfiguration} from "@/lib/ride-routing";
 import {resolveServiceAvailability,serviceAvailabilityCityKey} from "@/lib/service-availability";
 import {editServiceAvailabilityDraft} from "@/lib/service-availability-control-plane-server";
+import {countryLaunchReadiness} from "@/lib/lx6-country-launch-readiness.mjs";
 
 export const runtime="nodejs";
 const READ_ROLES=["super_admin","admin","platform_admin","operations_manager","regional_operations_manager","driver_operations_coordinator","dispatcher","support_manager"];
@@ -89,6 +90,13 @@ export async function POST(request){
    throw Object.assign(new Error("Cannot stage "+data.service+" live: "+prereq.missing.join("; ")),{status:409});
   const config=data.service==="ride"?rideSettings(current):parcelSettings(current);
   const countries=data.service==="ride"?(config.enabledCountries||[]):["ZW"];
+  // Enforce only on NEW staging enable operations when the operator explicitly opts in.
+  // A missing entry always blocks; permissions to edit platform settings alone do not
+  // establish regulatory approval or change the active ride/driver runtime.
+  if(data.action==="enable"&&process.env.SPOTLY_LX6_ENFORCE_COUNTRY_LAUNCH_GATE==="true"){
+   const missing=countries.map(country=>countryLaunchReadiness(current,country,data.service)).filter(result=>!result.ready);
+   if(missing.length)throw Object.assign(new Error("Country launch evidence is incomplete: "+missing.map(result=>`${result.country} (${result.blockers.join(", ")})`).join("; ")),{status:409});
+  }
   for(const country of countries){
    await editServiceAvailabilityDraft(db,actor,{service:data.service,scope:"country",country,state:data.action==="enable"?"discover":"paused",reason:data.action==="enable"?"":"Temporarily paused by Spotly Operations."});
    for(const city of config.enabledCities||[]){

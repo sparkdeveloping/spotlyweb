@@ -7,6 +7,7 @@
       ".write": false
     },
     "driverPresence": {
+      ".indexOn": ["state"],
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || root.child('runtimeAccess/driverPresenceReaders/' + $uid + '/' + auth.uid).val() === true)",
         ".write": "auth != null && auth.uid === $uid && (!newData.exists() || root.child('runtimeAccess/driverEligible/' + auth.uid).val() === true)",

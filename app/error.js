@@ -1,10 +1,37 @@
 "use client";
 
-import { useEffect } from "react";
-import { AlertTriangle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui";
+import { reportBoundaryIncident } from "@/lib/client-incidents";
+import { friendlyBoundaryMessage } from "@/lib/incident-policy.mjs";
+
+const copy = friendlyBoundaryMessage();
 
 export default function ErrorPage({ error, reset }) {
-  useEffect(() => { console.error(error); }, [error]);
-  return <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4"><div className="surface max-w-lg rounded-xl p-8 text-center shadow-elevated"><span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--danger-soft)] text-[var(--on-danger-soft)]"><AlertTriangle className="h-6 w-6" /></span><h1 className="mt-5 text-2xl font-bold">Spotly hit an unexpected error.</h1><p className="mt-3 text-sm leading-6 text-secondary">Your data was not intentionally changed. Retry the current screen, or return to the main workspace.</p><div className="mt-6 flex justify-center gap-2"><Button variant="outline" onClick={() => { window.location.href = "/"; }}>Go home</Button><Button onClick={reset}>Try again</Button></div></div></main>;
+  const reported = useRef(null);
+  const [reference, setReference] = useState(null);
+  useEffect(() => {
+    if (reported.current === error) return;
+    reported.current = error;
+    let active = true;
+    setReference(null);
+    reportBoundaryIncident(error, "page-boundary").then((ref) => { if (active) setReference(ref); });
+    return () => { active = false; };
+  }, [error]);
+
+  return <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4">
+    <div className="surface w-full max-w-lg rounded-2xl p-7 text-center shadow-elevated sm:p-9" role="alert">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-2)] text-secondary"><AlertCircle className="h-5 w-5" /></span>
+      <h1 className="mt-5 text-2xl font-semibold tracking-tight">{copy.title}</h1>
+      <p className="mt-3 text-sm leading-6 text-secondary">{copy.body}</p>
+      {reference && <p className="mt-4 text-xs text-secondary">Support reference: <strong className="select-all">{reference}</strong></p>}
+      <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+        <Button onClick={reset}>{copy.retry}</Button>
+        <Button variant="outline" asChild><Link href={process.env.NEXT_PUBLIC_SPOTLY_TICKETS_ENABLED === "true" ? (reference ? `https://tickets.spotlyafrica.com/?incident=${encodeURIComponent(reference)}` : "https://tickets.spotlyafrica.com/") : "/support"}>{copy.support}</Link></Button>
+      </div>
+      <Link href="/" className="mt-5 inline-block text-sm text-secondary underline underline-offset-4">Return to Spotly</Link>
+    </div>
+  </main>;
 }

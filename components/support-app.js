@@ -34,6 +34,7 @@ import {
   updateSupportConversation
 } from "@/lib/firebase-services";
 import { readState, removeState, writeState } from "@/lib/browser-state";
+import { SpotlySupportAssistant } from "@/components/spotly-support-assistant";
 
 const defaultResources = [
   { id: "customer-orders", title: "Track an order or delivery", description: "Use Activity to follow preparation, Driver progress, delivery PINs, payment and handover status.", category: "Orders & delivery", type: "guide", language: "en", audience: ["public", "customer"] },
@@ -177,6 +178,7 @@ export function SupportApp() {
         <div className="mt-6 max-w-3xl"><SearchField value={query} onChange={setQuery} placeholder="Search orders, bookings, payments, account, claiming…" className="h-14 bg-[var(--surface)]" /></div>
       </section>
 
+      <div className="mt-7"><SpotlySupportAssistant onHumanSupport={() => setChatOpen(true)} /></div>
       <div className="grid gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section>
           <div className="flex items-end justify-between gap-4"><div><p className="text-sm font-semibold text-[var(--accent)]">Help resources</p><h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">{query ? `Results for “${query}”` : "Start with the right guide"}</h2></div><span className="text-sm text-[var(--text-3)]">{filtered.length} resource{filtered.length === 1 ? "" : "s"}</span></div>
@@ -184,7 +186,7 @@ export function SupportApp() {
         </section>
 
         <aside className="space-y-6 border-t border-[var(--border-subtle)] pt-7 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
-          <div><Headphones className="h-5 w-5 text-[var(--accent)]" /><h3 className="mt-3 font-semibold">Message support</h3><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Available to visitors, customers, Drivers and businesses. Include the relevant order, booking, ride, Send or business reference when you have it.</p><Button onClick={() => setChatOpen(true)} className="mt-4 w-full">Start a conversation</Button></div>
+          <div><Headphones className="h-5 w-5 text-[var(--accent)]" /><h3 className="mt-3 font-semibold">Message support</h3><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Available to visitors, customers, Drivers and businesses. Include the relevant order, booking, ride, Send or business reference when you have it.</p><Button onClick={() => setChatOpen(true)} className="mt-4 w-full">Start a conversation</Button>{process.env.NEXT_PUBLIC_SPOTLY_TICKETS_ENABLED === "true" ? <a href="https://tickets.spotlyafrica.com" className="mt-3 inline-flex w-full justify-center text-xs font-semibold text-[var(--accent)] underline underline-offset-4">Open ticket portal</a> : null}</div>
           {(settings.support?.hours || settings.support?.email || settings.support?.whatsapp) ? <div className="border-t border-[var(--border-subtle)] pt-6"><Clock3 className="h-5 w-5 text-[var(--accent)]" /><h3 className="mt-3 font-semibold">Contact details</h3>{settings.support?.hours ? <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">{settings.support.hours}</p> : null}<div className="mt-4 space-y-3 text-sm">{settings.support?.email ? <a href={`mailto:${settings.support.email}`} className="flex justify-between gap-3"><span className="text-[var(--text-3)]">Email</span><span className="text-right font-semibold text-[var(--accent)]">{settings.support.email}</span></a> : null}{settings.support?.whatsapp ? <a href={`https://wa.me/${String(settings.support.whatsapp).replace(/\D/g, "")}`} className="flex justify-between gap-3"><span className="text-[var(--text-3)]">WhatsApp</span><span className="text-right font-semibold text-[var(--accent)]">{settings.support.whatsapp}</span></a> : null}</div></div> : null}
           <div className="border-t border-[var(--border-subtle)] pt-6"><ShieldCheck className="h-5 w-5 text-[var(--success)]" /><h3 className="mt-3 font-semibold">Keep private information private</h3><p className="mt-2 text-sm leading-6 text-[var(--text-2)]">Never send passwords, one-time codes, PINs or complete payment credentials in support chat.</p></div>
         </aside>

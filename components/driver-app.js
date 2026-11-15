@@ -86,13 +86,21 @@ function useDriverData() {
   const [dataUid, setDataUid] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const fullInFlight = useRef(false);
+  const liveInFlight = useRef(false);
+  const lastFullAt = useRef(0);
+  const lastLiveAt = useRef(0);
+  const dataUidRef = useRef("");
+  const splitUnavailable = useRef(false);
+  // Rollback: set NEXT_PUBLIC_SPOTLY_DRIVER_SPLIT_POLLING=false to retain 10s full bootstrap.
+  const splitPolling = process.env.NEXT_PUBLIC_SPOTLY_DRIVER_SPLIT_POLLING !== "false";
   const load = useCallback(async ({ quiet = false } = {}) => {
-    // Wait for shared Firebase login restoration instead of raising a false error.
     if (!authReady || !user?.uid || user.isAnonymous) return;
     if (!quiet) { setLoading(true); setError(""); }
+    fullInFlight.current = true;
+    const attemptStartedAt = Date.now();
     try {
-      // Cross-subdomain Firebase session restoration may finish after the first API call.
-      // Retry only a transient missing-token response before replacing the page with an error.
+      // Cross-subdomain login restoration can finish after the first request.
       let next;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -104,18 +112,77 @@ function useDriverData() {
         }
       }
       setData(next); setError(""); setDataUid(user.uid);
+      dataUidRef.current = user.uid;
+      lastFullAt.current = Date.now();
+      lastLiveAt.current = lastFullAt.current;
     } catch (err) {
-      // Preserve the last usable screen if a subsequent refresh temporarily fails.
+      // Keep the previously usable page after a transient recovery failure.
       if (!quiet) setError(err.message || "Driver information could not be loaded.");
-    } finally { if (!quiet) setLoading(false); }
+    } finally {
+      if (!lastFullAt.current) lastFullAt.current = attemptStartedAt;
+      fullInFlight.current = false;
+      if (!quiet) setLoading(false);
+    }
   }, [authReady, user?.uid, user?.isAnonymous]);
+
+  const refreshLive = useCallback(async () => {
+    if (!authReady || !user?.uid || user.isAnonymous || dataUidRef.current !== user.uid || fullInFlight.current || liveInFlight.current) return;
+    liveInFlight.current = true;
+    try {
+      const live = await authenticatedFetch("/api/driver/live", { cache: "no-store" });
+      if (!live?.ok) throw new Error("Driver live refresh failed.");
+      lastLiveAt.current = Date.now();
+      const { ok, locationHealth, locationAgeMs, ...fields } = live;
+      setData((previous) => {
+        if (!previous || dataUidRef.current !== user.uid) return previous;
+        const eligible = previous.eligibility?.eligible;
+        return {
+          ...previous, ...fields,
+          accountHealth: {
+            ...previous.accountHealth,
+            location: locationHealth,
+            locationAgeMs,
+            dispatchable: Boolean(fields.presence?.online && eligible && ["good", "weak"].includes(locationHealth))
+          }
+        };
+      });
+    } catch {
+      // Rolling deployments and temporary failures must never strand a driver.
+      splitUnavailable.current = true;
+      await load({ quiet: true });
+    } finally {
+      liveInFlight.current = false;
+    }
+  }, [authReady, user?.uid, user?.isAnonymous, load]);
+
   useEffect(() => {
     if (!authReady || !user?.uid || user.isAnonymous) return undefined;
+    dataUidRef.current = "";
+    splitUnavailable.current = false;
+    lastFullAt.current = 0;
+    lastLiveAt.current = 0;
     load();
-    const timer = window.setInterval(() => load({ quiet: true }), 10000);
+    if (!splitPolling) {
+      const timer = window.setInterval(() => load({ quiet: true }), 10_000);
+      return () => window.clearInterval(timer);
+    }
+    // Check the clock at a fixed cadence so that tab visibility changes take
+    // effect without depending on a second stateful timer or blocking actions.
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      const hidden = document.visibilityState === "hidden";
+      if (splitUnavailable.current) {
+        if (!fullInFlight.current && now - lastFullAt.current >= (hidden ? 30_000 : 10_000)) load({ quiet: true });
+        return;
+      }
+      if (!fullInFlight.current && now - lastFullAt.current >= (hidden ? 300_000 : 60_000)) load({ quiet: true });
+      if (now - lastLiveAt.current >= (hidden ? 30_000 : 10_000)) {
+        lastLiveAt.current = now;
+        refreshLive();
+      }
+    }, 1_000);
     return () => window.clearInterval(timer);
-  }, [authReady, user?.uid, user?.isAnonymous, load]);
-  // Never render one Driver\'s cached application while a different Firebase identity is loading.
+  }, [authReady, user?.uid, user?.isAnonymous, load, refreshLive, splitPolling]);
   const identityMatches = Boolean(user?.uid && dataUid === user.uid);
   return { data: identityMatches ? data : null, loading: loading || !authReady || (!error && Boolean(user?.uid) && !identityMatches), error, load };
 }

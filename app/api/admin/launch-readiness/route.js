@@ -6,6 +6,7 @@ import { SPOTLY_FIREBASE_PROJECT_ID, SPOTLY_FIREBASE_WEB_CONFIG } from "@/lib/fi
 import { SPOTLY_COUNTRIES } from "@/lib/country-engine";
 import { resolveServiceAvailability } from "@/lib/service-availability";
 import { ridePricingForCountry, ridePaymentMethodsForCountry } from "@/lib/ride-server";
+import { countryLaunchReadiness, LX6_COUNTRIES, LX6_SERVICES } from "@/lib/lx6-country-launch-readiness.mjs";
 import { parcelPricingForCountry, parcelPaymentMethodsForCountry } from "@/lib/parcel-server";
 
 export const runtime = "nodejs";
@@ -103,7 +104,17 @@ export async function GET(request) {
       marketplaceCheck = item("marketplace-directory", "Customer marketplace directory", "blocked", `The public business directory could not be queried: ${error.message || "unknown error"}`);
     }
 
+    // Legal/financial evidence is intentionally separate from technical readiness.
+    // This reports missing approval, never invents approval from an enabled feature flag.
+    const countryCompliance = LX6_COUNTRIES.flatMap((country) => LX6_SERVICES.map((service) => countryLaunchReadiness(settings, country, service)));
+    const countryComplianceChecks = countryCompliance.map((result) => item(
+      `lx6-${result.country.toLowerCase()}-${result.service}`,
+      `Country release evidence · ${result.country} · ${result.service}`,
+      result.ready ? "ready" : (["ride", "send"].includes(result.service) && (result.service === "ride" ? rideLiveScopes : sendLiveScopes).some((scope) => scope.country === result.country) ? "blocked" : "needs_verification"),
+      result.ready ? `All ${result.requiredCount} reviewer evidence items are recorded; confirm legal authenticity before release.` : `Missing or expired reviewer evidence: ${result.blockers.join(", ")}. This is not a legal authorization.`
+    ));
     const checks = [
+      ...countryComplianceChecks,
       item("firebase-project", "Firebase project identity", firebaseProjectAligned ? "ready" : "blocked", firebaseProjectAligned ? `Client and Admin configuration target ${SPOTLY_FIREBASE_PROJECT_ID}.` : `Firebase client/Admin project IDs must both target ${SPOTLY_FIREBASE_PROJECT_ID}.`),
       item("firebase-admin", "Firebase Admin runtime", firebaseAdminConfigured ? "ready" : "blocked", firebaseAdminConfigured ? `Server-side Firebase credentials are configured for ${SPOTLY_FIREBASE_PROJECT_ID}.` : `A ${SPOTLY_FIREBASE_PROJECT_ID} Firebase Admin service account is required; old-project credentials must not be reused.`),
       item("storage", "Firebase Storage", storageConfigured ? "ready" : "blocked", storageConfigured ? `Storage targets ${SPOTLY_FIREBASE_WEB_CONFIG.storageBucket}.` : `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET must be ${SPOTLY_FIREBASE_WEB_CONFIG.storageBucket}.`),
@@ -134,6 +145,7 @@ export async function GET(request) {
       ok: true,
       build: { version: BUILD_INFO.version, commit: BUILD_INFO.commit, environment: BUILD_INFO.environment },
       summary: { ready, total: checks.length, blocked },
+      countryCompliance,
       checks
     });
   } catch (error) {

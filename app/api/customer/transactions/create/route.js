@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import { apiError, authenticateRequest, getAdminServices } from "@/lib/firebase-admin";
 import { buildOrderTotals } from "@/lib/order-money";
+import { effectiveCommercialTerms } from "@/lib/commercial-policies.mjs";
 import { safeText } from "@/lib/server-helpers";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
 import { promotionCandidateRefs, resolvePromotionSnapshots } from "@/lib/promotion-server";
@@ -234,11 +235,21 @@ export async function POST(request) {
       const promotionResult = resolvePromotionSnapshots(promotionSnapshots, { businessId: body.businessId, branchId: body.branchId, currency: body.currency, lines: [line], code: body.promoCode || "", isNewCustomer: priorOrders.empty, previewAccess: operations.servicePreview });
       if (body.promoCode && !promotionResult?.quote?.eligible) throw Object.assign(new Error(promotionResult?.quote?.reason || "That promotion could not be applied."), { status: 409 });
       const promotionDiscount = promotionResult?.quote?.eligible ? Number(promotionResult.quote.discount || 0) : 0;
+      const legacyCommission = Number(finance.commissionPercent ?? settings.commerce?.defaultCommissionPercent ?? 0);
+      const [commercialOverride, commercialAgreement] = process.env.SPOTLY_COMMERCIAL_PRICING_ENABLED === "true"
+        ? await Promise.all([
+            transaction.get(db.collection("businessCommercialOverrides").doc(body.businessId)),
+            transaction.get(db.collection("businessCommercialAgreements").doc(body.businessId))
+          ]) : [null, null];
+      const commercialTerms = effectiveCommercialTerms({ config: process.env.SPOTLY_COMMERCIAL_PRICING_ENABLED === "true" ? settings.commercialPlans : null,
+        override: commercialOverride?.data(), agreement: process.env.SPOTLY_COMMERCIAL_PRICING_ENABLED === "true" ? commercialAgreement?.data() : null,
+        country: countryCode, service: transactionService, businessType: latestBusiness.businessType || "directory_profile",
+        fallbackPercent: legacyCommission });
       const latestTotals = buildOrderTotals({
         subtotal: latestSubtotal,
         discount: promotionDiscount,
         serviceFee: Number(finance.customerServiceFee || settings.commerce?.bookingServiceFee || 0),
-        commissionPercent: Number(finance.commissionPercent ?? settings.commerce?.defaultCommissionPercent ?? 0)
+        commissionPercent: commercialTerms.commissionPercent
       });
       const paymentRequired = body.paymentMethod !== "pay_later" && latestTotals.total > 0;
       const requiresBusinessReview = latestProduct.requiresBusinessReview === true;
@@ -275,6 +286,7 @@ export async function POST(request) {
         items: [line],
         itemCount: requestedQuantity,
         totals: latestTotals,
+        commerceSnapshot: { commissionPercent: latestTotals.commissionPercent, policySource: commercialTerms.source, policyRevision: commercialTerms.policyRevision, agreementVersion: commercialTerms.agreementVersion || null, trialApplied: commercialTerms.trialApplied, trialEndAt: commercialTerms.trialEndAt || null },
         total: latestTotals.total,
         promotion: promotionResult?.quote?.eligible ? { id: promotionResult.promotion.id, name: safeText(promotionResult.promotion.name || promotionResult.quote.label, 160), code: promotionResult.quote.code || "", type: promotionResult.promotion.type || "percentage", value: Number(promotionResult.promotion.value || 0), discount: promotionDiscount } : null,
         paymentMethod: body.paymentMethod,
