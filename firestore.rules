@@ -391,6 +391,10 @@ service cloud.firestore {
       allow read, update, delete: if platformAdmin() || hasPermission("content.*");
     }
 
+    match /businessRegistrations/{registrationId} {
+      allow read, write: if false;
+    }
+
     match /helpResources/{resourceId} { allow read: if resource.data.published == true || supportStaff(); allow write: if platformAdmin() || hasPermission("content.*"); }
     match /announcements/{announcementId} { allow read: if resource.data.active == true || platformAdmin(); allow write: if platformAdmin() || hasPermission("content.*"); }
 
