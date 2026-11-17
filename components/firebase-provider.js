@@ -184,7 +184,7 @@ export function FirebaseProvider({ children }) {
         }
       }
       if (event !== authEventRef.current) return;
-      if (nextUser && !nextUser.isAnonymous) {
+      if (nextUser && !nextUser.isAnonymous && !interactiveAuthRef.current) {
         try {
           await ensureUserProfile(nextUser);
           if (event !== authEventRef.current) return;
