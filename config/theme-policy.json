@@ -13,6 +13,7 @@
     "/admin/assist-menu-launch",
     "/admin/assist-research",
     "/admin/business-register",
+    "/admin/business-registrations",
     "/admin/guide",
     "/admin/independent-shopping",
     "/admin/queues/[queue]",
@@ -27,6 +28,7 @@
     "/business/[section]",
     "/business/claim-status/[claimId]",
     "/business/get-started",
+    "/business/get-started/verify",
     "/business/registrations",
     "/careers",
     "/careers/application/[applicationId]",
@@ -70,7 +72,8 @@
     "/staff/[section]",
     "/staff/onboard",
     "/support",
-    "/terms"
+    "/terms",
+    "/tickets"
   ],
   "fixedDark": [
     "/business/kiosk/live"
@@ -85,7 +88,8 @@
     "components/marketplace-home.js",
     "components/assist-booking-app.js",
     "components/independent-shopping-app.js",
-    "components/business-photo.js"
+    "components/business-photo.js",
+    "components/ride-app.js"
   ],
   "approvedFixedLightComponents": [
     "app/branding/page.js"

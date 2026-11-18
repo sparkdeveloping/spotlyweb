@@ -5,6 +5,7 @@ import "./admin-v8.css";
 import { AppProviders } from "@/components/providers";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
 import { CustomerLaunchGate } from "@/components/customer-launch-gate";
+import { SpotlyVitals } from "@/components/spotly-vitals";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://spotlyafrica.com";
 
@@ -68,7 +69,7 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /></head>
       <body>
-        <AppProviders><ConnectivityBanner /><CustomerLaunchGate>{children}</CustomerLaunchGate></AppProviders>
+        <SpotlyVitals /><AppProviders><ConnectivityBanner /><CustomerLaunchGate>{children}</CustomerLaunchGate></AppProviders>
       </body>
     </html>
   );

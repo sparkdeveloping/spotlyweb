@@ -39,8 +39,7 @@ export function BusinessLayoutClient({ children }) {
   // On business.spotlyafrica.com, usePathname() exposes the clean public URL (/get-started),
   // while legacy/internal routes may still include /business. Normalize once so the acquisition
   // journey is never mistaken for a protected workspace page.
-  if (cleanPathname === "/get-started" || cleanPathname === "/get-started/") return children;
-  if (cleanPathname === "/registrations" || cleanPathname === "/registrations/") return children;
+  if (cleanPathname === "/get-started" || cleanPathname === "/get-started/" || cleanPathname?.startsWith("/get-started/verify")) return children;
   if (cleanPathname?.startsWith("/claim-status/")) return <AuthGate portal="business" title="Sign in to track your business verification">{children}</AuthGate>;
   return <AuthGate portal="business" title="Sign in to manage your businesses"><BusinessDataProvider><BusinessPortalFrame>{children}</BusinessPortalFrame></BusinessDataProvider></AuthGate>;
 }

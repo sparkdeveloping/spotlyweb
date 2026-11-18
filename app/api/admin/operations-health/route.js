@@ -35,6 +35,18 @@ export async function GET(request) {
     return Response.json({
       ok: true,
       generatedAt: new Date(now).toISOString(),
+      // Observed slices, not platform-wide counts. No new database reads.
+      coverage: {
+        mode: "bounded_observation",
+        collections: {
+          driverPresence: { observed: presenceSnapshot.size, limit: 300 },
+          driverIncidents: { observed: incidentSnapshot.size, limit: 300 },
+          orders: { observed: orderSnapshot.size, limit: 600 },
+          securityRateLimits: { observed: securityRateSnapshot.size, limit: 300 },
+          rateLimits: { observed: publicRateSnapshot.size, limit: 300 },
+          auditLogs: { observed: auditSnapshot.size, limit: 100 }
+        }
+      },
       health: {
         appCheckEnforced,
         structuredLogging: true,

@@ -44,7 +44,7 @@ export function AdminLaunchReadiness() {
 
   useEffect(() => { load(); }, []);
 
-  return <SectionCard title="Pilot launch gates" description="Operational checks based on current platform settings and safe environment signals. A configured value is not treated as proof unless it can be verified here.">
+  return <SectionCard title="Pilot launch gates" description="Read-only settings inventory, not launch certification. Wave D financial, legal, country and signed-build evidence must be independently reviewed before production.">
     {loading && <div className="p-5 text-sm text-secondary">Checking the current environment…</div>}
     {!loading && error && <div className="flex items-center justify-between gap-4 p-5"><p className="text-sm text-danger">{error}</p><Button size="sm" variant="outline" onClick={load}><RefreshCw className="h-4 w-4" />Retry</Button></div>}
     {!loading && data && <div>

@@ -8,9 +8,7 @@ export default function GlobalError({ error, reset }) {
   const seen = useRef(null);
   const [reference, setReference] = useState(null);
   const [localCustomerOrigin, setLocalCustomerOrigin] = useState(false);
-  useEffect(() => {
-    setLocalCustomerOrigin(["localhost", "127.0.0.1"].includes(window.location.hostname) || portalForHostname(window.location.hostname) === "customer");
-  }, []);
+  useEffect(() => {setLocalCustomerOrigin(["localhost", "127.0.0.1"].includes(window.location.hostname) || portalForHostname(window.location.hostname) === "customer");}, []);
   useEffect(() => {
     if (seen.current === error) return;
     seen.current = error;

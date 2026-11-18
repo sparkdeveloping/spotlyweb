@@ -138,7 +138,8 @@ function ToastProvider({ children }) {
   useEffect(() => {
     const onActionError = (event) => {
       const message = String(event.detail?.message || "The action could not be completed.").slice(0, 400);
-      toast(message, { type: "error", title: "Action needs attention", duration: 10000 });
+      const reference = typeof event.detail?.reference === "string" && /^SR-[A-F0-9]{12}$/.test(event.detail.reference) ? event.detail.reference : null;
+      toast(reference ? `${message} Support reference: ${reference}` : message, { type: "error", title: "Action needs attention", duration: 10000 });
     };
     window.addEventListener("spotly:action-error", onActionError);
     return () => window.removeEventListener("spotly:action-error", onActionError);

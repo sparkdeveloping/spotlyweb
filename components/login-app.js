@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound, LoaderCircle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -11,6 +11,7 @@ import { useToast } from "@/components/providers";
 import { useAuth } from "@/components/firebase-provider";
 import { safeSpotlyDestination, spotlyPortalUrl } from "@/lib/spotly-domains";
 import { ServiceArtwork, ServiceGlyph } from "@/components/service-artwork";
+import { authFeedback } from "@/lib/auth-feedback";
 
 const destinations = {
   customer: spotlyPortalUrl("customer", "/account"),
@@ -35,6 +36,8 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
   const [redirecting, setRedirecting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [formError, setFormError] = useState("");
+  const reduceMotion = useReducedMotion();
   const { toast } = useToast();
   const { user, authReady, sessionReady, ensureSharedSession, createAccount, signIn, resetPassword } = useAuth();
   const router = useRouter();
@@ -72,6 +75,7 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
+    setFormError("");
     try {
       if (mode === "signup") {
         if (!acceptedTerms) throw new Error("Confirm that you agree to the Spotly terms and privacy notice.");
@@ -91,7 +95,9 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
       }
       navigateToWorkspace();
     } catch (error) {
-      toast(error.message, { type: "error", title: "Sign-in issue" });
+      const message = authFeedback(error);
+      setFormError(message);
+      toast(message, { type: "error", title: "Account issue" });
     } finally {
       setLoading(false);
     }
@@ -139,13 +145,14 @@ export function LoginApp({ initialPortal = "customer", initialMode = "signin" })
         <div className="mx-auto w-full max-w-md">
           <p className="text-sm font-semibold text-[var(--accent)]">Secure access</p><h2 className="mt-2 text-[34px] font-semibold tracking-[-.05em]">{title}</h2><p className="mt-3 text-sm leading-6 text-[var(--text-2)]">{description}</p>
           {!authReady || redirecting ? <div role="status" aria-live="polite" className="mt-8 flex min-h-48 items-center justify-center gap-3 rounded-2xl bg-[var(--surface-2)] p-6 text-sm font-medium text-secondary"><LoaderCircle className="h-5 w-5 animate-spin" />{redirecting ? "Opening your Spotly workspace…" : "Restoring your Spotly session…"}</div> : user && !user.isAnonymous ? <div className="mt-8"><div className="flex items-center gap-3 border-y border-[var(--border-subtle)] py-4"><span className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[var(--accent-soft)] text-[var(--accent)]"><UserRound className="h-5 w-5" /></span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{user.displayName || user.email}</p><p className="mt-1 text-xs text-[var(--text-3)]">Already signed in</p></div><Check className="h-5 w-5 text-[var(--success)]" /></div><p className="mt-5 text-sm leading-6 text-[var(--text-2)]">Continue to the workspace you requested. Spotly will still apply that workspace’s access rules.</p><Button loading={loading} disabled={loading} className="mt-5 w-full" onClick={continueSignedIn}>{sessionReady ? "Continue" : "Restore session & continue"}<ArrowRight className="h-4 w-4" /></Button></div> : <>
-            <div className="mt-7 grid grid-cols-2 rounded-[12px] bg-[var(--surface-2)] p-1">{[["signin", "Sign in"], ["signup", "Create account"]].map(([value, label]) => <button type="button" key={value} onClick={() => { setMode(value); setResetSent(false); }} className={`rounded-[10px] px-4 py-2.5 text-sm font-semibold transition ${mode === value ? "bg-[var(--surface)] text-[var(--accent-strong)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text)]"}`}>{label}</button>)}</div>
-            <AnimatePresence mode="wait"><motion.form key={mode} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: .2 }} onSubmit={submit} className="mt-6 space-y-4">
+            <div className="mt-7 grid grid-cols-2 rounded-[12px] bg-[var(--surface-2)] p-1">{[["signin", "Sign in"], ["signup", "Create account"]].map(([value, label]) => <button type="button" key={value} onClick={() => { setMode(value); setResetSent(false); setFormError(""); }} className={`rounded-[10px] px-4 py-2.5 text-sm font-semibold transition ${mode === value ? "bg-[var(--surface)] text-[var(--accent-strong)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text)]"}`}>{label}</button>)}</div>
+            <AnimatePresence mode="wait"><motion.form key={mode} initial={reduceMotion ? false : { opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={reduceMotion ? undefined : { opacity: 0, x: -8 }} transition={{ duration: reduceMotion ? 0 : .2 }} onSubmit={submit} className="mt-6 space-y-4">
               {mode === "signup" ? <Field label="Full name" icon={UserRound}><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required autoComplete="name" className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Your full name" /></Field> : null}
               <Field label="Email address" icon={Mail}><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="you@example.com" /></Field>
               {mode !== "reset" ? <Field label="Password" icon={LockKeyhole}><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === "signup" ? "new-password" : "current-password"} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={mode === "signup" ? "At least 8 characters" : "Your password"} /><button type="button" aria-label="Toggle password visibility" onClick={() => setShowPassword((value) => !value)} className="rounded-[10px] p-1 text-[var(--text-3)] hover:bg-[var(--surface-hover)]">{showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button></Field> : null}
               {mode === "signup" ? <><div className="grid grid-cols-2 gap-2 text-xs"><span className={password.length >= 8 ? "text-[var(--success)]" : "text-[var(--text-3)]"}>• At least 8 characters</span><span className={/[A-Za-z]/.test(password) && /\d/.test(password) ? "text-[var(--success)]" : "text-[var(--text-3)]"}>• Letters and a number</span></div><label className="flex items-start gap-3 border-y border-[var(--border-subtle)] py-3"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} className="mt-1 h-4 w-4" /><span className="text-xs leading-5 text-[var(--text-2)]">I agree to <Link href={spotlyPortalUrl("customer", "/terms")} className="font-semibold text-[var(--accent)]">Spotly’s terms</Link> and acknowledge the <Link href={spotlyPortalUrl("customer", "/privacy")} className="font-semibold text-[var(--accent)]">privacy notice</Link>.</span></label></> : null}
               {mode === "reset" && resetSent ? <div className="rounded-[16px] bg-[var(--success-soft)] p-4 text-sm leading-6 text-[var(--on-success-soft)]">Check your inbox for the password reset link. You can return here once the password has changed.</div> : null}
+              {formError ? <p className="rounded-xl border border-[var(--control-border-error)] bg-[var(--surface-2)] p-3 text-sm" role="alert">{formError}</p> : null}
               <Button type="submit" loading={loading} className="w-full">{mode === "signup" ? "Create account" : mode === "reset" ? "Send reset email" : "Sign in"}<ArrowRight className="h-4 w-4" /></Button>
               {mode === "signin" ? <button type="button" onClick={() => { setMode("reset"); setResetSent(false); }} className="w-full rounded-[10px] py-2 text-center text-sm font-semibold text-[var(--text-2)] hover:text-[var(--text)]">Forgot your password?</button> : mode === "reset" ? <button type="button" onClick={() => setMode("signin")} className="w-full rounded-[10px] py-2 text-center text-sm font-semibold text-[var(--text-2)] hover:text-[var(--text)]">Back to sign in</button> : null}
             </motion.form></AnimatePresence>

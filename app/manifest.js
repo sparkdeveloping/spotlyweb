@@ -55,8 +55,9 @@ export default async function manifest() {
     background_color: "#ffffff",
     icons: [
       { src: `/api/branding/assets/${symbol}_symbol_color.svg`, sizes: "any", type: "image/svg+xml", purpose: "any" },
-      { src: "/icons/spotly-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icons/spotly-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" }
+      { src: `/brand/pwa/${symbol}/icon-192.png`, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: `/brand/pwa/${symbol}/icon-512.png`, sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: `/brand/pwa/${symbol}/icon-maskable-512.png`, sizes: "512x512", type: "image/png", purpose: "maskable" }
     ]
   };
 }

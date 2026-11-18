@@ -7,6 +7,7 @@ import { SPOTLY_COUNTRIES } from "@/lib/country-engine";
 import { resolveServiceAvailability } from "@/lib/service-availability";
 import { ridePricingForCountry, ridePaymentMethodsForCountry } from "@/lib/ride-server";
 import { countryLaunchReadiness, LX6_COUNTRIES, LX6_SERVICES } from "@/lib/lx6-country-launch-readiness.mjs";
+import { waveDLegalFinanceReview } from "@/lib/wave-d-legal-finance-policy.mjs";
 import { parcelPricingForCountry, parcelPaymentMethodsForCountry } from "@/lib/parcel-server";
 
 export const runtime = "nodejs";
@@ -113,8 +114,10 @@ export async function GET(request) {
       result.ready ? "ready" : (["ride", "send"].includes(result.service) && (result.service === "ride" ? rideLiveScopes : sendLiveScopes).some((scope) => scope.country === result.country) ? "blocked" : "needs_verification"),
       result.ready ? `All ${result.requiredCount} reviewer evidence items are recorded; confirm legal authenticity before release.` : `Missing or expired reviewer evidence: ${result.blockers.join(", ")}. This is not a legal authorization.`
     ));
+    const waveD = waveDLegalFinanceReview(settings);
     const checks = [
       ...countryComplianceChecks,
+      ...waveD.checks,
       item("firebase-project", "Firebase project identity", firebaseProjectAligned ? "ready" : "blocked", firebaseProjectAligned ? `Client and Admin configuration target ${SPOTLY_FIREBASE_PROJECT_ID}.` : `Firebase client/Admin project IDs must both target ${SPOTLY_FIREBASE_PROJECT_ID}.`),
       item("firebase-admin", "Firebase Admin runtime", firebaseAdminConfigured ? "ready" : "blocked", firebaseAdminConfigured ? `Server-side Firebase credentials are configured for ${SPOTLY_FIREBASE_PROJECT_ID}.` : `A ${SPOTLY_FIREBASE_PROJECT_ID} Firebase Admin service account is required; old-project credentials must not be reused.`),
       item("storage", "Firebase Storage", storageConfigured ? "ready" : "blocked", storageConfigured ? `Storage targets ${SPOTLY_FIREBASE_WEB_CONFIG.storageBucket}.` : `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET must be ${SPOTLY_FIREBASE_WEB_CONFIG.storageBucket}.`),
@@ -146,6 +149,7 @@ export async function GET(request) {
       build: { version: BUILD_INFO.version, commit: BUILD_INFO.commit, environment: BUILD_INFO.environment },
       summary: { ready, total: checks.length, blocked },
       countryCompliance,
+      waveD: { productionDecision: waveD.productionDecision, evidenceScope: waveD.evidenceScope },
       checks
     });
   } catch (error) {

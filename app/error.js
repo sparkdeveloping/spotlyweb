@@ -13,9 +13,7 @@ export default function ErrorPage({ error, reset }) {
   const reported = useRef(null);
   const [reference, setReference] = useState(null);
   const [localCustomerOrigin, setLocalCustomerOrigin] = useState(false);
-  useEffect(() => {
-    setLocalCustomerOrigin(["localhost", "127.0.0.1"].includes(window.location.hostname) || portalForHostname(window.location.hostname) === "customer");
-  }, []);
+  useEffect(() => {setLocalCustomerOrigin(["localhost", "127.0.0.1"].includes(window.location.hostname) || portalForHostname(window.location.hostname) === "customer");}, []);
   useEffect(() => {
     if (reported.current === error) return;
     reported.current = error;
@@ -29,7 +27,6 @@ export default function ErrorPage({ error, reset }) {
     ? (reference ? `https://tickets.spotlyafrica.com/?incident=${encodeURIComponent(reference)}` : "https://tickets.spotlyafrica.com/")
     : (localCustomerOrigin ? "/support" : spotlyPortalUrl("customer", "/support"));
   const homeHref = localCustomerOrigin ? "/" : spotlyPortalUrl("customer");
-
   return <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4">
     <div className="surface w-full max-w-lg rounded-2xl p-7 text-center shadow-elevated sm:p-9" role="alert">
       <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-2)] text-secondary"><AlertCircle className="h-5 w-5" /></span>

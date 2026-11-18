@@ -1,221 +1,110 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
-import { apiError, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
+import { apiError, authenticateRequest, getAdminServices, verifyAppCheckRequest } from "@/lib/firebase-admin";
+import { requirePlatformPermission } from "@/lib/access-control-server";
 import { enforceRateLimit } from "@/lib/rate-limit-server";
-import { safeText, toPlainTimestamp } from "@/lib/server-helpers";
-import { countryCity, normalizeCountryCode } from "@/lib/country-engine";
+import { normalizeCountryCode, countryCity } from "@/lib/country-engine";
+import { normalizeRegistrationKey, registrationDocumentId, continuationProof, publicRegistrationReceipt, safeRegistrationStatus } from "@/lib/business-registration-policy.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const COLLECTION = "businessRegistrations";
-const DEFAULT_ADMIN_PASSWORD = "spotly-admin-2026";
-
+const noStore = {"Cache-Control":"private, no-store"};
 const createSchema = z.object({
-  applicantName: z.string().trim().min(2, "Enter your full name.").max(160),
-  phone: z.string().trim().min(5, "Enter a valid phone or WhatsApp number.").max(40),
-  email: z.string().trim().email("Enter a valid email address.").max(254).or(z.literal("")).optional().default(""),
-  roleAtBusiness: z.enum(["owner", "manager", "authorized_representative", "other"]).optional().default("owner"),
-  contactPreference: z.enum(["whatsapp", "phone", "email"]).optional().default("whatsapp"),
-  businessName: z.string().trim().min(2, "Enter your business name.").max(180),
-  registrationStatus: z.enum(["registered", "in_process", "not_registered"]),
-  category: z.string().trim().min(1, "Select a business category.").max(100),
-  country: z.string().trim().min(2).max(2),
-  city: z.string().trim().min(2, "Select or enter your city or town.").max(100),
-  notes: z.string().trim().max(1000).optional().default("")
+  idempotencyKey: z.string().trim().min(25).max(80),
+  applicantName:z.string().trim().min(2).max(160), phone:z.string().trim().min(5).max(40),
+  email:z.union([z.string().trim().email().max(254), z.literal("")]).default(""),
+  roleAtBusiness:z.enum(["owner","manager","authorized_representative","other"]).default("owner"),
+  contactPreference:z.enum(["whatsapp","phone","email"]).default("whatsapp"),
+  businessName:z.string().trim().min(2).max(180),
+  registrationStatus:z.enum(["registered","in_process","not_registered"]).default("not_registered"),
+  category:z.string().trim().min(1).max(120), country:z.string().trim().min(2).max(2),
+  city:z.string().trim().min(2).max(100), notes:z.string().trim().max(1000).default(""),
+  contactConsent:z.literal(true)
 });
+const idPattern = /^(?:br_[a-f0-9]{40}|[A-Za-z0-9]{16,40})$/;
+const changeSchema = z.object({
+  id:z.string().regex(idPattern),
+  status:z.enum(["new","seen","contacted","qualified","verification_invited","closed"]).optional(),
+  assignmentAction:z.enum(["claim","release"]).optional(),
+  note:z.string().trim().max(1500).optional()
+}).refine(x=>x.status||x.assignmentAction||x.note?.length,{message:"Nothing to update."});
+function deny(err,status=400){return Response.json({ok:false,error:err},{status,headers:noStore});}
+function serialize(doc){const d=doc.data()||{};const when=t=>t?.toDate?.()?.toISOString?.()||null;
+  return {id:doc.id,applicantName:d.applicantName||"",phone:d.phone||"",email:d.email||"",roleAtBusiness:d.roleAtBusiness||"owner",contactPreference:d.contactPreference||"whatsapp",businessName:d.businessName||"",registrationStatus:d.registrationStatus||"",category:d.category||"",country:d.country||"",city:d.city||"",notes:d.notes||"",status:safeRegistrationStatus(d.status || (d.seen ? "seen" : "new")),assignedTo:d.assignedTo||"",createdAt:when(d.createdAt),updatedAt:when(d.updatedAt),contactedAt:when(d.contactedAt),linkedClaimId:d.linkedClaimId||null};}
+function requireRead(actor){requirePlatformPermission(actor,"businesses.read",{roles:["operations_manager","regional_operations_manager","business_success_manager","verification_officer"]});}
+function requireWrite(actor){requirePlatformPermission(actor,"businesses.update",{roles:["operations_manager","business_success_manager","verification_officer"]});}
 
-const patchSchema = z.object({
-  id: z.string().trim().min(1).max(180),
-  seen: z.boolean().optional(),
-  status: z.enum(["new", "seen", "contacted"]).optional()
-});
-
-function sha256(value) {
-  return createHash("sha256").update(String(value || "")).digest();
+// Anonymous prospect intake; all internal reads and writes are authenticated separately.
+export async function POST(request){
+ try {
+  const length=Number(request.headers.get("content-length")||0);
+  if(length>6000)return deny("Registration is too large.",413);
+  await verifyAppCheckRequest(request);
+  await enforceRateLimit(request,{key:"business-registration-intake",limit:8,windowMs:30*60_000});
+  const raw=await request.text();if(raw.length>6000)return deny("Registration is too large.",413);
+  let parsed;try{parsed=createSchema.parse(JSON.parse(raw));}catch{return deny("Please review your business and contact details.");}
+  const country=normalizeCountryCode(parsed.country);if(!country)return deny("Choose a supported country.");
+  if(parsed.contactPreference==="email"&&!parsed.email)return deny("Enter an email address for email contact.");
+  if(!normalizeRegistrationKey(parsed.idempotencyKey))return deny("Please retry this registration.");
+  const id=registrationDocumentId(parsed.idempotencyKey,country,parsed.phone);
+  const city=countryCity(country,parsed.city)?.name||parsed.city;
+  const {db}=getAdminServices(),ref=db.collection("businessRegistrations").doc(id);
+  // Create-only: a slow response or double-tap cannot generate another lead.
+  try{await ref.create({applicantName:parsed.applicantName,phone:parsed.phone,email:parsed.email.toLowerCase(),roleAtBusiness:parsed.roleAtBusiness,contactPreference:parsed.contactPreference,businessName:parsed.businessName,registrationStatus:parsed.registrationStatus,category:parsed.category,country,city,notes:parsed.notes,status:"new",assignedTo:"",source:"public_business_get_started",contactConsentVersion:"business_intake_2026_11",contactConsent:true,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp(),contactedAt:null,linkedClaimId:null,continuationProof:continuationProof(parsed.idempotencyKey,id),applicantUid:null});}
+  catch(error){if(error.code!==6&&error.code!=="already-exists"&&error.code!=="firestore/already-exists")throw error;}
+  return Response.json(publicRegistrationReceipt(id),{status:201,headers:noStore});
+ }catch(error){return apiError(error);}
 }
 
-function requireRegistrationsPassword(request) {
-  const configured = process.env.SPOTLY_REGISTRATIONS_ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
-  const provided = request.headers.get("x-registrations-password") || "";
-  if (!provided || !timingSafeEqual(sha256(provided), sha256(configured))) {
-    throw Object.assign(new Error("Invalid admin password."), { status: 401 });
+export async function GET(request){
+ try{const actor=await authenticateRequest(request);requireRead(actor);
+  await enforceRateLimit(request,{key:"admin-business-leads-read",identity:actor.uid,limit:40,windowMs:60_000});
+  const url=new URL(request.url),requested=Number(url.searchParams.get("limit")||40);
+  const limit=Number.isInteger(requested)?Math.min(Math.max(requested,1),100):40;
+  const {db}=getAdminServices();
+  const historyId=url.searchParams.get("history")||"";
+  if (historyId) {
+    if (!idPattern.test(historyId)) return deny("Invalid registration reference.");
+    const leadRef=db.collection("businessRegistrations").doc(historyId);
+    const lead=await leadRef.get();if(!lead.exists)return deny("Registration not found.",404);
+    const history=await leadRef.collection("events").orderBy("createdAt","desc").limit(30).get();
+    const entries=history.docs.map(doc=>({id:doc.id,action:doc.data().action||"",actorId:doc.data().actorId||"",from:doc.data().from||"",to:doc.data().to||"",note:doc.data().note||"",createdAt:doc.data().createdAt?.toDate?.()?.toISOString?.()||null}));
+    return Response.json({ok:true,history:entries},{headers:noStore});
   }
+  let query=db.collection("businessRegistrations").orderBy("createdAt","desc").limit(limit);
+  const cursor=url.searchParams.get("cursor")||"";
+  if(cursor){if(!/^(?:br_[a-f0-9]{40}|[A-Za-z0-9]{16,40})$/.test(cursor))return deny("Invalid page cursor.");const previous=await db.collection("businessRegistrations").doc(cursor).get();if(!previous.exists)return deny("Page expired. Refresh to continue.");query=query.startAfter(previous);}
+  const snap=await query.get();return Response.json({ok:true,registrations:snap.docs.map(serialize),nextCursor:snap.size===limit?snap.docs.at(-1)?.id:null},{headers:noStore});
+ }catch(error){return apiError(error);}
 }
 
-function serializeRegistration(doc) {
-  const data = doc.data() || {};
-  return {
-    id: doc.id,
-    applicantName: data.applicantName || "",
-    phone: data.phone || "",
-    email: data.email || "",
-    roleAtBusiness: data.roleAtBusiness || "owner",
-    contactPreference: data.contactPreference || "whatsapp",
-    businessName: data.businessName || "",
-    registrationStatus: data.registrationStatus || "not_registered",
-    category: data.category || "Other",
-    country: data.country || "ZW",
-    city: data.city || "",
-    notes: data.notes || "",
-    seen: Boolean(data.seen),
-    status: data.status || (data.seen ? "seen" : "new"),
-    seenAt: toPlainTimestamp(data.seenAt),
-    contactedAt: toPlainTimestamp(data.contactedAt),
-    createdAt: toPlainTimestamp(data.createdAt),
-    updatedAt: toPlainTimestamp(data.updatedAt)
-  };
+export async function PATCH(request){
+ try{const actor=await authenticateRequest(request);requireWrite(actor);
+  await enforceRateLimit(request,{key:"admin-business-leads-write",identity:actor.uid,limit:30,windowMs:60_000});
+  let change;try{change=changeSchema.parse(await request.json());}catch{return deny("Review the update details.");}
+  const {db}=getAdminServices(),ref=db.collection("businessRegistrations").doc(change.id);
+  // Transaction keeps workflow state and audit together, never grants business ownership.
+  const outcome=await db.runTransaction(async tx=>{const before=await tx.get(ref);
+   if(!before.exists)throw Object.assign(new Error("Registration not found."),{status:404});
+   const previous=before.data()||{};
+   const oldStatus=safeRegistrationStatus(previous.status);
+   const next=change.status||oldStatus;
+   const previousAssignee=previous.assignedTo||"";
+   if(change.assignmentAction==="claim"&&previousAssignee&&previousAssignee!==actor.uid)throw Object.assign(new Error("Another team member already owns this follow-up."),{status:409});
+   if(change.assignmentAction==="release"&&previousAssignee!==actor.uid)throw Object.assign(new Error("Only the assigned team member can release this follow-up."),{status:403});
+   const newAssignee=change.assignmentAction==="claim"?actor.uid:change.assignmentAction==="release"?"":previousAssignee;
+   const updates={status:next,updatedAt:FieldValue.serverTimestamp(),updatedBy:actor.uid};
+   if(change.assignmentAction)updates.assignedTo=newAssignee;
+   if(next==="contacted"&&!previous.contactedAt)updates.contactedAt=FieldValue.serverTimestamp();
+   const changed=next!==oldStatus||newAssignee!==previousAssignee||Boolean(change.note?.trim());
+   if(!changed)return {status:next,assignedTo:newAssignee};
+   tx.update(ref,updates);
+   // Private history: free-form notes never enter broadly available audit metadata.
+   tx.create(ref.collection("events").doc(),{action:change.note?.trim()?"note":change.assignmentAction?"assignment":"stage",from:oldStatus,to:next,previousAssignee,newAssignee,actorId:actor.uid,note:change.note?.trim()||"",createdAt:FieldValue.serverTimestamp()});
+   tx.create(db.collection("auditLogs").doc(),{actorId:actor.uid,action:"business_registration.updated",entityType:"businessRegistration",entityId:change.id,metadata:{from:oldStatus,to:next,assigneeChanged:newAssignee!==previousAssignee,hasPrivateNote:Boolean(change.note?.trim())},createdAt:FieldValue.serverTimestamp()});
+   return {status:next,assignedTo:newAssignee};
+  });
+  return Response.json({ok:true,...outcome},{headers:noStore});
+ }catch(error){return apiError(error);}
 }
-
-export async function POST(request) {
-  try {
-    await verifyAppCheckRequest(request);
-    const rate = await enforceRateLimit(request, { key: "public-business-registration", limit: 15, windowMs: 30 * 60_000 });
-    const values = createSchema.parse(await request.json());
-
-    const country = normalizeCountryCode(values.country);
-    if (!country) {
-      return Response.json({ ok: false, error: "Choose a supported country." }, { status: 400 });
-    }
-    if (values.contactPreference === "email" && !values.email) {
-      return Response.json({ ok: false, error: "Enter an email address when email is your preferred contact method." }, { status: 400 });
-    }
-
-    const matchedCity = countryCity(country, values.city);
-    const cityName = matchedCity ? matchedCity.name : safeText(values.city, 100);
-
-    const { db } = getAdminServices();
-    const ref = await db.collection(COLLECTION).add({
-      applicantName: safeText(values.applicantName, 160),
-      phone: safeText(values.phone, 40),
-      email: values.email ? values.email.toLowerCase() : "",
-      roleAtBusiness: values.roleAtBusiness,
-      contactPreference: values.contactPreference,
-      businessName: safeText(values.businessName, 180),
-      registrationStatus: values.registrationStatus,
-      category: safeText(values.category, 100),
-      country,
-      city: cityName,
-      notes: safeText(values.notes, 1000),
-      seen: false,
-      seenAt: null,
-      contactedAt: null,
-      status: "new",
-      source: "simple_business_onboarding",
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp()
-    });
-
-    return Response.json(
-      { ok: true, id: ref.id },
-      { status: 201, headers: { "Cache-Control": "no-store", "X-RateLimit-Remaining": String(rate.remaining) } }
-    );
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      const firstIssue = error.issues?.[0]?.message || "Please check your registration details.";
-      return Response.json({ ok: false, error: firstIssue, details: error.flatten() }, { status: 400 });
-    }
-    return apiError(error);
-  }
-}
-
-export async function GET(request) {
-  try {
-    requireRegistrationsPassword(request);
-    const { db } = getAdminServices();
-    const snap = await db.collection(COLLECTION).orderBy("createdAt", "desc").limit(500).get();
-    return Response.json(
-      { ok: true, registrations: snap.docs.map(serializeRegistration) },
-      { headers: { "Cache-Control": "private, no-store" } }
-    );
-  } catch (error) {
-    return apiError(error);
-  }
-}
-
-export async function PATCH(request) {
-  try {
-    requireRegistrationsPassword(request);
-    const body = patchSchema.parse(await request.json());
-    const { db } = getAdminServices();
-    const ref = db.collection(COLLECTION).doc(body.id);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      return Response.json({ ok: false, error: "Registration not found." }, { status: 404 });
-    }
-
-    const existing = snap.data() || {};
-    let nextSeen = Boolean(existing.seen);
-    let nextStatus = existing.status || (existing.seen ? "seen" : "new");
-
-    if (body.status === "contacted") {
-      nextStatus = "contacted";
-      nextSeen = true;
-    } else if (body.status === "seen") {
-      nextStatus = "seen";
-      nextSeen = true;
-    } else if (body.status === "new") {
-      nextStatus = "new";
-      nextSeen = false;
-    } else if (typeof body.seen === "boolean") {
-      nextSeen = body.seen;
-      if (!nextSeen) nextStatus = "new";
-      else if (nextStatus === "new") nextStatus = "seen";
-    }
-
-    const patch = {
-      seen: nextSeen,
-      status: nextStatus,
-      updatedAt: FieldValue.serverTimestamp()
-    };
-
-    if (nextSeen && !existing.seenAt) {
-      patch.seenAt = FieldValue.serverTimestamp();
-    } else if (!nextSeen) {
-      patch.seenAt = null;
-      patch.contactedAt = null;
-    }
-
-    if (nextStatus === "contacted" && !existing.contactedAt) {
-      patch.contactedAt = FieldValue.serverTimestamp();
-    } else if (nextStatus !== "contacted" && existing.contactedAt) {
-      patch.contactedAt = null;
-    }
-
-    await ref.update(patch);
-    return Response.json({ ok: true, id: body.id, seen: nextSeen, status: nextStatus }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return Response.json({ ok: false, error: "Invalid update payload." }, { status: 400 });
-    }
-    return apiError(error);
-  }
-}
-
-export async function DELETE(request) {
-  try {
-    requireRegistrationsPassword(request);
-    const url = new URL(request.url);
-    let id = url.searchParams.get("id") || "";
-    if (!id) {
-      const body = await request.json().catch(() => ({}));
-      id = String(body?.id || "").trim();
-    }
-    if (!id || id.length > 180) {
-      return Response.json({ ok: false, error: "Registration ID is required." }, { status: 400 });
-    }
-
-    const { db } = getAdminServices();
-    const ref = db.collection(COLLECTION).doc(id);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      return Response.json({ ok: false, error: "Registration not found." }, { status: 404 });
-    }
-
-    await ref.delete();
-    return Response.json({ ok: true, id }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    return apiError(error);
-  }
-}
+// Intentionally no DELETE route: admissions and outreach history require audited retention policies.

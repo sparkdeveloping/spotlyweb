@@ -53,9 +53,9 @@ export function NoBusinessView({ user }) {
     <section className="rounded-3xl border bg-[var(--surface)] px-6 py-12 sm:px-12 sm:py-16">
       <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-business-soft text-business"><Building2 className="h-7 w-7" /></span>
       <h1 className="mt-8 max-w-xl text-4xl font-semibold tracking-[-.05em] sm:text-5xl">Your business starts here.</h1>
-      <p className="mt-5 max-w-lg text-base leading-8 text-secondary">Find your business on Spotly or add it if it's new. We'll help you confirm access and set up the things you need, one step at a time.</p>
+      <p className="mt-5 max-w-lg text-base leading-8 text-secondary">Tell Spotly about your business first. You can continue with ownership verification when you are ready. Your business remains inactive until the required approvals are complete.</p>
       <div className="mt-8"><Button asChild size="lg"><Link href={startHref}><Search className="h-5 w-5" />Get started<ArrowRight className="h-5 w-5" /></Link></Button></div>
-      <p className="mt-5 max-w-lg text-sm leading-6 text-secondary">Already have an application? You can resume it below. Your business won't accept transactions until required approval and launch checks are complete.</p>
+      <p className="mt-5 max-w-lg text-sm leading-6 text-secondary">Already have an application? You can resume it below, or continue verification directly. Nothing goes live before the required checks are complete.</p>
     </section>
 
     <section className="mt-8 overflow-hidden rounded-3xl border bg-[var(--surface)]">
