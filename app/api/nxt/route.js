@@ -55,7 +55,7 @@ export async function GET(request) {
       if (!doc.exists) err("Prospect not found", 404);
       const log = await db.collection(T).where("prospectId", "==", id).limit(100).get();
       const files = await db.collection("nxtEvidence").where("prospectId", "==", id).limit(75).get();
-      return noStore({ ok: true, prospect: serial(doc), activities: log.docs.map(serial).sort((a,b) => (b.occurredAt || "").localeCompare(a.occurredAt || "")), evidence: files.docs.filter(d=>d.data().status==="ready").map(d => ({ id: d.id, name:d.data().name, size:d.data().size, mime:d.data().mime, uploadedAt:serial(d).createdAt })) });
+      return noStore({ ok: true, prospect: serial(doc), activities: log.docs.map(serial).sort((a,b) => (b.sourceLocalDate || b.occurredAt || "").localeCompare(a.sourceLocalDate || a.occurredAt || "")), evidence: files.docs.filter(d=>d.data().status==="ready").map(d => ({ id: d.id, name:d.data().name, size:d.data().size, mime:d.data().mime, uploadedAt:serial(d).createdAt })) });
     }
     if (view === "overview") {
       const begin = new Date(Date.now() - 14 * 86_400_000);
@@ -67,12 +67,22 @@ export async function GET(request) {
       ]);
       const days = Array.from({length:14}, (_,i) => new Date(Date.now() - (13-i)*86400000).toISOString().slice(0,10));
       const perDay = Object.fromEntries(days.map(day=>[day,0]));
-      for(const doc of chartDocs.docs) { const d=serial(doc); if(d.createdAt && perDay[d.createdAt.slice(0,10)] != null) perDay[d.createdAt.slice(0,10)]++; }
-      const stages = {}, categories = {};
+      for(const doc of chartDocs.docs) { const d=serial(doc); const activityDate=d.sourceLocalDate||d.occurredAt||d.createdAt; if(activityDate && perDay[activityDate.slice(0,10)] != null) perDay[activityDate.slice(0,10)]++; }
+      const contributions = new Map();
+       for(const item of chartDocs.docs){
+         const d=item.data()||{};
+         const a=d.outreachAttribution||{};
+         const key=String(a.email||d.actorEmail||d.actorUid||"unattributed").trim().toLowerCase();
+         const previous=contributions.get(key)||{agent:a.name||d.actorEmail||"Unattributed",email:key,activities:0,historical:0,operational:0};
+         previous.activities++;
+         if(d.kind==="historical_contact")previous.historical++;else previous.operational++;
+         contributions.set(key,previous);
+       }
+       const stages = {}, categories = {};
       for(const doc of lead.docs){const prospect=doc.data();stages[prospect.status||"new"]=(stages[prospect.status||"new"]||0)+1;categories[prospect.category||"Uncategorized"]=(categories[prospect.category||"Uncategorized"]||0)+1;}
       return noStore({ok:true, totals:{ prospects:prospectCount.data().count, activities:activityCount.data().count, directory:directoryCount.data().count },
         recent:recent.docs.map(serial), chart:days.map(date=>({date, value:perDay[date]})), chartTruncated:chartDocs.size>=5000,
-        stageSample:stages,categorySample:categories,
+        stageSample:stages,categorySample:categories,contributions:[...contributions.values()].sort((a,b)=>b.activities-a.activities).slice(0,40),
         note:"Private NXT prospect records are separate from public business listings. Stage/category breakdowns sample the latest 150 prospects; activity chart includes up to 5,000 records from 14 days."});
     }
     const col = view === "directory" ? "businesses" : view === "activities" ? T : C;

@@ -73,7 +73,7 @@ import { businessCategories } from "@/data/business-config";
 import { SPOTLY_COUNTRIES, countryDefinition } from "@/lib/country-engine";
 import { defaultRoleTemplates } from "@/data/production-seed";
 import { authenticatedFetch } from "@/lib/api-client";
-import { canAccessAdminSection, hasAdminAccess } from "@/lib/admin-access";
+import { canAccessAdminSection, hasAdminAccess, adminSectionsForProfile } from "@/lib/admin-access";
 import { adminDataSourcesFor } from "@/lib/admin-data-scope.mjs";
 import { BUILD_INFO, buildLabel } from "@/lib/build-info";
 import { Badge, Button, Card, EmptyState, Modal, PageHeader, SearchField, SectionCard, StatusBadge, Tabs } from "@/components/ui";
@@ -160,11 +160,11 @@ export function useAdminData(section = "all", enabled = true) {
   return { businesses, claims, users, support, waitlist, partnerships, audit, help, announcements, roles, tasks, payouts, ready, partiallyLoaded, sources: activeSources };
 }
 
-export function AdminAccess({ children }) {
+export function AdminAccess({ children, section = null }) {
   const { user, profile, hasRole } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const allowed = hasRole("super_admin") || hasRole("admin") || hasAdminAccess(profile);
+  const allowed = (hasRole("super_admin") || hasRole("admin") || hasAdminAccess(profile)) && (section ? canAccessAdminSection(profile, section) : [...adminSectionsForProfile(profile)].some(item => item !== "home" && item !== "outreach"));
   if (allowed) return children;
   async function bootstrap() {
     setLoading(true);

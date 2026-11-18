@@ -86,6 +86,15 @@ export function proxy(request) {
   const isSpotlyHost = host === "spotlyafrica.com" || host === "www.spotlyafrica.com" || host.endsWith(".spotlyafrica.com");
   if (!isSpotlyHost) return NextResponse.next();
 
+  // NXT's human-facing dashboard is retired. Its private APIs remain reachable
+  // for backward compatibility, but every old page lands in the unified Admin
+  // field-outreach workflow. Drop legacy query tokens on the cross-host redirect.
+  if (host === "nxt.spotlyafrica.com" && !matchesPrefix(pathname, ORIGIN_LOCAL_PREFIXES)) {
+    const destination = productionUrl(request, "admin.spotlyafrica.com", "/outreach");
+    destination.search = "";
+    return NextResponse.redirect(destination, 308);
+  }
+
   // Dedicated, uncluttered support site. It reuses canonical support APIs and
   // authenticated/anonymous Firebase ownership; it does not create another store.
   if (host === "tickets.spotlyafrica.com") {

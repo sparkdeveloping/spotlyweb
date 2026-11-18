@@ -137,6 +137,7 @@ export const portals = {
       { group: "Operate", id: "work", label: "Work", icon: ListChecks, href: "/work" },
       { group: "Operate", id: "marketplace", label: "Marketplace", icon: Store, href: "/marketplace" },
       { group: "Operate", id: "business-register", label: "Business register", icon: Building2, href: "/business-register" },
+      { group: "Operate", id: "outreach", label: "Field outreach", icon: ClipboardList, href: "/outreach" },
       { group: "Operate", id: "mobility", label: "Ride & Send Launch", icon: Bike, href: "/mobility" },
       { group: "Operate", id: "money", label: "Money", icon: CreditCard, href: "/money" },
       { group: "Build", id: "growth", label: "Growth", icon: Compass, href: "/growth" },
