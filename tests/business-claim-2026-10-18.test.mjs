@@ -51,7 +51,7 @@ test("public claim wizard has explicit creation, device evidence staging, and ac
 test("business claims list offers authenticated draft resumption", () => {
   const jsx = fs.readFileSync("components/business/business-account.js", "utf8");
   assert.match(jsx, /subscribeClaimDrafts\(user.uid/);
-  assert.match(jsx, /get-started\?draft=/);
+  assert.match(jsx, /get-started\/verify\?draft=/);
   assert.match(jsx, /Resume application/);
 });
 

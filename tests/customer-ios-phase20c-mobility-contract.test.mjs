@@ -7,8 +7,14 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 test("native Ride and Send use bounded, server-verified road access", () => {
   const runtime = read("firebase/functions/src/core/customer-runtime.js");
   const routing = read("firebase/functions/src/core/mobility-road-access.js");
-  assert.match(runtime, /import \{ verifiedMobilityRoute \} from "\.\/mobility-road-access\.js"/);
-  assert.equal((runtime.match(/await verifiedMobilityRoute\(/g) || []).length, 2);
+  assert.match(runtime, /import \{[^}]*\bverifiedMobilityRoute\b[^}]*\} from "\.\/mobility-road-access\.js"/);
+  const ride = runtime.split("export async function rideQuote(")[1]?.split("export async function ridePickupSuggestions(")[0] || "";
+  const send = runtime.split("export async function sendQuote(")[1] || "";
+  for (const quote of [ride, send]) {
+    assert.match(quote, /await verifiedMobilityRoute\(/, "Each quote must use the verified routing provider");
+    assert.match(quote, /withinCountry\(\{ \.\.\.route\.accessPoints\.pickup/, "Pickup road access must be checked in-country");
+    assert.match(quote, /routePath: route\.path, accessPoints: route\.accessPoints/, "Never discard verified curb geometry");
+  }
   assert.equal((runtime.match(/routePath: route\.path, accessPoints: route\.accessPoints/g) || []).length, 2);
   assert.match(routing, /MAX_ACCESS_METERS = 350/);
   assert.match(routing, /route\?\.geometry\?\.coordinates/);

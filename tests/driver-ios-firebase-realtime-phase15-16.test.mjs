@@ -43,7 +43,11 @@ test("Phase 16 publishes Driver presence and active-trip location through RTDB",
   assert.match(location, /driverPresence\/\\\(uid\)/);
   assert.match(location, /dispatchPresence\/\\\(country\)\/\\\(area\)\/\\\(uid\)/);
   assert.match(location, /activeTrips\/\\\(workID\)\/driverLocation/);
-  assert.match(location, /allowsBackgroundLocationUpdates = mode == \.activeWork/);
+  // Background dispatch must also work for an online Driver awaiting an offer.
+  // Permission is checked first, and stopping must disable background updates.
+  assert.match(location, /case \.authorizedAlways:\s*beginLocationUpdates\(\)/);
+  assert.match(location, /allowsBackgroundLocationUpdates = mode != \.offline/);
+  assert.match(location, /mode = \.offline; manager\.stopUpdatingLocation\(\); manager\.allowsBackgroundLocationUpdates = false/);
   assert.match(location, /onDisconnectRemoveValue/);
 });
 

@@ -30,7 +30,11 @@ test("Ride and Send callable quotes use canonical location fields and verified r
  const source=read("firebase/functions/src/core/customer-runtime.js");
  for(const field of ["lat","lng","country","city","area","formattedAddress"])assert.match(source,new RegExp(field));
  assert.match(source,/verifiedRoute/);
- assert.match(source,/SPOTLY_ROUTING_URL/);
+ const routing=read("firebase/functions/src/core/mobility-road-access.js");
+ assert.match(routing,/SPOTLY_ROUTING_URL/);
+ assert.match(routing,/routingCredentialsConfigured/);
+ assert.match(source,/await verifiedMobilityRoute\(/);
+ assert.match(routing,/Verified road routing credentials are not configured/);
  assert.match(source,/rideQuote/);
  assert.match(source,/sendQuote/);
 });

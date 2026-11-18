@@ -18,9 +18,12 @@ test("iOS preflight has a byte-identical money contract in web and Firebase", ()
   assert.match(index, /moneyContractSHA256: SPOTLY_MONEY_CONTRACT_SHA256/);
 });
 
-test("every native routing callable and readiness has Secret Manager binding", () => {
+test("native route callables and route-readiness bind the licensed provider key", () => {
   const index = read("firebase/functions/src/index.js");
   assert.match(index, /defineSecret\("SPOTLY_ROUTING_API_KEY"\)/);
+  const readiness = read("firebase/functions/src/core/customer-runtime.js");
+  assert.match(readiness, /nativeMobilityReadiness\(settings\)/);
+  assert.match(readiness, /routingCredentialsConfigured\(\)/);
   for (const name of ["customerRuntime", "customerRideQuote", "customerSendQuote",
     "customerRidePickupSuggestions", "adminMobilityRouteCheck"]) {
     const start = index.indexOf("name: \"" + name + "\"");

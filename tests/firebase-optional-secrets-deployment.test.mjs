@@ -19,8 +19,19 @@ test("core deployment contains only expected functions and never binds custom PI
   const script=pkg.scripts["firebase:deploy:functions:core"];
   assert.ok(script.includes("--project spotly-africa"));
   assert.deepEqual(targetNames(script),expectedCore);
-  for(const name of expectedCore){
+  // Customer readiness also checks routingCredentialsConfigured(), so its
+  // secret binding is required to avoid falsely disabling native Ride/Send.
+  for(const name of expectedCore.filter(name=>!["customerRuntime","customerRideQuote","customerSendQuote"].includes(name))){
     assert.doesNotMatch(definition(name),/secrets:\s*\[/,"Unexpected secret binding in "+name);
+  }
+  assert.match(definition("customerRuntime"),/customerRuntimeSnapshot/);
+  const readiness = readFileSync(new URL("../firebase/functions/src/core/customer-runtime.js",import.meta.url),"utf8");
+  assert.match(readiness,/nativeMobilityReadiness\(settings\)/);
+  assert.match(readiness,/routingCredentialsConfigured\(\)/);
+  // Snapshot readiness and quotes all legitimately need the routing secret.
+  for(const name of ["customerRuntime","customerRideQuote","customerSendQuote"]){
+    assert.match(definition(name),/secrets:\s*\[CUSTOMER_ROUTING_KEY\]/);
+    assert.doesNotMatch(definition(name),/DRIVER_RIDE_PIN_KEY|DRIVER_SEND_PIN_KEY|CUSTOMER_PLACE_SEARCH_KEY/);
   }
 });
 test("search and PIN functions stay isolated in separate deployment modes",()=>{

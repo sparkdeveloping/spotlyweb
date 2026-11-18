@@ -50,11 +50,17 @@ test("Phase 20 customer transaction screens anchor primary actions and protect f
   const ride=ios("Features/Production/RideRequestView.swift");
   const send=ios("Features/Production/SendRequestView.swift");
   const checkout=ios("Features/Production/MarketplaceCheckoutView.swift");
-  for(const source of [ride,send]) {
-    assert.match(source,/safeAreaInset\(edge: \.bottom\)/);
-    assert.match(source,/SpotlyBottomActionBar/);
-    assert.match(source,/scrollDismissesKeyboard\(\.interactively\)/);
-  }
+  // Ride deliberately uses an intrinsic-height panel over a full-bleed map;
+  // requiring the old safeAreaInset would regress the destination-first layout.
+  assert.match(ride,/controlPanel\(availableHeight: geometry\.size\.height\)/);
+  assert.match(ride,/naturalPanelHeight > maximumContentHeight/);
+  assert.match(ride,/dynamicTypeSize\.isAccessibilitySize/);
+  assert.match(ride,/ScrollView \{ content \}/);
+  assert.match(ride,/padding\(\.bottom, 10\)/);
+  // Send anchors its actual confirm action above the home indicator.
+  assert.match(send,/safeAreaInset\(edge: \.bottom\)/);
+  assert.match(send,/requestActionBar\(response\)/);
+  assert.match(send,/scrollDismissesKeyboard\(\.interactively\)/);
   assert.match(checkout,/toolbar\(\.hidden, for: \.tabBar\)/);
   assert.match(checkout,/scrollDismissesKeyboard\(\.interactively\)/);
 });
@@ -62,10 +68,17 @@ test("Phase 20 customer transaction screens anchor primary actions and protect f
 test("Phase 20 customer glass controls and saved controls remain legible with Reduce Transparency",()=>{
   const production=ios("Features/Production/ProductionComponents.swift");
   const buttons=ios("Core/Components/SpotlyButton.swift");
-  assert.match(production,/accessibilityReduceTransparency/);
-  assert.match(production,/SpotlyBottomActionBar/);
-  assert.match(production,/frame\(width: 44, height: 44\)/);
-  assert.match(buttons,/accessibilityReduceTransparency/);
+  const glass=ios("Core/Components/SpotlyGlass.swift");
+  const saves=ios("Core/Components/SpotlyExperienceQuality.swift");
+  // The shared glass modifier owns the accessibility fallback for all callers.
+  assert.match(glass,/accessibilityReduceTransparency/);
+  assert.match(glass,/else if reduceTransparency/);
+  assert.match(glass,/background\(SpotlyColors\.surfaceElevated, in: shape\)/);
+  assert.match(buttons,/SpotlyGlassSurface\(/);
+  assert.match(saves,/struct SpotlySaveButton/);
+  assert.match(saves,/frame\(width: 44, height: 44\)/);
+  assert.match(saves,/accessibilityLabel\(saved \?/);
+  assert.match(production,/SpotlySaveButton\(saved: saved, action: onSave\)/);
 });
 
 test("Phase 20 customer mobility history uses the approved vehicle class for live markers",()=>{

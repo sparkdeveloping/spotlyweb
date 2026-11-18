@@ -56,7 +56,13 @@
     "media:verify-snapshots": "node scripts/verify-media-discovery-snapshots.mjs",
     "audit:security": "node scripts/security-readiness-audit.mjs",
     "audit:cost-release": "node scripts/c7-release-gate.mjs",
-    "audit:launch:lx12": "node scripts/lx12-launch-gate.mjs"
+    "audit:launch:lx12": "node scripts/lx12-launch-gate.mjs",
+    "audit:operations:lx13": "node scripts/lx13-operations-gate.mjs",
+    "audit:release-tests:rb1": "node scripts/rb1-suite-gate.mjs",
+    "audit:rb2:attestation": "node scripts/rb2-app-check-gate.mjs",
+    "audit:rb2:build-tools": "node scripts/rb2-build-preflight.mjs",
+    "audit:wave-d:release": "node scripts/wave-d-release-gate.mjs --report docs/WAVE-D-EVIDENCE-TEMPLATE.json",
+    "test:wave-d": "node --test tests/wave-d-production-evidence.test.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

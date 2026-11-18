@@ -65,9 +65,15 @@ test("RTDB Driver location rejects stale/future writes and has explicit retentio
 
 test("Driver app clears location when tracking stops or disconnects", () => {
   const source = read("../../driver/spotlydriver/spotlydriver/Core/Platform/DriverLocationService.swift");
-  assert.match(source, /driverPresence\/\\\(uid\)\/location"\)\.removeValue/);
-  assert.match(source, /driverPresence\/\\\(uid\)\/location"\)\.onDisconnectRemoveValue/);
-  assert.match(source, /dispatchPresence\/\\\(country\)\/\\\(area\)\/\\\(uid\).*removeValue/);
+  const stop = source.split("func stop() {")[1]?.split("private func requestPermissionAndStart()")[0] || "";
+  assert.match(stop, /let presence = db\.reference\(withPath: "driverPresence\//);
+  assert.match(stop, /presence\.child\("location"\)\.removeValue\(\)/);
+  assert.match(stop, /dispatch\.removeValue\(\)/);
+  assert.match(stop, /driverLocation\.removeValue\(\)/);
+  // Disconnect hooks are one-shot; they must be installed and renewed on reconnect.
+  assert.match(source, /reference\(withPath: "driverPresence\/\\\(uid\)\/location"\)\.onDisconnectRemoveValue\(\)/);
+  assert.match(source, /reference\(withPath: "dispatchPresence\/\\\(country\)\/\\\(area\)\/\\\(uid\)"\)\.onDisconnectRemoveValue\(\)/);
+  assert.match(source, /self\.installDisconnectSafety\(\)/);
 });
 
 test("Crashlytics and Performance ship in both native apps with privacy declarations", () => {
