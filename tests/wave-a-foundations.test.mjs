@@ -68,6 +68,6 @@ test('Business portfolio callable errors are contextual and never silently treat
  const hub=fs.readFileSync(new URL('../../../business/spotlybusiness/spotlybusiness/Features/Account/BusinessAccountHubView.swift',import.meta.url),'utf8');
  assert.match(api,/request\.operation == "businessPortfolio"/);assert.match(api,/SB-PORTFOLIO/);
  assert.match(api,/Functions\.functions\(region: "us-central1"\)/);
- assert.match(hub,/businesses could not load|businesses could not be loaded|couldn't confirm your businesses/i);
+ assert.match(hub,/Businesses couldn't load|businesses could not load|businesses could not be loaded/i);
  assert.match(hub,/Get help/);assert.match(hub,/Try again/);
 });

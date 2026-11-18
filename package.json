@@ -62,7 +62,10 @@
     "audit:rb2:attestation": "node scripts/rb2-app-check-gate.mjs",
     "audit:rb2:build-tools": "node scripts/rb2-build-preflight.mjs",
     "audit:wave-d:release": "node scripts/wave-d-release-gate.mjs --report docs/WAVE-D-EVIDENCE-TEMPLATE.json",
-    "test:wave-d": "node --test tests/wave-d-production-evidence.test.mjs"
+    "test:wave-d": "node --test tests/wave-d-production-evidence.test.mjs",
+    "test:wave-e": "node --test tests/wave-e-release-readiness.test.mjs",
+    "audit:wave-e:release": "node scripts/wave-e-release-gate.mjs --report docs/WAVE-E-REHEARSAL-TEMPLATE.json --trusted-keys docs/WAVE-E-TRUST-CONFIG-EXAMPLE.json",
+    "audit:wave-e:staging-safety": "node scripts/wave-e-staging-safety.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

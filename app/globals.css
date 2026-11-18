@@ -668,3 +668,56 @@ input:-webkit-autofill:focus {
     transform: none !important;
   }
 }
+
+/* Spotly loading identity: one preloaded, locally served brand mark.
+   Pure CSS motion ends immediately when the real route is ready. */
+.spotly-pulse-loader {
+  --pulse-tint: var(--brand-primary);
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  background: var(--background);
+  color: var(--text);
+  overflow: hidden;
+  isolation: isolate;
+}
+.spotly-pulse-loader--business { --pulse-tint: var(--brand-business); }
+.spotly-pulse-loader--driver { --pulse-tint: var(--brand-driver); }
+.spotly-pulse-loader__stage {
+  width: 188px;
+  height: 188px;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.spotly-pulse-loader__glow {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--pulse-tint) 12%, transparent) 0%, color-mix(in srgb, var(--pulse-tint) 4%, transparent) 51%, transparent 73%);
+  animation: spotly-loader-glow 2.6s ease-in-out infinite;
+}
+.spotly-pulse-loader__mark {
+  position: relative;
+  display: block;
+  width: 83px;
+  height: auto;
+  max-height: 112px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 20px color-mix(in srgb, var(--pulse-tint) 15%, transparent));
+  animation: spotly-loader-breathe 2.6s cubic-bezier(.36,0,.32,1) infinite;
+}
+@keyframes spotly-loader-breathe {
+  0%, 100% { transform: scale(.95); opacity: .84; }
+  50% { transform: scale(1.045); opacity: 1; }
+}
+@keyframes spotly-loader-glow {
+  0%, 100% { transform: scale(.86); opacity: .35; }
+  50% { transform: scale(1.14); opacity: .82; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spotly-pulse-loader__mark, .spotly-pulse-loader__glow { animation: none !important; }
+  .spotly-pulse-loader__mark { opacity: 1; transform: none; }
+  .spotly-pulse-loader__glow { opacity: .45; transform: none; }
+}

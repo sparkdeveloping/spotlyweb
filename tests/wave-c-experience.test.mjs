@@ -17,7 +17,7 @@ test('U9 - homepage experiences are separate dynamic bundles and the loading UI 
   const router = source('components/public-home-router.js');
   assert.match(router, /dynamic\(\(\) => import\("@\/components\/marketplace-app"\)/);
   assert.match(router, /dynamic\(\(\) => import\("@\/components\/first-access-landing"\)/);
-  assert.match(source('app/loading.js'), /v7-skeleton/);
+  assert.match(source('app/loading.js'), /SpotlyPulseLoader/);
   assert.doesNotMatch(source('app/loading.js'), /animate-spin/);
   assert.match(source('components/spotly-vitals.js'), /NEXT_PUBLIC_SPOTLY_VITALS_MODE/);
   assert.doesNotMatch(source('components/spotly-vitals.js'), /sendBeacon|fetch\(/);

@@ -76,7 +76,7 @@ requireText("components/customer-onboarding.js", "Spotly asks the browser for lo
 requireAll("components/customer-utility.js", ["Popular searches", "No results for", "Save the city you want to come back to", "Nothing saved in"], "Search and Saved empty/recovery states");
 requireAll("components/marketplace-app.js", ["Sign in to see your activity", "Your Spotly activity will live here", "Needs attention", "Active now", "Upcoming", "Past"], "Activity empty and lifecycle states");
 requireAll("components/customer-loading.js", ["v7-skeleton"], "customer content skeletons");
-requireAll("components/workspace-loading.js", ["v7-skeleton"], "workspace content skeletons");
+requireAll("components/workspace-loading.js", ["SpotlyPulseLoader"], "workspace full-page loading identity");
 
 // 16–20. Geometry, spacing, widths, cards and typography are systemized.
 requireAll("app/v7-experience.css", ["--v7-space-1", "--v7-space-16", "--v7-radius-control", "--v7-radius-card", "--v7-radius-feature", "--v7-radius-pill", "--v7-content-wide", "--v7-content-medium", "--v7-content-focused", ".v7-list", ".v7-row", ".v7-display", ".v7-title-1", ".v7-title-2", ".v7-title-3"], "V7 geometry/spacing/type tokens");

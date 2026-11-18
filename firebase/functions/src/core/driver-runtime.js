@@ -347,7 +347,21 @@ export async function driverBootstrapData(actor) {
     eligible: runtimeEligibility.eligible,
     eligibilityReason: runtimeEligibility.eligible ? "" : runtimeEligibility.reason
   };
-  return { profile: profile(actor, application, driver, selectedVehicle), dispatchReadiness, application, vehicle: selectedVehicle, documents, zones, presence: presenceDoc?.exists?.() ? plain(presenceDoc.val()) : null, offers: [...deliveryOffers, ...rideOffers, ...sendOffers], activeWork, completedWork, cancelledWork, earnings: earningsSummary(earnings), walletTransactions, notifications, incidents, canGoOnline: runtimeEligibility.eligible && !activeWork, applicationStatus: application.status || "not_started" };
+  // Native Driver reads accountReadiness separately from territory. The field must
+  // be supplied by the authenticated backend, never synthesized as approved by iOS.
+  // These are read-only facts; dispatch eligibility still uses the existing
+  // evaluateDriverEligibility and transaction-level server checks.
+  const accountReadiness = {
+    driverStatus: text(driver.status || "unknown", 40),
+    applicationStatus: text(application.status || "not_started", 40),
+    safetyHold: driver.safetyHold === true,
+    complianceHold: driver.complianceHold === true,
+    financeHold: driver.financeHold === true || (Boolean(driver.payoutVerificationState) && driver.payoutVerificationState !== "verified"),
+    eligible: runtimeEligibility.eligible,
+    reason: runtimeEligibility.eligible ? "" : runtimeEligibility.reason,
+    payoutVerificationState: text(driver.payoutVerificationState || "unverified", 40)
+  };
+  return { profile: profile(actor, application, driver, selectedVehicle), accountReadiness, dispatchReadiness, application, vehicle: selectedVehicle, documents, zones, presence: presenceDoc?.exists?.() ? plain(presenceDoc.val()) : null, offers: [...deliveryOffers, ...rideOffers, ...sendOffers], activeWork, completedWork, cancelledWork, earnings: earningsSummary(earnings), walletTransactions, notifications, incidents, canGoOnline: runtimeEligibility.eligible && !activeWork, applicationStatus: application.status || "not_started" };
 }
 
 async function eligibility(firestore, uid, { kind = null, work = null } = {}) {
